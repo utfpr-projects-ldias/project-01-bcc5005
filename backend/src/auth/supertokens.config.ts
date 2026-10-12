@@ -13,11 +13,11 @@ if (!apiKey) {
 }
 
 export const appInfo = {
-  appName: 'Gestao Contratual',
-  apiDomain: `http://localhost:${process.env.PORT ?? 3001}`,
-  websiteDomain: process.env.FRONTEND_URL ?? 'http://localhost:3000',
-  apiBasePath: '/auth',
-  websiteBasePath: '/login',
+  appName: "PRD",
+  apiDomain: "http://localhost:3001",
+  websiteDomain: "http://localhost:3000",
+  apiBasePath: "/auth/st",       // ← era "/auth", mude para "/auth/st"
+  websiteBasePath: "/auth",      // pode deixar
 };
 
 export const superTokensConfig = {

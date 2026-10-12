@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { AuthCheckController } from './auth/auth-check.controller.js';
+import { AuthModule } from './auth/auth.module.js';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { AuthCheckController } from './auth/auth-check.controller.js';
       autoLoadEntities: true,
       synchronize: false,
     }),
+    AuthModule,
   ],
   controllers: [
     AppController,
