@@ -6,6 +6,7 @@ import {
   middleware,
   errorHandler,
 } from 'supertokens-node/framework/express';
+import { verifySession } from 'supertokens-node/recipe/session/framework/express';
 
 import { AppModule } from './app.module.js';
 import {
@@ -33,7 +34,13 @@ async function bootstrap() {
   app.useBodyParser('json');
   app.useBodyParser('urlencoded', { extended: true });
 
+  // APIs de autenticacao do SuperTokens.
   app.use(middleware());
+
+  // Protecao do endpoint tecnico da TEC05-03.
+  app.use('/protected/ping', verifySession());
+
+  // Tratamento de erros do SuperTokens.
   app.use(errorHandler());
 
   await app.listen(process.env.PORT ?? 3001);
