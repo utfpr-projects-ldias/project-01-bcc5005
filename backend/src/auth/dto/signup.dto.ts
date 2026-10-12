@@ -7,6 +7,6 @@ export class SignupDto {
   @IsString()
   @MinLength(8, { message: "A senha deve ter pelo menos 8 caracteres" })
   @MaxLength(128, { message: "A senha é muito longa" })
-  // mensagens de erro.
+  // mensagens de erro do user.
   password!: string;
 }
