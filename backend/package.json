@@ -19,7 +19,11 @@
     "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watch",
     "test:cov": "NODE_OPTIONS=--experimental-vm-modules jest --coverage",
     "test:debug": "NODE_OPTIONS=--experimental-vm-modules node --inspect-brk ./node_modules/jest/bin/jest.js --runInBand",
-    "test:e2e": "NODE_OPTIONS=--experimental-vm-modules jest --config ./jest.config.e2e.cjs"
+    "test:e2e": "NODE_OPTIONS=--experimental-vm-modules jest --config ./jest.config.e2e.cjs",
+    "typeorm": "typeorm-ts-node-esm",
+    "migration:show": "npm run typeorm -- migration:show -d ./src/database/data-source.ts",
+    "migration:run": "npm run typeorm -- migration:run -d ./src/database/data-source.ts",
+    "migration:revert": "npm run typeorm -- migration:revert -d ./src/database/data-source.ts"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
