@@ -1,124 +1,300 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Backend — Sistema de Gestão de Execução Contratual
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Backend do Projeto Integrador (BCC5005), desenvolvido com **NestJS**, **TypeScript**, **TypeORM** e **PostgreSQL**. O ambiente de desenvolvimento é executado com **Docker Compose** e utiliza **SuperTokens Core** como serviço separado de autenticação.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+> **Leia primeiro o [`README.md` da raiz do repositório](../README.md)** para instalar o ambiente, configurar o `.env`, iniciar o Docker e conhecer os demais serviços. Este documento explica especificamente o **backend** e os **comandos de migrations** preparados na TEC04.
 
-## Description
+## 1. Tecnologias e responsabilidades
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+| Componente | Função |
+|---|---|
+| NestJS + TypeScript | API HTTP da aplicação |
+| TypeORM + `pg` | Acesso ao PostgreSQL e migrations |
+| PostgreSQL 17 | Persistência dos dados |
+| SuperTokens Core | Infraestrutura de autenticação, em container separado |
+| Jest | Testes automatizados |
+| Oxlint | Análise estática de código |
+| Docker Compose | Execução integrada em desenvolvimento |
 
-## Project setup
+No ambiente Docker, o backend é acessível em **http://localhost:3001**. O processo NestJS escuta na porta `3001` definida pela variável `PORT`.
 
-```bash
-$ npm install
+## 2. Estrutura relevante
+
+```text
+backend/
+├── Dockerfile.dev
+├── package.json
+├── package-lock.json
+├── README.md
+└── src/
+    ├── main.ts                  # Inicialização do NestJS
+    ├── app.module.ts            # Módulo e conexão TypeORM da aplicação
+    └── database/
+        ├── data-source.ts       # DataSource utilizado pela CLI do TypeORM
+        └── migrations/          # Migrations versionadas no Git
+            └── .gitkeep
 ```
 
-## Compile and run the project
+O `app.module.ts` configura o TypeORM durante a execução do NestJS. O `src/database/data-source.ts` fornece a conexão à **CLI de migrations**. Ambos utilizam a mesma variável `DATABASE_URL`.
+
+**Regra obrigatória:** manter `synchronize: false`. As mudanças de esquema devem ser aplicadas por migrations explícitas, e não automaticamente ao subir a aplicação.
+
+## 3. Preparar e iniciar o ambiente
+
+Os comandos abaixo devem ser executados **na raiz do repositório**, onde está `docker-compose.yml` — não dentro de `backend/`.
+
+Na **primeira instalação**, siga o README da raiz: crie `.env` a partir de `.env.example`, gere as credenciais locais, valide o Compose e construa o ambiente. O `.env` não deve ser versionado.
+
+No uso diário, caso o Docker Engine esteja desligado no Linux:
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+sudo systemctl start docker
 ```
 
-## Run tests
+Suba os serviços:
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+docker compose up -d
 ```
 
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+Verifique:
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+docker compose ps
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Observability
-
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
-
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
-
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
-To add it to this project:
+Na **primeira execução** ou quando houver alterações de Dockerfile/dependências que exijam reconstrução:
 
 ```bash
-$ npm install @nestjs/observe
+docker compose up -d --build
 ```
 
-Then follow the [setup guide](https://docs.nestjs.com/observability/overview) - it takes a single import and an app key.
+Não é necessário fazer `--build` apenas por editar scripts no `backend/package.json`, pois o Compose de desenvolvimento monta a pasta `./backend` em `/app`.
 
-The free plan needs no payment details and covers 300,000 events a month. You can also browse the [live demo](https://www.observe-demo.nestjs.com/dashboard) first - the whole dashboard over a busy service's data, with nothing to install.
+Consulte os logs:
 
-## Resources
+```bash
+docker compose logs --tail=80 backend
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+Verifique a API inicial:
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observe](https://observe.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+```bash
+curl http://localhost:3001
+```
 
-## Support
+## 4. Migrations do TypeORM (TEC04)
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+Uma **migration** é um arquivo versionado que representa uma mudança controlada no esquema do banco (por exemplo, criar ou alterar uma tabela). Cada integrante da equipe executa as migrations pendentes no seu próprio banco local.
 
-## Stay in touch
+Fluxo previsto para futuras funcionalidades:
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+```text
+Criar/alterar uma Entity (*.entity.ts)
+         ↓
+Gerar e revisar uma migration (*.ts)
+         ↓
+Versionar Entity + migration no Git
+         ↓
+Executar migration:run em cada ambiente
+         ↓
+Banco atualizado de forma controlada
+```
 
-## License
+**Nesta TEC04, não foram criadas entidades ou migrations de domínio.** A primeira migration real deve acompanhar a primeira entidade de uma funcionalidade futura.
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+### 4.1. Scripts disponíveis
+
+Os scripts estão definidos em `backend/package.json`. Execute sempre **na raiz do repositório**:
+
+| Ação | Comando |
+|---|---|
+| Listar migrations e seu estado | `docker compose exec backend npm run migration:show` |
+| Executar migrations pendentes | `docker compose exec backend npm run migration:run` |
+| Reverter a última migration executada | `docker compose exec backend npm run migration:revert` |
+
+**Listar:**
+
+```bash
+docker compose exec backend npm run migration:show
+```
+
+**Aplicar as pendentes:**
+
+```bash
+docker compose exec backend npm run migration:run
+```
+
+Se não houver migrations pendentes, a saída esperada é:
+
+```text
+No migrations are pending
+```
+
+O TypeORM pode manter uma tabela interna chamada `migrations` para registrar o histórico de execução. Ela não é uma tabela do domínio de contratos.
+
+**Reverter (usar apenas quando necessário):**
+
+```bash
+docker compose exec backend npm run migration:revert
+```
+
+> **Atenção:** `migration:revert` altera o banco de dados, executando o método `down` da última migration aplicada. Não é necessário executá-lo nesta TEC04, porque ainda não existem migrations reais para reverter.
+
+### 4.2. Gerar uma migration a partir das entidades
+
+Quando uma funcionalidade futura introduzir ou modificar entidades TypeORM:
+
+```bash
+docker compose exec backend \
+  npm run typeorm -- \
+  migration:generate \
+  ./src/database/migrations/NomeDaMigration \
+  -d ./src/database/data-source.ts
+```
+
+O TypeORM compara as entidades encontradas pelo DataSource com o esquema atual do PostgreSQL e gera um arquivo `.ts` em `src/database/migrations/`.
+
+**Revise o SQL gerado antes de executar `migration:run`.** Se não houver diferenças entre as entidades e o banco, o comando pode informar que não existem mudanças; isso não exige criar uma migration artificial.
+
+### 4.3. Criar uma migration manualmente
+
+Se for necessário escrever as operações manualmente, crie um arquivo base:
+
+```bash
+docker compose exec backend \
+  npm run typeorm -- \
+  migration:create \
+  ./src/database/migrations/NomeDaMigration
+```
+
+Depois, implemente e revise os métodos `up` e `down` conforme a alteração necessária. **Este comando cria apenas um arquivo-base**, não modifica o banco.
+
+### 4.4. Regras para a equipe
+
+- Versione as migrations junto com as respectivas entidades ou alterações de esquema.
+- Mantenha `synchronize: false` tanto no `AppModule` quanto no DataSource da CLI.
+- Não crie tabelas manualmente se a alteração faz parte de uma migration do projeto.
+- Não use migrations TypeORM para modificar as tabelas internas do **SuperTokens Core**; o serviço gerencia essas tabelas separadamente (no Compose atual, com prefixo `st_`).
+- Após atualizar uma branch que contenha **novas migrations**, execute `migration:run` no banco local e confira o resultado.
+- **Não execute `migration:revert` automaticamente** após um `git pull`: a reversão é uma operação deliberada.
+
+## 5. Validações do backend
+
+Os comandos abaixo já foram utilizados na TEC04-02. Eles não exigem reconstruir o Docker, desde que os containers estejam funcionando.
+
+**TypeScript:**
+
+```bash
+docker compose exec backend npx tsc --noEmit
+```
+
+**Build do NestJS:**
+
+```bash
+docker compose exec backend npm run build
+```
+
+**Testes unitários:**
+
+```bash
+docker compose exec backend npm test
+```
+
+**Lint:**
+
+```bash
+docker compose exec backend npm run lint
+```
+
+**Verificar os comandos registrados:**
+
+```bash
+docker compose exec backend npm run
+```
+
+**Testes E2E (quando aplicável):**
+
+```bash
+docker compose exec backend npm run test:e2e
+```
+
+A execução inicial da TEC04-02 confirmou que `migration:show` funciona, `migration:run` informa `No migrations are pending`, o TypeScript e o build passam, o teste unitário existente passa e o Oxlint termina sem avisos ou erros. Isso **não substitui** testes de migrations reais que venham a ser criadas futuramente.
+
+## 6. Problemas comuns
+
+### `password authentication failed for user "postgres"` (`28P01`)
+
+O banco pode estar marcado como `healthy` e, ainda assim, rejeitar a senha da aplicação. Isso ocorre, por exemplo, se o volume PostgreSQL foi inicializado com uma senha antiga e o `.env` foi alterado posteriormente.
+
+Confira os logs:
+
+```bash
+docker compose logs --tail=80 backend supertokens
+```
+
+**Não use `docker compose down -v` para corrigir esse erro:** isso removeria o volume com os dados do banco.
+
+Se houver divergência confirmada, é possível entrar no `psql` local do container:
+
+```bash
+docker compose exec database psql -U postgres -d postgres
+```
+
+E redefinir a senha do usuário:
+
+```text
+\password postgres
+```
+
+Informe a mesma senha configurada no `.env` da raiz e saia com `\q`. Esse procedimento só deve ser executado quando a divergência de credenciais estiver confirmada. Nunca publique o `.env` nem a URL contendo a senha.
+
+### `DATABASE_URL não foi definida`
+
+Verifique se existe um `.env` na **raiz** do projeto e se os serviços foram criados com a configuração atual. O backend recebe `DATABASE_URL` pelo Compose. Não substitua o host `database` por `localhost` dentro do container.
+
+### `Cannot find module` ao utilizar a CLI
+
+Confirme a existência de `backend/src/database/data-source.ts` e a disponibilidade do `ts-node`:
+
+```bash
+docker compose exec backend npm ls ts-node
+```
+
+O projeto usa ESM (`"type": "module"`), por isso o script da CLI utiliza `typeorm-ts-node-esm`.
+
+### `migration:show` ou `migration:run` não existe
+
+Confira se `backend/package.json` contém os scripts e se está executando o comando no serviço correto:
+
+```bash
+docker compose exec backend npm run
+```
+
+### Alteração no `package-lock.json` após atualizar a branch
+
+Em um ambiente já existente, pode ser necessário sincronizar as dependências instaladas no volume de `node_modules` do backend:
+
+```bash
+docker compose exec backend npm ci
+```
+
+Depois reinicie o serviço, se necessário:
+
+```bash
+docker compose restart backend
+```
+
+Não é necessário reinstalar dependências a cada mudança de branch; apenas quando o ambiente instalado estiver desatualizado em relação ao lockfile.
+
+## 7. Encerrar o ambiente
+
+Na **raiz do repositório**:
+
+```bash
+docker compose down
+```
+
+Esse comando remove os containers e a rede do projeto, mas **preserva o volume PostgreSQL**. Evite `docker compose down -v`, exceto se realmente desejar apagar os dados e reinicializar o banco.
+
+Para detalhes sobre iniciar ou desligar o Docker Engine manualmente, consulte o README principal na raiz do repositório.
