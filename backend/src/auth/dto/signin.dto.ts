@@ -1,6 +1,7 @@
 import { IsEmail, IsString, MaxLength, MinLength } from "class-validator";
 
 export class SigninDto {
+  // vai ser util so mais pra frente.
   @IsEmail({}, { message: "E-mail inválido" })
   email!: string;
 
