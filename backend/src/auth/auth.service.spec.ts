@@ -1,5 +1,9 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { BadRequestException, ConflictException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { jest } from "@jest/globals";
 
 import EmailPassword from "supertokens-node/recipe/emailpassword";
@@ -9,6 +13,7 @@ jest.mock("supertokens-node/recipe/emailpassword", () => ({
   __esModule: true,
   default: {
     signUp: jest.fn(),
+    signIn: jest.fn(),
   },
 }));
 
@@ -35,7 +40,12 @@ describe("AuthService", () => {
       password: "senha1234",
     });
 
-    expect(out).toEqual({ id: "u1", email: "a@b.com", role: "user" });
+    expect(out).toEqual({
+      id: "u1",
+      email: "a@b.com",
+      role: "user",
+    });
+
     expect(EmailPassword.signUp).toHaveBeenCalledWith(
       "public",
       "a@b.com",
@@ -49,7 +59,10 @@ describe("AuthService", () => {
     } as never);
 
     await expect(
-      service.signup({ email: "a@b.com", password: "senha1234" }),
+      service.signup({
+        email: "a@b.com",
+        password: "senha1234",
+      }),
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
@@ -59,7 +72,52 @@ describe("AuthService", () => {
     } as never);
 
     await expect(
-      service.signup({ email: "a@b.com", password: "senha1234" }),
+      service.signup({
+        email: "a@b.com",
+        password: "senha1234",
+      }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("autentica credenciais válidas e devolve os dados para criar a sessão", async () => {
+    (EmailPassword.signIn as jest.Mock).mockResolvedValue({
+      status: "OK",
+      recipeUserId: "recipe-user-1",
+      user: {
+        id: "u1",
+        emails: ["a@b.com"],
+      },
+    } as never);
+
+    const out = await service.signin({
+      email: "a@b.com",
+      password: "senha1234",
+    });
+
+    expect(out).toEqual({
+      recipeUserId: "recipe-user-1",
+      id: "u1",
+      email: "a@b.com",
+      role: "user",
+    });
+
+    expect(EmailPassword.signIn).toHaveBeenCalledWith(
+      "public",
+      "a@b.com",
+      "senha1234",
+    );
+  });
+
+  it("rejeita credenciais inválidas com UnauthorizedException", async () => {
+    (EmailPassword.signIn as jest.Mock).mockResolvedValue({
+      status: "WRONG_CREDENTIALS_ERROR",
+    } as never);
+
+    await expect(
+      service.signin({
+        email: "a@b.com",
+        password: "senhaerrada",
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });
