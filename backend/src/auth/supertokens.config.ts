@@ -13,11 +13,13 @@ if (!apiKey) {
 }
 
 export const appInfo = {
-  appName: "PRD",
-  apiDomain: "http://localhost:3001",
-  websiteDomain: "http://localhost:3000",
-  apiBasePath: "/auth/st",       // ← era "/auth", mude para "/auth/st"
-  websiteBasePath: "/auth",      // pode deixar
+  appName: 'Gestao Contratual',
+  apiDomain: `http://localhost:${process.env.PORT ?? 3001}`,
+  websiteDomain: process.env.FRONTEND_URL ?? 'http://localhost:3000',
+  // /auth pertence aos endpoints NestJS já criados pela equipe.
+  // /auth/st pertence ao SuperTokens e deve coincidir com o frontend.
+  apiBasePath: '/auth/st',
+  websiteBasePath: '/login',
 };
 
 export const superTokensConfig = {

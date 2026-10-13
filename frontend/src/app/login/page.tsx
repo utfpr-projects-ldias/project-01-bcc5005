@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { signIn } from "supertokens-web-js/recipe/emailpassword";
 import { z } from "zod";
 
 // 1. Schema de validação do Login com Zod
@@ -13,6 +16,7 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
+  const router = useRouter();
   const [formData, setFormData] = useState<LoginFormValues>({
     email: "",
     password: "",
@@ -20,6 +24,8 @@ export default function LoginPage() {
 
   const [errors, setErrors] = useState<Partial<Record<keyof LoginFormValues, string>>>({});
   const [successMessage, setSuccessMessage] = useState("");
+  const [serverError, setServerError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -29,26 +35,44 @@ export default function LoginPage() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (submitting) return;
     setSuccessMessage("");
+    setServerError("");
 
-    // Validando com Zod
     const result = loginSchema.safeParse(formData);
-
     if (!result.success) {
       const fieldErrors: Partial<Record<keyof LoginFormValues, string>> = {};
-      result.error.issues.forEach((issue) => {
-        const path = issue.path[0] as keyof LoginFormValues;
-        fieldErrors[path] = issue.message;
-      });
+      for (const issue of result.error.issues) {
+        const field = issue.path[0] as keyof LoginFormValues;
+        fieldErrors[field] = issue.message;
+      }
       setErrors(fieldErrors);
       return;
     }
 
     setErrors({});
-    setSuccessMessage("Login validado com sucesso! (Integre com sua API aqui)");
-    console.log("Dados de login válidos:", result.data);
+    setSubmitting(true);
+    try {
+      const response = await signIn({
+        formFields: [
+          { id: "email", value: result.data.email.trim().toLowerCase() },
+          { id: "password", value: result.data.password },
+        ],
+      });
+      if (response.status !== "OK") {
+        setServerError("E-mail ou senha inválidos, ou login não permitido.");
+        return;
+      }
+      setSuccessMessage("Login efetuado!");
+      router.replace("/dashboard");
+      router.refresh();
+    } catch {
+      setServerError("Erro de conexão ao entrar. Tente novamente.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -58,9 +82,12 @@ export default function LoginPage() {
         {/* Título */}
         <div className="text-center mb-8">
           <Link href="/" className="flex items-center justify-center gap-3 group">
-            <img 
-              src="/favicon.ico" 
-              alt="Ícone PRD" 
+            <Image
+              src="/favicon.ico"
+              alt="Ícone PRD"
+              width={32}
+              height={32}
+              unoptimized
               className="h-8 w-8 object-contain rounded-md"
             />
             <span className="font-bold text-2xl tracking-wide text-brand-neon group-hover:opacity-90 transition-opacity">
@@ -71,6 +98,9 @@ export default function LoginPage() {
           <p className="text-sm text-foreground/60 mt-1">Entre com seus dados para continuar</p>
         </div>
 
+        {serverError && (
+          <p role="alert" className="mb-4 text-sm text-red-400">{serverError}</p>
+        )}
         {/* Mensagem de Sucesso */}
         {successMessage && (
           <div className="mb-4 p-3 rounded-lg bg-brand-green/20 border border-brand-green text-brand-neon text-sm text-center">
@@ -110,11 +140,12 @@ export default function LoginPage() {
             {errors.password && <p className="mt-1 text-xs text-red-400">{errors.password}</p>}
           </div>
 
-          <button 
+          <button
             type="submit"
+            disabled={submitting}
             className="w-full py-3 rounded-lg bg-brand-green text-background font-semibold hover:opacity-90 transition-opacity mt-2"
           >
-            Entrar
+            {submitting ? "Entrando..." : "Entrar"}
           </button>
         </form>
 

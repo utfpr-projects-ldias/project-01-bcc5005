@@ -1,665 +1,107 @@
-# Projeto Integrador — Ambiente de Desenvolvimento
+# Projeto Integrador — ambiente de desenvolvimento
 
-Este repositório contém a estrutura base do Projeto Integrador com frontend, backend, banco de dados e autenticação executados em containers Docker.
+**Stack:** Next.js 16 (frontend), NestJS 12 (backend), PostgreSQL 17, SuperTokens, TypeORM, Jest e Docker Compose.
 
-O ambiente técnico inicial já está configurado. Este `README.md` serve como guia principal para configurar as variáveis locais, iniciar o Docker manualmente, subir o projeto, verificar os serviços, executar testes e encerrar o ambiente corretamente.
+## Primeira vez nesta máquina
 
-Para entender como toda a estrutura foi criada do zero, consulte o arquivo `DO-ZERO-AMBIENTE-DEV.md`.
-
----
-
-## Stack Tecnológica
-
-| Camada | Tecnologia |
-| :--- | :--- |
-| **Frontend** | Next.js 16, React 19, TypeScript, Tailwind CSS 4 |
-| **Backend** | NestJS 12, TypeScript, TypeORM |
-| **Banco de Dados** | PostgreSQL 17 |
-| **Autenticação** | SuperTokens |
-| **Testes** | Jest no Frontend e Backend; React Testing Library no Frontend |
-| **Runtime** | Node.js 24 em containers Alpine |
-| **Orquestração** | Docker Engine e Docker Compose |
-
----
-
-## Pré-requisitos
-
-Neste fluxo de desenvolvimento, é necessário ter instalado diretamente na máquina:
-
-- Git;
-- Docker Engine;
-- Docker Compose.
-
-Não é necessário instalar diretamente na máquina:
-
-- Node.js;
-- Next.js;
-- NestJS;
-- PostgreSQL;
-- SuperTokens Core.
-
-O Node.js utilizado pelo projeto é fornecido pelas imagens Docker.
-
-Verifique se Docker e Docker Compose estão disponíveis:
+Requisitos: **Git, Docker Engine e Docker Compose**. Não é necessário instalar Node.js ou PostgreSQL na máquina; eles rodam nos containers.
 
 ```bash
-docker --version
-docker compose version
-```
+# 1) Se você ainda não clonou, clone o repositório normalmente.
+# 2) Na raiz do projeto:
+[ -f .env ] || cp .env.example .env
 
----
+# 3) Abra .env e configure POSTGRES_PASSWORD e SUPERTOKENS_API_KEY.
+#    Use credenciais locais geradas assim (execute cada comando separadamente):
+openssl rand -hex 24   # senha do PostgreSQL
+openssl rand -hex 32   # chave do SuperTokens
 
-## Docker sem iniciar automaticamente no boot
-
-Neste projeto, o Docker pode ser utilizado somente quando necessário, sem iniciar automaticamente junto com o sistema operacional.
-
-### Verificar a configuração do boot
-
-```bash
-systemctl is-enabled docker.service
-systemctl is-enabled docker.socket
-```
-
-Para este fluxo, o esperado é:
-
-```text
-disabled
-disabled
-```
-
-Se algum deles aparecer como `enabled` e você quiser manter o Docker desativado no boot:
-
-```bash
-sudo systemctl disable docker.service
-sudo systemctl disable docker.socket
-```
-
-Isso não desinstala o Docker. Apenas impede sua inicialização automática.
-
-### Iniciar o Docker manualmente
-
-Sempre que for trabalhar no projeto:
-
-```bash
+# 4) Linux: inicie o Docker caso esteja desligado.
 sudo systemctl start docker
-```
 
-Confira:
-
-```bash
-sudo systemctl status docker
-```
-
-O estado esperado é semelhante a:
-
-```text
-Active: active (running)
-```
-
-Também é possível verificar com:
-
-```bash
-docker ps
-```
-
-> Não é necessário executar `sudo systemctl enable docker` para utilizar o Docker manualmente.
-
----
-
-## Configurar Variáveis de Ambiente
-
-Na primeira utilização do projeto em uma máquina, crie o arquivo `.env` na raiz a partir do modelo `.env.example`:
-
-```bash
-cp .env.example .env
-```
-
-O `.env.example` pode ser versionado no Git porque contém apenas a estrutura das variáveis e valores de exemplo.
-
-O `.env` contém as credenciais reais da máquina local e não deve ser enviado ao Git.
-
-### Gerar senha local do PostgreSQL
-
-```bash
-openssl rand -hex 24
-```
-
-Copie o valor gerado e coloque no `.env`:
-
-```env
-POSTGRES_PASSWORD=VALOR_GERADO
-```
-
-### Gerar chave local do SuperTokens
-
-```bash
-openssl rand -hex 32
-```
-
-Copie o valor gerado e coloque no `.env`:
-
-```env
-SUPERTOKENS_API_KEY=VALOR_GERADO
-```
-
-Cada desenvolvedor pode utilizar credenciais locais diferentes. O código do projeto permanece igual porque as aplicações leem os valores pelas variáveis de ambiente.
-
----
-
-## Validar o Docker Compose
-
-Antes de subir o ambiente, valide o `docker-compose.yml` sem imprimir no terminal os valores resolvidos das variáveis do `.env`:
-
-```bash
+# 5) Valide e inicie. A primeira execução já baixa imagens e inicializa o banco.
 docker compose config -q
+docker compose up --build
 ```
 
-Se o comando terminar sem apresentar erro, a configuração do Compose está válida.
+O `--build` constrói/reconstrói as imagens. **O `-d` é opcional:** apenas libera o terminal, não interfere na inicialização do PostgreSQL. Se preferir segundo plano, use `docker compose up -d --build` e consulte os logs com `docker compose logs -f`.
 
-Evite usar apenas:
+**IMPORTANTE:** não sobrescreva um `.env` existente. O `.env` não é versionado; `.env.example` é somente o modelo. Nunca publique senhas nem chaves no Git.
+
+## Uso diário
 
 ```bash
-docker compose config
+sudo systemctl start docker    # Linux, se necessário
+docker compose up             # ou: docker compose up -d
+docker compose ps             # em outro terminal, se estiver acompanhando logs
 ```
 
-quando não houver necessidade de visualizar a configuração completa, pois esse comando pode exibir no terminal os valores resolvidos das variáveis de ambiente.
+Endereços: frontend `http://localhost:3000`, API NestJS `http://localhost:3001`, SuperTokens Core `http://localhost:3567/hello`, PostgreSQL na porta local `5432`.
 
----
-
-## Subir o Projeto
-
-### Primeira execução ou após alterações de dependências/Dockerfiles
+Para encerrar sem apagar o banco, use `Ctrl+C` se estiver executando em primeiro plano; para remover os containers e a rede, preservando o volume do banco:
 
 ```bash
-docker compose up -d --build
+docker compose down
 ```
 
-O `--build` reconstrói as imagens do frontend e backend quando necessário.
+Se alterar um Dockerfile ou as dependências, use `docker compose up --build`. Ao instalar pacotes pelo container, mantenha `package.json` e `package-lock.json` no commit.
 
-Na primeira execução, o Docker também baixa automaticamente as imagens que ainda não existirem na máquina.
-
-### Uso diário
-
-Depois que o ambiente já estiver construído:
-
-```bash
-docker compose up -d
-```
-
-O parâmetro `-d` executa os containers em segundo plano e libera o terminal.
-
----
-
-## Verificar os Serviços
-
-Confira os containers do projeto:
+## Verificações e testes
 
 ```bash
 docker compose ps
-```
+docker compose logs --tail=50 backend frontend supertokens database
+curl http://localhost:3567/hello    # Hello
+curl http://localhost:3001          # Hello World!
 
-O ambiente possui os seguintes serviços:
-
-```text
-frontend
-backend
-database
-supertokens
-```
-
-Para acompanhar os logs de todos os serviços:
-
-```bash
-docker compose logs -f
-```
-
-Para acompanhar somente um serviço:
-
-```bash
-docker compose logs -f frontend
-docker compose logs -f backend
-docker compose logs -f database
-docker compose logs -f supertokens
-```
-
-Para sair da visualização de logs sem encerrar os containers:
-
-```text
-Ctrl + C
-```
-
----
-
-## Endereços Locais
-
-Com os containers em execução:
-
-- **Frontend:** `http://localhost:3000`
-- **Backend (API):** `http://localhost:3001`
-- **SuperTokens Core:** `http://localhost:3567`
-- **PostgreSQL:** `localhost:5432`
-
----
-
-## Verificações de Infraestrutura
-
-### Frontend
-
-```bash
-curl -I http://localhost:3000
-```
-
-### Backend
-
-```bash
-curl http://localhost:3001
-```
-
-### PostgreSQL
-
-```bash
-docker compose exec database pg_isready -U postgres -d integrador
-```
-
-O resultado esperado deve indicar:
-
-```text
-accepting connections
-```
-
-### SuperTokens Core
-
-```bash
-curl http://localhost:3567/hello
-```
-
-O resultado esperado é:
-
-```text
-Hello
-```
-
----
-
-## Verificar Dependências Instaladas
-
-### Frontend
-
-```bash
-docker compose exec frontend npm list --depth=0
-```
-
-### Backend
-
-```bash
-docker compose exec backend npm list --depth=0
-```
-
----
-
-## Executar os Testes
-
-### Frontend
-
-```bash
-docker compose exec frontend npm test
-```
-
-O frontend utiliza:
-
-- Jest;
-- React Testing Library;
-- `jest-environment-jsdom`.
-
-### Backend
-
-```bash
+# Backend
+docker compose exec backend npx tsc --noEmit
+docker compose exec backend npm run build
+docker compose exec backend npm run lint
 docker compose exec backend npm test
-```
-
-O backend utiliza:
-
-- Jest;
-- `@nestjs/testing`;
-- `ts-jest`;
-- Supertest para testes HTTP/E2E.
-
-### Cobertura do backend
-
-```bash
-docker compose exec backend npm run test:cov
-```
-
-### Testes E2E do backend
-
-```bash
 docker compose exec backend npm run test:e2e
-```
 
----
-
-## Instalar Novas Dependências
-
-Com os containers em execução, instale pacotes dentro do serviço correspondente.
-
-### Frontend
-
-Exemplo:
-
-```bash
-docker compose exec -u "$(id -u):$(id -g)" frontend npm install zod
-```
-
-### Backend
-
-Exemplo:
-
-```bash
-docker compose exec -u "$(id -u):$(id -g)" backend npm install class-validator class-transformer
-```
-
-Esses comandos atualizam o `package.json` e o `package-lock.json` do respectivo projeto.
-
-Depois de alterar dependências, reconstrua o ambiente quando necessário:
-
-```bash
-docker compose up -d --build
-```
-
----
-
-## Atualizar Dependências
-
-Para atualizar pacotes respeitando as faixas de versões registradas no `package.json`:
-
-### Frontend
-
-```bash
-docker compose exec -u "$(id -u):$(id -g)" frontend npm update
-```
-
-### Backend
-
-```bash
-docker compose exec -u "$(id -u):$(id -g)" backend npm update
-```
-
-Para atualizar um pacote específico para a versão mais recente:
-
-```bash
-docker compose exec -u "$(id -u):$(id -g)" frontend npm install PACOTE@latest
-```
-
-ou:
-
-```bash
-docker compose exec -u "$(id -u):$(id -g)" backend npm install PACOTE@latest
-```
-
-Atualizações de dependências devem ser verificadas e testadas antes de serem enviadas ao repositório.
-
----
-
-## Rotina Diária Recomendada
-
-### 1. Entrar na raiz do projeto
-
-Exemplo:
-
-```bash
-cd ~/Documents/projetos/project-01-bcc5005
-```
-
-### 2. Iniciar o Docker Engine
-
-```bash
-sudo systemctl start docker
-```
-
-### 3. Validar o Compose, quando necessário
-
-```bash
-docker compose config -q
-```
-
-### 4. Subir os containers
-
-```bash
-docker compose up -d
-```
-
-### 5. Conferir o ambiente
-
-```bash
-docker compose ps
-```
-
-### 6. Trabalhar normalmente
-
-Quando precisar acompanhar os logs:
-
-```bash
-docker compose logs -f
-```
-
-### 7. Encerrar os containers do projeto
-
-```bash
-docker compose down
-```
-
-### 8. Desligar o Docker completamente
-
-Pare primeiro o socket:
-
-```bash
-sudo systemctl stop docker.socket
-```
-
-Depois pare o serviço:
-
-```bash
-sudo systemctl stop docker.service
-```
-
-Essa ordem evita que o `docker.socket` permaneça ativo como unidade capaz de acionar novamente o serviço Docker.
-
-### 9. Confirmar que Docker e socket estão inativos
-
-```bash
-systemctl is-active docker.service docker.socket
-```
-
-O resultado esperado é:
-
-```text
-inactive
-inactive
-```
-
----
-
-## Diferença entre Docker Compose e Docker Engine
-
-O comando:
-
-```bash
-docker compose down
-```
-
-encerra e remove os containers e a rede criada pelo Compose para este projeto, mas não desliga o Docker Engine da máquina.
-
-Já:
-
-```bash
-sudo systemctl stop docker.socket
-sudo systemctl stop docker.service
-```
-
-desliga o mecanismo Docker utilizado pela máquina e também o socket que poderia ativá-lo novamente.
-
-Portanto, para encerrar completamente a rotina de desenvolvimento:
-
-```bash
-docker compose down
-sudo systemctl stop docker.socket
-sudo systemctl stop docker.service
-```
-
-Depois:
-
-```bash
-systemctl is-active docker.service docker.socket
-```
-
----
-
-## O que esperar depois de `docker compose down`
-
-Depois de:
-
-```bash
-docker compose down
-```
-
-é normal que:
-
-```bash
-docker ps
-```
-
-não apresente containers em execução.
-
-Também é normal que:
-
-```bash
-docker compose logs -f
-```
-
-não apresente logs dos containers que acabaram de ser removidos pelo `down`.
-
-Executar novamente:
-
-```bash
-docker compose down
-```
-
-quando o projeto já está encerrado também não causa problema. Apenas não haverá mais recursos do Compose para remover.
-
----
-
-## Persistência do PostgreSQL
-
-O PostgreSQL utiliza um volume Docker persistente.
-
-Ao executar:
-
-```bash
-docker compose down
-```
-
-os containers são removidos, mas os dados do PostgreSQL são preservados.
-
-Não use como rotina:
-
-```bash
-docker compose down -v
-```
-
-O parâmetro `-v` remove os volumes do Compose, incluindo o volume persistente do PostgreSQL.
-
-Use `docker compose down -v` somente quando realmente quiser apagar o banco local e recriá-lo do zero.
-
----
-
-## Atenção ao Alterar a Senha do PostgreSQL
-
-A senha definida na primeira inicialização do PostgreSQL fica associada ao usuário armazenado no volume existente.
-
-Por isso, alterar apenas:
-
-```env
-POSTGRES_PASSWORD=nova_senha
-```
-
-pode fazer o backend tentar utilizar uma senha diferente daquela registrada no banco já existente.
-
-Durante a fase inicial, caso não existam dados importantes e você realmente queira recriar o banco:
-
-```bash
-docker compose down -v
-docker compose up -d --build
-```
-
-Quando houver dados importantes, não apague o volume apenas para trocar uma senha. A credencial deve ser alterada no próprio PostgreSQL e depois atualizada no segredo utilizado pela aplicação.
-
----
-
-## Resumo dos Comandos Principais
-
-### Iniciar o trabalho
-
-```bash
-sudo systemctl start docker
-docker compose config -q
-docker compose up -d
-docker compose ps
-```
-
-### Ver logs
-
-```bash
-docker compose logs -f
-```
-
-### Executar testes
-
-```bash
+# Frontend
+docker compose exec frontend npx tsc --noEmit
+docker compose exec frontend npm run lint
 docker compose exec frontend npm test
-docker compose exec backend npm test
+docker compose exec frontend npm run build
+
+# TEC04 — migrations do TypeORM (não apaga dados)
+docker compose exec backend npm run migration:show
 ```
 
-### Encerrar o trabalho
+O lint frontend pode apresentar avisos `no-img-element` (não são erros). O frontend pode informar `No tests found`: o Jest passou sem executar casos de teste, portanto **não** significa que telas e fluxos estão testados.
+
+A aplicação oferece páginas de cadastro (`/cadastro`), login (`/login`) e dashboard (`/dashboard`). O SDK do SuperTokens utiliza `/auth/st` e os endpoints NestJS próprios da equipe utilizam `/auth`. O endpoint `/protected/ping` requer uma sessão válida; a proteção de navegação do dashboard deverá ser implementada separadamente.
+
+## PostgreSQL: como evitar erros de senha
+
+O banco usa o volume Docker `postgres_data`, persistente mesmo após `docker compose down` **ou após apagar a pasta do Git**. A senha definida no `.env` só é usada para criar o usuário na **primeira inicialização daquele volume**.
+
+- **Primeiro clone com volume novo:** ajuste o `.env` antes de `docker compose up --build`; não é preciso `down -v`.
+- **Reinicializações:** mantenha `POSTGRES_PASSWORD` estável. `--build` não apaga nem troca a senha do banco.
+- **Erro `password authentication failed` depois de mudar o `.env`:** volte à senha original desse volume ou altere a senha no banco de forma controlada. Não adianta apenas reconstruir as imagens.
+- **Você realmente quer um banco local vazio?** `docker compose down -v` remove o volume e **apaga todos os dados locais**, inclusive usuários e sessões do SuperTokens. Use apenas quando a perda for aceitável; nunca em produção.
+- **Novo clone na mesma máquina:** pode reaproveitar o volume antigo se o nome do projeto Compose for igual. Caso queira isolar clones, defina `COMPOSE_PROJECT_NAME=um_nome_local_unico` no `.env` **antes da primeira subida**.
+
+O healthcheck do PostgreSQL testa uma conexão autenticada (`SELECT 1` via TCP), portanto uma senha incompatível deixa o banco `unhealthy` em vez de permitir que os demais serviços avancem com uma configuração inválida.
+
+## Dependências e problemas comuns
 
 ```bash
-docker compose down
-sudo systemctl stop docker.socket
-sudo systemctl stop docker.service
-systemctl is-active docker.service docker.socket
-```
+# Exemplo: com o frontend já em execução, adicionar uma dependência
+docker compose exec frontend npm install PACOTE
 
-### Reconstruir quando necessário
-
-```bash
-docker compose up -d --build
-```
-
----
-
-## Regra Prática
-
-```text
-sudo systemctl start docker
-→ inicia manualmente o Docker Engine
-
-docker compose config -q
-→ valida o Compose sem imprimir a configuração resolvida
-
+# Se o container não estiver rodando, inicie antes de usar exec
 docker compose up -d
-→ inicia os serviços do projeto
 
-docker compose down
-→ encerra os serviços do projeto
-→ mantém os dados do PostgreSQL
-
-sudo systemctl stop docker.socket
-→ desliga o socket que pode ativar o Docker
-
-sudo systemctl stop docker.service
-→ desliga o Docker Engine
-
-docker compose down -v
-→ encerra o projeto
-→ APAGA os volumes locais
-→ não usar como rotina
+# Ver logs em tempo real
+docker compose logs -f
 ```
+
+- `Cannot connect to Docker daemon`: inicie o Docker (`sudo systemctl start docker`).
+- `service "frontend" is not running`: inicie os serviços antes de `docker compose exec`.
+- Mudou `.env` com containers em execução? Use `docker compose up -d --force-recreate` para atualizar o ambiente dos containers, **mas isso não muda a senha interna de um PostgreSQL já inicializado**.
+- Se for executar `next build` e `next dev` ao mesmo tempo no mesmo container, prefira parar temporariamente o frontend de desenvolvimento; ambos podem concorrer pelos artefatos da pasta `.next`.
+- Não execute `npm audit fix --force` sem avaliar as alterações e o impacto sobre as versões do projeto.

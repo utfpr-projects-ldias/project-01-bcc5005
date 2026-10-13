@@ -1,6 +1,31 @@
+"use client";
+
 import Link from "next/link";
+import Image from "next/image";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Session from "supertokens-web-js/recipe/session";
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
+
+  async function handleLogout() {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    setLogoutError("");
+    try {
+      await Session.signOut();
+      router.replace("/login");
+      router.refresh();
+    } catch {
+      setLogoutError("Não foi possível encerrar a sessão. Tente novamente.");
+    } finally {
+      setIsLoggingOut(false);
+    }
+  }
+
   const categories = [
     { name: "Dashboard", href: "/dashboard" },
     { name: "Contratos", href: "/contratos" },
@@ -18,9 +43,12 @@ export default function DashboardPage() {
         <div>
           {/* Logo / Título */}
           <Link href="/" className="flex items-center gap-2 mb-10 group">
-            <img 
-              src="/favicon.ico" 
-              alt="Ícone PRD" 
+            <Image
+              src="/favicon.ico"
+              alt="Ícone PRD"
+              width={32}
+              height={32}
+              unoptimized
               className="h-8 w-8 object-contain rounded-md"
             />
             <span className="font-bold text-2xl tracking-wide text-brand-neon group-hover:opacity-90 transition-opacity">
@@ -60,12 +88,17 @@ export default function DashboardPage() {
 
           <div className="flex items-center gap-4">
             {/* Botão de Logout */}
-            <Link
-              href="/login"
-              className="px-4 py-2 rounded-lg text-sm font-medium border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors"
+            {logoutError && (
+              <p role="alert" className="text-sm text-red-400">{logoutError}</p>
+            )}
+            <button
+              type="button"
+              onClick={() => void handleLogout()}
+              disabled={isLoggingOut}
+              className="px-4 py-2 rounded-lg text-sm font-medium border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-60"
             >
-              Sair
-            </Link>
+              {isLoggingOut ? "Saindo..." : "Sair"}
+            </button>
           </div>
         </header>
 
