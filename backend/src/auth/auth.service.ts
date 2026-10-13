@@ -4,9 +4,11 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  UnauthorizedException,
 } from "@nestjs/common";
 import EmailPassword from "supertokens-node/recipe/emailpassword";
 
+import { SigninDto } from "./dto/signin.dto.js";
 import { SignupDto } from "./dto/signup.dto.js";
 
 export type SignupResult = {
@@ -32,7 +34,9 @@ export class AuthService {
       }
 
       if (response.status !== "OK") {
-        throw new BadRequestException("Não foi possível criar a conta");
+        throw new BadRequestException(
+          "Não foi possível criar a conta",
+        );
       }
 
       return {
@@ -47,8 +51,53 @@ export class AuthService {
       ) {
         throw err;
       }
-      this.logger.error("Falha ao criar conta no SuperTokens", err as Error);
-      throw new InternalServerErrorException("Falha ao criar a conta");
+
+      this.logger.error(
+        "Falha ao criar conta no SuperTokens",
+        err as Error,
+      );
+
+      throw new InternalServerErrorException(
+        "Falha ao criar a conta",
+      );
+    }
+  }
+
+  async signin(dto: SigninDto) {
+    try {
+      const response = await EmailPassword.signIn(
+        "public",
+        dto.email,
+        dto.password,
+      );
+
+      if (response.status === "WRONG_CREDENTIALS_ERROR") {
+        throw new UnauthorizedException(
+          "E-mail ou senha inválidos",
+        );
+      }
+
+      return {
+        // Necessário para Session.createNewSession, inclusive se houver
+        // associação entre usuários/contas no SuperTokens.
+        recipeUserId: response.recipeUserId,
+        id: response.user.id,
+        email: response.user.emails[0] ?? dto.email,
+        role: "user" as const,
+      };
+    } catch (err) {
+      if (err instanceof UnauthorizedException) {
+        throw err;
+      }
+
+      this.logger.error(
+        "Falha ao autenticar usuário no SuperTokens",
+        err as Error,
+      );
+
+      throw new InternalServerErrorException(
+        "Falha ao realizar o login",
+      );
     }
   }
 }
