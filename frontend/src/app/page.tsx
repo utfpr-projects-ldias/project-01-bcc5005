@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 export default function Home() {
   const categories = [
@@ -16,9 +17,12 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between gap-4">
           
           <Link href="/" className="flex items-center gap-3 group">
-            <img 
-              src="/favicon.ico" 
-              alt="Ícone PRD" 
+            <Image
+              src="/favicon.ico"
+              alt="Ícone PRD"
+              width={32}
+              height={32}
+              unoptimized
               className="h-8 w-8 object-contain rounded-md"
             />
             <span className="font-bold text-xl tracking-wide text-brand-neon group-hover:opacity-90 transition-opacity">

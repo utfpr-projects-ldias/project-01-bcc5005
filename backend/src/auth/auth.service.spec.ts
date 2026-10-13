@@ -1,4 +1,4 @@
-import { Test, TestingModule } from "@nestjs/testing";
+import { Test, type TestingModule } from "@nestjs/testing";
 import {
   BadRequestException,
   ConflictException,
@@ -6,34 +6,37 @@ import {
 } from "@nestjs/common";
 import { jest } from "@jest/globals";
 
-import EmailPassword from "supertokens-node/recipe/emailpassword";
-import { AuthService } from "./auth.service.js";
+// Com Jest + ESM, o mock deve ser registrado ANTES de importar o serviço.
+// Um import estático de AuthService carregaria o módulo real antes do jest.mock.
+const signUpMock = jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const signInMock = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 
-jest.mock("supertokens-node/recipe/emailpassword", () => ({
-  __esModule: true,
+jest.unstable_mockModule("supertokens-node/recipe/emailpassword", () => ({
   default: {
-    signUp: jest.fn(),
-    signIn: jest.fn(),
+    signUp: signUpMock,
+    signIn: signInMock,
   },
 }));
 
+const { AuthService } = await import("./auth.service.js");
+
 describe("AuthService", () => {
-  let service: AuthService;
+  let service: InstanceType<typeof AuthService>;
 
   beforeEach(async () => {
+    jest.resetAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       providers: [AuthService],
     }).compile();
 
-    service = module.get<AuthService>(AuthService);
-    jest.clearAllMocks();
+    service = module.get<InstanceType<typeof AuthService>>(AuthService);
   });
 
   it("cria conta com sucesso e retorna role fixo", async () => {
-    (EmailPassword.signUp as jest.Mock).mockResolvedValue({
+    signUpMock.mockResolvedValue({
       status: "OK",
       user: { id: "u1", emails: ["a@b.com"] },
-    } as never);
+    });
 
     const out = await service.signup({
       email: "a@b.com",
@@ -46,7 +49,7 @@ describe("AuthService", () => {
       role: "user",
     });
 
-    expect(EmailPassword.signUp).toHaveBeenCalledWith(
+    expect(signUpMock).toHaveBeenCalledWith(
       "public",
       "a@b.com",
       "senha1234",
@@ -54,9 +57,9 @@ describe("AuthService", () => {
   });
 
   it("lança ConflictException quando e-mail já existe", async () => {
-    (EmailPassword.signUp as jest.Mock).mockResolvedValue({
+    signUpMock.mockResolvedValue({
       status: "EMAIL_ALREADY_EXISTS_ERROR",
-    } as never);
+    });
 
     await expect(
       service.signup({
@@ -67,9 +70,9 @@ describe("AuthService", () => {
   });
 
   it("lança BadRequestException para status inesperado", async () => {
-    (EmailPassword.signUp as jest.Mock).mockResolvedValue({
+    signUpMock.mockResolvedValue({
       status: "UNKNOWN",
-    } as never);
+    });
 
     await expect(
       service.signup({
@@ -80,14 +83,11 @@ describe("AuthService", () => {
   });
 
   it("autentica credenciais válidas e devolve os dados para criar a sessão", async () => {
-    (EmailPassword.signIn as jest.Mock).mockResolvedValue({
+    signInMock.mockResolvedValue({
       status: "OK",
       recipeUserId: "recipe-user-1",
-      user: {
-        id: "u1",
-        emails: ["a@b.com"],
-      },
-    } as never);
+      user: { id: "u1", emails: ["a@b.com"] },
+    });
 
     const out = await service.signin({
       email: "a@b.com",
@@ -101,7 +101,7 @@ describe("AuthService", () => {
       role: "user",
     });
 
-    expect(EmailPassword.signIn).toHaveBeenCalledWith(
+    expect(signInMock).toHaveBeenCalledWith(
       "public",
       "a@b.com",
       "senha1234",
@@ -109,9 +109,7 @@ describe("AuthService", () => {
   });
 
   it("rejeita credenciais inválidas com UnauthorizedException", async () => {
-    (EmailPassword.signIn as jest.Mock).mockResolvedValue({
-      status: "WRONG_CREDENTIALS_ERROR",
-    } as never);
+    signInMock.mockResolvedValue({ status: "WRONG_CREDENTIALS_ERROR" });
 
     await expect(
       service.signin({
