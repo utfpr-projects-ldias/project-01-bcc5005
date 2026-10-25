@@ -1,16 +1,19 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Post,
   Req,
   Res,
+  UnauthorizedException,
   UsePipes,
   ValidationPipe,
 } from "@nestjs/common";
 import type { Request, Response } from "express";
 import Session from "supertokens-node/recipe/session";
+import type { SessionRequest } from "supertokens-node/framework/express";
 
 import { AuthService, SignupResult } from "./auth.service.js";
 import { SigninDto } from "./dto/signin.dto.js";
@@ -49,8 +52,6 @@ export class AuthController {
   ) {
     const user = await this.authService.signin(dto);
 
-    // A sessão é criada somente depois que o SuperTokens valida a senha.
-    // O próprio SuperTokens escreve os cookies/cabeçalhos da sessão na resposta.
     await Session.createNewSession(
       request,
       response,
@@ -63,5 +64,18 @@ export class AuthController {
       email: user.email,
       role: user.role,
     });
+  }
+
+  @Get("me")
+  @HttpCode(HttpStatus.OK)
+  async getMe(@Req() request: SessionRequest) {
+    const session = request.session;
+
+    if (!session) {
+      throw new UnauthorizedException("Sessão obrigatória");
+    }
+
+    const userId = session.getUserId();
+    return this.authService.getMe(userId);
   }
 }
