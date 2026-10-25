@@ -1,107 +1,113 @@
-# Projeto Integrador — ambiente de desenvolvimento
+# Sistema de Gestão de Execução Contratual
 
-**Stack:** Next.js 16 (frontend), NestJS 12 (backend), PostgreSQL 17, SuperTokens, TypeORM, Jest e Docker Compose.
+Sistema web interno para acompanhar **contratos de prestação de serviços**, suas etapas, entregáveis, atividades e evidências. A primeira etapa prioriza planejamento, execução, comprovação e rastreabilidade, **sem gestão financeira**.
 
-## Primeira vez nesta máquina
+## Stack
 
-Requisitos: **Git, Docker Engine e Docker Compose**. Não é necessário instalar Node.js ou PostgreSQL na máquina; eles rodam nos containers.
+| Camada | Tecnologias |
+| --- | --- |
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4, Zod |
+| Backend | NestJS 12, TypeScript, TypeORM, `class-validator` e `class-transformer` |
+| Banco e autenticação | PostgreSQL 17, SuperTokens (Core, SDK web e SDK Node.js) |
+| Testes e qualidade | Jest, React Testing Library, Supertest, ESLint (frontend), Oxlint (backend) |
+| Ambiente | Node.js 24 (containers Alpine), Docker Engine e Docker Compose |
+
+## Primeira execução
+
+**Pré-requisitos:** Git, Docker Engine e Docker Compose. Não é necessário instalar Node.js nem PostgreSQL no computador.
+
+Na **raiz do repositório**, prepare o arquivo de ambiente:
 
 ```bash
-# 1) Se você ainda não clonou, clone o repositório normalmente.
-# 2) Na raiz do projeto:
 [ -f .env ] || cp .env.example .env
-
-# 3) Abra .env e configure POSTGRES_PASSWORD e SUPERTOKENS_API_KEY.
-#    Use credenciais locais geradas assim (execute cada comando separadamente):
-openssl rand -hex 24   # senha do PostgreSQL
-openssl rand -hex 32   # chave do SuperTokens
-
-# 4) Linux: inicie o Docker caso esteja desligado.
-sudo systemctl start docker
-
-# 5) Valide e inicie. A primeira execução já baixa imagens e inicializa o banco.
-docker compose config -q
-docker compose up --build
+openssl rand -hex 24
+openssl rand -hex 32
+nano .env
 ```
 
-O `--build` constrói/reconstrói as imagens. **O `-d` é opcional:** apenas libera o terminal, não interfere na inicialização do PostgreSQL. Se preferir segundo plano, use `docker compose up -d --build` e consulte os logs com `docker compose logs -f`.
+Use os dois valores gerados para preencher `POSTGRES_PASSWORD` e `SUPERTOKENS_API_KEY` no `.env`, respectivamente. **Não versione o `.env` nem substitua um arquivo já configurado.**
 
-**IMPORTANTE:** não sobrescreva um `.env` existente. O `.env` não é versionado; `.env.example` é somente o modelo. Nunca publique senhas nem chaves no Git.
+Inicie os serviços:
+
+```bash
+sudo systemctl start docker
+docker compose config -q
+docker compose up -d --build
+docker compose ps
+```
+
+Em um **banco novo**, aplique as migrations e crie o primeiro Administrador:
+
+```bash
+docker compose exec backend npm run migration:run
+docker compose exec backend npm run build
+docker compose exec backend npm run admin:create -- rinaldi@gmail.com
+```
+
+O último comando solicita e confirma a senha no próprio terminal. Ele é executado **uma vez por banco novo** e não recria um Administrador já existente. O comando `admin:create` faz parte da **TEC07-01** e estará disponível nas outras branches depois que essa sub-issue for integrada à `develop`.
+
+Acesse **http://localhost:3000/login**. A API NestJS fica em `http://localhost:3001`.
 
 ## Uso diário
 
-```bash
-sudo systemctl start docker    # Linux, se necessário
-docker compose up             # ou: docker compose up -d
-docker compose ps             # em outro terminal, se estiver acompanhando logs
-```
-
-Endereços: frontend `http://localhost:3000`, API NestJS `http://localhost:3001`, SuperTokens Core `http://localhost:3567/hello`, PostgreSQL na porta local `5432`.
-
-Para encerrar sem apagar o banco, use `Ctrl+C` se estiver executando em primeiro plano; para remover os containers e a rede, preservando o volume do banco:
+**Iniciar:**
 
 ```bash
-docker compose down
-```
-
-Se alterar um Dockerfile ou as dependências, use `docker compose up --build`. Ao instalar pacotes pelo container, mantenha `package.json` e `package-lock.json` no commit.
-
-## Verificações e testes
-
-```bash
-docker compose ps
-docker compose logs --tail=50 backend frontend supertokens database
-curl http://localhost:3567/hello    # Hello
-curl http://localhost:3001          # Hello World!
-
-# Backend
-docker compose exec backend npx tsc --noEmit
-docker compose exec backend npm run build
-docker compose exec backend npm run lint
-docker compose exec backend npm test
-docker compose exec backend npm run test:e2e
-
-# Frontend
-docker compose exec frontend npx tsc --noEmit
-docker compose exec frontend npm run lint
-docker compose exec frontend npm test
-docker compose exec frontend npm run build
-
-# TEC04 — migrations do TypeORM (não apaga dados)
-docker compose exec backend npm run migration:show
-```
-
-O lint frontend pode apresentar avisos `no-img-element` (não são erros). O frontend pode informar `No tests found`: o Jest passou sem executar casos de teste, portanto **não** significa que telas e fluxos estão testados.
-
-A aplicação oferece páginas de cadastro (`/cadastro`), login (`/login`) e dashboard (`/dashboard`). O SDK do SuperTokens utiliza `/auth/st` e os endpoints NestJS próprios da equipe utilizam `/auth`. O endpoint `/protected/ping` requer uma sessão válida; a proteção de navegação do dashboard deverá ser implementada separadamente.
-
-## PostgreSQL: como evitar erros de senha
-
-O banco usa o volume Docker `postgres_data`, persistente mesmo após `docker compose down` **ou após apagar a pasta do Git**. A senha definida no `.env` só é usada para criar o usuário na **primeira inicialização daquele volume**.
-
-- **Primeiro clone com volume novo:** ajuste o `.env` antes de `docker compose up --build`; não é preciso `down -v`.
-- **Reinicializações:** mantenha `POSTGRES_PASSWORD` estável. `--build` não apaga nem troca a senha do banco.
-- **Erro `password authentication failed` depois de mudar o `.env`:** volte à senha original desse volume ou altere a senha no banco de forma controlada. Não adianta apenas reconstruir as imagens.
-- **Você realmente quer um banco local vazio?** `docker compose down -v` remove o volume e **apaga todos os dados locais**, inclusive usuários e sessões do SuperTokens. Use apenas quando a perda for aceitável; nunca em produção.
-- **Novo clone na mesma máquina:** pode reaproveitar o volume antigo se o nome do projeto Compose for igual. Caso queira isolar clones, defina `COMPOSE_PROJECT_NAME=um_nome_local_unico` no `.env` **antes da primeira subida**.
-
-O healthcheck do PostgreSQL testa uma conexão autenticada (`SELECT 1` via TCP), portanto uma senha incompatível deixa o banco `unhealthy` em vez de permitir que os demais serviços avancem com uma configuração inválida.
-
-## Dependências e problemas comuns
-
-```bash
-# Exemplo: com o frontend já em execução, adicionar uma dependência
-docker compose exec frontend npm install PACOTE
-
-# Se o container não estiver rodando, inicie antes de usar exec
+sudo systemctl start docker
 docker compose up -d
+docker compose ps
+```
 
-# Ver logs em tempo real
+**Acompanhar logs:**
+
+```bash
 docker compose logs -f
 ```
 
-- `Cannot connect to Docker daemon`: inicie o Docker (`sudo systemctl start docker`).
-- `service "frontend" is not running`: inicie os serviços antes de `docker compose exec`.
-- Mudou `.env` com containers em execução? Use `docker compose up -d --force-recreate` para atualizar o ambiente dos containers, **mas isso não muda a senha interna de um PostgreSQL já inicializado**.
-- Se for executar `next build` e `next dev` ao mesmo tempo no mesmo container, prefira parar temporariamente o frontend de desenvolvimento; ambos podem concorrer pelos artefatos da pasta `.next`.
-- Não execute `npm audit fix --force` sem avaliar as alterações e o impacto sobre as versões do projeto.
+**Reconstruir imagens** após alterações de dependências ou Dockerfiles:
+
+```bash
+docker compose up -d --build
+```
+
+**Parar o projeto e, se desejado, o Docker no Linux:**
+
+```bash
+docker compose down
+sudo systemctl stop docker.socket
+sudo systemctl stop docker.service
+```
+
+`docker compose down` **preserva os dados** do PostgreSQL e as contas do SuperTokens. Desligar o Docker Engine é opcional e afeta outros projetos Docker da máquina.
+
+## Reiniciar o banco do zero — cuidado
+
+```bash
+docker compose down -v
+```
+
+**Atenção: `-v` apaga os volumes do projeto**, incluindo contratos, usuários, credenciais e sessões armazenados no banco local. Use somente quando quiser perder esses dados. Após recriar o banco, será necessário executar novamente as migrations e `admin:create`. **Não use `-v` para corrigir erros de build nem em produção.**
+
+## Comandos úteis
+
+```bash
+# Estado e logs
+docker compose ps
+docker compose logs --tail=50 backend frontend database supertokens
+
+# Migrations
+docker compose exec backend npm run migration:show
+docker compose exec backend npm run migration:run
+
+# Testes do backend
+docker compose exec backend npx tsc --noEmit
+docker compose exec backend npm run lint
+docker compose exec backend npm test -- --runInBand
+docker compose exec backend npm run test:e2e -- --runInBand
+
+# Testes do frontend
+docker compose exec frontend npm run lint
+docker compose exec frontend npm test
+```
+
+**Estado atual:** a autenticação e o bootstrap do Administrador já foram implementados na TEC07-01; a autorização detalhada e o bloqueio dos endpoints públicos de cadastro pertencem às TEC07-02 e TEC07-04. **Não exponha o ambiente de desenvolvimento publicamente como se essas proteções já estivessem concluídas.**
