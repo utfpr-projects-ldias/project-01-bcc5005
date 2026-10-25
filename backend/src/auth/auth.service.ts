@@ -7,6 +7,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import EmailPassword from "supertokens-node/recipe/emailpassword";
+import supertokens from "supertokens-node";
 
 import { SigninDto } from "./dto/signin.dto.js";
 import { SignupDto } from "./dto/signup.dto.js";
@@ -97,6 +98,34 @@ export class AuthService {
 
       throw new InternalServerErrorException(
         "Falha ao realizar o login",
+      );
+    }
+  }
+
+  async getMe(userId: string) {
+    try {
+      const user = await supertokens.getUser(userId);
+
+      if (!user) {
+        throw new UnauthorizedException("Usuário não encontrado");
+      }
+
+      return {
+        id: user.id,
+        email: user.emails[0],
+      };
+    } catch (err) {
+      if (err instanceof UnauthorizedException) {
+        throw err;
+      }
+
+      this.logger.error(
+        "Falha ao buscar dados do usuário autenticado",
+        err as Error,
+      );
+
+      throw new InternalServerErrorException(
+        "Falha ao recuperar dados da sessão",
       );
     }
   }
