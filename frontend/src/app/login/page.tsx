@@ -149,14 +149,6 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {/* Rodapé do card */}
-        <div className="text-center mt-6 text-sm text-foreground/60">
-          Não tem uma conta?{" "}
-          <Link href="/cadastro" className="text-brand-neon hover:underline font-medium">
-            Cadastre-se
-          </Link>
-        </div>
-
       </div>
 
       <div className="mt-8">
