@@ -26,13 +26,14 @@ export default function DashboardPage() {
     }
   }
 
-  const categories = [
-    { name: "Dashboard", href: "/dashboard" },
-    { name: "Contratos", href: "/contratos" },
-    { name: "Atividades", href: "/atividades" },
-    { name: "Evidências", href: "/evidencias" },
-    { name: "Relatórios", href: "/relatorios" },
-    { name: "Usuários/Administração", href: "/admin/usuarios" },
+  // Links do menu categorizados com indicação de disponibilidade conforme HU04-03
+  const navigationItems = [
+    { name: "Dashboard", href: "/dashboard", available: true },
+    { name: "Contratos", href: "#", available: false },
+    { name: "Atividades", href: "#", available: false },
+    { name: "Evidências", href: "#", available: false },
+    { name: "Relatórios", href: "#", available: false },
+    { name: "Usuários/Administração", href: "#", available: false },
   ];
 
   return (
@@ -42,7 +43,7 @@ export default function DashboardPage() {
       <aside className="w-64 border-r border-brand-green/20 bg-background/50 backdrop-blur-md hidden md:flex flex-col justify-between p-6 sticky top-0 h-screen">
         <div>
           {/* Logo / Título */}
-          <Link href="/" className="flex items-center gap-2 mb-10 group">
+          <Link href="/dashboard" className="flex items-center gap-2 mb-10 group">
             <Image
               src="/favicon.ico"
               alt="Ícone PRD"
@@ -58,9 +59,9 @@ export default function DashboardPage() {
 
           {/* Menu de Categorias */}
           <nav className="space-y-2">
-            {categories.map((item) => {
+            {navigationItems.map((item) => {
               const isActive = item.href === "/dashboard";
-              return (
+              return item.available ? (
                 <Link
                   key={item.name}
                   href={item.href}
@@ -72,6 +73,14 @@ export default function DashboardPage() {
                 >
                   {item.name}
                 </Link>
+              ) : (
+                <div
+                  key={item.name}
+                  className="block px-4 py-2.5 rounded-lg text-sm font-medium text-foreground/40 cursor-not-allowed select-none"
+                  title="Módulo em desenvolvimento"
+                >
+                  {item.name} <span className="text-xs opacity-60">(Em breve)</span>
+                </div>
               );
             })}
           </nav>
@@ -84,7 +93,7 @@ export default function DashboardPage() {
         
         {/* Topbar com Botão de Logout */}
         <header className="h-20 border-b border-brand-green/20 bg-background/80 backdrop-blur-md px-8 flex items-center justify-between sticky top-0 z-40">
-          <h1 className="text-xl font-bold text-foreground">Dashboard Geral</h1>
+          <h1 className="text-xl font-bold text-foreground">Dashboard</h1>
 
           <div className="flex items-center gap-4">
             {/* Botão de Logout */}
