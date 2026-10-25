@@ -1,10 +1,33 @@
+"use client";
+
 import Link from "next/link";
 import Image from "next/image";
+import { useEffect, useState } from "react";
+import { doesSessionExist } from "supertokens-auth-react/recipe/session";
 
 export default function Home() {
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    async function verifySession() {
+      try {
+        const sessionActive = await doesSessionExist();
+        setIsLoggedIn(sessionActive);
+      } catch {
+        setIsLoggedIn(false);
+      }
+    }
+    verifySession();
+  }, []);
+
+  // Define dinamicamente o destino e o texto com base no estado da sessão
+  const buttonHref = isLoggedIn ? "/dashboard" : "/login";
+  // Durante o carregamento (null) ou sem sessão, mantém o rótulo seguro
+  const buttonLabel = isLoggedIn ? "Acessar painel" : "Acessar o Sistema";
+
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground font-sans">
-{/* Header Público com Logo Centralizada */}
+      {/* Header Público com Logo Centralizada */}
       <header className="w-full border-b border-brand-green/20 bg-background/80 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-center">
           
@@ -41,15 +64,15 @@ export default function Home() {
             Centralize a execução física, operacional, documental e comprobatória de contratos públicos. Acompanhe o planejado, o realizado e o comprovado em um dossiê digital único.
           </p>
 
-          {/* Botão de Acesso apontando para o Login (Sem /cadastro) */}
+          {/* Botão de Acesso Dinâmico baseado na Sessão */}
           <div className="mt-6">
             <Link
-              href="/login"
+              href={buttonHref}
               className="group relative inline-flex items-center justify-center overflow-hidden rounded-full bg-brand-green px-12 py-4 text-lg font-semibold text-background transition-all duration-300 ease-out hover:scale-105 hover:shadow-lg hover:shadow-brand-green/20"
             >
               <span className="absolute inset-0 h-full w-full bg-gradient-to-r from-brand-green to-[#4bc137] opacity-0 transition-opacity duration-300 group-hover:opacity-100"></span>
               <span className="relative z-10 flex items-center gap-2">
-                Acessar o Sistema
+                {buttonLabel}
                 <svg 
                   className="w-5 h-5 transition-transform group-hover:translate-x-1" 
                   fill="none" 
