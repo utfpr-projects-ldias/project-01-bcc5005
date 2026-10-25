@@ -5,6 +5,7 @@ import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { AuthCheckController } from './auth/auth-check.controller.js';
 import { AuthModule } from './auth/auth.module.js';
+import { UsuariosModule } from './usuarios/usuarios.module.js';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { AuthModule } from './auth/auth.module.js';
       synchronize: false,
     }),
     AuthModule,
+    UsuariosModule,
   ],
   controllers: [
     AppController,

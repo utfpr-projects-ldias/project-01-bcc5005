@@ -23,7 +23,8 @@
     "typeorm": "typeorm-ts-node-esm",
     "migration:show": "npm run typeorm -- migration:show -d ./src/database/data-source.ts",
     "migration:run": "npm run typeorm -- migration:run -d ./src/database/data-source.ts",
-    "migration:revert": "npm run typeorm -- migration:revert -d ./src/database/data-source.ts"
+    "migration:revert": "npm run typeorm -- migration:revert -d ./src/database/data-source.ts",
+    "admin:create": "node dist/usuarios/cli/bootstrap-admin.js --interativo"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
