@@ -6,6 +6,7 @@ import { AppService } from './app.service.js';
 import { AuthCheckController } from './auth/auth-check.controller.js';
 import { AuthModule } from './auth/auth.module.js';
 import { UsuariosModule } from './usuarios/usuarios.module.js';
+import { AutorizacaoModule } from './autorizacao/autorizacao.module.js';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { UsuariosModule } from './usuarios/usuarios.module.js';
     }),
     AuthModule,
     UsuariosModule,
+    AutorizacaoModule,
   ],
   controllers: [
     AppController,
