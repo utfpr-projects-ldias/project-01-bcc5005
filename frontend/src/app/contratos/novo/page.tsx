@@ -6,6 +6,15 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Session from "supertokens-web-js/recipe/session";
 
+type StatusContrato =
+  | "Planejamento"
+  | "Em execução"
+  | "Em encerramento"
+  | "Concluído"
+  | "Suspenso"
+  | "Cancelado";
+type ModoCalculo = "Simples" | "Ponderado";
+
 export default function NovoContratoPage() {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
@@ -46,8 +55,8 @@ export default function NovoContratoPage() {
     inicio_vigencia: "",
     termino_vigencia: "",
     duracao_meses: "12",
-    status: "Planejamento" as const,
-    modo_calculo: "Simples" as const,
+    status: "Planejamento" as StatusContrato,
+    modo_calculo: "Simples" as ModoCalculo,
     processo_administrativo: "",
     unidade_responsavel: "",
     descricao: "",
@@ -97,8 +106,14 @@ export default function NovoContratoPage() {
       console.log("Contrato e PDF validados e prontos para persistência:", payload);
 
       router.push("/contratos");
-    } catch (err: any) {
-      const status = err?.status || 500;
+    } catch (err: unknown) {
+      const status =
+        typeof err === "object" &&
+        err !== null &&
+        "status" in err &&
+        typeof err.status === "number"
+          ? err.status
+          : 500;
       if (status === 400) {
         setErrorMsg("Dados inválidos. Verifique os campos obrigatórios preenchidos.");
       } else if (status === 401) {
@@ -320,7 +335,7 @@ export default function NovoContratoPage() {
                   <label className="block text-xs font-medium text-foreground/70 mb-1">Status Operacional *</label>
                   <select
                     value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value as StatusContrato })}
                     className="w-full px-3 py-2 rounded-lg bg-background border border-brand-green/30 text-sm text-foreground focus:outline-none focus:border-brand-green"
                   >
                     <option value="Planejamento">Planejamento</option>
@@ -335,7 +350,7 @@ export default function NovoContratoPage() {
                   <label className="block text-xs font-medium text-foreground/70 mb-1">Modo de Cálculo *</label>
                   <select
                     value={formData.modo_calculo}
-                    onChange={(e) => setFormData({ ...formData, modo_calculo: e.target.value as any })}
+                    onChange={(e) => setFormData({ ...formData, modo_calculo: e.target.value as ModoCalculo })}
                     className="w-full px-3 py-2 rounded-lg bg-background border border-brand-green/30 text-sm text-foreground focus:outline-none focus:border-brand-green"
                   >
                     <option value="Simples">Simples</option>

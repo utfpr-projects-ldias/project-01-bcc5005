@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Session from "supertokens-web-js/recipe/session";
+import { AdminUsuariosLink } from "./components/admin-usuarios-link";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -33,7 +34,6 @@ export default function DashboardPage() {
     { name: "Atividades", href: "#", available: false },
     { name: "Evidências", href: "#", available: false },
     { name: "Relatórios", href: "#", available: false },
-    { name: "Usuários/Administração", href: "#", available: false },
   ];
 
   return (
@@ -96,6 +96,7 @@ export default function DashboardPage() {
           <h1 className="text-xl font-bold text-foreground">Dashboard</h1>
 
           <div className="flex items-center gap-4">
+            <AdminUsuariosLink />
             {/* Botão de Logout */}
             {logoutError && (
               <p role="alert" className="text-sm text-red-400">{logoutError}</p>

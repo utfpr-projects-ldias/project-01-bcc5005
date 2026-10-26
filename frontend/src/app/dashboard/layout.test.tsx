@@ -1,7 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import DashboardLayout from "./layout";
 import { doesSessionExist } from "supertokens-web-js/recipe/session";
-import { useRouter } from "next/navigation";
 
 // Mocks do SuperTokens e Next.js Navigation
 jest.mock("supertokens-web-js/recipe/session", () => ({
@@ -16,11 +15,8 @@ jest.mock("next/navigation", () => ({
 }));
 
 describe("DashboardLayout Guard (HU04-02 / HU04-04)", () => {
-  const mockReplace = jest.fn();
-
   beforeEach(() => {
     jest.clearAllMocks();
-    // Reatribui o mock do router caso necessário
   });
 
   it("deve exibir estado de carregamento inicial e redirecionar para /login se a sessão não existir", async () => {
