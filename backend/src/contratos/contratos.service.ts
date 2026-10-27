@@ -1,5 +1,8 @@
 import {
-  BadRequestException, ConflictException, Injectable, NotFoundException,
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { QueryFailedError, type Repository } from 'typeorm';
@@ -37,7 +40,10 @@ export class ContratosService {
     private readonly auditoria: AuditoriaService,
   ) {}
 
-  async criar(dto: CriarContratoDto, ator: UsuarioAutenticado): Promise<Contrato> {
+  async criar(
+    dto: CriarContratoDto,
+    ator: UsuarioAutenticado,
+  ): Promise<Contrato> {
     this.validarVigencia(dto.inicioVigencia, dto.terminoVigencia);
 
     return this.auditoria.executarComAuditoria(ator, async (manager) => {
@@ -184,19 +190,25 @@ async function salvarContrato(
     return await repo.save(contrato);
   } catch (error: unknown) {
     if (error instanceof QueryFailedError) {
-      const codigo = (error as QueryFailedError & { code?: string }).code;
+      const erroDriver = error.driverError as { code?: string };
+      const codigo =
+        erroDriver.code ?? (error as QueryFailedError & { code?: string }).code;
+
       if (codigo === PG_CHECK_VIOLATION) {
         throw new BadRequestException('Dados violam restrição de integridade');
       }
+
       if (codigo === PG_UNIQUE_VIOLATION) {
         throw new ConflictException('Registro conflita com outro existente');
       }
+
       if (codigo === PG_FK_VIOLATION) {
         throw new BadRequestException(
           'Referência inválida (responsável ou contrato)',
         );
       }
     }
+
     throw error;
   }
 }
@@ -208,11 +220,20 @@ async function salvarContrato(
  */
 function aplicarAtualizacao(alvo: Contrato, dto: AtualizarContratoDto): void {
   const camposOpcionais: (keyof AtualizarContratoDto)[] = [
-    'processoAdministrativo', 'unidadeResponsavel', 'descricao',
-    'dataAssinatura', 'responsavelInternoId', 'fiscalGestor', 'observacoes',
+    'processoAdministrativo',
+    'unidadeResponsavel',
+    'descricao',
+    'dataAssinatura',
+    'responsavelInternoId',
+    'fiscalGestor',
+    'observacoes',
   ];
   const camposObrigatorios: (keyof AtualizarContratoDto)[] = [
-    'numeroContrato', 'orgaoContratante', 'objeto', 'status', 'modoCalculo',
+    'numeroContrato',
+    'orgaoContratante',
+    'objeto',
+    'status',
+    'modoCalculo',
   ];
 
   for (const campo of [...camposOpcionais, ...camposObrigatorios]) {
@@ -221,8 +242,10 @@ function aplicarAtualizacao(alvo: Contrato, dto: AtualizarContratoDto): void {
       alvo[campo] = dto[campo];
     }
   }
-  if (dto.numeroContrato !== undefined) alvo.numeroContrato = dto.numeroContrato.trim();
-  if (dto.orgaoContratante !== undefined) alvo.orgaoContratante = dto.orgaoContratante.trim();
+  if (dto.numeroContrato !== undefined)
+    alvo.numeroContrato = dto.numeroContrato.trim();
+  if (dto.orgaoContratante !== undefined)
+    alvo.orgaoContratante = dto.orgaoContratante.trim();
   if (dto.objeto !== undefined) alvo.objeto = dto.objeto.trim();
 }
 
