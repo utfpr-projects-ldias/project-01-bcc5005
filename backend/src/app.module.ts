@@ -8,6 +8,8 @@ import { AuthModule } from './auth/auth.module.js';
 import { UsuariosModule } from './usuarios/usuarios.module.js';
 import { AutorizacaoModule } from './autorizacao/autorizacao.module.js';
 import { AuditoriaModule } from './auditoria/auditoria.module.js';
+import { ContratosModule } from './contratos/contratos.module.js';
+
 
 @Module({
   imports: [
@@ -21,6 +23,7 @@ import { AuditoriaModule } from './auditoria/auditoria.module.js';
     UsuariosModule,
     AutorizacaoModule,
     AuditoriaModule,
+    ContratosModule,
   ],
   controllers: [
     AppController,
