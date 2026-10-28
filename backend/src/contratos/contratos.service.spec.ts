@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import {
   BadRequestException,
   ConflictException,
@@ -88,14 +89,15 @@ function montarCenario() {
       (dados: Partial<Contrato>) => ({ ...dados }) as Contrato,
     ),
 
-    save: jest.fn(async (contrato: Contrato) => ({
-      ...contrato,
-      id: contrato.id || ID_CONTRATO,
-    })),
+    save: jest.fn(async (contrato: Contrato) =>
+      Object.assign(new Contrato(), contrato, {
+        id: contrato.id || ID_CONTRATO,
+      }),
+    ),
 
-    find: jest.fn().mockResolvedValue([] as Contrato[]),
+    find: jest.fn<() => Promise<Contrato[]>>().mockResolvedValue([]),
 
-    findOneBy: jest.fn().mockResolvedValue(null as Contrato | null),
+    findOneBy: jest.fn<() => Promise<Contrato | null>>().mockResolvedValue(null),
   };
 
   const manager = {
@@ -116,7 +118,7 @@ function montarCenario() {
       },
     ),
 
-    registrarNaTransacao: jest.fn().mockResolvedValue(undefined),
+    registrarNaTransacao: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
   };
 
   const service = new ContratosService(
