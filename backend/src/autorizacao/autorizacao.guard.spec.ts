@@ -47,7 +47,12 @@ describe('guard global', () => {
     expect(identificar).not.toHaveBeenCalled();
   });
 
-  it.each(['/contratos', '/CONTRATOS/abc', '/contratos/abc', '/admin/usuarios', '/admin/usuarios/x', '/usuarios/me'])(
+  it('falha fechado para qualquer namespace de domínio novo', async () => {
+    metadados.mockReturnValue(undefined);
+    await expect(guard.canActivate(contexto('/modulo-futuro').context)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it.each(['/contratos', '/CONTRATOS/abc', '/contratos/abc', '/admin/usuarios', '/admin/usuarios/x', '/usuarios/me', '/evidencias', '/atividades', '/relatorios', '/etapas/abc', '/documentos', '/auditoria', '/admin/usuarios/x/permissoes'])(
     'nega rota interna sem política: %s', async (path) => {
       metadados.mockReturnValue(undefined);
       await expect(guard.canActivate(contexto(path).context)).rejects.toBeInstanceOf(ForbiddenException);

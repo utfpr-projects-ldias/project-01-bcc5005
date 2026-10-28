@@ -4,12 +4,12 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, type Repository } from 'typeorm';
+import type { ConsultarFuncionariosDto } from './dto/consultar-funcionarios.dto.js';
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
 import { PerfilUsuario } from './perfil-usuario.enum.js';
 import { Usuario } from './usuario.entity.js';
-import { UsuariosService } from './usuarios.service.js';
 import { IdentidadesFuncionariosService } from './identidades-funcionarios.service.js';
 import { normalizarNomeCompleto } from './nome-completo.js';
 import type { CriarFuncionarioDto } from './dto/criar-funcionario.dto.js';
@@ -21,7 +21,6 @@ export class AdministracaoUsuariosService {
 
   constructor(
     @InjectRepository(Usuario) private readonly repositorio: Repository<Usuario>,
-    private readonly usuarios: UsuariosService,
     private readonly identidades: IdentidadesFuncionariosService,
     private readonly dataSource: DataSource,
     private readonly auditoria: AuditoriaService,
@@ -32,7 +31,23 @@ export class AdministracaoUsuariosService {
     return dados.map((usuario) => this.publico(usuario));
   }
 
-  async criar(dto: CriarFuncionarioDto) {
+  /** A API de consulta pagina NO SERVIDOR; a rota GET antiga permanece para compatibilidade. */
+  async consultar(filtros: ConsultarFuncionariosDto) {
+    const pagina = filtros.pagina ?? 1;
+    const limite = filtros.limite ?? 20;
+    const busca = filtros.busca?.trim().slice(0, 160) || '';
+    // Escape de % e _ evita que a busca informada se torne padrão amplo arbitrário.
+    const escapar = (valor: string) => valor.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+    const query = this.repositorio.createQueryBuilder('u');
+    if (filtros.ativo !== undefined) query.andWhere('u.ativo = :ativo', { ativo: filtros.ativo });
+    if (busca) query.andWhere("(u.nome ILIKE :busca ESCAPE '\\' OR u.email ILIKE :busca ESCAPE '\\')", { busca: `%${escapar(busca)}%` });
+    const [dados, total] = await query.orderBy('u.criadoEm', 'DESC')
+      .addOrderBy('u.id', 'DESC').skip((pagina - 1) * limite).take(limite).getManyAndCount();
+    return { itens: dados.map((u) => this.publico(u)), pagina, limite, total, totalPaginas: Math.max(1, Math.ceil(total / limite)) };
+  }
+
+  async criar(dto: CriarFuncionarioDto, ator: UsuarioAutenticado) {
+    if (ator?.perfil !== PerfilUsuario.ADMINISTRADOR) throw new ForbiddenException('Somente Administrador pode criar funcionários');
     if (![PerfilUsuario.GESTOR, PerfilUsuario.COLABORADOR].includes(dto.perfil)) {
       throw new BadRequestException('Somente os perfis GESTOR e COLABORADOR podem ser provisionados');
     }
@@ -43,8 +58,22 @@ export class AdministracaoUsuariosService {
 
     const supertokensUserId = await this.identidades.criar(email, dto.senhaInicial);
     try {
-      const usuario = await this.usuarios.criarProvisionado({
-        supertokensUserId, email, nome, perfil: dto.perfil,
+      const usuario = await this.dataSource.transaction(async (manager) => {
+        const autor = await manager.getRepository(Usuario).findOne({ where: { id: ator.id }, lock: { mode: 'pessimistic_write' } });
+        if (!autor?.ativo || autor.perfil !== PerfilUsuario.ADMINISTRADOR || autor.supertokensUserId !== ator.supertokensUserId) {
+          throw new ForbiddenException('Administrador não está ativo');
+        }
+        const registro = manager.getRepository(Usuario).create({
+          supertokensUserId, email, nome, perfil: dto.perfil, ativo: true,
+        });
+        const salvo = await manager.getRepository(Usuario).save(registro);
+        await this.auditoria.registrarNaTransacao(manager, ator, {
+          acao: AcaoAuditoria.USUARIO_CRIADO,
+          entidadeTipo: 'USUARIO', entidadeId: salvo.id,
+          dadosAnteriores: null,
+          dadosPosteriores: { email: salvo.email, nome: salvo.nome, perfil: salvo.perfil, ativo: true },
+        });
+        return salvo;
       });
       return this.publico(usuario);
     } catch (error: unknown) {
@@ -57,6 +86,100 @@ export class AdministracaoUsuariosService {
       if (error instanceof HttpException) throw error;
       this.logger.error('Falha ao persistir funcionário no banco da aplicação');
       throw new InternalServerErrorException('Falha ao provisionar funcionário');
+    }
+  }
+
+  /** Bloqueia mudança da própria credencial administrativa até aprovação explícita. */
+  private async carregarAlvo(id: string, ator: UsuarioAutenticado): Promise<Usuario> {
+    if (ator.perfil !== PerfilUsuario.ADMINISTRADOR || id === ator.id) {
+      throw new ForbiddenException('Alteração de credencial da própria conta Administrador não permitida');
+    }
+    const autor = await this.repositorio.findOneBy({ id: ator.id, ativo: true });
+    if (!autor || autor.perfil !== PerfilUsuario.ADMINISTRADOR || autor.supertokensUserId !== ator.supertokensUserId) {
+      throw new ForbiddenException('Administrador não está ativo');
+    }
+    const alvo = await this.repositorio.findOneBy({ id });
+    if (!alvo) throw new NotFoundException('Funcionário não encontrado');
+    if (alvo.perfil === PerfilUsuario.ADMINISTRADOR) throw new ForbiddenException('Não é permitido alterar credenciais de Administrador');
+    return alvo;
+  }
+
+  async alterarEmail(id: string, emailInformado: string, ator: UsuarioAutenticado) {
+    const email = emailInformado.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 320) {
+      throw new BadRequestException('E-mail inválido');
+    }
+    await this.carregarAlvo(id, ator);
+    // Mantém exclusividade administrativa e bloqueia simultaneamente autor e alvo.
+    let idCore: string | undefined;
+    let anterior: string | undefined;
+    let mudouNoCore = false;
+    try {
+      return await this.dataSource.transaction(async (manager) => {
+        const repo = manager.getRepository(Usuario);
+        const ids = [ator.id, id].sort();
+        const bloqueados = new Map<string, Usuario>();
+        for (const usuarioId of ids) {
+          const u = await repo.findOne({ where: { id: usuarioId }, lock: { mode: 'pessimistic_write' } });
+          if (u) bloqueados.set(usuarioId, u);
+        }
+        const autor = bloqueados.get(ator.id);
+        const alvo = bloqueados.get(id);
+        if (!autor?.ativo || autor.perfil !== PerfilUsuario.ADMINISTRADOR || autor.supertokensUserId !== ator.supertokensUserId) {
+          throw new ForbiddenException('Administrador não está ativo');
+        }
+        if (!alvo) throw new NotFoundException('Funcionário não encontrado');
+        if (alvo.perfil === PerfilUsuario.ADMINISTRADOR) throw new ForbiddenException('Conta administrativa protegida');
+        if (alvo.email === email) return this.publico(alvo);
+        if (await repo.findOneBy({ email })) throw new ConflictException('E-mail já cadastrado');
+        anterior = alvo.email;
+        idCore = alvo.supertokensUserId;
+        // ST não participa do commit local. Compensação EXTERNA também cobre erro no COMMIT.
+        await this.identidades.alterarEmail(idCore, email);
+        mudouNoCore = true;
+        alvo.email = email;
+        await repo.save(alvo);
+        await this.auditoria.registrarNaTransacao(manager, ator, {
+          acao: AcaoAuditoria.USUARIO_EMAIL_ALTERADO,
+          entidadeTipo: 'USUARIO', entidadeId: alvo.id,
+          dadosAnteriores: { email: anterior }, dadosPosteriores: { email },
+        });
+        return this.publico(alvo);
+      });
+    } catch (erro: unknown) {
+      if (mudouNoCore && idCore && anterior) {
+        try { await this.identidades.alterarEmail(idCore, anterior); }
+        catch {
+          this.logger.error('Falha compensando e-mail após erro de banco/commit/auditoria; reconciliação manual necessária');
+          throw new InternalServerErrorException('E-mail inconsistente; contate o suporte técnico');
+        }
+      }
+      throw erro;
+    }
+  }
+
+  /** A senha pertence só ao Core. Audita a tentativa ANTES do efeito não transacional. */
+  async redefinirSenha(id: string, novaSenha: string, ator: UsuarioAutenticado): Promise<void> {
+    const alvo = await this.carregarAlvo(id, ator);
+    if (novaSenha.length < 12 || novaSenha.length > 128 ||
+      !/^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^a-zA-Z0-9]).+$/.test(novaSenha)) {
+      throw new BadRequestException('Senha fora da política mínima');
+    }
+    await this.auditoria.executarComAuditoria(ator, async () => ({
+      resultado: undefined,
+      evento: { acao: AcaoAuditoria.USUARIO_SENHA_REDEFINICAO_SOLICITADA,
+        entidadeTipo: 'USUARIO', entidadeId: alvo.id, dadosPosteriores: { situacao: 'SOLICITADA' } },
+    }));
+    await this.identidades.definirNovaSenha(alvo.supertokensUserId, novaSenha);
+    try {
+      await this.auditoria.executarComAuditoria(ator, async () => ({
+        resultado: undefined,
+        evento: { acao: AcaoAuditoria.USUARIO_SENHA_REDEFINIDA,
+          entidadeTipo: 'USUARIO', entidadeId: alvo.id, dadosPosteriores: { situacao: 'EFETIVADA' } },
+      }));
+    } catch {
+      this.logger.error('Senha alterada no SuperTokens; auditoria de confirmação falhou; reconciliação necessária');
+      throw new InternalServerErrorException('Senha alterada, mas auditoria incompleta; contate o suporte técnico');
     }
   }
 

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { doesSessionExist } from "supertokens-auth-react/recipe/session";
+import { doesSessionExist } from "supertokens-web-js/recipe/session";
 
 export default function Home() {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);

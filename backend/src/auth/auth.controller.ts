@@ -1,10 +1,11 @@
 import {
   Body, Controller, ForbiddenException, Get, HttpCode, HttpStatus,
-  Post, Req, Res, UnauthorizedException, UsePipes, ValidationPipe,
+  Post, Req, Res, UsePipes, ValidationPipe,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import Session from 'supertokens-node/recipe/session';
-import type { SessionRequest } from 'supertokens-node/framework/express';
+import { ExigirPolitica } from '../autorizacao/politica.decorator.js';
+import type { RequisicaoAutorizada } from '../autorizacao/usuario-autenticado.js';
 import { AuthService } from './auth.service.js';
 import { SigninDto } from './dto/signin.dto.js';
 
@@ -38,9 +39,9 @@ export class AuthController {
 
   @Get('me')
   @HttpCode(HttpStatus.OK)
-  async getMe(@Req() request: SessionRequest) {
-    const session = request.session;
-    if (!session) throw new UnauthorizedException('Sessão obrigatória');
-    return this.authService.getMe(session.getUserId());
+  @ExigirPolitica('perfil:proprio')
+  getMe(@Req() request: RequisicaoAutorizada) {
+    // O guard confere a sessão E o domínio ativo; nunca retornar o role legado.
+    return request.usuarioDominio;
   }
 }

@@ -2,7 +2,6 @@ import { jest } from '@jest/globals';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import type { DataSource, EntityManager, Repository } from 'typeorm';
 import type { AuditoriaService } from '../auditoria/auditoria.service.js';
-import type { UsuariosService } from './usuarios.service.js';
 import type { IdentidadesFuncionariosService } from './identidades-funcionarios.service.js';
 import { AdministracaoUsuariosService } from './administracao-usuarios.service.js';
 import { PerfilUsuario } from './perfil-usuario.enum.js';
@@ -20,7 +19,6 @@ const manager = { getRepository: () => ({
 const transacao = jest.fn<(callback: (manager: EntityManager) => Promise<unknown>) => Promise<unknown>>();
 const svc = new AdministracaoUsuariosService(
   {} as Repository<Usuario>,
-  {} as UsuariosService,
   {} as IdentidadesFuncionariosService,
   { transaction: transacao } as unknown as DataSource,
   { registrarNaTransacao: auditar } as unknown as AuditoriaService,

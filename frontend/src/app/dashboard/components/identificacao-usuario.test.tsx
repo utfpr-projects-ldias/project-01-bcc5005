@@ -14,9 +14,10 @@ test("mostra nome, e-mail e perfil reais", async () => {
   expect(screen.getByText("Gestor")).toBeInTheDocument();
 });
 
-test("conta legada mostra e-mail no lugar do nome", async () => {
+test("conta legada mostra Nome não informado, e-mail e perfil separados", async () => {
   consultar.mockResolvedValue({ id: "u", nome: null, email: "legado@example.com", ativo: true, perfil: "ADMINISTRADOR" });
   render(<IdentificacaoUsuario />);
-  expect(await screen.findByText("legado@example.com")).toBeInTheDocument();
+  expect(await screen.findByText("Nome não informado")).toBeInTheDocument();
+  expect(screen.getByText("legado@example.com")).toBeInTheDocument();
   expect(screen.getByText("Administrador")).toBeInTheDocument();
 });

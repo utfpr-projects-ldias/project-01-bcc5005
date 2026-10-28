@@ -21,8 +21,8 @@ export function IdentificacaoUsuario() {
   if (!perfil) return <span role="status" className="text-xs text-foreground/60">{erro ? "Perfil indisponível" : "Consultando conta..."}</span>;
   return (
     <div className="min-w-0 text-right text-xs sm:text-sm" aria-label="Conta autenticada">
-      <p className="font-semibold truncate max-w-40 sm:max-w-64">{perfil.nome || perfil.email}</p>
-      {perfil.nome && <p className="text-foreground/70 truncate max-w-40 sm:max-w-64">{perfil.email}</p>}
+      <p className="font-semibold truncate max-w-40 sm:max-w-64">{perfil.nome || "Nome não informado"}</p>
+      <p className="text-foreground/70 truncate max-w-40 sm:max-w-64">{perfil.email}</p>
       <p className="text-brand-neon">{nomes[perfil.perfil]}</p>
     </div>
   );

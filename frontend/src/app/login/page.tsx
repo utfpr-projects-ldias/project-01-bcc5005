@@ -111,10 +111,13 @@ export default function LoginPage() {
         {/* Formulário com Zod */}
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <div>
-            <label className="block text-sm font-medium text-foreground/80 mb-1">E-mail</label>
+            <label htmlFor="email-login" className="block text-sm font-medium text-foreground/80 mb-1">E-mail</label>
             <input 
               type="email" 
+              id="email-login"
               name="email"
+              aria-invalid={!!errors.email}
+              aria-describedby={errors.email ? "erro-login-email" : undefined}
               value={formData.email}
               onChange={handleChange}
               placeholder="seu@email.com"
@@ -122,14 +125,17 @@ export default function LoginPage() {
                 errors.email ? "border-red-500 focus:border-red-500" : "border-brand-green/30 focus:border-brand-neon"
               }`}
             />
-            {errors.email && <p className="mt-1 text-xs text-red-400">{errors.email}</p>}
+            {errors.email && <p id="erro-login-email" role="alert" className="mt-1 text-xs text-red-400">{errors.email}</p>}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-foreground/80 mb-1">Senha</label>
+            <label htmlFor="senha-login" className="block text-sm font-medium text-foreground/80 mb-1">Senha</label>
             <input 
               type="password" 
+              id="senha-login"
               name="password"
+              aria-invalid={!!errors.password}
+              aria-describedby={errors.password ? "erro-login-senha" : undefined}
               value={formData.password}
               onChange={handleChange}
               placeholder="••••••••"
@@ -137,7 +143,7 @@ export default function LoginPage() {
                 errors.password ? "border-red-500 focus:border-red-500" : "border-brand-green/30 focus:border-brand-neon"
               }`}
             />
-            {errors.password && <p className="mt-1 text-xs text-red-400">{errors.password}</p>}
+            {errors.password && <p id="erro-login-senha" role="alert" className="mt-1 text-xs text-red-400">{errors.password}</p>}
           </div>
 
           <button

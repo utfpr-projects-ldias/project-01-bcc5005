@@ -35,8 +35,11 @@ export class AutorizacaoGuard implements CanActivate {
       context.getHandler(), context.getClass(),
     ]);
     // Nenhum controller sob /contratos ou /admin/usuarios fica público por omissão.
-    const reservada = /^\/(?:contratos|admin\/usuarios|usuarios\/me)(?:\/|$)/i.test(req.path);
-    if (!politica && !reservada) return true;
+    const publica = /^\/$/i.test(req.path) || /^\/auth(?!\/me(?:\/|$))(?:\/|$)/i.test(req.path) || /^\/protected\/ping(?:\/|$)/i.test(req.path);
+    if (!politica && publica) return true;
+    // Todo novo controller (etapas, evidências, documentos etc.) é fechado por padrão.
+    // Mesmo uma rota interna sem decorator precisa de sessão ativa e falha 403.
+
 
     const supertokensUserId = await this.sessoes.identificar(req, res);
     const usuario = await this.usuarios.buscarAtivoPorSupertokensId(supertokensUserId);
