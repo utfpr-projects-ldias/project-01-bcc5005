@@ -5,6 +5,7 @@ export type UsuarioAutenticado = {
   id: string;
   supertokensUserId: string;
   email: string;
+  nome?: string | null;
   perfil: PerfilUsuario;
 };
 

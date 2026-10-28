@@ -3,48 +3,49 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { doesSessionExist } from "supertokens-web-js/recipe/session";
+import { consultarMeuPerfil, ErroApi } from "@/lib/admin-usuarios";
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+/** Exige sessão SuperTokens E usuário ativo no domínio, mesmo com cookie antigo. */
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [authorized, setAuthorized] = useState(false);
+  const [carregando, setCarregando] = useState(true);
+  const [autorizado, setAutorizado] = useState(false);
+  const [erro, setErro] = useState("");
 
   useEffect(() => {
-    async function checkAuth() {
+    let ativo = true;
+    async function verificar() {
       try {
-        const sessionExists = await doesSessionExist();
-
-        if (!sessionExists) {
+        if (!await doesSessionExist()) {
           router.replace("/login");
           return;
         }
-
-        setAuthorized(true);
-      } catch (err) {
-        console.error("Erro ao verificar sessão:", err);
-        router.replace("/login");
+        const perfil = await consultarMeuPerfil();
+        if (ativo && perfil.ativo) setAutorizado(true);
+        else if (ativo) setErro("Conta inativa. Contate um Administrador.");
+      } catch (e) {
+        if (!ativo) return;
+        if (e instanceof ErroApi && e.status === 401) router.replace("/login");
+        else setErro(e instanceof ErroApi && e.status === 403
+          ? "Conta inativa ou não autorizada. Contate um Administrador."
+          : "Não foi possível validar sua conta. Tente novamente.");
       } finally {
-        setLoading(false);
+        if (ativo) setCarregando(false);
       }
     }
-
-    checkAuth();
+    void verificar();
+    return () => { ativo = false; };
   }, [router]);
 
-  // Durante a validação da sessão, exibe um estado vazio/neutro para evitar flash de conteúdo protegido
-  if (loading || !authorized) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background text-foreground">
-        <div className="text-sm text-foreground/60 animate-pulse">
-          Carregando ambiente seguro...
-        </div>
-      </div>
-    );
-  }
-
+  if (carregando) return (
+    <div className="min-h-screen flex items-center justify-center bg-background text-foreground">
+      <div className="text-sm text-foreground/60 animate-pulse">Carregando ambiente seguro...</div>
+    </div>
+  );
+  if (!autorizado) return (
+    <div className="min-h-screen flex items-center justify-center bg-background text-foreground p-6">
+      <p role="alert" className="text-sm">{erro || "Sessão encerrada. Entre novamente."}</p>
+    </div>
+  );
   return <>{children}</>;
 }

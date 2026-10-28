@@ -5,15 +5,23 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import {
+  atualizarFuncionario,
   cadastrarFuncionario,
   consultarMeuPerfil,
   ErroApi,
   listarUsuarios,
   type PerfilFuncionario,
+  type AtualizarFuncionario,
+  type MeuPerfil,
   type UsuarioPublico,
 } from "@/lib/admin-usuarios";
 
+const nomeCompleto = z.string().min(3, "Informe nome e sobrenome.").max(160, "Nome muito longo.")
+  .regex(/^\p{L}[\p{L}\p{M}'’.-]*(?:[ \t]+\p{L}[\p{L}\p{M}'’.-]*)+$/u,
+    "Informe nome e sobrenome válidos.");
+
 const schema = z.object({
+  nome: nomeCompleto,
   email: z.string().email("Informe um e-mail válido.").max(320, "E-mail muito longo."),
   perfil: z.enum(["GESTOR", "COLABORADOR"]),
   senhaInicial: z.string().min(12, "A senha precisa ter ao menos 12 caracteres.")
@@ -25,10 +33,10 @@ const schema = z.object({
   message: "As senhas não coincidem.", path: ["confirmarSenha"],
 });
 
-type Campo = "email" | "perfil" | "senhaInicial" | "confirmarSenha";
+type Campo = "nome" | "email" | "perfil" | "senhaInicial" | "confirmarSenha";
 type Erros = Partial<Record<Campo, string>>;
 
-const inicialmente = { email: "", perfil: "COLABORADOR" as PerfilFuncionario, senhaInicial: "", confirmarSenha: "" };
+const inicialmente = { nome: "", email: "", perfil: "COLABORADOR" as PerfilFuncionario, senhaInicial: "", confirmarSenha: "" };
 
 function dataDeCriacao(data: string): string {
   const valor = new Date(data);
@@ -42,6 +50,12 @@ export default function AdministracaoUsuariosPage() {
   const [erroAcesso, setErroAcesso] = useState("");
   const [erroLista, setErroLista] = useState("");
   const [usuarios, setUsuarios] = useState<UsuarioPublico[]>([]);
+  const [minhaConta, setMinhaConta] = useState<MeuPerfil | null>(null);
+  const [editando, setEditando] = useState<UsuarioPublico | null>(null);
+  const [edicao, setEdicao] = useState({ nome: "", perfil: "GESTOR" as PerfilFuncionario, ativo: true });
+  const [erroEdicao, setErroEdicao] = useState("");
+  const [mensagemEdicao, setMensagemEdicao] = useState("");
+  const [salvandoEdicao, setSalvandoEdicao] = useState(false);
   const [formulario, setFormulario] = useState({ ...inicialmente });
   const [erros, setErros] = useState<Erros>({});
   const [erroCadastro, setErroCadastro] = useState("");
@@ -75,6 +89,7 @@ export default function AdministracaoUsuariosPage() {
           return;
         }
         setAutorizado(true);
+        setMinhaConta(perfil);
         const lista = await listarUsuarios();
         if (!ativo) return;
         setUsuarios(lista);
@@ -109,6 +124,7 @@ export default function AdministracaoUsuariosPage() {
     setMensagem("");
     const validacao = schema.safeParse({
       ...formulario,
+      nome: formulario.nome.trim().replace(/\s+/g, " "),
       email: formulario.email.trim().toLowerCase(),
     });
     if (!validacao.success) {
@@ -124,6 +140,7 @@ export default function AdministracaoUsuariosPage() {
     setEnviando(true);
     try {
       const criado = await cadastrarFuncionario({
+        nome: validacao.data.nome,
         email: validacao.data.email,
         perfil: validacao.data.perfil,
         senhaInicial: validacao.data.senhaInicial,
@@ -136,6 +153,44 @@ export default function AdministracaoUsuariosPage() {
       tratarErro(erro);
     } finally {
       setEnviando(false);
+    }
+  }
+
+  function iniciarEdicao(usuario: UsuarioPublico) {
+    setEditando(usuario);
+    setEdicao({ nome: usuario.nome ?? "", perfil: usuario.perfil === "ADMINISTRADOR" ? "GESTOR" : usuario.perfil, ativo: usuario.ativo });
+    setErroEdicao("");
+    setMensagemEdicao("");
+    setMensagem("");
+  }
+
+  async function salvarEdicao(evento: FormEvent<HTMLFormElement>) {
+    evento.preventDefault();
+    if (!editando || !autorizado || salvandoEdicao) return;
+    setErroEdicao("");
+    const nome = edicao.nome.trim().replace(/\s+/g, " ");
+    const valido = nomeCompleto.safeParse(nome);
+    if (!valido.success) {
+      setErroEdicao(valido.error.issues[0]?.message ?? "Nome inválido.");
+      return;
+    }
+    const dados: AtualizarFuncionario = editando.perfil === "ADMINISTRADOR"
+      ? { nome: valido.data }
+      : { nome: valido.data, perfil: edicao.perfil, ativo: edicao.ativo };
+    setSalvandoEdicao(true);
+    try {
+      const atualizado = await atualizarFuncionario(editando.id, dados);
+      setUsuarios((atual) => atual.map((item) => item.id === atualizado.id ? atualizado : item));
+      if (atualizado.id === minhaConta?.id) setMinhaConta((atual) => atual ? { ...atual, nome: atualizado.nome } : atual);
+      setMensagemEdicao(`Dados de ${atualizado.email} atualizados.`);
+      setEditando(null);
+    } catch (erro) {
+      if (erro instanceof ErroApi && erro.status === 401) { router.replace("/login"); }
+      else if (erro instanceof ErroApi && erro.status === 403) {
+        setErroEdicao("Operação negada. Atualize a página para verificar suas permissões.");
+      } else setErroEdicao(erro instanceof ErroApi ? erro.message : "Falha de conexão. Tente novamente.");
+    } finally {
+      setSalvandoEdicao(false);
     }
   }
 
@@ -160,7 +215,7 @@ export default function AdministracaoUsuariosPage() {
           <div>
             <Link href="/dashboard" className="text-sm text-brand-neon hover:underline">← Voltar ao dashboard</Link>
             <h1 className="mt-3 text-2xl font-bold">Administração de funcionários</h1>
-            <p className="mt-1 text-sm text-foreground/70">Cadastre Gestores e Colaboradores e consulte as contas existentes.</p>
+            <p className="mt-1 text-sm text-foreground/70">Cadastre e gerencie Gestores e Colaboradores; edite o próprio nome como Administrador.</p>
           </div>
           <span className="rounded-full border border-brand-green/30 px-3 py-1 text-xs font-medium text-brand-neon">Acesso do Administrador</span>
         </div>
@@ -182,30 +237,47 @@ export default function AdministracaoUsuariosPage() {
               <p className="mt-6 rounded-lg border border-brand-green/20 p-5 text-sm text-foreground/70">Nenhum usuário encontrado.</p>
             ) : (
               <div className="mt-5 overflow-x-auto">
-                <table className="w-full min-w-[490px] text-left text-sm">
+                <table className="w-full min-w-[650px] text-left text-sm">
                   <thead className="border-b border-brand-green/20 text-foreground/60">
-                    <tr><th scope="col" className="pb-3 pr-3 font-medium">E-mail</th><th scope="col" className="pb-3 pr-3 font-medium">Perfil</th><th scope="col" className="pb-3 pr-3 font-medium">Situação</th><th scope="col" className="pb-3 font-medium">Criado em</th></tr>
+                    <tr><th scope="col" className="pb-3 pr-3 font-medium">Nome</th><th scope="col" className="pb-3 pr-3 font-medium">E-mail</th><th scope="col" className="pb-3 pr-3 font-medium">Perfil</th><th scope="col" className="pb-3 pr-3 font-medium">Situação</th><th scope="col" className="pb-3 pr-3 font-medium">Criado em</th><th scope="col" className="pb-3 font-medium">Ações</th></tr>
                   </thead>
                   <tbody>
                     {usuarios.map((usuario) => (
                       <tr key={usuario.id} className="border-b border-brand-green/10 last:border-0">
+                        <td className="py-3 pr-3 break-words">{usuario.nome || <span className="text-foreground/60">Nome não informado</span>}</td>
                         <td className="py-3 pr-3 font-medium break-all">{usuario.email}</td>
                         <td className="py-3 pr-3">{usuario.perfil === "ADMINISTRADOR" ? "Administrador" : usuario.perfil === "GESTOR" ? "Gestor" : "Colaborador"}</td>
                         <td className="py-3 pr-3">{usuario.ativo ? "Ativo" : "Inativo"}</td>
-                        <td className="py-3">{dataDeCriacao(usuario.criadoEm)}</td>
+                        <td className="py-3 pr-3">{dataDeCriacao(usuario.criadoEm)}</td>
+                        <td className="py-3">
+                          {(usuario.perfil !== "ADMINISTRADOR" || usuario.id === minhaConta?.id) && (
+                            <button type="button" onClick={() => iniciarEdicao(usuario)}
+                              aria-label={`Editar ${usuario.email}`}
+                              className="rounded-lg border border-brand-green/40 px-3 py-1.5 text-sm hover:bg-brand-green/10">
+                              Editar
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             )}
-            <p className="mt-5 text-xs text-foreground/60">Edição de perfis e ativação/inativação dependerão de endpoints administrativos futuros.</p>
+            <p className="mt-5 text-xs text-foreground/60">Inativar bloqueia o acesso sem apagar o histórico. E-mail e senha não são alterados aqui.</p>
           </section>
 
           <section className="rounded-2xl border border-brand-green/20 bg-brand-darkgreen/20 p-5 md:p-6" aria-labelledby="titulo-formulario">
             <h2 id="titulo-formulario" className="text-lg font-semibold">Cadastrar funcionário</h2>
             <p className="mt-1 text-sm text-foreground/70">O novo usuário entrará pela mesma tela de login.</p>
             <form onSubmit={(e) => void cadastrar(e)} noValidate className="mt-5 space-y-4">
+              <div>
+                <label htmlFor="usuario-nome" className="mb-1 block text-sm font-medium">Nome completo</label>
+                <input id="usuario-nome" type="text" autoComplete="name" maxLength={160} value={formulario.nome}
+                  onChange={(e) => { setFormulario((f) => ({ ...f, nome: e.target.value })); setErros((f) => ({ ...f, nome: undefined })); }}
+                  aria-invalid={Boolean(erros.nome)} className="w-full rounded-lg border border-brand-green/30 bg-background px-3 py-2 text-foreground" />
+                {erros.nome && <p role="alert" className="mt-1 text-xs text-red-500">{erros.nome}</p>}
+              </div>
               <div>
                 <label htmlFor="usuario-email" className="mb-1 block text-sm font-medium">E-mail</label>
                 <input id="usuario-email" name="email" type="email" autoComplete="off" maxLength={320} value={formulario.email}
@@ -248,6 +320,43 @@ export default function AdministracaoUsuariosPage() {
             </form>
           </section>
         </div>
+        {mensagemEdicao && <p role="status" className="text-brand-neon">{mensagemEdicao}</p>}
+        {editando && (
+          <section className="rounded-2xl border border-brand-green/30 bg-brand-darkgreen/20 p-5" aria-labelledby="titulo-edicao">
+            <h2 id="titulo-edicao" className="text-lg font-semibold">Editar funcionário: {editando.email}</h2>
+            <p className="mt-1 text-xs text-foreground/60">Para Administrador, somente o próprio nome pode ser modificado. As demais contas podem ter perfil e situação alterados.</p>
+            <form onSubmit={(evento) => void salvarEdicao(evento)} noValidate className="mt-4 grid max-w-xl gap-4">
+              <div>
+                <label htmlFor="edicao-nome" className="mb-1 block text-sm font-medium">Nome completo (edição)</label>
+                <input id="edicao-nome" value={edicao.nome} maxLength={160} onChange={(e) => setEdicao((anterior) => ({ ...anterior, nome: e.target.value }))}
+                  className="w-full rounded-lg border border-brand-green/30 bg-background px-3 py-2" />
+              </div>
+              {editando.perfil !== "ADMINISTRADOR" && (
+                <>
+                  <div>
+                    <label htmlFor="edicao-perfil" className="mb-1 block text-sm font-medium">Perfil (edição)</label>
+                    <select id="edicao-perfil" value={edicao.perfil} onChange={(e) => setEdicao((anterior) => ({ ...anterior, perfil: e.target.value as PerfilFuncionario }))}
+                      className="w-full rounded-lg border border-brand-green/30 bg-background px-3 py-2">
+                      <option value="GESTOR">Gestor</option>
+                      <option value="COLABORADOR">Colaborador</option>
+                    </select>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={edicao.ativo} onChange={(e) => setEdicao((anterior) => ({ ...anterior, ativo: e.target.checked }))} />
+                    Conta ativa (desmarque para inativar)
+                  </label>
+                </>
+              )}
+              {erroEdicao && <p role="alert" className="text-sm text-red-500">{erroEdicao}</p>}
+              <div className="flex gap-3">
+                <button type="submit" disabled={salvandoEdicao} className="rounded-lg bg-brand-green px-4 py-2 font-semibold text-background disabled:opacity-50">
+                  {salvandoEdicao ? "Salvando..." : "Salvar alterações"}
+                </button>
+                <button type="button" onClick={() => { setEditando(null); setErroEdicao(""); }} className="rounded-lg border border-brand-green/30 px-4 py-2">Cancelar</button>
+              </div>
+            </form>
+          </section>
+        )}
       </div>
     </main>
   );

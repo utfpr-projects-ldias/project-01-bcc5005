@@ -1,11 +1,15 @@
 import {
-  Body, Controller, Get, HttpCode, HttpStatus, Post, UsePipes, ValidationPipe,
+  Body, Controller, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe,
+  Patch, Post, Req, UsePipes, ValidationPipe,
 } from '@nestjs/common';
 import { ExigirPolitica } from '../autorizacao/politica.decorator.js';
+import type { RequisicaoAutorizada } from '../autorizacao/usuario-autenticado.js';
 import { AdministracaoUsuariosService } from './administracao-usuarios.service.js';
+import { AtualizarFuncionarioDto } from './dto/atualizar-funcionario.dto.js';
 import { CriarFuncionarioDto } from './dto/criar-funcionario.dto.js';
 
-/** Sessão, identidade ativa e perfil ADMINISTRADOR validados pelo guard global. */
+const validacao = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true });
+
 @Controller('admin/usuarios')
 @ExigirPolitica('usuarios:administrar')
 export class AdministracaoUsuariosController {
@@ -18,8 +22,18 @@ export class AdministracaoUsuariosController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
+  @UsePipes(validacao)
   criar(@Body() dto: CriarFuncionarioDto) {
     return this.administracao.criar(dto);
+  }
+
+  @Patch(':id')
+  @UsePipes(validacao)
+  atualizar(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() dto: AtualizarFuncionarioDto,
+    @Req() requisicao: RequisicaoAutorizada,
+  ) {
+    return this.administracao.atualizar(id, dto, requisicao.usuarioDominio!);
   }
 }

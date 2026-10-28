@@ -45,6 +45,7 @@ export class AutorizacaoGuard implements CanActivate {
       id: usuario.id,
       supertokensUserId: usuario.supertokensUserId,
       email: usuario.email,
+      nome: usuario.nome ?? null,
       perfil: usuario.perfil,
     };
 

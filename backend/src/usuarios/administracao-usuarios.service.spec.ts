@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals';
-import { BadRequestException, ConflictException, InternalServerErrorException } from '@nestjs/common';
-import type { Repository } from 'typeorm';
+import { BadRequestException, ConflictException, InternalServerErrorException, Logger } from '@nestjs/common';
+import type { DataSource, Repository } from 'typeorm';
+import type { AuditoriaService } from '../auditoria/auditoria.service.js';
 import { PerfilUsuario } from './perfil-usuario.enum.js';
 import { Usuario } from './usuario.entity.js';
 import { AdministracaoUsuariosService } from './administracao-usuarios.service.js';
@@ -13,16 +14,21 @@ const provisionar = jest.fn<(dados: { supertokensUserId: string; email: string; 
 const buscarEmail = jest.fn<() => Promise<Usuario | null>>();
 const listar = jest.fn<() => Promise<Usuario[]>>();
 const usuario: Usuario = Object.assign(new Usuario(), {
+  nome: 'Pessoa de Teste',
   id: '876f37aa-7810-42f3-9a75-a08eaaf2311e',
   supertokensUserId: 'st-u1', email: 'func@example.com',
   perfil: PerfilUsuario.GESTOR, ativo: true, criadoEm: new Date(),
 });
+const transaction = jest.fn<(operacao: (manager: never) => Promise<unknown>) => Promise<unknown>>();
+const auditar = jest.fn<() => Promise<void>>();
 const svc = new AdministracaoUsuariosService(
   { findOneBy: buscarEmail, find: listar } as unknown as Repository<Usuario>,
   { criarProvisionado: provisionar } as unknown as UsuariosService,
   { criar: criarIdentidade, excluirCriacaoIncompleta: excluirIdentidade } as unknown as IdentidadesFuncionariosService,
+  { transaction } as unknown as DataSource,
+  { registrarNaTransacao: auditar } as unknown as AuditoriaService,
 );
-const pedido = { email: 'func@example.com', perfil: PerfilUsuario.GESTOR, senhaInicial: 'MinhaSenha!123' };
+const pedido = { nome: 'Pessoa de Teste', email: 'func@example.com', perfil: PerfilUsuario.GESTOR, senhaInicial: 'MinhaSenha!123' };
 
 beforeEach(() => {
   jest.resetAllMocks();
@@ -30,6 +36,7 @@ beforeEach(() => {
   criarIdentidade.mockResolvedValue('st-u1');
   provisionar.mockResolvedValue(usuario);
   excluirIdentidade.mockResolvedValue(undefined);
+  auditar.mockResolvedValue(undefined);
 });
 
 describe('TEC07-04: provisionamento controlado', () => {
@@ -39,7 +46,7 @@ describe('TEC07-04: provisionamento controlado', () => {
     expect(JSON.stringify(resposta)).not.toContain('MinhaSenha');
     expect(JSON.stringify(resposta)).not.toContain('st-u1');
     expect(criarIdentidade).toHaveBeenCalledWith(pedido.email, pedido.senhaInicial);
-    expect(provisionar).toHaveBeenCalledWith({ supertokensUserId: 'st-u1', email: pedido.email, perfil: PerfilUsuario.GESTOR });
+    expect(provisionar).toHaveBeenCalledWith({ supertokensUserId: 'st-u1', email: pedido.email, nome: pedido.nome, perfil: PerfilUsuario.GESTOR });
   });
 
   it('provisiona COLABORADOR', async () => {
@@ -65,15 +72,29 @@ describe('TEC07-04: provisionamento controlado', () => {
   });
 
   it('faz compensação se o PostgreSQL falhar após criar identidade', async () => {
-    provisionar.mockRejectedValue(new Error('falha db'));
-    await expect(svc.criar(pedido)).rejects.toBeInstanceOf(InternalServerErrorException);
-    expect(excluirIdentidade).toHaveBeenCalledWith('st-u1');
+    // O erro é esperado neste teste: capturamos o log e validamos seu conteúdo.
+    const log = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    try {
+      provisionar.mockRejectedValue(new Error('falha db'));
+      await expect(svc.criar(pedido)).rejects.toBeInstanceOf(InternalServerErrorException);
+      expect(excluirIdentidade).toHaveBeenCalledWith('st-u1');
+      expect(log).toHaveBeenCalledWith('Falha ao persistir funcionário no banco da aplicação');
+    } finally {
+      log.mockRestore();
+    }
   });
 
   it('não retorna sucesso se falhar a compensação', async () => {
-    provisionar.mockRejectedValue(new Error('falha db'));
-    excluirIdentidade.mockRejectedValue(new Error('falha core'));
-    await expect(svc.criar(pedido)).rejects.toBeInstanceOf(InternalServerErrorException);
+    // Nenhum log real de produção é desligado: este spy existe só neste teste.
+    const log = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    try {
+      provisionar.mockRejectedValue(new Error('falha db'));
+      excluirIdentidade.mockRejectedValue(new Error('falha core'));
+      await expect(svc.criar(pedido)).rejects.toBeInstanceOf(InternalServerErrorException);
+      expect(log).toHaveBeenCalledWith('Falha na compensação da identidade recém-criada; exige reconciliação manual');
+    } finally {
+      log.mockRestore();
+    }
   });
 
   it('lista usuários sem credenciais', async () => {

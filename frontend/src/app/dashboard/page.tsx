@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Session from "supertokens-web-js/recipe/session";
 import { AdminUsuariosLink } from "./components/admin-usuarios-link";
+import { IdentificacaoUsuario } from "./components/identificacao-usuario";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -96,6 +97,7 @@ export default function DashboardPage() {
           <h1 className="text-xl font-bold text-foreground">Dashboard</h1>
 
           <div className="flex items-center gap-4">
+            <IdentificacaoUsuario />
             <AdminUsuariosLink />
             {/* Botão de Logout */}
             {logoutError && (

@@ -36,6 +36,8 @@ docker compose up -d --build
 docker compose ps
 ```
 
+### Se falhar o build use docker compose down -v e depois o build denovo!
+
 Em um **banco novo**, aplique as migrations e crie o primeiro Administrador:
 
 ```bash

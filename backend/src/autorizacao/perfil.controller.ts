@@ -9,6 +9,6 @@ export class PerfilController {
   obterPerfil(@Req() req: RequisicaoAutorizada) {
     // Atribuído somente pelo guard global após verificar sessão e banco.
     const usuario = req.usuarioDominio!;
-    return { id: usuario.id, email: usuario.email, perfil: usuario.perfil, ativo: true };
+    return { id: usuario.id, nome: usuario.nome ?? null, email: usuario.email, perfil: usuario.perfil, ativo: true };
   }
 }

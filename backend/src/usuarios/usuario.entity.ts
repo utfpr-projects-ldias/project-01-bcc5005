@@ -23,6 +23,9 @@ export class Usuario {
   @Column({ type: 'varchar', length: 320 })
   email!: string;
 
+  @Column({ type: 'varchar', length: 160, nullable: true })
+  nome!: string | null;
+
   @Column({ type: 'enum', enum: PerfilUsuario, enumName: 'usuarios_perfil_enum' })
   perfil!: PerfilUsuario;
 
