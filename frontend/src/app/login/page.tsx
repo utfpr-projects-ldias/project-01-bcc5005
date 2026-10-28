@@ -95,7 +95,7 @@ export default function LoginPage() {
             </span>
           </Link>
           <h1 className="text-xl font-semibold mt-4 text-foreground">Acesse sua conta</h1>
-          <p className="text-sm text-foreground/60 mt-1">Entre com seus dados para continuar</p>
+          <p className="text-sm text-foreground/60 mt-1">Acesse com a conta criada pelo Administrador da instituição.</p>
         </div>
 
         {serverError && (

@@ -1,4 +1,4 @@
-import { act, render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent, within } from '@testing-library/react';
 import NovoContratoPage from './page';
 import { consultarMeuPerfil } from '@/lib/admin-usuarios';
 import { listarResponsaveis, criarContrato } from '@/lib/contratos';
@@ -21,11 +21,17 @@ test('HU05-06: visitante não recebe formulário de criação', async () => {
   expect(screen.queryByRole('button', { name: 'Cadastrar contrato' })).not.toBeInTheDocument();
 });
 
-test('HU05-06: ADMIN faz POST, só navega após confirmação', async () => {
+test('HU05-06: ADMIN confirma em diálogo simples antes do POST e da navegação', async () => {
   perfil.mockResolvedValue({ id: 'a', nome: 'Admin', email: 'a@example.com', perfil: 'ADMINISTRADOR', ativo: true });
   criar.mockResolvedValue({ id: '11111111-1111-4111-8111-111111111111' } as Awaited<ReturnType<typeof criarContrato>>);
   await act(async () => { render(<NovoContratoPage />); });
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Cadastrar contrato' })); });
+  expect(criar).not.toHaveBeenCalled();
+  const dialogo = screen.getByRole('dialog', { name: 'Confirmar cadastro?' });
+  fireEvent.click(within(dialogo).getByRole('button', { name: 'Cancelar' }));
+  expect(criar).not.toHaveBeenCalled();
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Cadastrar contrato' })); });
+  await act(async () => { fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Confirmar cadastro' })); });
   expect(criar).toHaveBeenCalledWith(expect.objectContaining({ numeroContrato: 'REAL' }));
   expect(navegar).toHaveBeenCalledWith('/contratos/11111111-1111-4111-8111-111111111111');
 });

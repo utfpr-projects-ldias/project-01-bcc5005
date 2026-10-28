@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { ConfirmacaoSimples } from "@/app/components/confirmacao-simples";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import {
@@ -79,6 +80,9 @@ export default function AdministracaoUsuariosPage() {
   const [contratoId, setContratoId] = useState("");
   const [podeEditar, setPodeEditar] = useState(false);
   const [erroPermissoes, setErroPermissoes] = useState("");
+  const [confirmacao, setConfirmacao] = useState<
+    { tipo: "conta"; usuario: UsuarioPublico } | { tipo: "permissao"; contratoId: string; email: string } | null
+  >(null);
 
   const cuidarSessao = useCallback((erro: unknown) => {
     if (erro instanceof ErroApi && erro.status === 401) { router.replace("/login"); return true; }
@@ -214,14 +218,14 @@ export default function AdministracaoUsuariosPage() {
 
   async function trocarEstado(u: UsuarioPublico) {
     if (u.perfil === "ADMINISTRADOR") return;
-    if (!window.confirm(`Deseja ${u.ativo ? "arquivar" : "reativar"} ${u.email}?`)) return;
     setAtualizando(true); setErroLista("");
     try {
       await atualizarFuncionario(u.id, { ativo: !u.ativo });
       setMensagem(`Conta ${u.email} ${u.ativo ? "arquivada" : "reativada"}.`);
       if (editando?.id === u.id) cancelar();
       await carregarLista(aba, 1, filtro); setPagina(1);
-    } catch (e) { if (!cuidarSessao(e)) setErroLista(erroLegivel(e)); }
+      setConfirmacao(null);
+    } catch (e) { setConfirmacao(null); if (!cuidarSessao(e)) setErroLista(erroLegivel(e)); }
     finally { setAtualizando(false); }
   }
 
@@ -264,13 +268,13 @@ export default function AdministracaoUsuariosPage() {
   }
   async function revogar(contrato: string) {
     if (!editando || enviando) return;
-    if (!window.confirm("Revogar acesso a este contrato?")) return;
     setEnviando(true); setErroPermissoes("");
     try {
       await revogarPermissaoFuncionario(editando.id, contrato);
       setPermissoes((atual) => atual.filter((p) => p.contratoId !== contrato));
       setMensagem("Permissão revogada.");
-    } catch (e) { if (!cuidarSessao(e)) setErroPermissoes(erroLegivel(e)); }
+      setConfirmacao(null);
+    } catch (e) { setConfirmacao(null); if (!cuidarSessao(e)) setErroPermissoes(erroLegivel(e)); }
     finally { setEnviando(false); }
   }
 
@@ -330,7 +334,7 @@ export default function AdministracaoUsuariosPage() {
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {(u.perfil !== "ADMINISTRADOR" || u.id === minhaConta?.id) && <button type="button" className={botao} onClick={() => iniciarEdicao(u)} aria-label={`Editar ${u.email}`}>Editar</button>}
-                        {u.perfil !== "ADMINISTRADOR" && <button type="button" className={botao} onClick={() => void trocarEstado(u)}>{u.ativo ? "Arquivar" : "Reativar"}</button>}
+                        {u.perfil !== "ADMINISTRADOR" && <button type="button" className={botao} onClick={() => setConfirmacao({ tipo: "conta", usuario: u })}>{u.ativo ? "Arquivar" : "Reativar"}</button>}
                       </div>
                     </div>
                   </li>
@@ -394,7 +398,7 @@ export default function AdministracaoUsuariosPage() {
                     <ul className="mt-2 space-y-2 text-sm">
                       {permissoes.map((v) => <li key={v.contratoId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand-green/20 p-2">
                         <span className="min-w-0 flex-1 break-words">{contratos.find((c) => c.id === v.contratoId)?.numeroContrato ?? v.contratoId} — {v.podeEditar ? "Pode editar" : "Somente leitura"}</span>
-                        <button type="button" className={botao} disabled={enviando} onClick={() => void revogar(v.contratoId)}>Revogar</button>
+                        <button type="button" className={botao} disabled={enviando} onClick={() => setConfirmacao({ tipo: "permissao", contratoId: v.contratoId, email: editando.email })}>Revogar</button>
                       </li>)}
                       {!permissoes.length && <li className="text-foreground/60">Sem vínculos cadastrados.</li>}
                     </ul>
@@ -436,6 +440,20 @@ export default function AdministracaoUsuariosPage() {
           </section>
         </div>
       </div>
+      {confirmacao && <ConfirmacaoSimples
+        titulo={confirmacao.tipo === "conta" ? (confirmacao.usuario.ativo ? "Arquivar funcionário?" : "Reativar funcionário?") : "Revogar permissão?"}
+        descricao={confirmacao.tipo === "conta"
+          ? `A conta ${confirmacao.usuario.email} será ${confirmacao.usuario.ativo ? "inativada e movida para Arquivados" : "reativada"}. O histórico será preservado.`
+          : `Remover o acesso de ${confirmacao.email} ao contrato selecionado? O histórico será preservado.`}
+        confirmar={confirmacao.tipo === "conta" ? (confirmacao.usuario.ativo ? "Arquivar" : "Reativar") : "Revogar"}
+        perigoso={confirmacao.tipo === "permissao" || (confirmacao.tipo === "conta" && confirmacao.usuario.ativo)}
+        ocupado={enviando || atualizando}
+        onCancelar={() => setConfirmacao(null)}
+        onConfirmar={() => {
+          if (confirmacao.tipo === "conta") void trocarEstado(confirmacao.usuario);
+          else void revogar(confirmacao.contratoId);
+        }}
+      />}
     </main>
   );
 }

@@ -34,3 +34,13 @@ test('fim de mês ambíguo exige escolha da data final', () => {
   fireEvent.change(screen.getByLabelText('Duração em meses *'), { target: { value: '1' } });
   expect(screen.getByLabelText('Data de término explícita *')).toBeInTheDocument();
 });
+
+
+test('cadastro vazio mostra erro da aplicação em vez do balão de validação do navegador', async () => {
+  const salvar = jest.fn().mockResolvedValue(undefined);
+  const { container } = render(<FormularioContrato responsaveis={[]} onSalvar={salvar} />);
+  expect(container.querySelector('form')).toHaveAttribute('novalidate');
+  fireEvent.click(screen.getByRole('button', { name: 'Cadastrar contrato' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Preencha número do contrato');
+  expect(salvar).not.toHaveBeenCalled();
+});

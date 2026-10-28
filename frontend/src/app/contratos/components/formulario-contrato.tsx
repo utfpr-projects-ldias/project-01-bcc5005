@@ -40,13 +40,28 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
     setForm(atual => ({ ...atual, [campo]: valor }));
     setErro('');
   }
+  function dataValida(data: string): boolean {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) return false;
+    const [ano, mes, dia] = data.split('-').map(Number);
+    const d = new Date(Date.UTC(ano, mes - 1, dia));
+    return Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === data;
+  }
   async function enviar(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (salvando) return;
     const inicio = form.inicioVigencia;
-    if (!inicio || !terminar || terminar < inicio) { setErro('Informe vigência válida: término igual ou posterior ao início.'); return; }
-    if (modo === 'meses' && (!Number.isInteger(Number(meses)) || Number(meses) < 1)) { setErro('Informe um número inteiro positivo de meses.'); return; }
-    if (!form.numeroContrato.trim() || !form.orgaoContratante.trim() || !form.objeto.trim()) { setErro('Preencha número, órgão e objeto.'); return; }
+    if (!form.numeroContrato.trim() || !form.orgaoContratante.trim() || !form.objeto.trim()) {
+      setErro('Preencha número do contrato, órgão contratante e objeto.'); return;
+    }
+    if (modo === 'meses' && (!Number.isInteger(Number(meses)) || Number(meses) < 1 || Number(meses) > 1200)) {
+      setErro('A duração deve ser um número inteiro entre 1 e 1200 meses.'); return;
+    }
+    if (!dataValida(inicio) || !dataValida(terminar) || terminar < inicio) {
+      setErro('Confira a vigência: informe datas válidas e término igual ou posterior ao início.'); return;
+    }
+    if (form.dataAssinatura && !dataValida(form.dataAssinatura)) {
+      setErro('A data de assinatura é inválida.'); return;
+    }
     const dados: DadosContrato = {
       ...form, numeroContrato: form.numeroContrato.trim(), orgaoContratante: form.orgaoContratante.trim(), objeto: form.objeto.trim(),
       terminoVigencia: terminar,
@@ -54,10 +69,7 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
     setErro('');
     await onSalvar(dados);
   }
-  function Campo({ titulo, id, obrigatorio = false, children }: { titulo: string; id: string; obrigatorio?: boolean; children: ReactNode }) {
-    return <div><label htmlFor={id} className={label}>{titulo}{obrigatorio ? ' *' : ''}</label>{children}</div>;
-  }
-  return <form onSubmit={e => void enviar(e)} className="space-y-6 rounded-2xl border border-brand-green/25 bg-brand-darkgreen/10 p-4 md:p-6">
+  return <form noValidate onSubmit={e => void enviar(e)} className="space-y-6 rounded-2xl border border-brand-green/25 bg-brand-darkgreen/10 p-4 md:p-6">
     <p className="text-sm text-foreground/65">Os campos marcados com * são obrigatórios. Nenhum dado financeiro será solicitado.</p>
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
       <Campo titulo="Número do contrato" id="numero" obrigatorio><input id="numero" required maxLength={100} className={input} value={form.numeroContrato} onChange={e => atualizar('numeroContrato', e.target.value)} /></Campo>

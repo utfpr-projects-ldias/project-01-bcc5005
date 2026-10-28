@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { MenuLateral, MenuMobile } from "@/app/components/menu-modulos";
 import Session from "supertokens-web-js/recipe/session";
-import { AdminUsuariosLink } from "./components/admin-usuarios-link";
 import { IdentificacaoUsuario } from "./components/identificacao-usuario";
 
 export default function DashboardPage() {
@@ -27,9 +26,6 @@ export default function DashboardPage() {
     }
   }
 
-  // Links do menu categorizados com indicação de disponibilidade conforme HU04-03
-
-
   return (
     <div className="min-h-screen flex bg-background text-foreground font-sans">
       
@@ -44,7 +40,6 @@ export default function DashboardPage() {
 
           <div className="flex items-center gap-4">
             <IdentificacaoUsuario />
-            <AdminUsuariosLink />
             {/* Botão de Logout */}
             {logoutError && (
               <p role="alert" className="text-sm text-red-400">{logoutError}</p>

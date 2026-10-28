@@ -182,3 +182,19 @@ test("B2 identifica o Admin pelo nome real após editar sua própria conta", asy
   await waitFor(() => expect(cabecalho).toHaveTextContent("Admin de Testes"));
   expect(cabecalho).not.toHaveTextContent("Nome não informado");
 });
+
+test("Arquivar pede confirmação própria e só altera conta após confirmar", async () => {
+  atualizar.mockResolvedValue({ ...gestor, ativo: false });
+  render(<AdministracaoUsuariosPage />);
+  await screen.findByText("gestor@exemplo.com");
+  fireEvent.click(screen.getByRole("button", { name: "Arquivar" }));
+  const modal = screen.getByRole("dialog", { name: "Arquivar funcionário?" });
+  expect(modal).toHaveTextContent("histórico será preservado");
+  expect(atualizar).not.toHaveBeenCalled();
+  fireEvent.click(within(modal).getByRole("button", { name: "Cancelar" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(atualizar).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Arquivar" }));
+  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Arquivar" }));
+  await waitFor(() => expect(atualizar).toHaveBeenCalledWith("b", { ativo: false }));
+});

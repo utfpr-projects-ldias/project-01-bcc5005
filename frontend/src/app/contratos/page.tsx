@@ -6,6 +6,17 @@ import { consultarMeuPerfil, type MeuPerfil } from '@/lib/admin-usuarios';
 import { ErroContrato, listarContratos, STATUS, MODOS, dataCivil, type Contrato, type StatusContrato } from '@/lib/contratos';
 import { AreaContratos, Aviso } from './components/area-contratos';
 
+function mensagemErro(erro: unknown): string {
+  return erro instanceof Error ? erro.message : 'Não foi possível carregar os contratos.';
+}
+
+async function consultarContratosAutorizados() {
+  const usuario = await consultarMeuPerfil();
+  if (!usuario.ativo) throw new ErroContrato(403, 'Conta inativa.');
+  const dados = await listarContratos();
+  return { usuario, dados };
+}
+
 export default function ContratosListPage() {
   const [perfil, setPerfil] = useState<MeuPerfil | null>(null);
   const [contratos, setContratos] = useState<Contrato[]>([]);
@@ -13,17 +24,39 @@ export default function ContratosListPage() {
   const [erro, setErro] = useState('');
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState<StatusContrato | ''>('');
+  // Consulta ao backend sempre com o perfil autenticado, sem confiar em IDs do navegador.
   const carregar = useCallback(async () => {
-    setCarregando(true); setErro('');
+    setCarregando(true);
+    setErro('');
     try {
-      const usuario = await consultarMeuPerfil();
-      if (!usuario.ativo) throw new ErroContrato(403, 'Conta inativa.');
+      const { usuario, dados } = await consultarContratosAutorizados();
       setPerfil(usuario);
-      setContratos(await listarContratos());
-    } catch (e) { setErro(e instanceof Error ? e.message : 'Não foi possível carregar os contratos.'); }
-    finally { setCarregando(false); }
+      setContratos(dados);
+    } catch (e) {
+      setErro(mensagemErro(e));
+    } finally {
+      setCarregando(false);
+    }
   }, []);
-  useEffect(() => { void carregar(); }, [carregar]);
+
+  // O carregamento inicial só atualiza o estado após a resolução assíncrona,
+  // evitando setState síncrono no efeito (react-hooks/set-state-in-effect).
+  useEffect(() => {
+    let montado = true;
+    void consultarContratosAutorizados()
+      .then(({ usuario, dados }) => {
+        if (!montado) return;
+        setPerfil(usuario);
+        setContratos(dados);
+      })
+      .catch((e: unknown) => {
+        if (montado) setErro(mensagemErro(e));
+      })
+      .finally(() => {
+        if (montado) setCarregando(false);
+      });
+    return () => { montado = false; };
+  }, []);
   const visiveis = useMemo(() => contratos.filter(c => {
     const texto = `${c.numeroContrato} ${c.orgaoContratante} ${c.objeto}`.toLocaleLowerCase('pt-BR');
     return (!filtro || c.status === filtro) && texto.includes(busca.toLocaleLowerCase('pt-BR').trim());
