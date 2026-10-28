@@ -156,7 +156,8 @@ export default function AdministracaoUsuariosPage() {
   useEffect(() => {
     if (!editando) return;
     if (typeof painelRef.current?.scrollIntoView === "function") {
-      painelRef.current.scrollIntoView({ block: "start", behavior: "smooth" });
+      const reduzido = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
+      painelRef.current.scrollIntoView({ block: "start", behavior: reduzido ? "auto" : "smooth" });
     }
     nomeRef.current?.focus();
   }, [editando]);
@@ -201,7 +202,10 @@ export default function AdministracaoUsuariosPage() {
     setEnviando(true); setErroFormulario("");
     try {
       const atualizado = await atualizarFuncionario(editando.id, dados);
-      if (atualizado.id === minhaConta?.id) setMinhaConta((u) => u ? { ...u, nome: atualizado.nome } : u);
+      if (atualizado.id === minhaConta?.id) {
+        setMinhaConta((u) => u ? { ...u, nome: atualizado.nome } : u);
+        window.dispatchEvent(new Event("perfil-atualizado"));
+      }
       setMensagem(`Dados de ${atualizado.email} atualizados.`); usuarioSelecionado.current = null; setEditando(null);
       await recarregar(aba, 1, filtro); setPagina(1);
     } catch (e) { if (!cuidarSessao(e)) setErroFormulario(erroLegivel(e)); }
@@ -282,13 +286,21 @@ export default function AdministracaoUsuariosPage() {
   return (
     <main className="min-h-screen bg-background px-4 py-6 text-foreground md:px-8">
       <div className="mx-auto max-w-7xl space-y-6">
-        <header>
-          <Link href="/dashboard" className="text-sm text-brand-neon underline">← Voltar ao painel</Link>
-          <h1 className="mt-3 text-2xl font-bold">Administração de funcionários</h1>
-          <p className="text-sm text-foreground/70">Cadastre, edite e gerencie acessos. Contas arquivadas mantêm seus registros.</p>
+        <header className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <Link href="/dashboard" className="text-sm text-brand-neon underline">← Voltar ao painel</Link>
+            <h1 className="mt-3 text-2xl font-bold">Administração de funcionários</h1>
+            <p className="text-sm text-foreground/70">Cadastre, edite e gerencie acessos. Contas arquivadas mantêm seus registros.</p>
+          </div>
+          {minhaConta && <div className="min-w-0 text-left text-sm md:text-right" aria-label="Administrador autenticado">
+            <p className="font-semibold break-words">{minhaConta.nome?.trim() || "Nome não informado"}</p>
+            <p className="text-foreground/70 break-all">{minhaConta.email}</p>
+            <p className="text-brand-neon">Administrador</p>
+          </div>}
         </header>
         {mensagem && <p role="status" className="rounded-lg border border-brand-green/30 px-4 py-2 text-brand-neon">{mensagem}</p>}
-        <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(330px,1fr)]">
+        {/* B2: lista acima e painel único de cadastro/edição abaixo em todas as larguras. */}
+        <div className="flex flex-col gap-5">
           <section className="min-w-0 rounded-2xl border border-brand-green/20 p-4 md:p-6" aria-labelledby="titulo-lista">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 id="titulo-lista" className="text-lg font-semibold">Funcionários</h2>

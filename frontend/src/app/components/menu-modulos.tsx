@@ -8,19 +8,18 @@ import { consultarMeuPerfil, type MeuPerfil } from "@/lib/admin-usuarios";
 type Item = { nome: string; href?: string; aviso?: string };
 
 function useItens(): Item[] {
-  const path = usePathname();
   const [perfil, setPerfil] = useState<MeuPerfil | null>(null);
   useEffect(() => {
     let valido = true;
     void consultarMeuPerfil().then((p) => { if (valido) setPerfil(p); }).catch(() => { if (valido) setPerfil(null); });
     return () => { valido = false; };
   }, []);
-  const dentroDeContratos = path.startsWith('/contratos');
   return [
     { nome: 'Dashboard', href: '/dashboard' },
-    // A HU05-06 ainda não integrou o CRUD. A navegação não anuncia o mock como produção.
-    { nome: 'Contratos', href: dentroDeContratos ? '/contratos' : undefined, aviso: 'Integração HU05-06 pendente' },
-    { nome: 'Atividades', aviso: 'Em desenvolvimento' },
+    // HU05 (Sprint 03): interface demonstrativa acessível; a integração real é HU05-06.
+    { nome: 'Contratos', href: '/contratos', aviso: 'Prévia da Sprint 03' },
+    // HU08 ainda pertence à Sprint 04, não ao débito histórico de HU05.
+    { nome: 'Atividades', aviso: 'Sprint 04 · em desenvolvimento' },
     { nome: 'Evidências', aviso: 'Sprint 05' },
     { nome: 'Relatórios', aviso: 'Sprint 06' },
     ...(perfil?.ativo && perfil.perfil === 'ADMINISTRADOR' ? [{ nome: 'Administração', href: '/admin/usuarios' }] : []),
@@ -34,7 +33,7 @@ function Itens({ compactos = false }: { compactos?: boolean }) {
     {itens.map((item) => item.href ? (
       <Link key={item.nome} href={item.href} aria-current={path === item.href || (item.href === '/contratos' && path.startsWith('/contratos')) ? 'page' : undefined}
         className={`${compactos ? 'px-3 py-2' : 'block px-4 py-2.5'} rounded-lg text-sm font-medium focus-visible:outline-2 focus-visible:outline-brand-green ${path === item.href || (item.href === '/contratos' && path.startsWith('/contratos')) ? 'bg-brand-green text-background' : 'hover:bg-brand-darkgreen/40'}`}>
-        {item.nome}{item.aviso && compactos ? ' (demonstração)' : ''}
+        {item.nome}{item.aviso && <span className="ml-1 text-xs font-normal opacity-70"> · {item.aviso}</span>}
       </Link>
     ) : (
       <span key={item.nome} className={`${compactos ? 'px-3 py-2' : 'block px-4 py-2.5'} rounded-lg text-xs text-foreground/50`} title={item.aviso}>

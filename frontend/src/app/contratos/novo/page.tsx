@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { MenuLateral, MenuMobile } from "@/app/components/menu-modulos";
 import Session from "supertokens-web-js/recipe/session";
+import { consultarMeuPerfil } from "@/lib/admin-usuarios";
 
 type StatusContrato =
   | "Planejamento"
@@ -17,8 +18,8 @@ type ModoCalculo = "Simples" | "Ponderado";
 
 export default function NovoContratoPage() {
   const router = useRouter();
-  const [submitting, setSubmitting] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
+  const [autorizacao, setAutorizacao] = useState<"verificando" | "permitido" | "negado">("verificando");
+  const [erroAcesso, setErroAcesso] = useState("");
   const [modoVigencia, setModoVigencia] = useState<"data" | "duracao">("data");
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
@@ -57,71 +58,40 @@ export default function NovoContratoPage() {
     responsavel_interno: "",
     fiscal_gestor: "",
     observacoes: "",
-    anexo_pdf: null as File | null,
   });
 
-  // Cálculo inclusivo de vigência (ex: 17/10/2026 + 12 meses -> 16/10/2027)
-  function calcularTerminoPorMeses(inicio: string, mesesStr: string) {
-    if (!inicio || !mesesStr) return "";
-    const [ano, mes, dia] = inicio.split("-").map(Number);
-    const meses = parseInt(mesesStr, 10);
-    if (isNaN(ano) || isNaN(mes) || isNaN(dia) || isNaN(meses)) return "";
-
-    const dataObj = new Date(ano, mes - 1 + meses, dia - 1);
-    const y = dataObj.getFullYear();
-    const m = String(dataObj.getMonth() + 1).padStart(2, "0");
-    const d = String(dataObj.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  }
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (submitting) return;
-
-    setSubmitting(true);
-    setErrorMsg("");
-
-    let terminoFinal = formData.termino_vigencia;
-    if (modoVigencia === "duracao") {
-      terminoFinal = calcularTerminoPorMeses(formData.inicio_vigencia, formData.duracao_meses);
-    }
-
-    try {
-      // Simulação da chamada POST /contratos incluindo o arquivo PDF
-      await new Promise((resolve) => setTimeout(resolve, 800));
-
-      const payload = {
-        ...formData,
-        termino_vigencia: terminoFinal,
-        nome_arquivo_pdf: formData.anexo_pdf ? formData.anexo_pdf.name : null,
-      };
-
-      console.log("Contrato e PDF validados e prontos para persistência:", payload);
-
-      router.push("/contratos");
-    } catch (err: unknown) {
-      const status =
-        typeof err === "object" &&
-        err !== null &&
-        "status" in err &&
-        typeof err.status === "number"
-          ? err.status
-          : 500;
-      if (status === 400) {
-        setErrorMsg("Dados inválidos. Verifique os campos obrigatórios preenchidos.");
-      } else if (status === 401) {
-        setErrorMsg("Sessão expirada. Faça login novamente.");
-        router.replace("/login");
-      } else if (status === 403) {
-        setErrorMsg("Acesso negado: apenas Administradores podem cadastrar contratos.");
-      } else if (status === 409) {
-        setErrorMsg("Conflito: Já existe um contrato cadastrado com este número.");
+  // O cadastro é somente uma prévia. Sem autenticação de domínio ativa, não exibir dados internos.
+  useEffect(() => {
+    let montado = true;
+    void consultarMeuPerfil().then((perfil) => {
+      if (!montado) return;
+      if (perfil.ativo && perfil.perfil === "ADMINISTRADOR") {
+        setAutorizacao("permitido");
       } else {
-        setErrorMsg("Falha de comunicação com o servidor. Tente novamente.");
+        setAutorizacao("negado");
+        setErroAcesso("Somente Administradores ativos podem acessar a prévia do formulário de contratos.");
       }
-    } finally {
-      setSubmitting(false);
-    }
+    }).catch((erro: unknown) => {
+      if (!montado) return;
+      if (erro instanceof Error && "status" in erro && erro.status === 401) {
+        router.replace("/login");
+      } else {
+        setErroAcesso("Não foi possível confirmar a permissão de acesso.");
+        setAutorizacao("negado");
+      }
+    });
+    return () => { montado = false; };
+  }, [router]);
+
+  if (autorizacao === "verificando") {
+    return <main role="status" className="flex min-h-screen items-center justify-center p-6">Verificando acesso ao formulário...</main>;
+  }
+  if (autorizacao === "negado") {
+    return <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-6">
+      <h1 className="text-xl font-semibold">Acesso restrito</h1>
+      <p role="alert">{erroAcesso}</p>
+      <Link href="/contratos" className="underline">Voltar aos contratos</Link>
+    </main>;
   }
 
   return (
@@ -156,8 +126,8 @@ export default function NovoContratoPage() {
             
             <div className="flex items-center justify-between border-b border-brand-green/20 pb-4">
               <div>
-                <h2 className="text-lg font-semibold text-brand-neon">Cadastro da Entidade Raiz</h2>
-                <p className="text-sm text-foreground/70">Preencha os dados obrigatórios, vigência e anexe o PDF do contrato.</p>
+                <h2 className="text-lg font-semibold text-brand-neon">Prévia do formulário de contratos</h2>
+                <p className="text-sm text-foreground/70">Interface criada na Sprint 03. A integração e o salvamento acontecerão na HU05-06.</p>
               </div>
               <Link
                 href="/contratos"
@@ -167,14 +137,14 @@ export default function NovoContratoPage() {
               </Link>
             </div>
 
-            {errorMsg && (
-              <div role="alert" className="p-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
-                {errorMsg}
-              </div>
-            )}
+            <section role="note" className="rounded-xl border border-amber-500/50 bg-amber-500/10 p-4 text-sm" aria-label="Formulário demonstrativo">
+              <p className="font-semibold">Formulário demonstrativo — nenhum dado será salvo</p>
+              <p className="mt-1">Você pode conhecer os campos visuais, mas o botão de salvar está desabilitado e nenhum PDF será enviado. O cadastro real, as validações de calendário e a integração com o banco pertencem à HU05-06 e TEC08.</p>
+            </section>
 
-            <form onSubmit={handleSubmit} className="space-y-6 bg-brand-darkgreen/10 p-6 rounded-2xl border border-brand-green/20">
+            <div className="space-y-6 rounded-2xl border border-brand-green/20 bg-brand-darkgreen/10 p-6" aria-label="Campos de prévia do contrato">
               
+              <fieldset disabled className="min-w-0 space-y-6" aria-label="Campos indisponíveis até a HU05-06">
               {/* Dados Principais */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -271,7 +241,7 @@ export default function NovoContratoPage() {
                       />
                       {formData.inicio_vigencia && (
                         <p className="text-xs text-foreground/50 mt-1">
-                          Término calculado: {calcularTerminoPorMeses(formData.inicio_vigencia, formData.duracao_meses)}
+                          Cálculo de fim de mês pendente de validação para a HU05-06.
                         </p>
                       )}
                     </div>
@@ -309,19 +279,9 @@ export default function NovoContratoPage() {
                 </div>
               </div>
 
-              {/* Campo de Anexo PDF do Contrato */}
-              <div className="p-4 rounded-xl bg-background border border-brand-green/20 space-y-2">
-                <label className="block text-xs font-semibold text-brand-neon">Documento do Contrato (PDF)</label>
-                <input
-                  type="file"
-                  accept=".pdf,application/pdf"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0] || null;
-                    setFormData({ ...formData, anexo_pdf: file });
-                  }}
-                  className="w-full text-sm text-foreground/70 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-brand-green file:text-background hover:file:opacity-90 cursor-pointer"
-                />
-                <p className="text-xs text-foreground/50">Anexe o arquivo PDF oficial emitido pelo órgão contratante.</p>
+              <div className="space-y-2 rounded-xl border border-brand-green/20 bg-background p-4">
+                <p className="text-xs font-semibold text-brand-neon">Documento do Contrato (PDF)</p>
+                <p className="text-xs text-foreground/70">Upload indisponível nesta prévia. Armazenamento seguro será implementado pela TEC08.</p>
               </div>
 
               {/* Campos Opcionais PRD */}
@@ -380,14 +340,14 @@ export default function NovoContratoPage() {
                 </Link>
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled
                   className="px-6 py-2 rounded-lg text-sm font-semibold bg-brand-green text-background hover:opacity-90 disabled:opacity-50 transition-opacity"
                 >
-                  {submitting ? "Salvando..." : "Salvar Contrato"}
+                  Salvar contrato (indisponível)
                 </button>
               </div>
-
-            </form>
+              </fieldset>
+            </div>
 
           </div>
         </main>

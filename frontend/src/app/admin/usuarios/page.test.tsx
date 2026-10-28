@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import AdministracaoUsuariosPage from "./page";
 import {
   atualizarFuncionario, cadastrarFuncionario, consultarMeuPerfil,
@@ -40,7 +40,8 @@ beforeEach(() => {
 test("Administrador carrega listagem paginada pela API", async () => {
   render(<AdministracaoUsuariosPage />);
   expect(screen.getByRole("status")).toHaveTextContent("Verificando permissões");
-  expect(await screen.findByText("admin@exemplo.com")).toBeInTheDocument();
+  const lista = await screen.findByRole("region", { name: "Funcionários" });
+  expect(within(lista).getByText("admin@exemplo.com")).toBeInTheDocument();
   expect(paginados).toHaveBeenCalledWith(expect.objectContaining({ ativo: true, pagina: 1 }));
   expect(screen.getByRole("button", { name: "Cadastrar funcionário" })).toBeInTheDocument();
 });
@@ -125,8 +126,7 @@ test("PATCH de perfil e situação funciona", async () => {
 
 test("Administrador só altera seu próprio nome", async () => {
   render(<AdministracaoUsuariosPage />);
-  await screen.findByText("admin@exemplo.com");
-  fireEvent.click(screen.getByRole("button", { name: "Editar admin@exemplo.com" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Editar admin@exemplo.com" }));
   expect(screen.getByLabelText("Nome completo (edição)")).toBeInTheDocument();
   expect(screen.queryByLabelText("Perfil (edição)")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Novo e-mail")).not.toBeInTheDocument();
@@ -152,4 +152,33 @@ test("Senha nunca é enviada no PATCH de domínio", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Definir nova senha" }));
   await waitFor(() => expect(redefinirSenha).toHaveBeenCalledWith("b", "NovaSenha!1234"));
   expect(atualizar).not.toHaveBeenCalled();
+});
+
+test("B2 mantém lista acima do painel de cadastro/edição em todas as larguras", async () => {
+  render(<AdministracaoUsuariosPage />);
+  await screen.findByText("gestor@exemplo.com");
+  const lista = screen.getByRole("region", { name: "Funcionários" });
+  const formulario = screen.getByRole("region", { name: "Cadastrar funcionário" });
+  expect(lista.parentElement).toBe(formulario.parentElement);
+  expect(lista.parentElement).toHaveClass("flex", "flex-col");
+  expect(lista.nextElementSibling).toBe(formulario);
+  // A edição também carrega contratos e permissões de forma assíncrona.
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Editar gestor@exemplo.com" }));
+  });
+  expect(screen.getByRole("region", { name: /Editar funcionário/ })).toBe(formulario);
+  expect(lista.nextElementSibling).toBe(formulario);
+});
+
+test("B2 identifica o Admin pelo nome real após editar sua própria conta", async () => {
+  atualizar.mockResolvedValue({ ...admin, nome: "Admin de Testes" });
+  render(<AdministracaoUsuariosPage />);
+  const cabecalho = await screen.findByLabelText("Administrador autenticado");
+  expect(within(cabecalho).getByText("admin@exemplo.com")).toBeInTheDocument();
+  expect(cabecalho).toHaveTextContent("Nome não informado");
+  fireEvent.click(screen.getByRole("button", { name: "Editar admin@exemplo.com" }));
+  fireEvent.change(screen.getByLabelText("Nome completo (edição)"), { target: { value: "Admin de Testes" } });
+  fireEvent.click(screen.getByRole("button", { name: "Salvar alterações" }));
+  await waitFor(() => expect(cabecalho).toHaveTextContent("Admin de Testes"));
+  expect(cabecalho).not.toHaveTextContent("Nome não informado");
 });

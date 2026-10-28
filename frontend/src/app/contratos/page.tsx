@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { doesSessionExist } from "supertokens-web-js/recipe/session";
 import Session from "supertokens-web-js/recipe/session";
 import { useRouter } from "next/navigation";
 import { MenuLateral, MenuMobile } from "@/app/components/menu-modulos";
+import { consultarMeuPerfil } from "@/lib/admin-usuarios";
 
 export type Contrato = {
   id: string;
@@ -46,17 +46,17 @@ export default function ContratosListPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const session = await doesSessionExist();
-        if (!session) {
-          router.replace("/login");
+        // Área de prévia interna: não basta uma sessão técnica SuperTokens;
+        // o usuário de domínio também precisa existir e estar ativo.
+        const perfil = await consultarMeuPerfil();
+        if (!perfil.ativo) {
+          setError("Esta conta está inativa. Acesso à prévia não autorizado.");
           return;
         }
 
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        
         const mockContratos: Contrato[] = [
           {
-            id: "1",
+            id: "exemplo-nao-persistido",
             numero_contrato: "CT-001/2026",
             orgao_contratante: "Secretaria de Tecnologia da Informação",
             objeto: "Prestação de serviços de desenvolvimento de software e sustentação de sistemas.",
@@ -70,7 +70,12 @@ export default function ContratosListPage() {
         setContratos(mockContratos);
       } catch (err) {
         console.error(err);
-        setError("Falha de rede ou erro ao carregar contratos.");
+        if (err instanceof Error && "status" in err && err.status === 401) {
+          setError("Sessão expirada. Entre novamente.");
+          router.replace("/login");
+          return;
+        }
+        setError("Não foi possível validar o acesso à prévia de contratos.");
       } finally {
         setLoading(false);
       }
@@ -132,17 +137,20 @@ export default function ContratosListPage() {
         {/* Corpo da Página de Contratos */}
         <main className="flex-1 p-4 md:p-8 overflow-y-auto">
           <div className="max-w-5xl mx-auto space-y-6">
-            
-            <div className="flex items-center justify-between">
+            <section role="note" aria-label="Prévia sem persistência" className="rounded-xl border border-amber-500/50 bg-amber-500/10 p-4 text-sm">
+              <p className="font-semibold">Protótipo visual da Sprint 03 — HU05</p>
+              <p className="mt-1">Os contratos mostrados abaixo são exemplos fictícios, não registros do PostgreSQL. O formulário também é apenas uma prévia: nenhum contrato ou PDF será salvo. A integração real está prevista na HU05-06.</p>
+            </section>
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-lg font-semibold text-brand-neon">Contratos Cadastrados</h2>
-                <p className="text-sm text-foreground/70">Visualize a entidade raiz e vigências operacionais.</p>
+                <h2 className="text-lg font-semibold text-brand-neon">Exemplo de listagem de contratos</h2>
+                <p className="text-sm text-foreground/70">Visualização de referência, sem conexão à API de listagem.</p>
               </div>
               <Link
                 href="/contratos/novo"
                 className="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-green text-background hover:opacity-90 transition-opacity"
               >
-                + Novo Contrato
+                Visualizar formulário de contrato
               </Link>
             </div>
 
@@ -166,6 +174,7 @@ export default function ContratosListPage() {
                     <div className="space-y-1">
                       <div className="flex items-center gap-3">
                         <span className="font-bold text-brand-neon">{c.numero_contrato}</span>
+                        <span className="text-xs text-amber-600 dark:text-amber-300">Exemplo fictício</span>
                         <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-green/20 text-brand-neon border border-brand-green/30">
                           {c.status}
                         </span>
@@ -177,12 +186,9 @@ export default function ContratosListPage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2 self-end md:self-center">
-                      <Link
-                        href={`/contratos/${c.id}`}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium border border-brand-green/30 text-brand-green hover:bg-brand-green/10"
-                      >
-                        Detalhes
-                      </Link>
+                      <span className="rounded-lg border border-brand-green/20 px-3 py-1.5 text-xs text-foreground/60" title="A tela de detalhes será criada na HU05-06">
+                        Detalhes indisponíveis na prévia
+                      </span>
                     </div>
                   </div>
                 ))}
