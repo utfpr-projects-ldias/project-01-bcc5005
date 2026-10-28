@@ -1,5 +1,5 @@
 import {
-  IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength,
+  IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, Matches, MaxLength,
 } from 'class-validator';
 
 import { ModoCalculo } from '../modo-calculo.enum.js';
@@ -54,12 +54,15 @@ export class CriarContratoDto {
 
   @IsOptional()
   @IsDateString({ strict: true })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: "Use data civil YYYY-MM-DD, sem horário" })
   dataAssinatura?: string | null;
 
   @IsDateString({ strict: true })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: "Use data civil YYYY-MM-DD, sem horário" })
   inicioVigencia!: string;
 
   @IsDateString({ strict: true })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: "Use data civil YYYY-MM-DD, sem horário" })
   terminoVigencia!: string;
 
   @IsEnum(StatusContrato)

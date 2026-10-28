@@ -21,10 +21,12 @@ export class PoliticaAcessoService {
         return true; // o guard já verificou usuário de domínio ativo
       case 'usuarios:administrar':
       case 'contratos:criar':
-      case 'contratos:listar':
-        // listagem ampla bloqueada para não-admin até existir filtragem na HU05-02;
-        // PQ-03: Gestor NÃO cria contrato até confirmação do cliente.
+        // Cadastro amplo permanece exclusivo do ADMIN (PQ-03 não homologada).
         return admin;
+      case 'contratos:listar':
+        // O guard garante usuário ATIVO; o serviço limita os dados ao vínculo.
+        // Jamais usar uma consulta global para não administradores.
+        return true;
       case 'contratos:visualizar':
       case 'contratos:editar': {
         if (!contratoId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(contratoId)) {

@@ -1,29 +1,38 @@
-import { render, screen } from "@testing-library/react";
-import ContratosListPage from "./page";
-import { consultarMeuPerfil } from "@/lib/admin-usuarios";
+import { act, render, screen } from '@testing-library/react';
+import ContratosListPage from './page';
+import { consultarMeuPerfil } from '@/lib/admin-usuarios';
+import { listarContratos } from '@/lib/contratos';
 
-const mockReplace = jest.fn();
-jest.mock("next/navigation", () => ({ useRouter: () => ({ replace: mockReplace, refresh: jest.fn() }) }));
-jest.mock("@/app/components/menu-modulos", () => ({ MenuLateral: () => <div>Menu desktop</div>, MenuMobile: () => <div>Menu móvel</div> }));
-jest.mock("supertokens-web-js/recipe/session", () => ({ __esModule: true, default: { signOut: jest.fn() } }));
-jest.mock("@/lib/admin-usuarios", () => ({ consultarMeuPerfil: jest.fn() }));
+jest.mock('@/lib/admin-usuarios', () => ({ consultarMeuPerfil: jest.fn() }));
+jest.mock('@/lib/contratos', () => ({
+  listarContratos: jest.fn(), STATUS: { PLANEJAMENTO: 'Planejamento' }, MODOS: { SIMPLES: 'Simples' }, dataCivil: (x: string) => x,
+}));
+jest.mock('./components/area-contratos', () => ({
+  AreaContratos: ({ children }: { children: React.ReactNode }) => <main>{children}</main>,
+  Aviso: ({ children }: { children: React.ReactNode }) => <p>{children}</p>,
+}));
 const perfil = consultarMeuPerfil as jest.MockedFunction<typeof consultarMeuPerfil>;
+const listar = listarContratos as jest.MockedFunction<typeof listarContratos>;
+beforeEach(() => { jest.clearAllMocks(); perfil.mockResolvedValue({ id: 'a', nome: 'Admin', email: 'a@example.com', perfil: 'ADMINISTRADOR', ativo: true }); });
 
-beforeEach(() => jest.clearAllMocks());
-
-test("B2 lista contratos como exemplos fictícios e não oferece detalhe quebrado", async () => {
-  perfil.mockResolvedValue({ id: "a", nome: "Admin de Teste", email: "admin@example.com", perfil: "ADMINISTRADOR", ativo: true });
-  render(<ContratosListPage />);
-  expect(await screen.findByText("Protótipo visual da Sprint 03 — HU05")).toBeInTheDocument();
-  expect(screen.getByText("CT-001/2026")).toBeInTheDocument();
-  expect(screen.getByText(/Detalhes indisponíveis na prévia/)).toBeInTheDocument();
-  expect(screen.queryByRole("link", { name: "Detalhes" })).not.toBeInTheDocument();
-  expect(screen.getByRole("link", { name: /Visualizar formulário/ })).toHaveAttribute("href", "/contratos/novo");
+test('HU05-06: busca dados reais e não apresenta fixture CT-001/2026', async () => {
+  listar.mockResolvedValue([]);
+  await act(async () => { render(<ContratosListPage />); });
+  expect(listar).toHaveBeenCalledTimes(1);
+  expect(screen.getByText(/Nenhum contrato cadastrado ou atribuído/)).toBeInTheDocument();
+  expect(screen.queryByText('CT-001/2026')).not.toBeInTheDocument();
 });
 
-test("B2 não revela nem mesmo a prévia a uma conta de domínio inativa", async () => {
-  perfil.mockResolvedValue({ id: "b", nome: null, email: "teste@example.com", perfil: "COLABORADOR", ativo: false });
-  render(<ContratosListPage />);
-  expect(await screen.findByText(/Esta conta está inativa/)).toBeInTheDocument();
-  expect(screen.queryByText("CT-001/2026")).not.toBeInTheDocument();
+test('HU05-06: contrato real abre detalhe pelo UUID', async () => {
+  listar.mockResolvedValue([{ id: '11111111-1111-4111-8111-111111111111', numeroContrato: 'REAL-2026', orgaoContratante: 'UTFPR', objeto: 'Serviços', status: 'PLANEJAMENTO', modoCalculo: 'SIMPLES', inicioVigencia: '2026-01-01', terminoVigencia: '2026-12-31' } as Awaited<ReturnType<typeof listarContratos>>[number]]);
+  await act(async () => { render(<ContratosListPage />); });
+  expect(screen.getByText('REAL-2026')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Detalhes' })).toHaveAttribute('href', '/contratos/11111111-1111-4111-8111-111111111111');
+});
+
+test('HU05-06: não oferece criar a Colaborador', async () => {
+  perfil.mockResolvedValue({ id: 'c', nome: null, email: 'c@example.com', perfil: 'COLABORADOR', ativo: true });
+  listar.mockResolvedValue([]);
+  await act(async () => { render(<ContratosListPage />); });
+  expect(screen.queryByRole('link', { name: 'Cadastrar contrato' })).not.toBeInTheDocument();
 });

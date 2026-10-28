@@ -16,7 +16,7 @@ import { CriarContratoDto } from './dto/criar-contrato.dto.js';
  *  1. Sem sessão SuperTokens válida → 401.
  *  2. Sessão sem usuário de domínio ativo → 403.
  *  3. `@ExigirPolitica` avalia a política:
- *     - `contratos:criar` / `contratos:listar` → Administrador (PoliticaAcessoService).
+ *     - `contratos:criar` → Administrador; `contratos:listar` → carteira filtrada por sessão.
  *     - `contratos:visualizar` / `contratos:editar` → Administrador OU vínculo
  *       explícito (`permissoes_contrato`); para editar, GESTOR + `pode_editar`.
  *  4. `visualizar`/`editar` exigem `id` **da rota** (nunca body/query). Negar
@@ -31,8 +31,8 @@ export class ContratosController {
 
   @Get()
   @ExigirPolitica('contratos:listar')
-  listar() {
-    return this.contratos.listar();
+  listar(@Req() req: RequisicaoAutorizada) {
+    return this.contratos.listar(req.usuarioDominio!);
   }
 
   @Post()
@@ -47,6 +47,12 @@ export class ContratosController {
   @ExigirPolitica('contratos:visualizar', 'id')
   detalhar(@Param('id') id: string) {
     return this.contratos.detalhar(id);
+  }
+
+  @Get(':id/acesso')
+  @ExigirPolitica('contratos:visualizar', 'id')
+  acesso(@Param('id') id: string, @Req() req: RequisicaoAutorizada) {
+    return this.contratos.consultarAcesso(id, req.usuarioDominio!);
   }
 
   @Patch(':id')

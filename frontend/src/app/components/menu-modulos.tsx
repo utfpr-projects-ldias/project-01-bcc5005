@@ -16,8 +16,8 @@ function useItens(): Item[] {
   }, []);
   return [
     { nome: 'Dashboard', href: '/dashboard' },
-    // HU05 (Sprint 03): interface demonstrativa acessível; a integração real é HU05-06.
-    { nome: 'Contratos', href: '/contratos', aviso: 'Prévia da Sprint 03' },
+    // HU05, Sprint 03: CRUD real integrado à API na continuidade TEC07.
+    { nome: 'Contratos', href: '/contratos' },
     // HU08 ainda pertence à Sprint 04, não ao débito histórico de HU05.
     { nome: 'Atividades', aviso: 'Sprint 04 · em desenvolvimento' },
     { nome: 'Evidências', aviso: 'Sprint 05' },

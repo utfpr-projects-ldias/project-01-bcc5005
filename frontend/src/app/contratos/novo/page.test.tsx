@@ -1,28 +1,31 @@
-import { render, screen } from "@testing-library/react";
-import NovoContratoPage from "./page";
-import { consultarMeuPerfil } from "@/lib/admin-usuarios";
+import { act, render, screen, fireEvent } from '@testing-library/react';
+import NovoContratoPage from './page';
+import { consultarMeuPerfil } from '@/lib/admin-usuarios';
+import { listarResponsaveis, criarContrato } from '@/lib/contratos';
 
-const mockReplace = jest.fn();
-jest.mock("next/navigation", () => ({ useRouter: () => ({ replace: mockReplace, refresh: jest.fn() }) }));
-jest.mock("@/app/components/menu-modulos", () => ({ MenuLateral: () => <div>Menu desktop</div>, MenuMobile: () => <div>Menu móvel</div> }));
-jest.mock("supertokens-web-js/recipe/session", () => ({ __esModule: true, default: { signOut: jest.fn() } }));
-jest.mock("@/lib/admin-usuarios", () => ({ consultarMeuPerfil: jest.fn() }));
+const navegar = jest.fn();
+jest.mock('next/navigation', () => ({ useRouter: () => ({ push: navegar }) }));
+jest.mock('@/lib/admin-usuarios', () => ({ consultarMeuPerfil: jest.fn() }));
+jest.mock('@/lib/contratos', () => ({ listarResponsaveis: jest.fn(), criarContrato: jest.fn() }));
+jest.mock('../components/area-contratos', () => ({ AreaContratos: ({ children }: { children: React.ReactNode }) => <main>{children}</main>, Aviso: ({ children }: { children: React.ReactNode }) => <p>{children}</p> }));
+jest.mock('../components/formulario-contrato', () => ({ FormularioContrato: ({ onSalvar }: { onSalvar: (dados: unknown) => Promise<void> }) => <button onClick={() => void onSalvar({ numeroContrato: 'REAL' })}>Cadastrar contrato</button> }));
 const perfil = consultarMeuPerfil as jest.MockedFunction<typeof consultarMeuPerfil>;
+const responsaveis = listarResponsaveis as jest.MockedFunction<typeof listarResponsaveis>;
+const criar = criarContrato as jest.MockedFunction<typeof criarContrato>;
+beforeEach(() => { jest.clearAllMocks(); responsaveis.mockResolvedValue({ usuarios: [], incompleta: false }); });
 
-beforeEach(() => jest.clearAllMocks());
-
-test("B2 apresenta formulário de Sprint 03 sem nenhum salvamento fictício", async () => {
-  perfil.mockResolvedValue({ id: "a", nome: "Admin de Teste", email: "admin@example.com", perfil: "ADMINISTRADOR", ativo: true });
-  render(<NovoContratoPage />);
-  expect(await screen.findByText("Formulário demonstrativo — nenhum dado será salvo")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /Salvar contrato \(indisponível\)/ })).toBeDisabled();
-  expect(screen.getByRole("group", { name: /Campos indisponíveis até a HU05-06/ })).toBeDisabled();
-  expect(screen.getByText(/Upload indisponível nesta prévia/)).toBeInTheDocument();
+test('HU05-06: visitante não recebe formulário de criação', async () => {
+  perfil.mockResolvedValue({ id: 'a', nome: null, email: 'a@example.com', perfil: 'COLABORADOR', ativo: true });
+  await act(async () => { render(<NovoContratoPage />); });
+  expect(screen.getByText('Acesso restrito')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Cadastrar contrato' })).not.toBeInTheDocument();
 });
 
-test("B2 impede colaborador de visualizar o formulário administrativo", async () => {
-  perfil.mockResolvedValue({ id: "b", nome: "Colaborador de Teste", email: "teste@example.com", perfil: "COLABORADOR", ativo: true });
-  render(<NovoContratoPage />);
-  expect(await screen.findByRole("heading", { name: "Acesso restrito" })).toBeInTheDocument();
-  expect(screen.queryByText("Formulário demonstrativo — nenhum dado será salvo")).not.toBeInTheDocument();
+test('HU05-06: ADMIN faz POST, só navega após confirmação', async () => {
+  perfil.mockResolvedValue({ id: 'a', nome: 'Admin', email: 'a@example.com', perfil: 'ADMINISTRADOR', ativo: true });
+  criar.mockResolvedValue({ id: '11111111-1111-4111-8111-111111111111' } as Awaited<ReturnType<typeof criarContrato>>);
+  await act(async () => { render(<NovoContratoPage />); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Cadastrar contrato' })); });
+  expect(criar).toHaveBeenCalledWith(expect.objectContaining({ numeroContrato: 'REAL' }));
+  expect(navegar).toHaveBeenCalledWith('/contratos/11111111-1111-4111-8111-111111111111');
 });

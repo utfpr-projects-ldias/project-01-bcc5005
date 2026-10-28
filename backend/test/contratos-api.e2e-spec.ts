@@ -20,6 +20,7 @@ describe('Contratos API — validação e autorização HTTP', () => {
   const listar = jest.fn<(...args: unknown[]) => Promise<unknown>>();
   const detalhar = jest.fn<(...args: unknown[]) => Promise<unknown>>();
   const atualizar = jest.fn<(...args: unknown[]) => Promise<unknown>>();
+  const consultarAcesso = jest.fn<(...args: unknown[]) => Promise<unknown>>();
   const idContrato = '11111111-1111-4111-8111-111111111111';
   const body = {
     numeroContrato: '2026/001',
@@ -35,7 +36,7 @@ describe('Contratos API — validação e autorização HTTP', () => {
     const fixture: TestingModule = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(SessaoSuperTokensService).useValue({ identificar })
       .overrideProvider(UsuariosService).useValue({ buscarAtivoPorSupertokensId: usuario })
-      .overrideProvider(ContratosService).useValue({ criar, listar, detalhar, atualizar })
+      .overrideProvider(ContratosService).useValue({ criar, listar, detalhar, atualizar, consultarAcesso })
       .compile();
     app = fixture.createNestApplication();
     await app.init();
@@ -56,6 +57,7 @@ describe('Contratos API — validação e autorização HTTP', () => {
     criar.mockResolvedValue({ ...body, id: idContrato });
     listar.mockResolvedValue([]);
     detalhar.mockResolvedValue({ ...body, id: idContrato });
+    consultarAcesso.mockResolvedValue({ podeEditar: true });
     atualizar.mockResolvedValue({ ...body, id: idContrato, status: 'EM_EXECUCAO' });
   });
 
@@ -72,14 +74,14 @@ describe('Contratos API — validação e autorização HTTP', () => {
   });
 
   it.each([PerfilUsuario.GESTOR, PerfilUsuario.COLABORADOR])(
-    '403: %s não realiza listagem global', async (perfil) => {
+    '200: %s consulta apenas a própria carteira (filtrada no service)', async (perfil) => {
       usuario.mockResolvedValue({
         id: '33333333-3333-4333-8333-333333333333',
         supertokensUserId: 'st-usuario',
         email: 'usuario@empresa.test', perfil, ativo: true,
       });
-      await request(app.getHttpServer()).get('/contratos').expect(403);
-      expect(listar).not.toHaveBeenCalled();
+      await request(app.getHttpServer()).get('/contratos').expect(200);
+      expect(listar).toHaveBeenCalledWith(expect.objectContaining({ perfil }));
     },
   );
 
@@ -103,6 +105,12 @@ describe('Contratos API — validação e autorização HTTP', () => {
     await request(app.getHttpServer()).get(`/contratos/${idContrato}`).expect(200);
     expect(listar).toHaveBeenCalledTimes(1);
     expect(detalhar).toHaveBeenCalledTimes(1);
+  });
+
+  it('200: Administração consulta flag de edição do contrato', async () => {
+    const resposta = await request(app.getHttpServer()).get(`/contratos/${idContrato}/acesso`).expect(200);
+    expect(resposta.body).toEqual({ podeEditar: true });
+    expect(consultarAcesso).toHaveBeenCalledTimes(1);
   });
 
   it('200: PATCH aceita alteração parcial de status', async () => {
