@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { EstruturaInterna } from './estrutura-interna';
 import { usePathname } from 'next/navigation';
 import Session from 'supertokens-web-js/recipe/session';
@@ -38,4 +38,39 @@ test('logout usa API oficial sem refresh integral da página', async () => {
   render(<EstruturaInterna><p>Área protegida</p></EstruturaInterna>);
   fireEvent.click(screen.getByRole('button', { name: 'Sair' }));
   expect(Session.signOut).toHaveBeenCalledTimes(1);
+});
+
+
+test('logout seguido de novo login não conserva o spinner Saindo... no cabeçalho', async () => {
+  (Session.signOut as jest.Mock).mockResolvedValue(undefined);
+  const { rerender } = render(<EstruturaInterna><p>Primeira sessão</p></EstruturaInterna>);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Sair' }));
+  expect(screen.getByRole('button', { name: /Saindo/ })).toBeDisabled();
+  await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/login'));
+
+  // Mesmo layout raiz, mas rota pública: cabeçalho privado desmonta.
+  rota.mockReturnValue('/login');
+  rerender(<EstruturaInterna><p>Faça login novamente</p></EstruturaInterna>);
+  expect(screen.queryByRole('button', { name: /Saindo/ })).not.toBeInTheDocument();
+  expect(screen.getByText('Faça login novamente')).toBeInTheDocument();
+
+  // Novo login: o cabeçalho deve iniciar com botão habilitado.
+  rota.mockReturnValue('/dashboard');
+  rerender(<EstruturaInterna><p>Nova sessão</p></EstruturaInterna>);
+  expect(screen.getByRole('button', { name: 'Sair' })).toBeEnabled();
+  expect(screen.queryByText('Saindo...')).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Sair' }));
+  expect(Session.signOut).toHaveBeenCalledTimes(2);
+});
+
+test('falha ao sair restaura o botão e mostra mensagem, sem travar a sessão', async () => {
+  (Session.signOut as jest.Mock).mockRejectedValueOnce(new Error('Falha de rede'));
+  render(<EstruturaInterna><p>Área protegida</p></EstruturaInterna>);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Sair' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível sair');
+  expect(screen.getByRole('button', { name: 'Sair' })).toBeEnabled();
+  expect(mockReplace).not.toHaveBeenCalled();
 });

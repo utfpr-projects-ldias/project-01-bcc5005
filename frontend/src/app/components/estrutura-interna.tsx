@@ -7,16 +7,23 @@ import { MenuLateral, MenuMobile } from "./menu-modulos";
 import { IndicadorCarregamento } from "./indicador-carregamento";
 import { IdentificacaoUsuario } from "../dashboard/components/identificacao-usuario";
 
-/** Mantido no layout raiz, não é desmontado na troca entre rotas internas. */
+/** O layout raiz permanece montado mesmo ao navegar entre login e dashboard. */
 export function EstruturaInterna({ children }: { children: ReactNode }) {
   const rota = usePathname();
-  const router = useRouter();
-  const [saindo, setSaindo] = useState(false);
-  const [erroSaida, setErroSaida] = useState("");
   const interna = rota === "/dashboard" || rota === "/contratos" || rota.startsWith("/contratos/") ||
     rota === "/admin/usuarios" || rota.startsWith("/admin/usuarios/");
 
   if (!interna) return <>{children}</>;
+
+  // Este componente interno é DESMONTADO ao sair para /login.
+  // Assim, o estado `saindo` nunca atravessa duas sessões diferentes.
+  return <CabecalhoInterno rota={rota}>{children}</CabecalhoInterno>;
+}
+
+function CabecalhoInterno({ rota, children }: { rota: string; children: ReactNode }) {
+  const router = useRouter();
+  const [saindo, setSaindo] = useState(false);
+  const [erroSaida, setErroSaida] = useState("");
 
   let titulo = "Dashboard";
   if (rota.startsWith("/admin/usuarios")) {
@@ -34,7 +41,7 @@ export function EstruturaInterna({ children }: { children: ReactNode }) {
     setErroSaida("");
     try {
       await Session.signOut();
-      // Não atualizar toda a árvore com router.refresh(): somente trocar de rota.
+      // Ao entrar em /login, CabecalhoInterno será desmontado e limpará o estado.
       router.replace("/login");
     } catch {
       setErroSaida("Não foi possível sair. Tente novamente.");
