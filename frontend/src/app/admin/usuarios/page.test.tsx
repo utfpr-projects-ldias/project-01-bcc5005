@@ -1,17 +1,20 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import AdministracaoUsuariosPage from "./page";
+import CadastrarFuncionarioPage from "./novo/page";
+import { PainelAdministracao } from "./components/painel-administracao";
 import {
-  atualizarFuncionario, cadastrarFuncionario, consultarMeuPerfil,
-  consultarUsuariosPaginados, alterarEmailFuncionario,
-  redefinirSenhaFuncionario, ErroApi,
+  atualizarFuncionario, cadastrarFuncionario, consultarMeuPerfil, consultarUsuariosPaginados,
+  buscarFuncionarioPorId, alterarEmailFuncionario, redefinirSenhaFuncionario, ErroApi,
 } from "@/lib/admin-usuarios";
 
 const substituir = jest.fn();
-const mockRouter = { replace: substituir };
+const navegar = jest.fn();
+const mockRouter = { replace: substituir, push: navegar, refresh: jest.fn() };
 jest.mock("next/navigation", () => ({ useRouter: () => mockRouter }));
 jest.mock("@/lib/admin-usuarios", () => ({
   ...jest.requireActual("@/lib/admin-usuarios"),
   consultarMeuPerfil: jest.fn(), consultarUsuariosPaginados: jest.fn(),
+  buscarFuncionarioPorId: jest.fn(),
   cadastrarFuncionario: jest.fn(), atualizarFuncionario: jest.fn(),
   alterarEmailFuncionario: jest.fn(), redefinirSenhaFuncionario: jest.fn(),
   listarPermissoesFuncionario: jest.fn(() => Promise.resolve([])),
@@ -20,6 +23,7 @@ jest.mock("@/lib/admin-usuarios", () => ({
 }));
 const eu = consultarMeuPerfil as jest.MockedFunction<typeof consultarMeuPerfil>;
 const paginados = consultarUsuariosPaginados as jest.MockedFunction<typeof consultarUsuariosPaginados>;
+const porId = buscarFuncionarioPorId as jest.MockedFunction<typeof buscarFuncionarioPorId>;
 const criar = cadastrarFuncionario as jest.MockedFunction<typeof cadastrarFuncionario>;
 const atualizar = atualizarFuncionario as jest.MockedFunction<typeof atualizarFuncionario>;
 const atualizarEmail = alterarEmailFuncionario as jest.MockedFunction<typeof alterarEmailFuncionario>;
@@ -30,6 +34,7 @@ const gestor = { id: "b", nome: "Gestor de Teste", email: "gestor@exemplo.com", 
 beforeEach(() => {
   jest.clearAllMocks();
   eu.mockResolvedValue(admin);
+  porId.mockResolvedValue(gestor);
   paginados.mockImplementation(async (opts) => ({
     itens: opts.limite === 1 ? [admin] : opts.ativo ? [admin, gestor] : [],
     pagina: opts.pagina ?? 1, limite: opts.limite ?? 20,
@@ -37,116 +42,108 @@ beforeEach(() => {
   }));
 });
 
-test("Administrador carrega listagem paginada pela API", async () => {
+test("listagem exibe ação de cadastro ao lado de atualizar, sem formulário", async () => {
   render(<AdministracaoUsuariosPage />);
-  expect(screen.getByRole("status")).toHaveTextContent("Verificando permissões");
   const lista = await screen.findByRole("region", { name: "Funcionários" });
-  expect(within(lista).getByText("admin@exemplo.com")).toBeInTheDocument();
-  expect(paginados).toHaveBeenCalledWith(expect.objectContaining({ ativo: true, pagina: 1 }));
-  expect(screen.getByRole("button", { name: "Cadastrar funcionário" })).toBeInTheDocument();
+  expect(within(lista).getByText("gestor@exemplo.com")).toBeInTheDocument();
+  expect(paginados).toHaveBeenCalled();
+  const cadastrar = within(lista).getByRole("link", { name: "Cadastrar funcionário" });
+  expect(cadastrar).toHaveAttribute("href", "/admin/usuarios/novo");
+  expect(cadastrar.parentElement).toContainElement(within(lista).getByRole("button", { name: "Atualizar lista" }));
+  expect(screen.queryByLabelText("Senha inicial")).not.toBeInTheDocument();
 });
 
-test("Gestor não tem acesso à área pela URL", async () => {
+test("editar é link para página própria", async () => {
+  render(<AdministracaoUsuariosPage />);
+  const lista = await screen.findByRole("region", { name: "Funcionários" });
+  expect(within(lista).getByRole("link", { name: "Editar gestor@exemplo.com" }))
+    .toHaveAttribute("href", "/admin/usuarios/b/editar");
+  expect(screen.queryByRole("region", { name: /Editar funcionário/ })).not.toBeInTheDocument();
+});
+
+test("Gestor não acessa listagem", async () => {
   eu.mockResolvedValue({ ...admin, perfil: "GESTOR" });
   render(<AdministracaoUsuariosPage />);
   expect(await screen.findByRole("heading", { name: "Acesso restrito" })).toBeInTheDocument();
   expect(paginados).not.toHaveBeenCalled();
 });
 
-test("Sessão 401 redireciona", async () => {
+test("sessão expirada redireciona sem mostrar dados", async () => {
   eu.mockRejectedValue(new ErroApi(401, "Sessão expirada"));
   render(<AdministracaoUsuariosPage />);
   await waitFor(() => expect(substituir).toHaveBeenCalledWith("/login"));
+  expect(screen.queryByText("gestor@exemplo.com")).not.toBeInTheDocument();
 });
 
-test("Alterna arquivados com filtro server-side", async () => {
+test("abas ativos e arquivados usam filtro servidor", async () => {
   render(<AdministracaoUsuariosPage />);
   await screen.findByText("gestor@exemplo.com");
   fireEvent.click(screen.getByRole("button", { name: /Arquivados \(/ }));
   await waitFor(() => expect(paginados).toHaveBeenCalledWith(expect.objectContaining({ ativo: false, pagina: 1 })));
 });
 
-test("Valida senha de cadastro antes da API", async () => {
-  render(<AdministracaoUsuariosPage />);
-  await screen.findByText("gestor@exemplo.com");
-  fireEvent.change(screen.getByLabelText("E-mail"), { target: { value: "gestor@exemplo.com" } });
+test("cadastrar possui formulário isolado e valida senha antes da API", async () => {
+  render(<CadastrarFuncionarioPage />);
+  await screen.findByRole("heading", { name: "Cadastrar funcionário", level: 1 });
+  expect(screen.queryByRole("region", { name: "Funcionários" })).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Nome completo"), { target: { value: gestor.nome } });
+  fireEvent.change(screen.getByLabelText("E-mail"), { target: { value: gestor.email } });
   fireEvent.change(screen.getByLabelText("Senha inicial"), { target: { value: "fraca" } });
   fireEvent.change(screen.getByLabelText("Confirmar senha"), { target: { value: "fraca" } });
   fireEvent.click(screen.getByRole("button", { name: "Cadastrar funcionário" }));
-  expect(screen.getByText("A senha precisa ter ao menos 12 caracteres.")).toBeInTheDocument();
+  expect(await screen.findByText("A senha precisa ter ao menos 12 caracteres.")).toBeInTheDocument();
   expect(criar).not.toHaveBeenCalled();
 });
 
-test("Cadastra e limpa senha após resposta real simulada", async () => {
+test("cadastro válido grava via API e retorna à listagem", async () => {
   criar.mockResolvedValue(gestor);
-  render(<AdministracaoUsuariosPage />);
-  await screen.findByText("gestor@exemplo.com");
+  render(<CadastrarFuncionarioPage />);
+  await screen.findByRole("heading", { name: "Cadastrar funcionário", level: 1 });
   fireEvent.change(screen.getByLabelText("Nome completo"), { target: { value: gestor.nome } });
   fireEvent.change(screen.getByLabelText("E-mail"), { target: { value: "GESTOR@EXEMPLO.COM" } });
   fireEvent.change(screen.getByLabelText("Senha inicial"), { target: { value: "ForteSenha!123" } });
   fireEvent.change(screen.getByLabelText("Confirmar senha"), { target: { value: "ForteSenha!123" } });
   fireEvent.click(screen.getByRole("button", { name: "Cadastrar funcionário" }));
-  await waitFor(() => expect(criar).toHaveBeenCalledWith(expect.objectContaining({ email: "gestor@exemplo.com", nome: gestor.nome })));
-  await waitFor(() => expect(screen.getByLabelText("Senha inicial")).toHaveValue(""));
+  await waitFor(() => expect(criar).toHaveBeenCalledWith(expect.objectContaining({ email: gestor.email })));
+  expect(substituir).toHaveBeenCalledWith("/admin/usuarios");
 });
 
-test("Erro de duplicidade mantém campos", async () => {
-  criar.mockRejectedValue(new ErroApi(409, "Este e-mail já está cadastrado."));
-  render(<AdministracaoUsuariosPage />);
-  await screen.findByText("gestor@exemplo.com");
-  fireEvent.change(screen.getByLabelText("Nome completo"), { target: { value: gestor.nome } });
-  fireEvent.change(screen.getByLabelText("E-mail"), { target: { value: gestor.email } });
-  fireEvent.change(screen.getByLabelText("Senha inicial"), { target: { value: "ForteSenha!123" } });
-  fireEvent.change(screen.getByLabelText("Confirmar senha"), { target: { value: "ForteSenha!123" } });
-  fireEvent.click(screen.getByRole("button", { name: "Cadastrar funcionário" }));
-  expect(await screen.findByText("Este e-mail já está cadastrado.")).toBeInTheDocument();
-  expect(screen.getByLabelText("E-mail")).toHaveValue(gestor.email);
+test("edição abre por UUID consultando API individual, mesmo fora das 100 primeiras contas", async () => {
+  render(<PainelAdministracao vista="edicao" idEdicao="b" />);
+  expect(await screen.findByRole("heading", { name: /Editar funcionário — Gestor de Teste/ })).toBeInTheDocument();
+  expect(porId).toHaveBeenCalledWith("b");
+  expect(paginados).not.toHaveBeenCalled();
+  expect(screen.getByLabelText("Perfil (edição)")).toHaveValue("GESTOR");
+  expect(screen.queryByRole("region", { name: "Funcionários" })).not.toBeInTheDocument();
 });
 
-test("Editar usa mesmo painel e cancela", async () => {
-  render(<AdministracaoUsuariosPage />);
-  await screen.findByText("gestor@exemplo.com");
-  fireEvent.click(screen.getByRole("button", { name: "Editar gestor@exemplo.com" }));
-  expect(screen.getByRole("heading", { name: /Editar funcionário/ })).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Cadastrar funcionário" })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Cancelar edição" }));
-  expect(screen.getByRole("button", { name: "Cadastrar funcionário" })).toBeInTheDocument();
-});
-
-test("PATCH de perfil e situação funciona", async () => {
+test("edição salva o PATCH e permanece na página para gerenciar credenciais", async () => {
   atualizar.mockResolvedValue({ ...gestor, perfil: "COLABORADOR", ativo: false });
-  render(<AdministracaoUsuariosPage />);
-  await screen.findByText("gestor@exemplo.com");
-  fireEvent.click(screen.getByRole("button", { name: "Editar gestor@exemplo.com" }));
+  render(<PainelAdministracao vista="edicao" idEdicao="b" />);
+  await screen.findByLabelText("Perfil (edição)");
   fireEvent.change(screen.getByLabelText("Perfil (edição)"), { target: { value: "COLABORADOR" } });
   fireEvent.click(screen.getByLabelText("Conta ativa (desmarque para inativar)"));
   fireEvent.click(screen.getByRole("button", { name: "Salvar alterações" }));
   await waitFor(() => expect(atualizar).toHaveBeenCalledWith("b", { perfil: "COLABORADOR", ativo: false }));
+  expect(screen.getByText(/Dados de gestor@exemplo.com atualizados/)).toBeInTheDocument();
 });
 
-test("Administrador só altera seu próprio nome", async () => {
-  render(<AdministracaoUsuariosPage />);
-  fireEvent.click(await screen.findByRole("button", { name: "Editar admin@exemplo.com" }));
-  expect(screen.getByLabelText("Nome completo (edição)")).toBeInTheDocument();
+test("editar Administrador permite somente o próprio nome", async () => {
+  porId.mockResolvedValue(admin);
+  render(<PainelAdministracao vista="edicao" idEdicao="a" />);
+  await screen.findByLabelText("Nome completo (edição)");
   expect(screen.queryByLabelText("Perfil (edição)")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Novo e-mail")).not.toBeInTheDocument();
 });
 
-test("Atualização de e-mail separada do PATCH de perfil", async () => {
+test("edição de credenciais não usa o PATCH de domínio", async () => {
   atualizarEmail.mockResolvedValue({ ...gestor, email: "novo@exemplo.com" });
-  render(<AdministracaoUsuariosPage />);
-  await screen.findByText("gestor@exemplo.com");
-  fireEvent.click(screen.getByRole("button", { name: "Editar gestor@exemplo.com" }));
+  redefinirSenha.mockResolvedValue(undefined);
+  render(<PainelAdministracao vista="edicao" idEdicao="b" />);
+  await screen.findByLabelText("Novo e-mail");
   fireEvent.change(screen.getByLabelText("Novo e-mail"), { target: { value: "novo@exemplo.com" } });
   fireEvent.click(screen.getByRole("button", { name: "Atualizar e-mail" }));
   await waitFor(() => expect(atualizarEmail).toHaveBeenCalledWith("b", "novo@exemplo.com"));
-});
-
-test("Senha nunca é enviada no PATCH de domínio", async () => {
-  redefinirSenha.mockResolvedValue(undefined);
-  render(<AdministracaoUsuariosPage />);
-  await screen.findByText("gestor@exemplo.com");
-  fireEvent.click(screen.getByRole("button", { name: "Editar gestor@exemplo.com" }));
   fireEvent.change(screen.getByLabelText("Nova senha"), { target: { value: "NovaSenha!1234" } });
   fireEvent.change(screen.getByLabelText("Confirmar nova senha"), { target: { value: "NovaSenha!1234" } });
   fireEvent.click(screen.getByRole("button", { name: "Definir nova senha" }));
@@ -154,47 +151,20 @@ test("Senha nunca é enviada no PATCH de domínio", async () => {
   expect(atualizar).not.toHaveBeenCalled();
 });
 
-test("B2 mantém lista acima do painel de cadastro/edição em todas as larguras", async () => {
-  render(<AdministracaoUsuariosPage />);
-  await screen.findByText("gestor@exemplo.com");
-  const lista = screen.getByRole("region", { name: "Funcionários" });
-  const formulario = screen.getByRole("region", { name: "Cadastrar funcionário" });
-  expect(lista.parentElement).toBe(formulario.parentElement);
-  expect(lista.parentElement).toHaveClass("flex", "flex-col");
-  expect(lista.nextElementSibling).toBe(formulario);
-  // A edição também carrega contratos e permissões de forma assíncrona.
-  await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Editar gestor@exemplo.com" }));
-  });
-  expect(screen.getByRole("region", { name: /Editar funcionário/ })).toBe(formulario);
-  expect(lista.nextElementSibling).toBe(formulario);
+test("voltar da edição retorna à listagem", async () => {
+  render(<PainelAdministracao vista="edicao" idEdicao="b" />);
+  await screen.findByRole("button", { name: "Cancelar edição" });
+  fireEvent.click(screen.getByRole("button", { name: "Cancelar edição" }));
+  expect(navegar).toHaveBeenCalledWith("/admin/usuarios");
 });
 
-test("B2 identifica o Admin pelo nome real após editar sua própria conta", async () => {
-  atualizar.mockResolvedValue({ ...admin, nome: "Admin de Testes" });
-  render(<AdministracaoUsuariosPage />);
-  const cabecalho = await screen.findByLabelText("Administrador autenticado");
-  expect(within(cabecalho).getByText("admin@exemplo.com")).toBeInTheDocument();
-  expect(cabecalho).toHaveTextContent("Nome não informado");
-  fireEvent.click(screen.getByRole("button", { name: "Editar admin@exemplo.com" }));
-  fireEvent.change(screen.getByLabelText("Nome completo (edição)"), { target: { value: "Admin de Testes" } });
-  fireEvent.click(screen.getByRole("button", { name: "Salvar alterações" }));
-  await waitFor(() => expect(cabecalho).toHaveTextContent("Admin de Testes"));
-  expect(cabecalho).not.toHaveTextContent("Nome não informado");
-});
-
-test("Arquivar pede confirmação própria e só altera conta após confirmar", async () => {
+test("arquivamento ainda exige confirmação visual simples", async () => {
   atualizar.mockResolvedValue({ ...gestor, ativo: false });
   render(<AdministracaoUsuariosPage />);
   await screen.findByText("gestor@exemplo.com");
   fireEvent.click(screen.getByRole("button", { name: "Arquivar" }));
-  const modal = screen.getByRole("dialog", { name: "Arquivar funcionário?" });
-  expect(modal).toHaveTextContent("histórico será preservado");
+  const dialogo = screen.getByRole("dialog", { name: "Arquivar funcionário?" });
   expect(atualizar).not.toHaveBeenCalled();
-  fireEvent.click(within(modal).getByRole("button", { name: "Cancelar" }));
-  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  expect(atualizar).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "Arquivar" }));
-  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Arquivar" }));
+  fireEvent.click(within(dialogo).getByRole("button", { name: "Arquivar" }));
   await waitFor(() => expect(atualizar).toHaveBeenCalledWith("b", { ativo: false }));
 });

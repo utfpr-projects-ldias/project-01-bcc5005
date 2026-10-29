@@ -46,6 +46,13 @@ export class AdministracaoUsuariosService {
     return { itens: dados.map((u) => this.publico(u)), pagina, limite, total, totalPaginas: Math.max(1, Math.ceil(total / limite)) };
   }
 
+  /** Consulta individual para página de edição; a política ADMIN já é aplicada pelo controller. */
+  async buscarPorId(id: string) {
+    const usuario = await this.repositorio.findOneBy({ id });
+    if (!usuario) throw new NotFoundException('Funcionário não encontrado');
+    return this.publico(usuario);
+  }
+
   async criar(dto: CriarFuncionarioDto, ator: UsuarioAutenticado) {
     if (ator?.perfil !== PerfilUsuario.ADMINISTRADOR) throw new ForbiddenException('Somente Administrador pode criar funcionários');
     if (![PerfilUsuario.GESTOR, PerfilUsuario.COLABORADOR].includes(dto.perfil)) {

@@ -129,3 +129,18 @@ describe('Credenciais administrativas', () => {
     expect(JSON.stringify(auditarExecucao.mock.calls)).not.toContain('NovaSenha!1234');
   });
 });
+
+
+describe('consulta administrativa individual', () => {
+  it('retorna usuário sem expor ID SuperTokens e sem limite de paginação', async () => {
+    buscarEmail.mockResolvedValue(usuario);
+    const dado = await svc.buscarPorId(usuario.id);
+    expect(dado).toMatchObject({ id: usuario.id, email: usuario.email });
+    expect(JSON.stringify(dado)).not.toContain(usuario.supertokensUserId);
+    expect(buscarEmail).toHaveBeenCalledWith({ id: usuario.id });
+  });
+  it('retorna 404 quando o ID não existe', async () => {
+    buscarEmail.mockResolvedValue(null);
+    await expect(svc.buscarPorId('uuid-ausente')).rejects.toThrow('Funcionário não encontrado');
+  });
+});

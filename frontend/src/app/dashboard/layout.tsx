@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { doesSessionExist } from "supertokens-web-js/recipe/session";
 import { consultarMeuPerfil, ErroApi } from "@/lib/admin-usuarios";
+import { IndicadorCarregamento } from "@/app/components/indicador-carregamento";
 
 /** Exige sessão SuperTokens E usuário ativo no domínio, mesmo com cookie antigo. */
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -39,7 +40,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (carregando) return (
     <div className="min-h-screen flex items-center justify-center bg-background text-foreground">
-      <div className="text-sm text-foreground/60 animate-pulse">Carregando ambiente seguro...</div>
+      <IndicadorCarregamento texto="Validando sessão e permissões..." />
     </div>
   );
   if (!autorizado) return (

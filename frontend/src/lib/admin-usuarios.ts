@@ -69,6 +69,9 @@ export function consultarUsuariosPaginados(opcoes: { ativo: boolean; pagina?: nu
   });
   return requisitar<PaginaUsuarios>(`/admin/usuarios/consulta?${busca.toString()}`);
 }
+export function buscarFuncionarioPorId(id: string): Promise<UsuarioPublico> {
+  return requisitar<UsuarioPublico>(`/admin/usuarios/${encodeURIComponent(id)}`);
+}
 export function alterarEmailFuncionario(id: string, email: string): Promise<UsuarioPublico> {
   return requisitar<UsuarioPublico>(`/admin/usuarios/${encodeURIComponent(id)}/email`, {
     method: 'PATCH', body: JSON.stringify({ email }),

@@ -16,6 +16,7 @@ describe('TEC07-04 - API admin (E2E)', () => {
   const criar = jest.fn<() => Promise<unknown>>();
   const listar = jest.fn<() => Promise<unknown>>();
   const atualizar = jest.fn<() => Promise<unknown>>();
+  const buscarPorId = jest.fn<() => Promise<unknown>>();
   const body = {
     nome: 'Funcionario de Teste', email: 'funcionario@empresa.test', perfil: PerfilUsuario.COLABORADOR,
     senhaInicial: 'SenhaForte!1234',
@@ -25,7 +26,7 @@ describe('TEC07-04 - API admin (E2E)', () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(SessaoSuperTokensService).useValue({ identificar })
       .overrideProvider(UsuariosService).useValue({ buscarAtivoPorSupertokensId: usuario })
-      .overrideProvider(AdministracaoUsuariosService).useValue({ criar, listar, atualizar })
+      .overrideProvider(AdministracaoUsuariosService).useValue({ criar, listar, atualizar, buscarPorId })
       .compile();
     app = moduleFixture.createNestApplication();
     await app.init();
@@ -38,6 +39,7 @@ describe('TEC07-04 - API admin (E2E)', () => {
     criar.mockResolvedValue({ id: 'u2', email: body.email, perfil: body.perfil, ativo: true });
     listar.mockResolvedValue([]);
     atualizar.mockResolvedValue({ id: "b2b28766-c374-43b0-b2b6-3e84608d3ca1", nome: "Pessoa de Teste", perfil: PerfilUsuario.GESTOR, ativo: false });
+    buscarPorId.mockResolvedValue({ id: "b2b28766-c374-43b0-b2b6-3e84608d3ca1", email: "funcionario@empresa.test", perfil: PerfilUsuario.GESTOR, ativo: true });
   });
 
   it('401: sem sessão não cria conta', async () => {
@@ -73,6 +75,21 @@ describe('TEC07-04 - API admin (E2E)', () => {
   it('200: admin lista funcionários', async () => {
     await request(app.getHttpServer()).get('/admin/usuarios').expect(200);
     expect(listar).toHaveBeenCalledTimes(1);
+  });
+
+  it('200: administrador busca funcionário por UUID para editar', async () => {
+    const id = 'b2b28766-c374-43b0-b2b6-3e84608d3ca1';
+    await request(app.getHttpServer()).get(`/admin/usuarios/${id}`).expect(200);
+    expect(buscarPorId).toHaveBeenCalledWith(id);
+  });
+  it('403: gestor não consegue abrir dados administrativos individuais', async () => {
+    usuario.mockResolvedValue({ id: 'u1', supertokensUserId: 'st-id', perfil: PerfilUsuario.GESTOR, ativo: true });
+    await request(app.getHttpServer()).get('/admin/usuarios/b2b28766-c374-43b0-b2b6-3e84608d3ca1').expect(403);
+    expect(buscarPorId).not.toHaveBeenCalled();
+  });
+  it('400: identificador administrativo inválido é recusado', async () => {
+    await request(app.getHttpServer()).get('/admin/usuarios/id-invalido').expect(400);
+    expect(buscarPorId).not.toHaveBeenCalled();
   });
 
   it('400: role inventado e campos estranhos são recusados', async () => {

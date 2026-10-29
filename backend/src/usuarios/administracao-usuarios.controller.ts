@@ -28,6 +28,11 @@ export class AdministracaoUsuariosController {
     return this.administracao.consultar(filtros);
   }
 
+  @Get(':id')
+  buscarPorId(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
+    return this.administracao.buscarPorId(id);
+  }
+
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @UsePipes(validacao)

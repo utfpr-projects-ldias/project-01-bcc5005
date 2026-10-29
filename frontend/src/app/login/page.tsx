@@ -1,10 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { signIn } from "supertokens-web-js/recipe/emailpassword";
+import { doesSessionExist } from "supertokens-web-js/recipe/session";
+import { consultarMeuPerfil, ErroApi } from "@/lib/admin-usuarios";
+import { initSuperTokens } from "@/config/supertokens";
+import { IndicadorCarregamento } from "@/app/components/indicador-carregamento";
 import { z } from "zod";
 
 // 1. Schema de validação do Login com Zod
@@ -23,9 +27,39 @@ export default function LoginPage() {
   });
 
   const [errors, setErrors] = useState<Partial<Record<keyof LoginFormValues, string>>>({});
-  const [successMessage, setSuccessMessage] = useState("");
+  const [fase, setFase] = useState<"verificando" | "pronto" | "redirecionando">("verificando");
   const [serverError, setServerError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    let montado = true;
+    async function verificarSessao() {
+      try {
+        initSuperTokens();
+        if (await doesSessionExist()) {
+          const perfil = await consultarMeuPerfil();
+          if (!montado) return;
+          if (perfil.ativo) {
+            setFase("redirecionando");
+            router.replace("/dashboard");
+            return;
+          }
+          setServerError("Conta inativa. Procure um Administrador.");
+        }
+      } catch (erro) {
+        if (!montado) return;
+        if (erro instanceof ErroApi && erro.status === 403) {
+          setServerError("Conta inativa ou sem autorização. Procure um Administrador.");
+        } else if (!(erro instanceof ErroApi && erro.status === 401)) {
+          setServerError("Não foi possível verificar a sessão. Confira a conexão e tente entrar.");
+        }
+      } finally {
+        if (montado) setFase((estado) => estado === "redirecionando" ? estado : "pronto");
+      }
+    }
+    void verificarSessao();
+    return () => { montado = false; };
+  }, [router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -37,11 +71,16 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (submitting) return;
-    setSuccessMessage("");
+    if (submitting || fase !== "pronto") return;
     setServerError("");
 
-    const result = loginSchema.safeParse(formData);
+    // O preenchimento automático do navegador pode não disparar onChange no React.
+    // Leia os valores realmente presentes no formulário ao confirmar o login.
+    const campos = new FormData(e.currentTarget);
+    const result = loginSchema.safeParse({
+      email: String(campos.get("email") ?? ""),
+      password: String(campos.get("password") ?? ""),
+    });
     if (!result.success) {
       const fieldErrors: Partial<Record<keyof LoginFormValues, string>> = {};
       for (const issue of result.error.issues) {
@@ -55,6 +94,7 @@ export default function LoginPage() {
     setErrors({});
     setSubmitting(true);
     try {
+      initSuperTokens();
       const response = await signIn({
         formFields: [
           { id: "email", value: result.data.email.trim().toLowerCase() },
@@ -65,7 +105,7 @@ export default function LoginPage() {
         setServerError("E-mail ou senha inválidos, ou login não permitido.");
         return;
       }
-      setSuccessMessage("Login efetuado!");
+      setFase("redirecionando");
       router.replace("/dashboard");
       router.refresh();
     } catch {
@@ -74,6 +114,12 @@ export default function LoginPage() {
       setSubmitting(false);
     }
   };
+
+  if (fase !== "pronto") return (
+    <main className="min-h-screen flex items-center justify-center bg-background p-6 text-foreground">
+      <IndicadorCarregamento texto={fase === "verificando" ? "Verificando sessão..." : "Abrindo painel..."} />
+    </main>
+  );
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-background text-foreground font-sans">
@@ -100,12 +146,6 @@ export default function LoginPage() {
 
         {serverError && (
           <p role="alert" className="mb-4 text-sm text-red-400">{serverError}</p>
-        )}
-        {/* Mensagem de Sucesso */}
-        {successMessage && (
-          <div className="mb-4 p-3 rounded-lg bg-brand-green/20 border border-brand-green text-brand-neon text-sm text-center">
-            {successMessage}
-          </div>
         )}
 
         {/* Formulário com Zod */}
@@ -148,10 +188,10 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || fase !== "pronto"}
             className="w-full py-3 rounded-lg bg-brand-green text-background font-semibold hover:opacity-90 transition-opacity mt-2"
           >
-            {submitting ? "Entrando..." : "Entrar"}
+            {submitting ? <IndicadorCarregamento texto="Verificando acesso..." compacto /> : "Entrar"}
           </button>
         </form>
 

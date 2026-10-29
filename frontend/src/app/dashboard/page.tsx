@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { MenuLateral, MenuMobile } from "@/app/components/menu-modulos";
 import Session from "supertokens-web-js/recipe/session";
 import { IdentificacaoUsuario } from "./components/identificacao-usuario";
+import { IndicadorCarregamento } from "@/app/components/indicador-carregamento";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -21,7 +22,6 @@ export default function DashboardPage() {
       router.refresh();
     } catch {
       setLogoutError("Não foi possível encerrar a sessão. Tente novamente.");
-    } finally {
       setIsLoggingOut(false);
     }
   }
@@ -50,7 +50,7 @@ export default function DashboardPage() {
               disabled={isLoggingOut}
               className="px-4 py-2 rounded-lg text-sm font-medium border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-60"
             >
-              {isLoggingOut ? "Saindo..." : "Sair"}
+              {isLoggingOut ? <IndicadorCarregamento texto="Saindo..." compacto /> : "Sair"}
             </button>
           </div>
         </header>
