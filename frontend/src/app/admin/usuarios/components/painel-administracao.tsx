@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { MenuLateral, MenuMobile } from "@/app/components/menu-modulos";
+import { IndicadorCarregamento } from "@/app/components/indicador-carregamento";
 import { ConfirmacaoSimples } from "@/app/components/confirmacao-simples";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
@@ -77,6 +79,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
   const [contratoId, setContratoId] = useState("");
   const [podeEditar, setPodeEditar] = useState(false);
   const [erroPermissoes, setErroPermissoes] = useState("");
+  const [atualizandoVinculo, setAtualizandoVinculo] = useState("");
   const [confirmacao, setConfirmacao] = useState<
     { tipo: "conta"; usuario: UsuarioPublico } | { tipo: "permissao"; contratoId: string; email: string } | null
   >(null);
@@ -152,13 +155,6 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
     setPagina(nova); void recarregar(aba, nova, filtro);
   }
 
-  function cancelar() {
-    router.push("/admin/usuarios");
-    setEditando(null); setForm({ ...inicial }); setErroFormulario(""); setErros({});
-    setEmailNovo(""); setSenhaNova(""); setSenhaConfirmada(""); setMensagem("");
-    setPermissoes([]); setErroPermissoes("");
-  }
-
   async function cadastrar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault(); if (enviando) return;
     setErroFormulario(""); setMensagem("");
@@ -195,7 +191,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
       if (editando.perfil !== edicao.perfil) dados.perfil = edicao.perfil;
       if (editando.ativo !== edicao.ativo) dados.ativo = edicao.ativo;
     }
-    if (!Object.keys(dados).length) { setErroFormulario("Nenhuma alteração informada."); return; }
+    if (!Object.keys(dados).length) { setErroFormulario(""); setMensagem("Nenhuma alteração pendente."); return; }
     setEnviando(true); setErroFormulario("");
     try {
       const atualizado = await atualizarFuncionario(editando.id, dados);
@@ -247,17 +243,32 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
     finally { setEnviando(false); }
   }
 
+  const contratosLivres = contratos.filter((c) => !permissoes.some((p) => p.contratoId === c.id));
+  const contratoSelecionado = contratosLivres.some((c) => c.id === contratoId)
+    ? contratoId : (contratosLivres[0]?.id ?? "");
+
   async function salvarPermissao(evento: FormEvent<HTMLFormElement>) {
-    evento.preventDefault(); if (!editando || !contratoId || enviando) return;
+    evento.preventDefault(); if (!editando || !contratoSelecionado || enviando) return;
     setEnviando(true); setErroPermissoes("");
     try {
       await concederPermissaoFuncionario(editando.id, {
-        contratoId, podeEditar: editando.perfil === "GESTOR" && podeEditar,
+        contratoId: contratoSelecionado, podeEditar: editando.perfil === "GESTOR" && podeEditar,
       });
       setPermissoes(await listarPermissoesFuncionario(editando.id));
-      setMensagem("Permissão de contrato salva.");
+      setContratoId(""); setPodeEditar(false);
+      setMensagem("Contrato vinculado ao funcionário.");
     } catch (e) { if (!cuidarSessao(e)) setErroPermissoes(erroLegivel(e)); }
     finally { setEnviando(false); }
+  }
+  async function alternarPermissao(vinculo: PermissaoFuncionario) {
+    if (!editando || enviando || atualizandoVinculo || editando.perfil !== "GESTOR") return;
+    setAtualizandoVinculo(vinculo.contratoId); setErroPermissoes("");
+    try {
+      await concederPermissaoFuncionario(editando.id, { contratoId: vinculo.contratoId, podeEditar: !vinculo.podeEditar });
+      setPermissoes(await listarPermissoesFuncionario(editando.id));
+      setMensagem("Nível de acesso atualizado.");
+    } catch (erro) { if (!cuidarSessao(erro)) setErroPermissoes(erroLegivel(erro)); }
+    finally { setAtualizandoVinculo(""); }
   }
   async function revogar(contrato: string) {
     if (!editando || enviando) return;
@@ -271,7 +282,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
     finally { setEnviando(false); }
   }
 
-  if (carregando) return <main role="status" className="min-h-screen flex items-center justify-center p-6">Verificando permissões e carregando funcionários...</main>;
+  if (carregando) return <main role="status" className="min-h-screen flex items-center justify-center p-6"><IndicadorCarregamento texto="Verificando acesso à administração..." /></main>;
   if (!autorizado) return (
     <main className="min-h-screen flex flex-col items-center justify-center gap-4 p-6">
       <h1 className="text-2xl font-semibold">{vista === "edicao" && erroAcesso.includes("não encontrado") ? "Funcionário não encontrado" : "Acesso restrito"}</h1>
@@ -281,13 +292,17 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
   );
 
   return (
-    <main className="min-h-screen bg-background px-4 py-6 text-foreground md:px-8">
-      <div className="mx-auto max-w-7xl space-y-6">
+    <div className="flex min-h-screen bg-background text-foreground">
+      <MenuLateral />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <MenuMobile />
+        <main className="flex-1 px-4 py-6 md:px-8">
+      <div className="mx-auto max-w-5xl space-y-6">
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <Link href={vista === "lista" ? "/dashboard" : "/admin/usuarios"} className="text-sm text-brand-neon underline">← {vista === "lista" ? "Voltar ao painel" : "Voltar aos funcionários"}</Link>
             <h1 className="mt-3 text-2xl font-bold">{vista === "lista" ? "Administração de funcionários" : vista === "cadastro" ? "Cadastrar funcionário" : "Editar funcionário"}</h1>
-            <p className="text-sm text-foreground/70">{vista === "lista" ? "Consulte funcionários e gerencie contas arquivadas." : "Gerencie os dados com acesso restrito ao Administrador."}</p>
+            <p className="text-sm text-foreground/70">{vista === "lista" ? "Encontre funcionários, consulte seus perfis e administre contas arquivadas." : vista === "cadastro" ? "Crie uma conta interna com dados e senha inicial. O acesso a contratos é atribuído após o cadastro." : "Altere os dados principais. Credenciais e contratos possuem controles separados, abaixo."}</p>
           </div>
           {minhaConta && <div className="min-w-0 text-left text-sm md:text-right" aria-label="Administrador autenticado">
             <p className="font-semibold break-words">{minhaConta.nome?.trim() || "Nome não informado"}</p>
@@ -343,68 +358,96 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
             </div>
           </section>}
 
-          {vista !== "lista" && <section className="min-w-0 space-y-5 rounded-2xl border border-brand-green/20 p-4 md:p-6" aria-labelledby="titulo-formulario">
+          {vista !== "lista" && <section className="mx-auto w-full max-w-3xl min-w-0 space-y-5 rounded-2xl border border-brand-green/20 p-4 md:p-6" aria-labelledby="titulo-formulario">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 id="titulo-formulario" className="text-lg font-semibold">{editando ? `Editar funcionário — ${editando.nome || "Nome não informado"}` : "Cadastrar funcionário"}</h2>
-              {vista === "edicao" && <button type="button" className={botao} onClick={cancelar}>Cancelar edição</button>}
+              {vista === "edicao" && <span className="rounded-full bg-brand-green/10 px-3 py-1 text-xs text-foreground/70">Edição administrativa</span>}
             </div>
             {erroFormulario && <p role="alert" className="text-sm text-red-400">{erroFormulario}</p>}
             {vista === "edicao" && editando ? (
               <>
                 <p className="break-all text-sm text-foreground/70">Conta: {editando.email}</p>
+                <div className="rounded-xl border border-brand-green/15 bg-brand-darkgreen/10 p-4">
+                <h3 className="mb-1 font-semibold">Dados e situação da conta</h3>
+                <p className="mb-4 text-xs text-foreground/65">Use Salvar dados somente para nome, perfil e situação. As demais operações são independentes.</p>
                 <form className="space-y-4" noValidate onSubmit={(e) => void salvarEdicao(e)}>
                   <div>
-                    <label htmlFor="edicao-nome" className="mb-1 block text-sm">Nome completo (edição)</label>
+                    <label htmlFor="edicao-nome" className="mb-1 block text-sm">Nome completo</label>
                     <input id="edicao-nome" className={campo} value={edicao.nome} onChange={(e) => setEdicao((s) => ({ ...s, nome: e.target.value }))} maxLength={160} aria-describedby="aviso-nome-legado" />
                     {!editando.nome && <p id="aviso-nome-legado" className="text-xs text-foreground/60">Nome legado opcional nesta edição. Ao preencher, informe nome e sobrenome.</p>}
                   </div>
                   {editando.perfil !== "ADMINISTRADOR" && <>
                     <div>
-                      <label htmlFor="edicao-perfil" className="mb-1 block text-sm">Perfil (edição)</label>
+                      <label htmlFor="edicao-perfil" className="mb-1 block text-sm">Perfil de acesso</label>
                       <select id="edicao-perfil" className={campo} value={edicao.perfil} onChange={(e) => setEdicao((s) => ({ ...s, perfil: e.target.value as PerfilFuncionario }))}><option value="GESTOR">Gestor</option><option value="COLABORADOR">Colaborador</option></select>
                     </div>
-                    <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={edicao.ativo} onChange={(e) => setEdicao((s) => ({ ...s, ativo: e.target.checked }))} />Conta ativa (desmarque para inativar)</label>
+                    <p className="text-xs text-foreground/65">Situação: {editando.ativo ? "Ativo" : "Arquivado"}. Para arquivar ou reativar, utilize a ação na lista de funcionários, que solicita confirmação.</p>
                   </>}
-                  <button type="submit" disabled={enviando} className={acao}>{enviando ? "Salvando..." : "Salvar alterações"}</button>
+                  <button type="submit" disabled={enviando} className={acao}>{enviando ? "Salvando..." : "Salvar dados da conta"}</button>
                 </form>
+                </div>
                 {editando.perfil !== "ADMINISTRADOR" && <>
-                  <div className="border-t border-brand-green/20 pt-4">
-                    <h3 className="font-semibold">Alterar e-mail da conta</h3>
-                    <form onSubmit={(e) => void salvarEmail(e)} className="mt-3 space-y-3">
-                      <label htmlFor="edicao-email" className="block text-sm">Novo e-mail</label>
-                      <input id="edicao-email" type="email" className={campo} value={emailNovo} maxLength={320} required onChange={(e) => setEmailNovo(e.target.value)} />
-                      <button className={botao} type="submit" disabled={enviando || emailNovo.trim().toLowerCase() === editando.email}>Atualizar e-mail</button>
-                    </form>
-                  </div>
-                  <div className="border-t border-brand-green/20 pt-4">
-                    <h3 className="font-semibold">Definir nova senha</h3>
-                    <p className="text-xs text-foreground/65">A senha atual nunca é exibida. 12 a 128 caracteres, com maiúscula, minúscula, número e símbolo.</p>
-                    <form onSubmit={(e) => void salvarSenha(e)} className="mt-3 space-y-3">
-                      <label htmlFor="nova-senha" className="block text-sm">Nova senha</label>
-                      <input id="nova-senha" type="password" autoComplete="new-password" className={campo} value={senhaNova} onChange={(e) => setSenhaNova(e.target.value)} />
-                      <label htmlFor="confirmar-nova-senha" className="block text-sm">Confirmar nova senha</label>
-                      <input id="confirmar-nova-senha" type="password" autoComplete="new-password" className={campo} value={senhaConfirmada} onChange={(e) => setSenhaConfirmada(e.target.value)} />
-                      <button className={botao} type="submit" disabled={enviando}>Definir nova senha</button>
-                    </form>
-                  </div>
-                  <div className="border-t border-brand-green/20 pt-4">
-                    <h3 className="font-semibold">Permissões por contrato</h3>
-                    {erroPermissoes && <p role="alert" className="text-sm text-red-400">{erroPermissoes}</p>}
-                    <ul className="mt-2 space-y-2 text-sm">
-                      {permissoes.map((v) => <li key={v.contratoId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand-green/20 p-2">
-                        <span className="min-w-0 flex-1 break-words">{contratos.find((c) => c.id === v.contratoId)?.numeroContrato ?? v.contratoId} — {v.podeEditar ? "Pode editar" : "Somente leitura"}</span>
-                        <button type="button" className={botao} disabled={enviando} onClick={() => setConfirmacao({ tipo: "permissao", contratoId: v.contratoId, email: editando.email })}>Revogar</button>
-                      </li>)}
-                      {!permissoes.length && <li className="text-foreground/60">Sem vínculos cadastrados.</li>}
-                    </ul>
-                    <form onSubmit={(e) => void salvarPermissao(e)} className="mt-3 space-y-3">
-                      <label htmlFor="contrato-permissao" className="block text-sm">Contrato existente</label>
-                      <select id="contrato-permissao" className={campo} value={contratoId} onChange={(e) => setContratoId(e.target.value)}>
-                        {contratos.map((c) => <option value={c.id} key={c.id}>{c.numeroContrato} — {c.orgaoContratante}</option>)}
-                      </select>
-                      {editando.perfil === "GESTOR" && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={podeEditar} onChange={(e) => setPodeEditar(e.target.checked)} />Pode editar contrato</label>}
-                      <button type="submit" disabled={enviando || !contratoId || !editando.ativo} className={botao}>Conceder / atualizar vínculo</button>
-                    </form>
+                  <div className="space-y-3" aria-label="Configurações administrativas adicionais">
+                    <h3 className="text-base font-semibold">Outras configurações</h3>
+                    <p className="text-sm text-foreground/65">Abra apenas a seção que deseja modificar. As alterações são independentes.</p>
+                    <details className="group rounded-xl border border-brand-green/20 p-4">
+                      <summary className="cursor-pointer font-semibold focus-visible:outline-2 focus-visible:outline-brand-green">Alterar e-mail <span className="ml-2 text-xs font-normal text-foreground/60">Credencial de acesso</span></summary>
+                      <form onSubmit={(e) => void salvarEmail(e)} className="mt-4 space-y-3">
+                        <p className="text-xs text-foreground/65">E-mail atual: {editando.email}</p>
+                        <label htmlFor="edicao-email" className="block text-sm">Novo e-mail</label>
+                        <input id="edicao-email" type="email" className={campo} value={emailNovo} maxLength={320} required onChange={(e) => setEmailNovo(e.target.value)} />
+                        <button className={acao} type="submit" disabled={enviando || emailNovo.trim().toLowerCase() === editando.email}>{enviando ? "Atualizando..." : "Confirmar mudança de e-mail"}</button>
+                      </form>
+                    </details>
+                    <details className="group rounded-xl border border-brand-green/20 p-4">
+                      <summary className="cursor-pointer font-semibold focus-visible:outline-2 focus-visible:outline-brand-green">Redefinir senha <span className="ml-2 text-xs font-normal text-foreground/60">Operação sensível</span></summary>
+                      <form onSubmit={(e) => void salvarSenha(e)} className="mt-4 space-y-3">
+                        <p className="text-xs text-foreground/65">A senha anterior nunca é exibida. Use 12–128 caracteres com maiúscula, minúscula, número e símbolo.</p>
+                        <label htmlFor="nova-senha" className="block text-sm">Nova senha</label>
+                        <input id="nova-senha" type="password" autoComplete="new-password" className={campo} value={senhaNova} onChange={(e) => setSenhaNova(e.target.value)} />
+                        <label htmlFor="confirmar-nova-senha" className="block text-sm">Confirmar nova senha</label>
+                        <input id="confirmar-nova-senha" type="password" autoComplete="new-password" className={campo} value={senhaConfirmada} onChange={(e) => setSenhaConfirmada(e.target.value)} />
+                        <button className={acao} type="submit" disabled={enviando}>{enviando ? "Redefinindo..." : "Confirmar redefinição de senha"}</button>
+                      </form>
+                    </details>
+                    <details className="group rounded-xl border border-brand-green/20 p-4" data-testid="acessos-contratuais">
+                      <summary className="cursor-pointer font-semibold focus-visible:outline-2 focus-visible:outline-brand-green">Acesso aos contratos <span className="ml-2 text-xs font-normal text-foreground/60">{permissoes.length} vínculo(s)</span></summary>
+                      <div className="mt-4 space-y-4">
+                        <p className="text-sm text-foreground/70">Cada funcionário pode ter acesso a vários contratos. Gestores podem receber edição; colaboradores, apenas leitura. Estes vínculos não alteram o responsável interno do contrato.</p>
+                        {erroPermissoes && <p role="alert" className="text-sm text-red-400">{erroPermissoes}</p>}
+                        <section aria-label="Contratos vinculados">
+                          <h4 className="text-sm font-semibold">Contratos com acesso ({permissoes.length})</h4>
+                          <ul className="mt-2 space-y-2 text-sm">
+                            {permissoes.map((v) => {
+                              const contrato = contratos.find((c) => c.id === v.contratoId);
+                              return <li key={v.contratoId} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brand-green/20 p-3">
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-medium break-words">{contrato ? `${contrato.numeroContrato} — ${contrato.orgaoContratante}` : `Contrato ${v.contratoId}`}</p>
+                                  <p className="text-xs text-foreground/65">{v.podeEditar && editando.perfil === "GESTOR" ? "Leitura e edição" : "Somente leitura"}</p>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {editando.perfil === "GESTOR" && <button type="button" className={botao} disabled={enviando || !!atualizandoVinculo || !editando.ativo} onClick={() => void alternarPermissao(v)}>{atualizandoVinculo === v.contratoId ? "Atualizando..." : v.podeEditar ? "Remover edição" : "Permitir edição"}</button>}
+                                  <button type="button" className={botao} disabled={enviando || !!atualizandoVinculo} onClick={() => setConfirmacao({ tipo: "permissao", contratoId: v.contratoId, email: editando.email })}>Revogar acesso</button>
+                                </div>
+                              </li>;
+                            })}
+                            {!permissoes.length && <li className="rounded-lg border border-dashed border-brand-green/20 p-3 text-foreground/60">Nenhum contrato vinculado.</li>}
+                          </ul>
+                        </section>
+                        <section className="border-t border-brand-green/20 pt-4" aria-label="Conceder novo acesso">
+                          <h4 className="text-sm font-semibold">Adicionar acesso</h4>
+                          {contratosLivres.length === 0 ? <p className="mt-2 text-sm text-foreground/60">Não há outros contratos disponíveis para vincular. Crie um contrato ou revise os vínculos acima.</p> :
+                            <form onSubmit={(e) => void salvarPermissao(e)} className="mt-3 space-y-3">
+                              <label htmlFor="contrato-permissao" className="block text-sm">Selecionar contrato ainda não vinculado</label>
+                              <select id="contrato-permissao" className={campo} value={contratoSelecionado} onChange={(e) => setContratoId(e.target.value)}>
+                                {contratosLivres.map((c) => <option value={c.id} key={c.id}>{c.numeroContrato} — {c.orgaoContratante}</option>)}
+                              </select>
+                              {editando.perfil === "GESTOR" && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={podeEditar} onChange={(e) => setPodeEditar(e.target.checked)} />Permitir também edição</label>}
+                              <button type="submit" disabled={enviando || !contratoSelecionado || !editando.ativo} className={acao}>{enviando ? "Vinculando..." : "Adicionar vínculo"}</button>
+                            </form>}
+                        </section>
+                      </div>
+                    </details>
                   </div>
                 </>}
               </>
@@ -435,6 +478,8 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
           </section>}
         </div>
       </div>
+      </main>
+      </div>
       {confirmacao && <ConfirmacaoSimples
         titulo={confirmacao.tipo === "conta" ? (confirmacao.usuario.ativo ? "Arquivar funcionário?" : "Reativar funcionário?") : "Revogar permissão?"}
         descricao={confirmacao.tipo === "conta"
@@ -449,6 +494,6 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
           else void revogar(confirmacao.contratoId);
         }}
       />}
-    </main>
+    </div>
   );
 }

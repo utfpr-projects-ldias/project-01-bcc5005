@@ -4,13 +4,14 @@ import CadastrarFuncionarioPage from "./novo/page";
 import { PainelAdministracao } from "./components/painel-administracao";
 import {
   atualizarFuncionario, cadastrarFuncionario, consultarMeuPerfil, consultarUsuariosPaginados,
-  buscarFuncionarioPorId, alterarEmailFuncionario, redefinirSenhaFuncionario, ErroApi,
+  buscarFuncionarioPorId, alterarEmailFuncionario, redefinirSenhaFuncionario,
+  listarPermissoesFuncionario, listarContratosAdministracao, concederPermissaoFuncionario, ErroApi,
 } from "@/lib/admin-usuarios";
 
 const substituir = jest.fn();
 const navegar = jest.fn();
 const mockRouter = { replace: substituir, push: navegar, refresh: jest.fn() };
-jest.mock("next/navigation", () => ({ useRouter: () => mockRouter }));
+jest.mock("next/navigation", () => ({ useRouter: () => mockRouter, usePathname: () => "/admin/usuarios" }));
 jest.mock("@/lib/admin-usuarios", () => ({
   ...jest.requireActual("@/lib/admin-usuarios"),
   consultarMeuPerfil: jest.fn(), consultarUsuariosPaginados: jest.fn(),
@@ -27,6 +28,9 @@ const porId = buscarFuncionarioPorId as jest.MockedFunction<typeof buscarFuncion
 const criar = cadastrarFuncionario as jest.MockedFunction<typeof cadastrarFuncionario>;
 const atualizar = atualizarFuncionario as jest.MockedFunction<typeof atualizarFuncionario>;
 const atualizarEmail = alterarEmailFuncionario as jest.MockedFunction<typeof alterarEmailFuncionario>;
+const acessos = listarPermissoesFuncionario as jest.MockedFunction<typeof listarPermissoesFuncionario>;
+const contratos = listarContratosAdministracao as jest.MockedFunction<typeof listarContratosAdministracao>;
+const conceder = concederPermissaoFuncionario as jest.MockedFunction<typeof concederPermissaoFuncionario>;
 const redefinirSenha = redefinirSenhaFuncionario as jest.MockedFunction<typeof redefinirSenhaFuncionario>;
 const admin = { id: "a", nome: null, email: "admin@exemplo.com", perfil: "ADMINISTRADOR" as const, ativo: true, criadoEm: "2026-10-25T19:40:20Z" };
 const gestor = { id: "b", nome: "Gestor de Teste", email: "gestor@exemplo.com", perfil: "GESTOR" as const, ativo: true, criadoEm: "2026-10-26T10:00:00Z" };
@@ -35,6 +39,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   eu.mockResolvedValue(admin);
   porId.mockResolvedValue(gestor);
+  acessos.mockResolvedValue([]); contratos.mockResolvedValue([]);
   paginados.mockImplementation(async (opts) => ({
     itens: opts.limite === 1 ? [admin] : opts.ativo ? [admin, gestor] : [],
     pagina: opts.pagina ?? 1, limite: opts.limite ?? 20,
@@ -113,26 +118,25 @@ test("edição abre por UUID consultando API individual, mesmo fora das 100 prim
   expect(await screen.findByRole("heading", { name: /Editar funcionário — Gestor de Teste/ })).toBeInTheDocument();
   expect(porId).toHaveBeenCalledWith("b");
   expect(paginados).not.toHaveBeenCalled();
-  expect(screen.getByLabelText("Perfil (edição)")).toHaveValue("GESTOR");
+  expect(screen.getByLabelText("Perfil de acesso")).toHaveValue("GESTOR");
   expect(screen.queryByRole("region", { name: "Funcionários" })).not.toBeInTheDocument();
 });
 
 test("edição salva o PATCH e permanece na página para gerenciar credenciais", async () => {
   atualizar.mockResolvedValue({ ...gestor, perfil: "COLABORADOR", ativo: false });
   render(<PainelAdministracao vista="edicao" idEdicao="b" />);
-  await screen.findByLabelText("Perfil (edição)");
-  fireEvent.change(screen.getByLabelText("Perfil (edição)"), { target: { value: "COLABORADOR" } });
-  fireEvent.click(screen.getByLabelText("Conta ativa (desmarque para inativar)"));
-  fireEvent.click(screen.getByRole("button", { name: "Salvar alterações" }));
-  await waitFor(() => expect(atualizar).toHaveBeenCalledWith("b", { perfil: "COLABORADOR", ativo: false }));
+  await screen.findByLabelText("Perfil de acesso");
+  fireEvent.change(screen.getByLabelText("Perfil de acesso"), { target: { value: "COLABORADOR" } });
+  fireEvent.click(screen.getByRole("button", { name: "Salvar dados da conta" }));
+  await waitFor(() => expect(atualizar).toHaveBeenCalledWith("b", { perfil: "COLABORADOR" }));
   expect(screen.getByText(/Dados de gestor@exemplo.com atualizados/)).toBeInTheDocument();
 });
 
 test("editar Administrador permite somente o próprio nome", async () => {
   porId.mockResolvedValue(admin);
   render(<PainelAdministracao vista="edicao" idEdicao="a" />);
-  await screen.findByLabelText("Nome completo (edição)");
-  expect(screen.queryByLabelText("Perfil (edição)")).not.toBeInTheDocument();
+  await screen.findByLabelText("Nome completo");
+  expect(screen.queryByLabelText("Perfil de acesso")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Novo e-mail")).not.toBeInTheDocument();
 });
 
@@ -140,22 +144,26 @@ test("edição de credenciais não usa o PATCH de domínio", async () => {
   atualizarEmail.mockResolvedValue({ ...gestor, email: "novo@exemplo.com" });
   redefinirSenha.mockResolvedValue(undefined);
   render(<PainelAdministracao vista="edicao" idEdicao="b" />);
-  await screen.findByLabelText("Novo e-mail");
+  await screen.findByRole("heading", { name: /Editar funcionário — Gestor de Teste/ });
+  fireEvent.click(screen.getByText("Alterar e-mail", { exact: false, selector: "summary" }));
   fireEvent.change(screen.getByLabelText("Novo e-mail"), { target: { value: "novo@exemplo.com" } });
-  fireEvent.click(screen.getByRole("button", { name: "Atualizar e-mail" }));
+  fireEvent.click(screen.getByRole("button", { name: "Confirmar mudança de e-mail" }));
   await waitFor(() => expect(atualizarEmail).toHaveBeenCalledWith("b", "novo@exemplo.com"));
+  fireEvent.click(screen.getByText("Redefinir senha", { exact: false, selector: "summary" }));
   fireEvent.change(screen.getByLabelText("Nova senha"), { target: { value: "NovaSenha!1234" } });
   fireEvent.change(screen.getByLabelText("Confirmar nova senha"), { target: { value: "NovaSenha!1234" } });
-  fireEvent.click(screen.getByRole("button", { name: "Definir nova senha" }));
+  fireEvent.click(screen.getByRole("button", { name: "Confirmar redefinição de senha" }));
   await waitFor(() => expect(redefinirSenha).toHaveBeenCalledWith("b", "NovaSenha!1234"));
   expect(atualizar).not.toHaveBeenCalled();
 });
 
-test("voltar da edição retorna à listagem", async () => {
+test("edição mantém navegação lateral e retorno para lista", async () => {
   render(<PainelAdministracao vista="edicao" idEdicao="b" />);
-  await screen.findByRole("button", { name: "Cancelar edição" });
-  fireEvent.click(screen.getByRole("button", { name: "Cancelar edição" }));
-  expect(navegar).toHaveBeenCalledWith("/admin/usuarios");
+  await screen.findByRole("heading", { name: /Editar funcionário — Gestor de Teste/ });
+  expect(screen.getByRole("complementary", { name: "Navegação principal" })).toBeInTheDocument();
+  expect(screen.getByRole("navigation", { name: "Navegação móvel" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: /Voltar aos funcionários/ })).toHaveAttribute("href", "/admin/usuarios");
+  expect(screen.getByRole("button", { name: "Salvar dados da conta" })).toBeInTheDocument();
 });
 
 test("arquivamento ainda exige confirmação visual simples", async () => {
@@ -167,4 +175,38 @@ test("arquivamento ainda exige confirmação visual simples", async () => {
   expect(atualizar).not.toHaveBeenCalled();
   fireEvent.click(within(dialogo).getByRole("button", { name: "Arquivar" }));
   await waitFor(() => expect(atualizar).toHaveBeenCalledWith("b", { ativo: false }));
+});
+
+
+test("cadastro e listagem conservam navegação global", async () => {
+  const { unmount } = render(<CadastrarFuncionarioPage />);
+  await screen.findByRole("heading", { name: "Cadastrar funcionário", level: 1 });
+  expect(screen.getByRole("complementary", { name: "Navegação principal" })).toBeInTheDocument();
+  unmount();
+  render(<AdministracaoUsuariosPage />);
+  await screen.findByRole("region", { name: "Funcionários" });
+  expect(screen.getByRole("complementary", { name: "Navegação principal" })).toBeInTheDocument();
+});
+
+test("vários vínculos existentes aparecem e não podem ser adicionados duas vezes", async () => {
+  contratos.mockResolvedValue([
+    { id: "ct1", numeroContrato: "001/26", orgaoContratante: "UTFPR", status: "PLANEJAMENTO" },
+    { id: "ct2", numeroContrato: "002/26", orgaoContratante: "Prefeitura", status: "PLANEJAMENTO" },
+    { id: "ct3", numeroContrato: "003/26", orgaoContratante: "Universidade", status: "PLANEJAMENTO" },
+  ]);
+  acessos.mockResolvedValue([{ contratoId: "ct1", podeEditar: true }, { contratoId: "ct2", podeEditar: false }]);
+  render(<PainelAdministracao vista="edicao" idEdicao="b" />);
+  await screen.findByRole("heading", { name: /Editar funcionário — Gestor de Teste/ });
+  fireEvent.click(screen.getByText("Acesso aos contratos", { exact: false, selector: "summary" }));
+  const lista = screen.getByRole("region", { name: "Contratos vinculados" });
+  expect(within(lista).getByText(/001\/26/)).toBeInTheDocument();
+  expect(within(lista).getByText(/002\/26/)).toBeInTheDocument();
+  const seletor = screen.getByLabelText("Selecionar contrato ainda não vinculado");
+  expect(within(seletor).getAllByRole("option")).toHaveLength(1);
+  expect(within(seletor).getByRole("option", { name: /003\/26/ })).toBeInTheDocument();
+  conceder.mockResolvedValue({ contratoId: "ct3", podeEditar: false });
+  acessos.mockResolvedValueOnce([{ contratoId: "ct1", podeEditar: true }, { contratoId: "ct2", podeEditar: false }])
+    .mockResolvedValueOnce([{ contratoId: "ct1", podeEditar: true }, { contratoId: "ct2", podeEditar: false }, { contratoId: "ct3", podeEditar: false }]);
+  fireEvent.click(screen.getByRole("button", { name: "Adicionar vínculo" }));
+  await waitFor(() => expect(conceder).toHaveBeenCalledWith("b", { contratoId: "ct3", podeEditar: false }));
 });

@@ -29,10 +29,12 @@ function useItens(): Item[] {
 function Itens({ compactos = false }: { compactos?: boolean }) {
   const itens = useItens();
   const path = usePathname();
+  const ativo = (href: string) => path === href ||
+    ((href === '/contratos' || href === '/admin/usuarios') && path.startsWith(`${href}/`));
   return <>
     {itens.map((item) => item.href ? (
-      <Link key={item.nome} href={item.href} aria-current={path === item.href || (item.href === '/contratos' && path.startsWith('/contratos')) ? 'page' : undefined}
-        className={`${compactos ? 'px-3 py-2' : 'block px-4 py-2.5'} rounded-lg text-sm font-medium focus-visible:outline-2 focus-visible:outline-brand-green ${path === item.href || (item.href === '/contratos' && path.startsWith('/contratos')) ? 'bg-brand-green text-background' : 'hover:bg-brand-darkgreen/40'}`}>
+      <Link key={item.nome} href={item.href} aria-current={ativo(item.href) ? 'page' : undefined}
+        className={`${compactos ? 'px-3 py-2' : 'block px-4 py-2.5'} rounded-lg text-sm font-medium focus-visible:outline-2 focus-visible:outline-brand-green ${ativo(item.href) ? 'bg-brand-green text-background' : 'hover:bg-brand-darkgreen/40'}`}>
         {item.nome}{item.aviso && <span className="ml-1 text-xs font-normal opacity-70"> · {item.aviso}</span>}
       </Link>
     ) : (
