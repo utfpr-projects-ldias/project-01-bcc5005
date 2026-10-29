@@ -21,21 +21,25 @@ export default function ContratosListPage() {
   const [perfil, setPerfil] = useState<MeuPerfil | null>(null);
   const [contratos, setContratos] = useState<Contrato[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const [atualizando, setAtualizando] = useState(false);
+  const [avisoAtualizacao, setAvisoAtualizacao] = useState('');
   const [erro, setErro] = useState('');
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState<StatusContrato | ''>('');
   // Consulta ao backend sempre com o perfil autenticado, sem confiar em IDs do navegador.
   const carregar = useCallback(async () => {
-    setCarregando(true);
+    setAtualizando(true);
+    setAvisoAtualizacao('');
     setErro('');
     try {
       const { usuario, dados } = await consultarContratosAutorizados();
       setPerfil(usuario);
       setContratos(dados);
+      setAvisoAtualizacao('Lista atualizada.');
     } catch (e) {
-      setErro(mensagemErro(e));
+      setErro(`${mensagemErro(e)} A listagem anterior foi mantida.`);
     } finally {
-      setCarregando(false);
+      setAtualizando(false);
     }
   }, []);
 
@@ -66,11 +70,13 @@ export default function ContratosListPage() {
       <div><h2 className="text-lg font-semibold text-brand-neon">Contratos cadastrados</h2>
         <p className="text-sm text-foreground/70">{perfil?.perfil === 'ADMINISTRADOR' ? 'Carteira completa autorizada' : 'Somente contratos vinculados à sua conta'} · Dados do PostgreSQL</p></div>
       <div className="flex gap-2">
-        <button type="button" onClick={() => void carregar()} className="rounded-lg border border-brand-green/40 px-3 py-2 text-sm">Atualizar</button>
+        <button type="button" onClick={() => void carregar()} disabled={atualizando || carregando} aria-busy={atualizando} className="min-w-28 rounded-lg border border-brand-green/40 px-3 py-2 text-sm disabled:opacity-50">{atualizando ? 'Atualizando...' : 'Atualizar lista'}</button>
         {perfil?.perfil === 'ADMINISTRADOR' && <Link href="/contratos/novo" className="rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-background">Cadastrar contrato</Link>}
       </div>
     </section>
-    {carregando ? <Aviso>Carregando contratos reais...</Aviso> : erro ? <div className="space-y-3"><Aviso erro>{erro}</Aviso><button type="button" onClick={() => void carregar()} className="text-sm text-brand-neon underline">Tentar novamente</button></div> : <>
+    <p role="status" className="min-h-4 text-xs text-foreground/65">{avisoAtualizacao}</p>
+    {erro && <div className="space-y-2"><Aviso erro>{erro}</Aviso><button type="button" onClick={() => void carregar()} disabled={atualizando} className="text-sm text-brand-neon underline disabled:opacity-50">Tentar novamente</button></div>}
+    {carregando ? <Aviso>Carregando contratos reais...</Aviso> : !perfil && erro ? null : <>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div><label htmlFor="busca-contrato" className="mb-1 block text-sm">Buscar por número, órgão ou objeto</label>
           <input id="busca-contrato" className="w-full rounded-lg border border-brand-green/30 bg-background p-2" value={busca} onChange={e => setBusca(e.target.value)} /></div>
@@ -82,8 +88,8 @@ export default function ContratosListPage() {
       {!contratos.length ? <Aviso>Nenhum contrato cadastrado ou atribuído à sua conta.</Aviso> : !visiveis.length ? <Aviso>Nenhum resultado para os filtros escolhidos.</Aviso> :
         <ul className="space-y-4">{visiveis.map(c => <li key={c.id} className="rounded-xl border border-brand-green/20 bg-brand-darkgreen/20 p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0 flex-1 space-y-2"><div className="flex flex-wrap items-center gap-3"><span className="font-bold text-brand-neon">{c.numeroContrato}</span><span className="rounded-full border border-brand-green/30 px-2 py-1 text-xs">{STATUS[c.status]}</span></div>
-              <p className="text-sm font-semibold">{c.orgaoContratante}</p><p className="break-words text-sm text-foreground/75">{c.objeto}</p>
+            <div className="min-w-0 flex-1 space-y-2"><div className="flex flex-wrap items-center gap-3"><span className="min-w-0 [overflow-wrap:anywhere] font-bold text-brand-neon">{c.numeroContrato}</span><span className="rounded-full border border-brand-green/30 px-2 py-1 text-xs">{STATUS[c.status]}</span></div>
+              <p className="[overflow-wrap:anywhere] text-sm font-semibold">{c.orgaoContratante}</p><p className="[overflow-wrap:anywhere] text-sm text-foreground/75">{c.objeto}</p>
               <p className="text-xs text-foreground/60">Vigência: {dataCivil(c.inicioVigencia)} até {dataCivil(c.terminoVigencia)} · Modo: {MODOS[c.modoCalculo]}</p>
             </div><Link href={`/contratos/${encodeURIComponent(c.id)}`} className="rounded-lg border border-brand-green/40 px-3 py-2 text-sm text-brand-neon">Detalhes</Link>
           </div></li>)}</ul>}

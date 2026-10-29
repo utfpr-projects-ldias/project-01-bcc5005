@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SuperTokensInit } from "./components/supertokens-init";
+import { EstruturaInterna } from "./components/estrutura-interna";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -25,7 +26,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <SuperTokensInit>{children}</SuperTokensInit>
+        <SuperTokensInit><EstruturaInterna>{children}</EstruturaInterna></SuperTokensInit>
       </body>
     </html>
   );

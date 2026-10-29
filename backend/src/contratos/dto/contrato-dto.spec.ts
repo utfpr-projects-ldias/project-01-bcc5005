@@ -52,6 +52,13 @@ describe('DTOs de contratos — validação de entrada', () => {
     })).toHaveLength(0);
   });
 
+  it('impõe limites de descrição e observações em POST e PATCH', () => {
+    expect(validarCriacao({ ...base, descricao: 'x'.repeat(3001) }).length).toBeGreaterThan(0);
+    expect(validarCriacao({ ...base, observacoes: 'x'.repeat(2001) }).length).toBeGreaterThan(0);
+    expect(validarAtualizacao({ descricao: 'x'.repeat(3001) }).length).toBeGreaterThan(0);
+    expect(validarAtualizacao({ observacoes: 'x'.repeat(2001) }).length).toBeGreaterThan(0);
+  });
+
   it('rejeita estados e modos de cálculo fora dos enums', () => {
     expect(validarCriacao({ ...base, status: 'ABERTO' }).length).toBeGreaterThan(0);
     expect(validarCriacao({ ...base, modoCalculo: 'FINANCEIRO' }).length).toBeGreaterThan(0);

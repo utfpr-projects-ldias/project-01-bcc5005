@@ -157,11 +157,11 @@ test("edição de credenciais não usa o PATCH de domínio", async () => {
   expect(atualizar).not.toHaveBeenCalled();
 });
 
-test("edição mantém navegação lateral e retorno para lista", async () => {
+test("edição mantém retorno para lista e ações próprias sem recriar a navegação", async () => {
   render(<PainelAdministracao vista="edicao" idEdicao="b" />);
   await screen.findByRole("heading", { name: /Editar funcionário — Gestor de Teste/ });
-  expect(screen.getByRole("complementary", { name: "Navegação principal" })).toBeInTheDocument();
-  expect(screen.getByRole("navigation", { name: "Navegação móvel" })).toBeInTheDocument();
+  expect(screen.queryByRole("complementary", { name: "Navegação principal" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("navigation", { name: "Navegação móvel" })).not.toBeInTheDocument();
   expect(screen.getByRole("link", { name: /Voltar aos funcionários/ })).toHaveAttribute("href", "/admin/usuarios");
   expect(screen.getByRole("button", { name: "Salvar dados da conta" })).toBeInTheDocument();
 });
@@ -178,14 +178,14 @@ test("arquivamento ainda exige confirmação visual simples", async () => {
 });
 
 
-test("cadastro e listagem conservam navegação global", async () => {
+test("cadastro e listagem não remontam navegação global", async () => {
   const { unmount } = render(<CadastrarFuncionarioPage />);
   await screen.findByRole("heading", { name: "Cadastrar funcionário", level: 1 });
-  expect(screen.getByRole("complementary", { name: "Navegação principal" })).toBeInTheDocument();
+  expect(screen.queryByRole("complementary", { name: "Navegação principal" })).not.toBeInTheDocument();
   unmount();
   render(<AdministracaoUsuariosPage />);
   await screen.findByRole("region", { name: "Funcionários" });
-  expect(screen.getByRole("complementary", { name: "Navegação principal" })).toBeInTheDocument();
+  expect(screen.queryByRole("complementary", { name: "Navegação principal" })).not.toBeInTheDocument();
 });
 
 test("vários vínculos existentes aparecem e não podem ser adicionados duas vezes", async () => {

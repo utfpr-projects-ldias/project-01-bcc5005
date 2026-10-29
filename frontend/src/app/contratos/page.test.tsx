@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ContratosListPage from './page';
 import { consultarMeuPerfil } from '@/lib/admin-usuarios';
 import { listarContratos } from '@/lib/contratos';
@@ -35,4 +35,23 @@ test('HU05-06: não oferece criar a Colaborador', async () => {
   listar.mockResolvedValue([]);
   await act(async () => { render(<ContratosListPage />); });
   expect(screen.queryByRole('link', { name: 'Cadastrar contrato' })).not.toBeInTheDocument();
+});
+
+
+test('atualizar lista mantém contratos na tela sem piscar durante requisição pendente', async () => {
+  const contrato = { id: '11111111-1111-4111-8111-111111111111', numeroContrato: 'QA-2026',
+    orgaoContratante: 'UTFPR', objeto: 'Serviços', status: 'PLANEJAMENTO', modoCalculo: 'SIMPLES',
+    inicioVigencia: '2026-01-01', terminoVigencia: '2026-12-31' } as Awaited<ReturnType<typeof listarContratos>>[number];
+  let concluir!: (c: Awaited<ReturnType<typeof listarContratos>>) => void;
+  listar.mockResolvedValueOnce([contrato]).mockImplementationOnce(() =>
+    new Promise(resolve => { concluir = resolve; }));
+  render(<ContratosListPage />);
+  expect(await screen.findByText('QA-2026')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Atualizar lista' }));
+  expect(screen.getByText('QA-2026')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Atualizando...' })).toBeDisabled();
+  await waitFor(() => expect(concluir).toEqual(expect.any(Function)));
+  await act(async () => { concluir([contrato]); });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Atualizar lista' })).toBeEnabled());
+  expect(screen.getByText('QA-2026')).toBeInTheDocument();
 });

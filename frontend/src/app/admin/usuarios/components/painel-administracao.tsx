@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { MenuLateral, MenuMobile } from "@/app/components/menu-modulos";
 import { IndicadorCarregamento } from "@/app/components/indicador-carregamento";
 import { ConfirmacaoSimples } from "@/app/components/confirmacao-simples";
 import { useRouter } from "next/navigation";
@@ -64,6 +63,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
   const [quantidades, setQuantidades] = useState({ ativos: 0, arquivados: 0 });
   const [erroLista, setErroLista] = useState("");
   const [atualizando, setAtualizando] = useState(false);
+  const [avisoAtualizacao, setAvisoAtualizacao] = useState("");
   const [editando, setEditando] = useState<UsuarioPublico | null>(null);
   const [form, setForm] = useState({ ...inicial });
   const [edicao, setEdicao] = useState({ nome: "", perfil: "GESTOR" as PerfilFuncionario, ativo: true });
@@ -139,8 +139,8 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
   }, [carregarLista, cuidarSessao, vista, idEdicao]);
 
   async function recarregar(a = aba, p = pagina, q = filtro) {
-    setAtualizando(true); setErroLista("");
-    try { await carregarLista(a, p, q); }
+    setAtualizando(true); setErroLista(""); setAvisoAtualizacao("");
+    try { await carregarLista(a, p, q); setAvisoAtualizacao("Lista atualizada."); }
     catch (e) { if (!cuidarSessao(e)) setErroLista(`${erroLegivel(e)} A lista pode estar desatualizada.`); }
     finally { setAtualizando(false); }
   }
@@ -292,12 +292,8 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
   );
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
-      <MenuLateral />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <MenuMobile />
-        <main className="flex-1 px-4 py-6 md:px-8">
-      <div className="mx-auto max-w-5xl space-y-6">
+    <section className="min-w-0 space-y-6">
+      <div className="min-w-0 space-y-6">
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <Link href={vista === "lista" ? "/dashboard" : "/admin/usuarios"} className="text-sm text-brand-neon underline">← {vista === "lista" ? "Voltar ao painel" : "Voltar aos funcionários"}</Link>
@@ -316,7 +312,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 id="titulo-lista" className="text-lg font-semibold">Funcionários</h2>
               <div className="flex flex-wrap gap-2">
-                <button type="button" className={botao} onClick={() => void recarregar()} disabled={atualizando}>{atualizando ? "Atualizando..." : "Atualizar lista"}</button>
+                <button type="button" className={botao + " min-w-32"} onClick={() => void recarregar()} disabled={atualizando} aria-busy={atualizando}>{atualizando ? "Atualizando..." : "Atualizar lista"}</button>
                 <Link href="/admin/usuarios/novo" className={acao}>Cadastrar funcionário</Link>
               </div>
             </div>
@@ -331,6 +327,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
               <button type="button" className={botao} onClick={() => { setBusca(""); setFiltro(""); setPagina(1); void recarregar(aba, 1, ""); }}>Limpar</button>
             </form>
             {erroLista && <p role="alert" className="mt-3 text-sm text-red-400">{erroLista}</p>}
+            <p role="status" className="mt-2 min-h-4 text-xs text-foreground/65">{avisoAtualizacao}</p>
             <p className="mt-3 text-xs text-foreground/65">{lista.total} resultados · Página {lista.pagina} de {lista.totalPaginas}</p>
             {lista.itens.length === 0 ? <p className="mt-5 text-sm text-foreground/70">Nenhum funcionário nesta consulta.</p> : (
               <ul className="mt-3 space-y-3">
@@ -478,8 +475,6 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
           </section>}
         </div>
       </div>
-      </main>
-      </div>
       {confirmacao && <ConfirmacaoSimples
         titulo={confirmacao.tipo === "conta" ? (confirmacao.usuario.ativo ? "Arquivar funcionário?" : "Reativar funcionário?") : "Revogar permissão?"}
         descricao={confirmacao.tipo === "conta"
@@ -494,6 +489,6 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
           else void revogar(confirmacao.contratoId);
         }}
       />}
-    </div>
+    </section>
   );
 }

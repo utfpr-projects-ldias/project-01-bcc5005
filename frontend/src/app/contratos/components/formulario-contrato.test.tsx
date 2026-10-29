@@ -9,11 +9,13 @@ const inicial: Contrato = {
 };
 
 test('cadastro usa campos reais, nenhum PDF fictício nem save desabilitado', () => {
-  render(<FormularioContrato responsaveis={[]} onSalvar={jest.fn()} />);
+  const { container } = render(<FormularioContrato responsaveis={[]} onSalvar={jest.fn()} />);
   expect(screen.getByRole('button', { name: 'Cadastrar contrato' })).toBeEnabled();
   expect(screen.getByLabelText('Número do contrato *')).toBeInTheDocument();
   expect(screen.getByLabelText('Responsável interno (usuário ativo)')).toBeInTheDocument();
-  expect(screen.getByText(/Nenhum arquivo é enviado/)).toBeInTheDocument();
+  // Anexos ainda não têm upload nesta etapa: nenhum controle de arquivo deve existir.
+  expect(container.querySelector('input[type="file"]')).toBeNull();
+  expect(screen.getByRole('note')).toHaveTextContent(/Anexos ainda não podem ser enviados/i);
 });
 
 test('edição envia payload DTO sem id e sem string vazia em data de assinatura', async () => {
@@ -41,6 +43,19 @@ test('cadastro vazio mostra erro da aplicação em vez do balão de validação 
   const { container } = render(<FormularioContrato responsaveis={[]} onSalvar={salvar} />);
   expect(container.querySelector('form')).toHaveAttribute('novalidate');
   fireEvent.click(screen.getByRole('button', { name: 'Cadastrar contrato' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('Preencha número do contrato');
+  expect(await screen.findByText('Número do contrato é obrigatório.')).toBeInTheDocument();
+  expect(screen.getByLabelText('Número do contrato *')).toHaveAttribute('aria-invalid', 'true');
   expect(salvar).not.toHaveBeenCalled();
+});
+
+
+test('limites de caracteres e mensagens explicativas de modo de cálculo', () => {
+  render(<FormularioContrato responsaveis={[]} onSalvar={jest.fn()} />);
+  expect(screen.getByLabelText('Objeto *')).toHaveAttribute('maxLength', '500');
+  expect(screen.getByText(/média dos percentuais de execução/)).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Modo de cálculo físico *'), { target: { value: 'PONDERADO' } });
+  expect(screen.getByText(/pesos válidos deverão somar 100%/)).toBeInTheDocument();
+  fireEvent.click(screen.getByText(/Informações complementares/));
+  expect(screen.getByLabelText('Descrição')).toHaveAttribute('maxLength', '3000');
+  expect(screen.getByLabelText('Observações')).toHaveAttribute('maxLength', '2000');
 });
