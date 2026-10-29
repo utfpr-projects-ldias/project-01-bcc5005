@@ -1,5 +1,7 @@
 'use client';
 
+import { LinkVoltar } from '@/app/components/link-voltar';
+
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -45,7 +47,7 @@ export default function DetalheContratoPage() {
 
   return <AreaContratos titulo="Detalhes do contrato">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <Link href="/contratos" className="text-sm text-brand-neon underline">Voltar à lista</Link>
+      <LinkVoltar href="/contratos">Voltar aos contratos</LinkVoltar>
       {podeEditar && contrato && <Link href={`/contratos/${encodeURIComponent(contrato.id)}/editar`}
         className="rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-background">Editar contrato</Link>}
     </div>

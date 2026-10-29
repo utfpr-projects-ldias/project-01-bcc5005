@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { IndicadorCarregamento } from '@/app/components/indicador-carregamento';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { consultarMeuPerfil, type MeuPerfil } from '@/lib/admin-usuarios';
 import { ErroContrato, listarContratos, STATUS, MODOS, dataCivil, type Contrato, type StatusContrato } from '@/lib/contratos';
@@ -70,7 +71,7 @@ export default function ContratosListPage() {
       <div><h2 className="text-lg font-semibold text-brand-neon">Contratos cadastrados</h2>
         <p className="text-sm text-foreground/70">{perfil?.perfil === 'ADMINISTRADOR' ? 'Carteira completa autorizada' : 'Somente contratos vinculados à sua conta'} · Dados do PostgreSQL</p></div>
       <div className="flex gap-2">
-        <button type="button" onClick={() => void carregar()} disabled={atualizando || carregando} aria-busy={atualizando} className="min-w-28 rounded-lg border border-brand-green/40 px-3 py-2 text-sm disabled:opacity-50">{atualizando ? 'Atualizando...' : 'Atualizar lista'}</button>
+        <button type="button" onClick={() => void carregar()} disabled={atualizando || carregando} aria-busy={atualizando} className="inline-flex min-h-10 min-w-36 items-center justify-center rounded-lg border border-brand-green/40 px-3 py-2 text-sm transition-colors hover:bg-brand-green/10 disabled:opacity-60">{atualizando ? <IndicadorCarregamento compacto texto="Atualizando..." /> : 'Atualizar lista'}</button>
         {perfil?.perfil === 'ADMINISTRADOR' && <Link href="/contratos/novo" className="rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-background">Cadastrar contrato</Link>}
       </div>
     </section>

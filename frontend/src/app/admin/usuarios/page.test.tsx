@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import AdministracaoUsuariosPage from "./page";
 import CadastrarFuncionarioPage from "./novo/page";
 import { PainelAdministracao } from "./components/painel-administracao";
@@ -89,7 +89,7 @@ test("abas ativos e arquivados usam filtro servidor", async () => {
 
 test("cadastrar possui formulário isolado e valida senha antes da API", async () => {
   render(<CadastrarFuncionarioPage />);
-  await screen.findByRole("heading", { name: "Cadastrar funcionário", level: 1 });
+  await screen.findByRole("heading", { name: "Nova conta de funcionário", level: 2 });
   expect(screen.queryByRole("region", { name: "Funcionários" })).not.toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("Nome completo"), { target: { value: gestor.nome } });
   fireEvent.change(screen.getByLabelText("E-mail"), { target: { value: gestor.email } });
@@ -103,7 +103,7 @@ test("cadastrar possui formulário isolado e valida senha antes da API", async (
 test("cadastro válido grava via API e retorna à listagem", async () => {
   criar.mockResolvedValue(gestor);
   render(<CadastrarFuncionarioPage />);
-  await screen.findByRole("heading", { name: "Cadastrar funcionário", level: 1 });
+  await screen.findByRole("heading", { name: "Nova conta de funcionário", level: 2 });
   fireEvent.change(screen.getByLabelText("Nome completo"), { target: { value: gestor.nome } });
   fireEvent.change(screen.getByLabelText("E-mail"), { target: { value: "GESTOR@EXEMPLO.COM" } });
   fireEvent.change(screen.getByLabelText("Senha inicial"), { target: { value: "ForteSenha!123" } });
@@ -115,7 +115,7 @@ test("cadastro válido grava via API e retorna à listagem", async () => {
 
 test("edição abre por UUID consultando API individual, mesmo fora das 100 primeiras contas", async () => {
   render(<PainelAdministracao vista="edicao" idEdicao="b" />);
-  expect(await screen.findByRole("heading", { name: /Editar funcionário — Gestor de Teste/ })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: /Conta de Gestor de Teste/ })).toBeInTheDocument();
   expect(porId).toHaveBeenCalledWith("b");
   expect(paginados).not.toHaveBeenCalled();
   expect(screen.getByLabelText("Perfil de acesso")).toHaveValue("GESTOR");
@@ -144,7 +144,7 @@ test("edição de credenciais não usa o PATCH de domínio", async () => {
   atualizarEmail.mockResolvedValue({ ...gestor, email: "novo@exemplo.com" });
   redefinirSenha.mockResolvedValue(undefined);
   render(<PainelAdministracao vista="edicao" idEdicao="b" />);
-  await screen.findByRole("heading", { name: /Editar funcionário — Gestor de Teste/ });
+  await screen.findByRole("heading", { name: /Conta de Gestor de Teste/ });
   fireEvent.click(screen.getByText("Alterar e-mail", { exact: false, selector: "summary" }));
   fireEvent.change(screen.getByLabelText("Novo e-mail"), { target: { value: "novo@exemplo.com" } });
   fireEvent.click(screen.getByRole("button", { name: "Confirmar mudança de e-mail" }));
@@ -159,7 +159,7 @@ test("edição de credenciais não usa o PATCH de domínio", async () => {
 
 test("edição mantém retorno para lista e ações próprias sem recriar a navegação", async () => {
   render(<PainelAdministracao vista="edicao" idEdicao="b" />);
-  await screen.findByRole("heading", { name: /Editar funcionário — Gestor de Teste/ });
+  await screen.findByRole("heading", { name: /Conta de Gestor de Teste/ });
   expect(screen.queryByRole("complementary", { name: "Navegação principal" })).not.toBeInTheDocument();
   expect(screen.queryByRole("navigation", { name: "Navegação móvel" })).not.toBeInTheDocument();
   expect(screen.getByRole("link", { name: /Voltar aos funcionários/ })).toHaveAttribute("href", "/admin/usuarios");
@@ -180,7 +180,7 @@ test("arquivamento ainda exige confirmação visual simples", async () => {
 
 test("cadastro e listagem não remontam navegação global", async () => {
   const { unmount } = render(<CadastrarFuncionarioPage />);
-  await screen.findByRole("heading", { name: "Cadastrar funcionário", level: 1 });
+  await screen.findByRole("heading", { name: "Nova conta de funcionário", level: 2 });
   expect(screen.queryByRole("complementary", { name: "Navegação principal" })).not.toBeInTheDocument();
   unmount();
   render(<AdministracaoUsuariosPage />);
@@ -196,7 +196,7 @@ test("vários vínculos existentes aparecem e não podem ser adicionados duas ve
   ]);
   acessos.mockResolvedValue([{ contratoId: "ct1", podeEditar: true }, { contratoId: "ct2", podeEditar: false }]);
   render(<PainelAdministracao vista="edicao" idEdicao="b" />);
-  await screen.findByRole("heading", { name: /Editar funcionário — Gestor de Teste/ });
+  await screen.findByRole("heading", { name: /Conta de Gestor de Teste/ });
   fireEvent.click(screen.getByText("Acesso aos contratos", { exact: false, selector: "summary" }));
   const lista = screen.getByRole("region", { name: "Contratos vinculados" });
   expect(within(lista).getByText(/001\/26/)).toBeInTheDocument();
@@ -209,4 +209,31 @@ test("vários vínculos existentes aparecem e não podem ser adicionados duas ve
     .mockResolvedValueOnce([{ contratoId: "ct1", podeEditar: true }, { contratoId: "ct2", podeEditar: false }, { contratoId: "ct3", podeEditar: false }]);
   fireEvent.click(screen.getByRole("button", { name: "Adicionar vínculo" }));
   await waitFor(() => expect(conceder).toHaveBeenCalledWith("b", { contratoId: "ct3", podeEditar: false }));
+});
+
+
+test("administração não duplica cabeçalho de rota nem identificação de sessão", async () => {
+  const { container } = render(<PainelAdministracao vista="edicao" idEdicao="b" />);
+  await screen.findByRole("heading", { name: /Conta de Gestor de Teste/ });
+  // O título da rota e o perfil logado agora pertencem exclusivamente ao layout global.
+  expect(screen.queryByRole("heading", { name: /^Editar funcionário$/ })).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Administrador autenticado")).not.toBeInTheDocument();
+  expect(container.querySelector("header")).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Voltar aos funcionários" })).toHaveAttribute("href", "/admin/usuarios");
+});
+
+test("atualizar funcionários mostra spinner dentro do botão mantendo lista visível", async () => {
+  let concluir!: (valor: { itens: typeof gestor[]; pagina: number; limite: number; total: number; totalPaginas: number }) => void;
+  render(<AdministracaoUsuariosPage />);
+  await screen.findByText("gestor@exemplo.com");
+  paginados.mockImplementation((opcoes) => {
+    if (opcoes.limite === 1) return Promise.resolve({ itens: [], pagina: 1, limite: 1, total: 2, totalPaginas: 1 });
+    return new Promise((resolver) => { concluir = resolver; });
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Atualizar lista" }));
+  expect(screen.getByRole("button", { name: "Atualizando..." })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Atualizando..." }).querySelector(".animate-spin")).not.toBeNull();
+  expect(screen.getByText("gestor@exemplo.com")).toBeInTheDocument();
+  await act(async () => { concluir({ itens: [gestor], pagina: 1, limite: 20, total: 1, totalPaginas: 1 }); });
+  await waitFor(() => expect(screen.getByRole("button", { name: "Atualizar lista" })).toBeEnabled());
 });

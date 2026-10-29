@@ -50,6 +50,7 @@ test('atualizar lista mantém contratos na tela sem piscar durante requisição 
   fireEvent.click(screen.getByRole('button', { name: 'Atualizar lista' }));
   expect(screen.getByText('QA-2026')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Atualizando...' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Atualizando...' }).querySelector('.animate-spin')).not.toBeNull();
   await waitFor(() => expect(concluir).toEqual(expect.any(Function)));
   await act(async () => { concluir([contrato]); });
   await waitFor(() => expect(screen.getByRole('button', { name: 'Atualizar lista' })).toBeEnabled());

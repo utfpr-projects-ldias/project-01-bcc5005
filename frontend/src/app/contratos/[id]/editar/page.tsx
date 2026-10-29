@@ -1,6 +1,7 @@
 'use client';
 
-import Link from 'next/link';
+import { LinkVoltar } from '@/app/components/link-voltar';
+
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { consultarMeuPerfil, type UsuarioPublico } from '@/lib/admin-usuarios';
@@ -45,7 +46,7 @@ export default function EditarContratoPage() {
     finally { setSalvando(false); }
   }
   return <AreaContratos titulo="Editar contrato">
-    <Link href={`/contratos/${encodeURIComponent(id)}`} className="text-sm text-brand-neon underline">Voltar aos detalhes</Link>
+    <LinkVoltar href={`/contratos/${encodeURIComponent(id)}`}>Voltar aos detalhes</LinkVoltar>
     {carregando ? <Aviso>Verificando permissão de edição...</Aviso> : !autorizado ? <Aviso erro>{erro || 'Edição não permitida.'}</Aviso> : contrato ? <>
       {erro && <Aviso erro>{erro}</Aviso>}
       <FormularioContrato inicial={contrato} responsaveis={responsaveis} onSalvar={salvar} salvando={salvando} podeDefinirResponsavel={admin} />

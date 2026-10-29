@@ -87,6 +87,18 @@ describe('TEC07-04 - API admin (E2E)', () => {
     await request(app.getHttpServer()).get('/admin/usuarios/b2b28766-c374-43b0-b2b6-3e84608d3ca1').expect(403);
     expect(buscarPorId).not.toHaveBeenCalled();
   });
+  it('401: acesso direto ao detalhe administrativo exige sessão', async () => {
+    identificar.mockRejectedValue(new UnauthorizedException());
+    await request(app.getHttpServer()).get('/admin/usuarios/b2b28766-c374-43b0-b2b6-3e84608d3ca1').expect(401);
+    expect(buscarPorId).not.toHaveBeenCalled();
+  });
+
+  it('403: Colaborador não consulta funcionário por identificador', async () => {
+    usuario.mockResolvedValue({ id: 'u1', supertokensUserId: 'st-id', perfil: PerfilUsuario.COLABORADOR, ativo: true });
+    await request(app.getHttpServer()).get('/admin/usuarios/b2b28766-c374-43b0-b2b6-3e84608d3ca1').expect(403);
+    expect(buscarPorId).not.toHaveBeenCalled();
+  });
+
   it('400: identificador administrativo inválido é recusado', async () => {
     await request(app.getHttpServer()).get('/admin/usuarios/id-invalido').expect(400);
     expect(buscarPorId).not.toHaveBeenCalled();

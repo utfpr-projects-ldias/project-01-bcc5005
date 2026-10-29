@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { LinkVoltar } from "@/app/components/link-voltar";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { signIn } from "supertokens-web-js/recipe/emailpassword";
@@ -198,9 +199,7 @@ export default function LoginPage() {
       </div>
 
       <div className="mt-8">
-        <Link href="/" className="text-sm text-foreground/50 hover:text-brand-green transition-colors">
-          &larr; Voltar para a página inicial
-        </Link>
+        <LinkVoltar href="/">Voltar para a página inicial</LinkVoltar>
       </div>
     </div>
   );

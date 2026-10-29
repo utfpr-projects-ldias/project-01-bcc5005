@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { IndicadorCarregamento } from "@/app/components/indicador-carregamento";
+import { LinkVoltar } from "@/app/components/link-voltar";
 import { ConfirmacaoSimples } from "@/app/components/confirmacao-simples";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
@@ -287,44 +288,42 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
     <main className="min-h-screen flex flex-col items-center justify-center gap-4 p-6">
       <h1 className="text-2xl font-semibold">{vista === "edicao" && erroAcesso.includes("não encontrado") ? "Funcionário não encontrado" : "Acesso restrito"}</h1>
       <p role="alert">{erroAcesso || "Não foi possível verificar sua autorização."}</p>
-      <Link href={vista === "lista" ? "/dashboard" : "/admin/usuarios"} className="underline">{vista === "lista" ? "Voltar ao painel" : "Voltar à lista de funcionários"}</Link>
+      <LinkVoltar href={vista === "lista" ? "/dashboard" : "/admin/usuarios"}>{vista === "lista" ? "Voltar ao painel" : "Voltar aos funcionários"}</LinkVoltar>
     </main>
   );
 
   return (
     <section className="min-w-0 space-y-6">
       <div className="min-w-0 space-y-6">
-        <header className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <Link href={vista === "lista" ? "/dashboard" : "/admin/usuarios"} className="text-sm text-brand-neon underline">← {vista === "lista" ? "Voltar ao painel" : "Voltar aos funcionários"}</Link>
-            <h1 className="mt-3 text-2xl font-bold">{vista === "lista" ? "Administração de funcionários" : vista === "cadastro" ? "Cadastrar funcionário" : "Editar funcionário"}</h1>
-            <p className="text-sm text-foreground/70">{vista === "lista" ? "Encontre funcionários, consulte seus perfis e administre contas arquivadas." : vista === "cadastro" ? "Crie uma conta interna com dados e senha inicial. O acesso a contratos é atribuído após o cadastro." : "Altere os dados principais. Credenciais e contratos possuem controles separados, abaixo."}</p>
-          </div>
-          {minhaConta && <div className="min-w-0 text-left text-sm md:text-right" aria-label="Administrador autenticado">
-            <p className="font-semibold break-words">{minhaConta.nome?.trim() || "Nome não informado"}</p>
-            <p className="text-foreground/70 break-all">{minhaConta.email}</p>
-            <p className="text-brand-neon">Administrador</p>
-          </div>}
-        </header>
+        <div className="space-y-3">
+          <LinkVoltar href={vista === "lista" ? "/dashboard" : "/admin/usuarios"}>
+            {vista === "lista" ? "Voltar ao painel" : "Voltar aos funcionários"}
+          </LinkVoltar>
+          <p className="max-w-3xl text-sm text-foreground/70">{vista === "lista"
+            ? "Encontre funcionários, consulte seus perfis e administre contas arquivadas."
+            : vista === "cadastro"
+              ? "Crie uma conta interna. O acesso a contratos pode ser atribuído após o cadastro."
+              : "Atualize os dados da conta ou abra uma seção adicional para alterar credenciais e contratos."}</p>
+        </div>
         {mensagem && <p role="status" className="rounded-lg border border-brand-green/30 px-4 py-2 text-brand-neon">{mensagem}</p>}
         <div className="flex flex-col gap-5">
           {vista === "lista" && <section className="min-w-0 rounded-2xl border border-brand-green/20 p-4 md:p-6" aria-labelledby="titulo-lista">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 id="titulo-lista" className="text-lg font-semibold">Funcionários</h2>
               <div className="flex flex-wrap gap-2">
-                <button type="button" className={botao + " min-w-32"} onClick={() => void recarregar()} disabled={atualizando} aria-busy={atualizando}>{atualizando ? "Atualizando..." : "Atualizar lista"}</button>
+                <button type="button" className={botao + " min-w-32"} onClick={() => void recarregar()} disabled={atualizando} aria-busy={atualizando}>{atualizando ? <IndicadorCarregamento compacto texto="Atualizando..." /> : "Atualizar lista"}</button>
                 <Link href="/admin/usuarios/novo" className={acao}>Cadastrar funcionário</Link>
               </div>
             </div>
             <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Situação dos funcionários">
-              <button type="button" onClick={() => trocarAba("ativos")} aria-pressed={aba === "ativos"} className={botao + (aba === "ativos" ? " border-brand-green bg-brand-green/10" : "")}>Ativos ({quantidades.ativos})</button>
-              <button type="button" onClick={() => trocarAba("arquivados")} aria-pressed={aba === "arquivados"} className={botao + (aba === "arquivados" ? " border-brand-green bg-brand-green/10" : "")}>Arquivados ({quantidades.arquivados})</button>
+              <button type="button" onClick={() => trocarAba("ativos")} disabled={atualizando} aria-pressed={aba === "ativos"} className={botao + (aba === "ativos" ? " border-brand-green bg-brand-green/10" : "")}>Ativos ({quantidades.ativos})</button>
+              <button type="button" onClick={() => trocarAba("arquivados")} disabled={atualizando} aria-pressed={aba === "arquivados"} className={botao + (aba === "arquivados" ? " border-brand-green bg-brand-green/10" : "")}>Arquivados ({quantidades.arquivados})</button>
             </div>
             <form className="mt-4 flex flex-wrap gap-2" onSubmit={pesquisar} role="search">
               <label htmlFor="buscar-funcionario" className="sr-only">Buscar funcionário por nome ou e-mail</label>
               <input id="buscar-funcionario" className={campo + " min-w-[12rem] flex-1"} value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar nome ou e-mail" maxLength={160} />
-              <button type="submit" className={botao}>Buscar</button>
-              <button type="button" className={botao} onClick={() => { setBusca(""); setFiltro(""); setPagina(1); void recarregar(aba, 1, ""); }}>Limpar</button>
+              <button type="submit" disabled={atualizando} className={botao}>Buscar</button>
+              <button type="button" disabled={atualizando} className={botao} onClick={() => { setBusca(""); setFiltro(""); setPagina(1); void recarregar(aba, 1, ""); }}>Limpar</button>
             </form>
             {erroLista && <p role="alert" className="mt-3 text-sm text-red-400">{erroLista}</p>}
             <p role="status" className="mt-2 min-h-4 text-xs text-foreground/65">{avisoAtualizacao}</p>
@@ -357,7 +356,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
 
           {vista !== "lista" && <section className="mx-auto w-full max-w-3xl min-w-0 space-y-5 rounded-2xl border border-brand-green/20 p-4 md:p-6" aria-labelledby="titulo-formulario">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 id="titulo-formulario" className="text-lg font-semibold">{editando ? `Editar funcionário — ${editando.nome || "Nome não informado"}` : "Cadastrar funcionário"}</h2>
+              <h2 id="titulo-formulario" className="text-lg font-semibold">{editando ? `Conta de ${editando.nome || "Nome não informado"}` : "Nova conta de funcionário"}</h2>
               {vista === "edicao" && <span className="rounded-full bg-brand-green/10 px-3 py-1 text-xs text-foreground/70">Edição administrativa</span>}
             </div>
             {erroFormulario && <p role="alert" className="text-sm text-red-400">{erroFormulario}</p>}
@@ -380,7 +379,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                     </div>
                     <p className="text-xs text-foreground/65">Situação: {editando.ativo ? "Ativo" : "Arquivado"}. Para arquivar ou reativar, utilize a ação na lista de funcionários, que solicita confirmação.</p>
                   </>}
-                  <button type="submit" disabled={enviando} className={acao}>{enviando ? "Salvando..." : "Salvar dados da conta"}</button>
+                  <button type="submit" disabled={enviando} className={acao}>{enviando ? <IndicadorCarregamento compacto texto="Salvando..." /> : "Salvar dados da conta"}</button>
                 </form>
                 </div>
                 {editando.perfil !== "ADMINISTRADOR" && <>
@@ -393,7 +392,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                         <p className="text-xs text-foreground/65">E-mail atual: {editando.email}</p>
                         <label htmlFor="edicao-email" className="block text-sm">Novo e-mail</label>
                         <input id="edicao-email" type="email" className={campo} value={emailNovo} maxLength={320} required onChange={(e) => setEmailNovo(e.target.value)} />
-                        <button className={acao} type="submit" disabled={enviando || emailNovo.trim().toLowerCase() === editando.email}>{enviando ? "Atualizando..." : "Confirmar mudança de e-mail"}</button>
+                        <button className={acao} type="submit" disabled={enviando || emailNovo.trim().toLowerCase() === editando.email}>{enviando ? <IndicadorCarregamento compacto texto="Atualizando..." /> : "Confirmar mudança de e-mail"}</button>
                       </form>
                     </details>
                     <details className="group rounded-xl border border-brand-green/20 p-4">
@@ -404,7 +403,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                         <input id="nova-senha" type="password" autoComplete="new-password" className={campo} value={senhaNova} onChange={(e) => setSenhaNova(e.target.value)} />
                         <label htmlFor="confirmar-nova-senha" className="block text-sm">Confirmar nova senha</label>
                         <input id="confirmar-nova-senha" type="password" autoComplete="new-password" className={campo} value={senhaConfirmada} onChange={(e) => setSenhaConfirmada(e.target.value)} />
-                        <button className={acao} type="submit" disabled={enviando}>{enviando ? "Redefinindo..." : "Confirmar redefinição de senha"}</button>
+                        <button className={acao} type="submit" disabled={enviando}>{enviando ? <IndicadorCarregamento compacto texto="Redefinindo..." /> : "Confirmar redefinição de senha"}</button>
                       </form>
                     </details>
                     <details className="group rounded-xl border border-brand-green/20 p-4" data-testid="acessos-contratuais">
@@ -423,7 +422,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                                   <p className="text-xs text-foreground/65">{v.podeEditar && editando.perfil === "GESTOR" ? "Leitura e edição" : "Somente leitura"}</p>
                                 </div>
                                 <div className="flex flex-wrap gap-2">
-                                  {editando.perfil === "GESTOR" && <button type="button" className={botao} disabled={enviando || !!atualizandoVinculo || !editando.ativo} onClick={() => void alternarPermissao(v)}>{atualizandoVinculo === v.contratoId ? "Atualizando..." : v.podeEditar ? "Remover edição" : "Permitir edição"}</button>}
+                                  {editando.perfil === "GESTOR" && <button type="button" className={botao} disabled={enviando || !!atualizandoVinculo || !editando.ativo} onClick={() => void alternarPermissao(v)}>{atualizandoVinculo === v.contratoId ? <IndicadorCarregamento compacto texto="Atualizando..." /> : v.podeEditar ? "Remover edição" : "Permitir edição"}</button>}
                                   <button type="button" className={botao} disabled={enviando || !!atualizandoVinculo} onClick={() => setConfirmacao({ tipo: "permissao", contratoId: v.contratoId, email: editando.email })}>Revogar acesso</button>
                                 </div>
                               </li>;
@@ -440,7 +439,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                                 {contratosLivres.map((c) => <option value={c.id} key={c.id}>{c.numeroContrato} — {c.orgaoContratante}</option>)}
                               </select>
                               {editando.perfil === "GESTOR" && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={podeEditar} onChange={(e) => setPodeEditar(e.target.checked)} />Permitir também edição</label>}
-                              <button type="submit" disabled={enviando || !contratoSelecionado || !editando.ativo} className={acao}>{enviando ? "Vinculando..." : "Adicionar vínculo"}</button>
+                              <button type="submit" disabled={enviando || !contratoSelecionado || !editando.ativo} className={acao}>{enviando ? <IndicadorCarregamento compacto texto="Vinculando..." /> : "Adicionar vínculo"}</button>
                             </form>}
                         </section>
                       </div>
@@ -469,7 +468,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                   <input id="usuario-confirmacao" type="password" autoComplete="new-password" className={campo} value={form.confirmarSenha} onChange={(e) => setForm((s) => ({ ...s, confirmarSenha: e.target.value }))} aria-invalid={!!erros.confirmarSenha} />
                   {erros.confirmarSenha && <p role="alert" className="text-xs text-red-400">{erros.confirmarSenha}</p>}
                 </div>
-                <button className={acao + " w-full"} type="submit" disabled={enviando}>{enviando ? "Cadastrando..." : "Cadastrar funcionário"}</button>
+                <button className={acao + " w-full"} type="submit" disabled={enviando}>{enviando ? <IndicadorCarregamento compacto texto="Cadastrando..." /> : "Cadastrar funcionário"}</button>
               </form>
             ) : null}
           </section>}

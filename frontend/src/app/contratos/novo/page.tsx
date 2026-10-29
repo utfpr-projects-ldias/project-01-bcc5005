@@ -1,6 +1,7 @@
 'use client';
 
-import Link from 'next/link';
+import { LinkVoltar } from '@/app/components/link-voltar';
+
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { consultarMeuPerfil, type UsuarioPublico } from '@/lib/admin-usuarios';
@@ -44,7 +45,7 @@ export default function NovoContratoPage() {
     } finally { setSalvando(false); }
   }
   return <AreaContratos titulo="Cadastrar contrato">
-    <Link href="/contratos" className="text-sm text-brand-neon underline">Voltar à lista</Link>
+    <LinkVoltar href="/contratos">Voltar aos contratos</LinkVoltar>
     {verificando ? <Aviso>Verificando sua autorização...</Aviso> : !autorizado ? <><h2 className="text-lg font-semibold">Acesso restrito</h2><Aviso erro>{erro}</Aviso></> : <>
       {listaIncompleta && <Aviso>A lista de responsáveis foi limitada. Use apenas usuários ativos encontrados ou deixe o vínculo em branco.</Aviso>}
       {erro && <Aviso erro>{erro}</Aviso>}
