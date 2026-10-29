@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import {
   BadRequestException,
   ConflictException,
@@ -39,6 +40,7 @@ type RetornoAuditoria = {
 
 const ator = {
   id: '22222222-2222-4222-8222-222222222222',
+  perfil: 'ADMINISTRADOR',
 } as unknown as UsuarioAutenticado;
 
 function contratoBase(
@@ -88,14 +90,15 @@ function montarCenario() {
       (dados: Partial<Contrato>) => ({ ...dados }) as Contrato,
     ),
 
-    save: jest.fn(async (contrato: Contrato) => ({
-      ...contrato,
-      id: contrato.id || ID_CONTRATO,
-    })),
+    save: jest.fn(async (contrato: Contrato) =>
+      Object.assign(new Contrato(), contrato, {
+        id: contrato.id || ID_CONTRATO,
+      }),
+    ),
 
-    find: jest.fn().mockResolvedValue([] as Contrato[]),
+    find: jest.fn<() => Promise<Contrato[]>>().mockResolvedValue([]),
 
-    findOneBy: jest.fn().mockResolvedValue(null as Contrato | null),
+    findOneBy: jest.fn<() => Promise<Contrato | null>>().mockResolvedValue(null),
   };
 
   const manager = {
@@ -116,7 +119,7 @@ function montarCenario() {
       },
     ),
 
-    registrarNaTransacao: jest.fn().mockResolvedValue(undefined),
+    registrarNaTransacao: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
   };
 
   const service = new ContratosService(
@@ -145,6 +148,25 @@ function erroPostgres(codigo: string): QueryFailedError {
     erroDriver,
   );
 }
+
+describe('Escopo de carteira de contratos (RF-40)', () => {
+  it('não usa find global para GESTOR; consulta filtrada pelo próprio id', async () => {
+    const c = montarCenario();
+    const getMany = jest.fn<() => Promise<Contrato[]>>().mockResolvedValue([]);
+    const builder = {
+      innerJoin: jest.fn(), orderBy: jest.fn(), addOrderBy: jest.fn(), getMany,
+    };
+    builder.innerJoin.mockReturnValue(builder);
+    builder.orderBy.mockReturnValue(builder);
+    builder.addOrderBy.mockReturnValue(builder);
+    Object.assign(c.repositorio, { createQueryBuilder: jest.fn(() => builder) });
+    const gestor = { ...ator, perfil: 'GESTOR' } as UsuarioAutenticado;
+    expect(await c.service.listar(gestor)).toEqual([]);
+    expect(c.repositorio.find).not.toHaveBeenCalled();
+    expect(builder.innerJoin).toHaveBeenCalledWith('permissoes_contrato', 'p',
+      expect.stringContaining('p.usuario_id = :usuarioId'), { usuarioId: gestor.id });
+  });
+});
 
 describe('ContratosService', () => {
   describe('criar', () => {
@@ -427,7 +449,7 @@ describe('ContratosService', () => {
     it('ordena a listagem por início descendente e número ascendente', async () => {
       const cenario = montarCenario();
 
-      await cenario.service.listar();
+      await cenario.service.listar(ator);
 
       expect(cenario.repositorio.find).toHaveBeenCalledWith({
         order: {

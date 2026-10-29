@@ -1,59 +1,42 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import DashboardLayout from "./layout";
 import { doesSessionExist } from "supertokens-web-js/recipe/session";
+import { consultarMeuPerfil, ErroApi } from "@/lib/admin-usuarios";
 
-// Mocks do SuperTokens e Next.js Navigation
-jest.mock("supertokens-web-js/recipe/session", () => ({
-  doesSessionExist: jest.fn(),
+const mockReplace = jest.fn();
+const mockRouter = { replace: mockReplace, refresh: jest.fn() };
+jest.mock("supertokens-web-js/recipe/session", () => ({ doesSessionExist: jest.fn() }));
+jest.mock("next/navigation", () => ({ useRouter: () => mockRouter }));
+jest.mock("@/lib/admin-usuarios", () => ({
+  ...jest.requireActual("@/lib/admin-usuarios"), consultarMeuPerfil: jest.fn(),
 }));
+const sessao = doesSessionExist as jest.MockedFunction<typeof doesSessionExist>;
+const perfil = consultarMeuPerfil as jest.MockedFunction<typeof consultarMeuPerfil>;
 
-jest.mock("next/navigation", () => ({
-  useRouter: () => ({
-    replace: jest.fn(),
-    refresh: jest.fn(),
-  }),
-}));
+beforeEach(() => {
+  jest.clearAllMocks();
+  perfil.mockResolvedValue({ id: "a", nome: null, email: "admin@example.com", perfil: "ADMINISTRADOR", ativo: true });
+});
 
-describe("DashboardLayout Guard (HU04-02 / HU04-04)", () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
+test("não mostra conteúdo quando sessão não existe", async () => {
+  sessao.mockResolvedValue(false);
+  render(<DashboardLayout><div data-testid="protegido">Conteúdo protegido</div></DashboardLayout>);
+  await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/login"));
+  expect(perfil).not.toHaveBeenCalled();
+  expect(screen.queryByTestId("protegido")).not.toBeInTheDocument();
+});
 
-  it("deve exibir estado de carregamento inicial e redirecionar para /login se a sessão não existir", async () => {
-    (doesSessionExist as jest.Mock).mockResolvedValue(false);
+test("mostra conteúdo apenas após backend confirmar usuário ativo", async () => {
+  sessao.mockResolvedValue(true);
+  render(<DashboardLayout><div data-testid="protegido">Conteúdo protegido</div></DashboardLayout>);
+  expect(await screen.findByTestId("protegido")).toBeInTheDocument();
+  expect(perfil).toHaveBeenCalledTimes(1);
+});
 
-    render(
-      <DashboardLayout>
-        <div data-testid="protected-content">Conteúdo Secreto</div>
-      </DashboardLayout>
-    );
-
-    // Verifica estado inicial de loading
-    expect(screen.getByText(/carregando ambiente seguro/i)).toBeInTheDocument();
-
-    // Aguarda a resolução da checagem de sessão
-    await waitFor(() => {
-      expect(doesSessionExist).toHaveBeenCalledTimes(1);
-    });
-
-    // Garante que o conteúdo protegido NÃO é exibido
-    expect(screen.queryByTestId("protected-content")).not.toBeInTheDocument();
-  });
-
-  it("deve renderizar o conteúdo protegido quando a sessão for válida", async () => {
-    (doesSessionExist as jest.Mock).mockResolvedValue(true);
-
-    render(
-      <DashboardLayout>
-        <div data-testid="protected-content">Conteúdo Secreto</div>
-      </DashboardLayout>
-    );
-
-    // Aguarda o carregamento e valida que o conteúdo é renderizado
-    await waitFor(() => {
-      expect(screen.getByTestId("protected-content")).toBeInTheDocument();
-    });
-
-    expect(screen.getByText("Conteúdo Secreto")).toBeInTheDocument();
-  });
+test("usuário inativado com cookie válido não entra no dashboard", async () => {
+  sessao.mockResolvedValue(true);
+  perfil.mockRejectedValue(new ErroApi(403, "Inativo"));
+  render(<DashboardLayout><div data-testid="protegido">Conteúdo protegido</div></DashboardLayout>);
+  expect(await screen.findByRole("alert")).toHaveTextContent(/conta inativa/i);
+  expect(screen.queryByTestId("protegido")).not.toBeInTheDocument();
 });

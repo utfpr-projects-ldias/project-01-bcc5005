@@ -1,86 +1,146 @@
 import { jest } from '@jest/globals';
-import { BadRequestException, ConflictException, InternalServerErrorException } from '@nestjs/common';
-import type { Repository } from 'typeorm';
+import {
+  BadRequestException, ConflictException, ForbiddenException,
+  InternalServerErrorException, Logger,
+} from '@nestjs/common';
+import type { DataSource, Repository, EntityManager } from 'typeorm';
+import type { AuditoriaService } from '../auditoria/auditoria.service.js';
+import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
 import { PerfilUsuario } from './perfil-usuario.enum.js';
 import { Usuario } from './usuario.entity.js';
 import { AdministracaoUsuariosService } from './administracao-usuarios.service.js';
-import type { UsuariosService } from './usuarios.service.js';
 import type { IdentidadesFuncionariosService } from './identidades-funcionarios.service.js';
 
-const criarIdentidade = jest.fn<(email: string, senha: string) => Promise<string>>();
-const excluirIdentidade = jest.fn<(id: string) => Promise<void>>();
-const provisionar = jest.fn<(dados: { supertokensUserId: string; email: string; perfil: PerfilUsuario }) => Promise<Usuario>>();
-const buscarEmail = jest.fn<() => Promise<Usuario | null>>();
-const listar = jest.fn<() => Promise<Usuario[]>>();
-const usuario: Usuario = Object.assign(new Usuario(), {
-  id: '876f37aa-7810-42f3-9a75-a08eaaf2311e',
-  supertokensUserId: 'st-u1', email: 'func@example.com',
+const ator = { id: 'uuid-admin', supertokensUserId: 'st-admin', perfil: PerfilUsuario.ADMINISTRADOR, email: 'admin@example.com' };
+const pedido = { nome: 'Pessoa de Teste', email: 'func@example.com', senhaInicial: 'SenhaForte!1234', perfil: PerfilUsuario.GESTOR };
+const admin = Object.assign(new Usuario(), { id: ator.id, supertokensUserId: ator.supertokensUserId, email: ator.email, ativo: true, perfil: PerfilUsuario.ADMINISTRADOR });
+const usuario = Object.assign(new Usuario(), {
+  id: 'uuid-func', supertokensUserId: 'st-func', nome: pedido.nome, email: pedido.email,
   perfil: PerfilUsuario.GESTOR, ativo: true, criadoEm: new Date(),
 });
+
+const buscarEmail = jest.fn<(...args: unknown[]) => Promise<Usuario | null>>();
+const listar = jest.fn<(...args: unknown[]) => Promise<Usuario[]>>();
+const criarIdentidade = jest.fn<(email: string, senha: string) => Promise<string>>();
+const excluirIdentidade = jest.fn<(id: string) => Promise<void>>();
+const alterarEmail = jest.fn<(id: string, email: string) => Promise<void>>();
+const definirSenha = jest.fn<(id: string, senha: string) => Promise<void>>();
+const salvar = jest.fn<(...args: unknown[]) => Promise<Usuario>>();
+const findOne = jest.fn<(...args: unknown[]) => Promise<Usuario | null>>();
+const criar = jest.fn<(...args: unknown[]) => Usuario>();
+const auditar = jest.fn<(...args: unknown[]) => Promise<void>>();
+const auditarExecucao = jest.fn<(...args: unknown[]) => Promise<void>>();
+const repoTx = { findOne, findOneBy: buscarEmail, create: criar, save: salvar };
+const manager = { getRepository: () => repoTx } as unknown as EntityManager;
+const transacao = jest.fn<(fn: (m: EntityManager) => Promise<unknown>) => Promise<unknown>>();
 const svc = new AdministracaoUsuariosService(
   { findOneBy: buscarEmail, find: listar } as unknown as Repository<Usuario>,
-  { criarProvisionado: provisionar } as unknown as UsuariosService,
-  { criar: criarIdentidade, excluirCriacaoIncompleta: excluirIdentidade } as unknown as IdentidadesFuncionariosService,
+  { criar: criarIdentidade, excluirCriacaoIncompleta: excluirIdentidade, alterarEmail, definirNovaSenha: definirSenha } as unknown as IdentidadesFuncionariosService,
+  { transaction: transacao } as unknown as DataSource,
+  { registrarNaTransacao: auditar, executarComAuditoria: auditarExecucao } as unknown as AuditoriaService,
 );
-const pedido = { email: 'func@example.com', perfil: PerfilUsuario.GESTOR, senhaInicial: 'MinhaSenha!123' };
 
 beforeEach(() => {
   jest.resetAllMocks();
   buscarEmail.mockResolvedValue(null);
-  criarIdentidade.mockResolvedValue('st-u1');
-  provisionar.mockResolvedValue(usuario);
+  listar.mockResolvedValue([usuario]);
+  criarIdentidade.mockResolvedValue('st-func');
   excluirIdentidade.mockResolvedValue(undefined);
+  alterarEmail.mockResolvedValue(undefined);
+  definirSenha.mockResolvedValue(undefined);
+  findOne.mockResolvedValue(admin);
+  criar.mockReturnValue(usuario);
+  salvar.mockResolvedValue(usuario);
+  auditar.mockResolvedValue(undefined);
+  auditarExecucao.mockResolvedValue(undefined);
+  transacao.mockImplementation(async (fn) => fn(manager));
 });
 
-describe('TEC07-04: provisionamento controlado', () => {
-  it('provisiona GESTOR sem retornar senha ou SuperTokens ID', async () => {
-    const resposta = await svc.criar(pedido);
-    expect(resposta).toEqual(expect.objectContaining({ email: pedido.email, perfil: PerfilUsuario.GESTOR }));
-    expect(JSON.stringify(resposta)).not.toContain('MinhaSenha');
-    expect(JSON.stringify(resposta)).not.toContain('st-u1');
+describe('TEC07-AJUSTES-01: criação de conta com auditoria', () => {
+  it('persiste novo usuário e USUARIO_CRIADO no mesmo EntityManager', async () => {
+    const resp = await svc.criar(pedido, ator);
+    expect(resp).toMatchObject({ nome: pedido.nome, email: pedido.email });
     expect(criarIdentidade).toHaveBeenCalledWith(pedido.email, pedido.senhaInicial);
-    expect(provisionar).toHaveBeenCalledWith({ supertokensUserId: 'st-u1', email: pedido.email, perfil: PerfilUsuario.GESTOR });
+    expect(transacao).toHaveBeenCalledTimes(1);
+    expect(auditar).toHaveBeenCalledWith(manager, ator, expect.objectContaining({
+      acao: AcaoAuditoria.USUARIO_CRIADO, entidadeTipo: 'USUARIO', entidadeId: usuario.id,
+    }));
+    expect(JSON.stringify(auditar.mock.calls)).not.toContain(pedido.senhaInicial);
+    expect(JSON.stringify(resp)).not.toContain('st-func');
   });
 
-  it('provisiona COLABORADOR', async () => {
-    provisionar.mockResolvedValue(Object.assign(new Usuario(), usuario, { perfil: PerfilUsuario.COLABORADOR }));
-    await expect(svc.criar({ ...pedido, perfil: PerfilUsuario.COLABORADOR })).resolves.toMatchObject({ perfil: PerfilUsuario.COLABORADOR });
-  });
-
-  it('não permite novo ADMINISTRADOR por API, mesmo com sessão administrativa', async () => {
-    await expect(svc.criar({ ...pedido, perfil: PerfilUsuario.ADMINISTRADOR })).rejects.toBeInstanceOf(BadRequestException);
+  it('nega perfil ADMINISTRADOR antes de usar SuperTokens', async () => {
+    await expect(svc.criar({ ...pedido, perfil: PerfilUsuario.ADMINISTRADOR }, ator))
+      .rejects.toBeInstanceOf(BadRequestException);
     expect(criarIdentidade).not.toHaveBeenCalled();
   });
 
-  it('nega e-mail já cadastrado sem tentar criar identidade', async () => {
+  it('nega outro perfil de autor antes de usar SuperTokens', async () => {
+    await expect(svc.criar(pedido, { ...ator, perfil: PerfilUsuario.GESTOR }))
+      .rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('nega duplicidade antes da criação SuperTokens', async () => {
     buscarEmail.mockResolvedValue(usuario);
-    await expect(svc.criar(pedido)).rejects.toBeInstanceOf(ConflictException);
+    await expect(svc.criar(pedido, ator)).rejects.toBeInstanceOf(ConflictException);
     expect(criarIdentidade).not.toHaveBeenCalled();
   });
 
-  it('propaga duplicidade de SuperTokens e não salva no banco da aplicação', async () => {
-    criarIdentidade.mockRejectedValue(new ConflictException('E-mail já cadastrado'));
-    await expect(svc.criar(pedido)).rejects.toBeInstanceOf(ConflictException);
-    expect(provisionar).not.toHaveBeenCalled();
+  it('compensa identidade recém-criada quando falha auditoria de criação', async () => {
+    const log = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    try {
+      auditar.mockRejectedValue(new Error('falha auditoria'));
+      await expect(svc.criar(pedido, ator)).rejects.toBeInstanceOf(InternalServerErrorException);
+      expect(excluirIdentidade).toHaveBeenCalledWith('st-func');
+      expect(log).toHaveBeenCalled();
+    } finally { log.mockRestore(); }
   });
 
-  it('faz compensação se o PostgreSQL falhar após criar identidade', async () => {
-    provisionar.mockRejectedValue(new Error('falha db'));
-    await expect(svc.criar(pedido)).rejects.toBeInstanceOf(InternalServerErrorException);
-    expect(excluirIdentidade).toHaveBeenCalledWith('st-u1');
+  it('sinaliza reconciliação quando não consegue compensar', async () => {
+    const log = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    try {
+      auditar.mockRejectedValue(new Error('falha auditoria'));
+      excluirIdentidade.mockRejectedValue(new Error('falha core'));
+      await expect(svc.criar(pedido, ator)).rejects.toBeInstanceOf(InternalServerErrorException);
+      expect(log).toHaveBeenCalledWith('Falha na compensação da identidade recém-criada; exige reconciliação manual');
+    } finally { log.mockRestore(); }
   });
 
-  it('não retorna sucesso se falhar a compensação', async () => {
-    provisionar.mockRejectedValue(new Error('falha db'));
-    excluirIdentidade.mockRejectedValue(new Error('falha core'));
-    await expect(svc.criar(pedido)).rejects.toBeInstanceOf(InternalServerErrorException);
+  it('não expõe ID SuperTokens nem senha na listagem legada', async () => {
+    const dados = await svc.listar();
+    expect(dados).toHaveLength(1);
+    expect(JSON.stringify(dados)).not.toContain('st-func');
+    expect(JSON.stringify(dados)).not.toContain('SenhaForte');
   });
+});
 
-  it('lista usuários sem credenciais', async () => {
-    listar.mockResolvedValue([usuario]);
-    const resultado = await svc.listar();
-    expect(resultado).toHaveLength(1);
-    expect(JSON.stringify(resultado)).not.toContain('supertokensUserId');
-    expect(JSON.stringify(resultado)).not.toContain('senhaInicial');
+describe('Credenciais administrativas', () => {
+  it('nega mudança de credencial do próprio Administrador', async () => {
+    await expect(svc.alterarEmail(ator.id, 'novo@example.com', ator))
+      .rejects.toBeInstanceOf(ForbiddenException);
+    await expect(svc.redefinirSenha(ator.id, 'NovaSenha!1234', ator))
+      .rejects.toBeInstanceOf(ForbiddenException);
+  });
+  it('registra tentativa e confirmação sem segredo na redefinição', async () => {
+    buscarEmail.mockImplementation(async (args) => (args as {id: string})?.id === ator.id ? admin : usuario);
+    await svc.redefinirSenha(usuario.id, 'NovaSenha!1234', ator);
+    expect(definirSenha).toHaveBeenCalledWith('st-func', 'NovaSenha!1234');
+    expect(auditarExecucao).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(auditarExecucao.mock.calls)).not.toContain('NovaSenha!1234');
+  });
+});
+
+
+describe('consulta administrativa individual', () => {
+  it('retorna usuário sem expor ID SuperTokens e sem limite de paginação', async () => {
+    buscarEmail.mockResolvedValue(usuario);
+    const dado = await svc.buscarPorId(usuario.id);
+    expect(dado).toMatchObject({ id: usuario.id, email: usuario.email });
+    expect(JSON.stringify(dado)).not.toContain(usuario.supertokensUserId);
+    expect(buscarEmail).toHaveBeenCalledWith({ id: usuario.id });
+  });
+  it('retorna 404 quando o ID não existe', async () => {
+    buscarEmail.mockResolvedValue(null);
+    await expect(svc.buscarPorId('uuid-ausente')).rejects.toThrow('Funcionário não encontrado');
   });
 });

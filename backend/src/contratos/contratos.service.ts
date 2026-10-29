@@ -1,15 +1,19 @@
 import {
   BadRequestException,
+  ForbiddenException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { QueryFailedError, type Repository } from 'typeorm';
+import { QueryFailedError, type EntityManager, type Repository } from 'typeorm';
 
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
+import { PermissaoContrato } from '../autorizacao/permissao-contrato.entity.js';
+import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
+import { Usuario } from '../usuarios/usuario.entity.js';
 import { Contrato } from './contrato.entity.js';
 import type { AtualizarContratoDto } from './dto/atualizar-contrato.dto.js';
 import type { CriarContratoDto } from './dto/criar-contrato.dto.js';
@@ -48,6 +52,7 @@ export class ContratosService {
 
     return this.auditoria.executarComAuditoria(ator, async (manager) => {
       const repo = manager.getRepository(Contrato);
+      await this.validarResponsavel(manager, dto.responsavelInternoId);
       const contrato = repo.create({
         numeroContrato: dto.numeroContrato.trim(),
         processoAdministrativo: dto.processoAdministrativo ?? null,
@@ -79,12 +84,27 @@ export class ContratosService {
     });
   }
 
-  async listar(): Promise<Contrato[]> {
-    // `contratos:listar` só passa para ADMINISTRADOR (PoliticaAcessoService).
-    // Ordenação estável prepara paginação de HU05-04 sem reescrever a query.
-    return this.contratos.find({
-      order: { inicioVigencia: 'DESC', numeroContrato: 'ASC' },
-    });
+  async listar(ator: UsuarioAutenticado): Promise<Contrato[]> {
+    if (ator.perfil === PerfilUsuario.ADMINISTRADOR) {
+      return this.contratos.find({ order: { inicioVigencia: 'DESC', numeroContrato: 'ASC' } });
+    }
+    // RF-40/RB-20: vínculo explícito e vínculo APENAS do usuário da sessão.
+    // INNER JOIN evita que o cliente consiga consultar carteira alheia por parâmetros.
+    return this.contratos.createQueryBuilder('c')
+      .innerJoin('permissoes_contrato', 'p', 'p.contrato_id = c.id AND p.usuario_id = :usuarioId', { usuarioId: ator.id })
+      .orderBy('c.inicioVigencia', 'DESC')
+      .addOrderBy('c.numeroContrato', 'ASC')
+      .getMany();
+  }
+
+  async consultarAcesso(id: string, ator: UsuarioAutenticado): Promise<{ podeEditar: boolean }> {
+    // Mesmo estando sob guard: não confirmar ID inexistente.
+    await this.detalhar(id);
+    if (ator.perfil === PerfilUsuario.ADMINISTRADOR) return { podeEditar: true };
+    if (ator.perfil !== PerfilUsuario.GESTOR) return { podeEditar: false };
+    const vinculo = await this.contratos.manager.getRepository(PermissaoContrato)
+      .findOneBy({ usuarioId: ator.id, contratoId: id });
+    return { podeEditar: Boolean(vinculo?.podeEditar) };
   }
 
   async detalhar(id: string): Promise<Contrato> {
@@ -102,6 +122,14 @@ export class ContratosService {
       const repo = manager.getRepository(Contrato);
       const existente = await repo.findOneBy({ id });
       if (!existente) throw new NotFoundException('Contrato não encontrado');
+      if (dto.responsavelInternoId !== undefined) {
+        if (ator.perfil !== PerfilUsuario.ADMINISTRADOR && dto.responsavelInternoId !== existente.responsavelInternoId) {
+          throw new ForbiddenException('Somente Administrador pode alterar o responsável interno');
+        }
+        if (dto.responsavelInternoId !== existente.responsavelInternoId) {
+          await this.validarResponsavel(manager, dto.responsavelInternoId);
+        }
+      }
 
       const inicioAnterior = existente.inicioVigencia;
       const terminoAnterior = existente.terminoVigencia;
@@ -163,6 +191,12 @@ export class ContratosService {
         },
       };
     });
+  }
+
+  private async validarResponsavel(manager: EntityManager, id: string | null | undefined): Promise<void> {
+    if (!id) return; // Responsável é opcional no PRD.
+    const responsavel = await manager.getRepository(Usuario).findOneBy({ id, ativo: true });
+    if (!responsavel) throw new BadRequestException('Responsável interno inexistente ou inativo');
   }
 
   /** Calendário real + coerência de vigência (issue + §8.2). */

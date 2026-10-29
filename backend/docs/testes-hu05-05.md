@@ -11,6 +11,8 @@ Exclusão e anexos não fazem parte do escopo desta issue.
 
 ### DTOs
 
+Testes de `class-validator` em `src/contratos/dto/contrato-dto.spec.ts` (sem banco).
+
 - Criação: campos obrigatórios, opcionais, tipos, enums e datas.
 - Atualização parcial: omissão de campos e valores nulos.
 - Rejeição de ID informado pelo cliente.
@@ -25,6 +27,11 @@ Exclusão e anexos não fazem parte do escopo desta issue.
 - Alterações de status e registros de auditoria.
 - Tratamento de contrato inexistente e erros SQLSTATE.
 
+### API HTTP com NestJS
+
+`test/contratos-api.e2e-spec.ts` verifica controller, ValidationPipe, guard e respostas 201/200/400/401/403/404.
+**Os serviços e a identidade da sessão são simulados nesta suíte:** ela não comprova escrita real no PostgreSQL, autenticação real do SuperTokens ou auditoria transacional.
+
 ### PostgreSQL e migration
 
 - Aplicação inicial da migration de contratos.
@@ -34,8 +41,11 @@ Exclusão e anexos não fazem parte do escopo desta issue.
 - Restrição de término anterior ao início.
 - Ausência de colunas financeiras.
 
-A suíte de migration requer TEST_DATABASE_URL apontando para
-um banco exclusivo de testes. Sem essa variável, ela é ignorada.
+A suíte de migration requer `TEST_DATABASE_URL` apontando para
+um banco exclusivo de testes. **Sem essa variável, a suíte fica `SKIP`,
+mesmo quando `npm run test:e2e` encerra sem falhas.** Não contar `SKIP`
+como teste executado. O teste de migration é uma verificação isolada de schema,
+não um CRUD E2E completo do módulo de contratos.
 
 ## Comandos locais
 
@@ -74,5 +84,11 @@ preservados. O teste cria e remove um schema próprio.
 
 ## Resultado da execução
 
-Cobertura do CRUD completo depende da integração das HU05-01/02/03/04
-e TEC07-02/03.
+O backend NestJS de contratos já existe após HU05-01/02/05, mas as suítes
+unitárias e HTTP com mocks não provam sozinhas persistência e autorização
+com sessão real. A suíte de migration testa PostgreSQL quando `TEST_DATABASE_URL`
+está definida. Registrar separadamente evidências do fluxo real (login, CRUD,
+auditoria, rollback, vínculos) e depois da integração frontend HU05-06.
+
+A camada frontend ainda possui mocks; não confundir construção de tela
+com integração real do CRUD.

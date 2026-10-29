@@ -16,6 +16,7 @@ export type CredenciaisBootstrap = {
 export interface ProvedorIdentidadeBootstrap {
   criar(email: string, senha: string): Promise<string>;
   autenticar(email: string, senha: string): Promise<string>;
+  excluirCriacaoIncompleta?(id: string): Promise<void>;
 }
 
 /**
@@ -34,7 +35,9 @@ export async function criarAdministradorInicial(
     throw new BadRequestException('Modo, e-mail ou senha inválidos (mínimo 12 caracteres)');
   }
 
-  return conexao.transaction(async (manager) => {
+  let criadaNestaTentativa: string | undefined;
+  try {
+    return await conexao.transaction(async (manager) => {
     // Chave fixada neste utilitário; lock transacional liberado no commit/rollback.
     await manager.query('SELECT pg_advisory_xact_lock($1)', [720701]);
     const repositorio = manager.getRepository(Usuario);
@@ -47,6 +50,7 @@ export async function criarAdministradorInicial(
     const supertokensUserId = credenciais.modo === 'novo'
       ? await identidades.criar(email, credenciais.senha)
       : await identidades.autenticar(email, credenciais.senha);
+    if (credenciais.modo === 'novo') criadaNestaTentativa = supertokensUserId;
 
     const usuario = new UsuariosService(repositorio);
     return usuario.criarProvisionado({
@@ -54,5 +58,15 @@ export async function criarAdministradorInicial(
       email,
       perfil: PerfilUsuario.ADMINISTRADOR,
     });
-  });
+    });
+  } catch (erro: unknown) {
+    if (criadaNestaTentativa) {
+      if (!identidades.excluirCriacaoIncompleta) {
+        throw new Error('Bootstrap falhou após criar identidade; reconciliar manualmente pelo modo existente');
+      }
+      try { await identidades.excluirCriacaoIncompleta(criadaNestaTentativa); }
+      catch { throw new Error('Falha ao compensar identidade do bootstrap; reconciliação manual necessária'); }
+    }
+    throw erro;
+  }
 }

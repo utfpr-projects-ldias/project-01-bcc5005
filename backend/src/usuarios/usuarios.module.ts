@@ -5,9 +5,10 @@ import { UsuariosService } from './usuarios.service.js';
 import { IdentidadesFuncionariosService } from './identidades-funcionarios.service.js';
 import { AdministracaoUsuariosService } from './administracao-usuarios.service.js';
 import { AdministracaoUsuariosController } from './administracao-usuarios.controller.js';
+import { AuditoriaModule } from '../auditoria/auditoria.module.js';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Usuario])],
+  imports: [TypeOrmModule.forFeature([Usuario]), AuditoriaModule],
   controllers: [AdministracaoUsuariosController],
   providers: [UsuariosService, IdentidadesFuncionariosService, AdministracaoUsuariosService],
   exports: [UsuariosService],

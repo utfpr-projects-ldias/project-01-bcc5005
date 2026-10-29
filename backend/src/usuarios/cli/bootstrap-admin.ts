@@ -179,6 +179,9 @@ async function main(): Promise<void> {
         }
         return resultado.user.id;
       },
+      async excluirCriacaoIncompleta(id) {
+        await supertokens.deleteUser(id);
+      },
       async autenticar(emailExistente, senha) {
         const resultado = await EmailPassword.signIn('public', emailExistente, senha);
         if (resultado.status !== 'OK') {

@@ -18,10 +18,16 @@ beforeEach(() => busca.mockReset());
 
 describe('políticas por perfil e escopo', () => {
   it('administrador gerencia usuários, cria e lista contratos', async () => {
-    for (const acao of ['usuarios:administrar', 'contratos:criar', 'contratos:listar'] as const) {
+    for (const acao of ['usuarios:administrar', 'contratos:criar'] as const) {
       expect(await politica.permitido(usuario(PerfilUsuario.ADMINISTRADOR), { acao })).toBe(true);
       expect(await politica.permitido(usuario(PerfilUsuario.GESTOR), { acao })).toBe(false);
       expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR), { acao })).toBe(false);
+    }
+  });
+
+  it('consulta de carteira usa guard para usuário ativo e filtro no service', async () => {
+    for (const perfil of [PerfilUsuario.ADMINISTRADOR, PerfilUsuario.GESTOR, PerfilUsuario.COLABORADOR]) {
+      expect(await politica.permitido(usuario(perfil), { acao: 'contratos:listar' })).toBe(true);
     }
   });
 

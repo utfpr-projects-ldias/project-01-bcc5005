@@ -1,250 +1,99 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import Image from "next/image";
-import { doesSessionExist } from "supertokens-web-js/recipe/session";
-import Session from "supertokens-web-js/recipe/session";
-import { useRouter } from "next/navigation";
+import Link from 'next/link';
+import { IndicadorCarregamento } from '@/app/components/indicador-carregamento';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { consultarMeuPerfil, type MeuPerfil } from '@/lib/admin-usuarios';
+import { ErroContrato, listarContratos, STATUS, MODOS, dataCivil, type Contrato, type StatusContrato } from '@/lib/contratos';
+import { AreaContratos, Aviso } from './components/area-contratos';
 
-export type Contrato = {
-  id: string;
-  numero_contrato: string;
-  orgao_contratante: string;
-  objeto: string;
-  inicio_vigencia: string;
-  termino_vigencia: string;
-  status: "Planejamento" | "Em execução" | "Em encerramento" | "Concluído" | "Suspenso" | "Cancelado";
-  modo_calculo: "Simples" | "Ponderado";
-};
+function mensagemErro(erro: unknown): string {
+  return erro instanceof Error ? erro.message : 'Não foi possível carregar os contratos.';
+}
+
+async function consultarContratosAutorizados() {
+  const usuario = await consultarMeuPerfil();
+  if (!usuario.ativo) throw new ErroContrato(403, 'Conta inativa.');
+  const dados = await listarContratos();
+  return { usuario, dados };
+}
 
 export default function ContratosListPage() {
-  const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [perfil, setPerfil] = useState<MeuPerfil | null>(null);
   const [contratos, setContratos] = useState<Contrato[]>([]);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [logoutError, setLogoutError] = useState("");
-
-  async function handleLogout() {
-    if (isLoggingOut) return;
-    setIsLoggingOut(true);
-    setLogoutError("");
+  const [carregando, setCarregando] = useState(true);
+  const [atualizando, setAtualizando] = useState(false);
+  const [avisoAtualizacao, setAvisoAtualizacao] = useState('');
+  const [erro, setErro] = useState('');
+  const [busca, setBusca] = useState('');
+  const [filtro, setFiltro] = useState<StatusContrato | ''>('');
+  // Consulta ao backend sempre com o perfil autenticado, sem confiar em IDs do navegador.
+  const carregar = useCallback(async () => {
+    setAtualizando(true);
+    setAvisoAtualizacao('');
+    setErro('');
     try {
-      await Session.signOut();
-      router.replace("/login");
-      router.refresh();
-    } catch {
-      setLogoutError("Não foi possível encerrar a sessão. Tente novamente.");
+      const { usuario, dados } = await consultarContratosAutorizados();
+      setPerfil(usuario);
+      setContratos(dados);
+      setAvisoAtualizacao('Lista atualizada.');
+    } catch (e) {
+      setErro(`${mensagemErro(e)} A listagem anterior foi mantida.`);
     } finally {
-      setIsLoggingOut(false);
+      setAtualizando(false);
     }
-  }
+  }, []);
 
-  const navigationItems = [
-    { name: "Dashboard", href: "/dashboard", available: true },
-    { name: "Contratos", href: "/contratos", available: true },
-    { name: "Atividades", href: "#", available: false },
-    { name: "Evidências", href: "#", available: false },
-    { name: "Relatórios", href: "#", available: false },
-    { name: "Usuários/Administração", href: "#", available: false },
-  ];
-
+  // O carregamento inicial só atualiza o estado após a resolução assíncrona,
+  // evitando setState síncrono no efeito (react-hooks/set-state-in-effect).
   useEffect(() => {
-    async function loadData() {
-      try {
-        const session = await doesSessionExist();
-        if (!session) {
-          router.replace("/login");
-          return;
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        
-        const mockContratos: Contrato[] = [
-          {
-            id: "1",
-            numero_contrato: "CT-001/2026",
-            orgao_contratante: "Secretaria de Tecnologia da Informação",
-            objeto: "Prestação de serviços de desenvolvimento de software e sustentação de sistemas.",
-            inicio_vigencia: "2026-01-01",
-            termino_vigencia: "2026-12-31",
-            status: "Em execução",
-            modo_calculo: "Ponderado",
-          },
-        ];
-
-        setContratos(mockContratos);
-      } catch (err) {
-        console.error(err);
-        setError("Falha de rede ou erro ao carregar contratos.");
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadData();
-  }, [router]);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background text-foreground">
-        <p className="text-sm text-foreground/60 animate-pulse">Carregando contratos...</p>
+    let montado = true;
+    void consultarContratosAutorizados()
+      .then(({ usuario, dados }) => {
+        if (!montado) return;
+        setPerfil(usuario);
+        setContratos(dados);
+      })
+      .catch((e: unknown) => {
+        if (montado) setErro(mensagemErro(e));
+      })
+      .finally(() => {
+        if (montado) setCarregando(false);
+      });
+    return () => { montado = false; };
+  }, []);
+  const visiveis = useMemo(() => contratos.filter(c => {
+    const texto = `${c.numeroContrato} ${c.orgaoContratante} ${c.objeto}`.toLocaleLowerCase('pt-BR');
+    return (!filtro || c.status === filtro) && texto.includes(busca.toLocaleLowerCase('pt-BR').trim());
+  }), [contratos, busca, filtro]);
+  return <AreaContratos titulo="Gestão de Contratos">
+    <section className="flex flex-wrap items-center justify-between gap-4">
+      <div><h2 className="text-lg font-semibold text-brand-neon">Contratos cadastrados</h2>
+        <p className="text-sm text-foreground/70">{perfil?.perfil === 'ADMINISTRADOR' ? 'Carteira completa autorizada' : 'Somente contratos vinculados à sua conta'} · Dados do PostgreSQL</p></div>
+      <div className="flex gap-2">
+        <button type="button" onClick={() => void carregar()} disabled={atualizando || carregando} aria-busy={atualizando} className="inline-flex min-h-10 min-w-36 items-center justify-center rounded-lg border border-brand-green/40 px-3 py-2 text-sm transition-colors hover:bg-brand-green/10 disabled:opacity-60">{atualizando ? <IndicadorCarregamento compacto texto="Atualizando..." /> : 'Atualizar lista'}</button>
+        {perfil?.perfil === 'ADMINISTRADOR' && <Link href="/contratos/novo" className="rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-background">Cadastrar contrato</Link>}
       </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-background text-foreground p-6">
-        <p className="text-red-400 mb-4">{error}</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="px-4 py-2 rounded-lg bg-brand-green text-background font-semibold text-sm"
-        >
-          Tentar novamente
-        </button>
+    </section>
+    <p role="status" className="min-h-4 text-xs text-foreground/65">{avisoAtualizacao}</p>
+    {erro && <div className="space-y-2"><Aviso erro>{erro}</Aviso><button type="button" onClick={() => void carregar()} disabled={atualizando} className="text-sm text-brand-neon underline disabled:opacity-50">Tentar novamente</button></div>}
+    {carregando ? <Aviso>Carregando contratos reais...</Aviso> : !perfil && erro ? null : <>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div><label htmlFor="busca-contrato" className="mb-1 block text-sm">Buscar por número, órgão ou objeto</label>
+          <input id="busca-contrato" className="w-full rounded-lg border border-brand-green/30 bg-background p-2" value={busca} onChange={e => setBusca(e.target.value)} /></div>
+        <div><label htmlFor="filtro-status" className="mb-1 block text-sm">Filtrar por status</label>
+          <select id="filtro-status" className="w-full rounded-lg border border-brand-green/30 bg-background p-2" value={filtro} onChange={e => setFiltro(e.target.value as StatusContrato | '')}>
+            <option value="">Todos os status</option>{(Object.keys(STATUS) as StatusContrato[]).map(k => <option key={k} value={k}>{STATUS[k]}</option>)}</select></div>
       </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen flex bg-background text-foreground font-sans">
-      
-      {/* Sidebar à Esquerda */}
-      <aside className="w-64 border-r border-brand-green/20 bg-background/50 backdrop-blur-md hidden md:flex flex-col justify-between p-6 sticky top-0 h-screen">
-        <div>
-          {/* Logo / Título */}
-          <Link href="/dashboard" className="flex items-center gap-2 mb-10 group">
-            <Image
-              src="/favicon.ico"
-              alt="Ícone PRD"
-              width={32}
-              height={32}
-              unoptimized
-              className="h-8 w-8 object-contain rounded-md"
-            />
-            <span className="font-bold text-2xl tracking-wide text-brand-neon group-hover:opacity-90 transition-opacity">
-              PRD
-            </span>
-          </Link>
-
-          {/* Menu de Navegação */}
-          <nav className="space-y-2">
-            {navigationItems.map((item) => {
-              const isActive = item.href === "/contratos";
-              return item.available ? (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  className={`block px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-brand-green text-background font-semibold"
-                      : "text-foreground/80 hover:bg-brand-darkgreen/40 hover:text-brand-green"
-                  }`}
-                >
-                  {item.name}
-                </Link>
-              ) : (
-                <div
-                  key={item.name}
-                  className="block px-4 py-2.5 rounded-lg text-sm font-medium text-foreground/40 cursor-not-allowed select-none"
-                  title="Módulo em desenvolvimento"
-                >
-                  {item.name} <span className="text-xs opacity-60">(Em breve)</span>
-                </div>
-              );
-            })}
-          </nav>
-        </div>
-      </aside>
-
-      {/* Conteúdo Principal à Direita */}
-      <div className="flex-1 flex flex-col min-w-0">
-        
-        {/* Topbar com Título e Logout */}
-        <header className="h-20 border-b border-brand-green/20 bg-background/80 backdrop-blur-md px-8 flex items-center justify-between sticky top-0 z-40">
-          <h1 className="text-xl font-bold text-foreground">Gestão de Contratos</h1>
-
-          <div className="flex items-center gap-4">
-            {logoutError && (
-              <p role="alert" className="text-sm text-red-400">{logoutError}</p>
-            )}
-            <button
-              type="button"
-              onClick={() => void handleLogout()}
-              disabled={isLoggingOut}
-              className="px-4 py-2 rounded-lg text-sm font-medium border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-60"
-            >
-              {isLoggingOut ? "Saindo..." : "Sair"}
-            </button>
-          </div>
-        </header>
-
-        {/* Corpo da Página de Contratos */}
-        <main className="flex-1 p-8 overflow-y-auto">
-          <div className="max-w-5xl mx-auto space-y-6">
-            
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-brand-neon">Contratos Cadastrados</h2>
-                <p className="text-sm text-foreground/70">Visualize a entidade raiz e vigências operacionais.</p>
-              </div>
-              <Link
-                href="/contratos/novo"
-                className="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-green text-background hover:opacity-90 transition-opacity"
-              >
-                + Novo Contrato
-              </Link>
-            </div>
-
-            {contratos.length === 0 ? (
-              <div className="p-12 text-center rounded-2xl bg-brand-darkgreen/20 border border-brand-green/20">
-                <p className="text-foreground/60 text-sm mb-4">Nenhum contrato cadastrado no sistema.</p>
-                <Link
-                  href="/contratos/novo"
-                  className="inline-block px-4 py-2 rounded-lg text-sm font-semibold bg-brand-green text-background"
-                >
-                  Cadastrar Primeiro Contrato
-                </Link>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-4">
-                {contratos.map((c) => (
-                  <div
-                    key={c.id}
-                    className="p-5 rounded-xl bg-brand-darkgreen/20 border border-brand-green/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-3">
-                        <span className="font-bold text-brand-neon">{c.numero_contrato}</span>
-                        <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-green/20 text-brand-neon border border-brand-green/30">
-                          {c.status}
-                        </span>
-                      </div>
-                      <p className="text-sm font-medium text-foreground">{c.orgao_contratante}</p>
-                      <p className="text-xs text-foreground/70 line-clamp-1">{c.objeto}</p>
-                      <p className="text-xs text-foreground/50">
-                        Vigência: {c.inicio_vigencia} até {c.termino_vigencia} | Modo: {c.modo_calculo}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 self-end md:self-center">
-                      <Link
-                        href={`/contratos/${c.id}`}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium border border-brand-green/30 text-brand-green hover:bg-brand-green/10"
-                      >
-                        Detalhes
-                      </Link>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-          </div>
-        </main>
-
-      </div>
-    </div>
-  );
+      <p className="text-sm text-foreground/60">{visiveis.length} de {contratos.length} contratos autorizados</p>
+      {!contratos.length ? <Aviso>Nenhum contrato cadastrado ou atribuído à sua conta.</Aviso> : !visiveis.length ? <Aviso>Nenhum resultado para os filtros escolhidos.</Aviso> :
+        <ul className="space-y-4">{visiveis.map(c => <li key={c.id} className="rounded-xl border border-brand-green/20 bg-brand-darkgreen/20 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1 space-y-2"><div className="flex flex-wrap items-center gap-3"><span className="min-w-0 [overflow-wrap:anywhere] font-bold text-brand-neon">{c.numeroContrato}</span><span className="rounded-full border border-brand-green/30 px-2 py-1 text-xs">{STATUS[c.status]}</span></div>
+              <p className="[overflow-wrap:anywhere] text-sm font-semibold">{c.orgaoContratante}</p><p className="[overflow-wrap:anywhere] text-sm text-foreground/75">{c.objeto}</p>
+              <p className="text-xs text-foreground/60">Vigência: {dataCivil(c.inicioVigencia)} até {dataCivil(c.terminoVigencia)} · Modo: {MODOS[c.modoCalculo]}</p>
+            </div><Link href={`/contratos/${encodeURIComponent(c.id)}`} className="rounded-lg border border-brand-green/40 px-3 py-2 text-sm text-brand-neon">Detalhes</Link>
+          </div></li>)}</ul>}
+    </>}
+  </AreaContratos>;
 }
