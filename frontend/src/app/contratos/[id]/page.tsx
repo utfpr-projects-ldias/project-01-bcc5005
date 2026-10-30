@@ -8,6 +8,7 @@ import { useMeuPerfil } from '@/hooks/use-meu-perfil';
 import { useContrato, useAcessoContrato } from '@/hooks/use-contratos';
 import { dataCivil, MODOS, STATUS } from '@/lib/contratos';
 import { AreaContratos, Aviso } from '../components/area-contratos';
+import { PainelEtapas } from '../components/painel-etapas';
 
 type Par = [titulo: string, valor: string | null | undefined];
 function dataBR(valor: string | null | undefined): string {
@@ -63,6 +64,8 @@ export default function DetalheContratoPage() {
           ['Responsável interno (identificador)', contrato.responsavelInternoId],
           ['Fiscal/gestor público (informativo)', contrato.fiscalGestor], ['Observações', contrato.observacoes],
         ]} />
+      <PainelEtapas key={contrato.id} contratoId={contrato.id} habilitado={!!perfil?.ativo}
+        podeGerenciar={(perfil?.perfil === 'ADMINISTRADOR' || perfil?.perfil === 'GESTOR') && podeEditar} />
       <Aviso>Os documentos deste contrato ainda não estão disponíveis nesta área.</Aviso>
     </> : <Aviso erro>Contrato não encontrado.</Aviso>}
   </AreaContratos>;
