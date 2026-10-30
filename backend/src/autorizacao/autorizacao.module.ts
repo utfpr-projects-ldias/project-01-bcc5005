@@ -12,16 +12,19 @@ import { GestaoPermissoesService } from './gestao-permissoes.service.js';
 import { GestaoPermissoesController } from './gestao-permissoes.controller.js';
 import { PoliticaAcessoService } from './politica-acesso.service.js';
 import { SessaoSuperTokensService } from './sessao-supertokens.service.js';
+import { Etapa } from '../etapas/etapa.entity.js';
+import { ResolverEscopoContratoService } from './resolver-escopo-contrato.service.js';
 
 @Module({
-  imports: [UsuariosModule, AuditoriaModule, TypeOrmModule.forFeature([PermissaoContrato, Usuario, Contrato])],
+  imports: [UsuariosModule, AuditoriaModule, TypeOrmModule.forFeature([PermissaoContrato, Usuario, Contrato, Etapa])],
   controllers: [PerfilController, GestaoPermissoesController],
   providers: [
     PoliticaAcessoService,
+    ResolverEscopoContratoService,
     GestaoPermissoesService,
     SessaoSuperTokensService,
     { provide: APP_GUARD, useClass: AutorizacaoGuard },
   ],
-  exports: [PoliticaAcessoService],
+  exports: [PoliticaAcessoService, ResolverEscopoContratoService],
 })
 export class AutorizacaoModule {}

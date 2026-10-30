@@ -64,3 +64,44 @@ describe('políticas por perfil e escopo', () => {
     expect(busca).not.toHaveBeenCalled();
   });
 });
+
+
+describe('TEC07-AJUSTES-02-02 — matriz PRD RF-39/40', () => {
+  const noContrato = { tipo: 'contrato', parametro: 'contratoId' } as const;
+  const etapaReal = { tipo: 'recurso', recurso: 'etapa', parametro: 'etapaId' } as const;
+
+  it('ADMIN tem acesso global a operações tipadas, mas exige contrato raiz válido', async () => {
+    for (const acao of ['etapas:criar', 'atividades:registrar', 'documentos:anexar'] as const) {
+      expect(await politica.permitido(usuario(PerfilUsuario.ADMINISTRADOR), { acao, escopoOperacional: noContrato }, CONTRATO_ID)).toBe(true);
+    }
+    expect(await politica.permitido(usuario(PerfilUsuario.ADMINISTRADOR), { acao: 'etapas:editar', escopoOperacional: etapaReal })).toBe(false);
+    expect(busca).not.toHaveBeenCalled();
+  });
+
+  it('GESTOR somente edita planejamento quando vinculado e podeEditar=true', async () => {
+    busca.mockResolvedValueOnce(null).mockResolvedValueOnce({ podeEditar: false } as PermissaoContrato)
+      .mockResolvedValueOnce({ podeEditar: true } as PermissaoContrato);
+    for (const esperado of [false, false, true]) {
+      expect(await politica.permitido(usuario(PerfilUsuario.GESTOR),
+        { acao: 'etapas:editar', escopoOperacional: etapaReal }, CONTRATO_ID)).toBe(esperado);
+    }
+  });
+
+  it('COLABORADOR consulta e registra atividade/evidência quando vinculado; não edita etapas', async () => {
+    busca.mockResolvedValue({ podeEditar: true } as PermissaoContrato);
+    for (const acao of ['etapas:listar', 'atividades:registrar', 'evidencias:anexar'] as const) {
+      expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR), { acao, escopoOperacional: noContrato }, CONTRATO_ID)).toBe(true);
+    }
+    expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR), { acao: 'etapas:editar', escopoOperacional: etapaReal }, CONTRATO_ID)).toBe(false);
+    expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR), { acao: 'execucao:atualizar', escopoOperacional: { tipo:'recurso',recurso:'entregavel',parametro:'id' } }, CONTRATO_ID)).toBe(false);
+  });
+
+  it('não usa podeEditar para acesso sem vínculo, nem aceita decorator legado/escopo incompatível', async () => {
+    busca.mockResolvedValue(null);
+    expect(await politica.permitido(usuario(PerfilUsuario.GESTOR), { acao: 'etapas:listar', escopoOperacional: noContrato }, OUTRO_ID)).toBe(false);
+    expect(await politica.permitido(usuario(PerfilUsuario.ADMINISTRADOR), { acao: 'etapas:editar' }, CONTRATO_ID)).toBe(false);
+    expect(await politica.permitido(usuario(PerfilUsuario.ADMINISTRADOR), { acao: 'etapas:editar', escopoOperacional: noContrato }, CONTRATO_ID)).toBe(false);
+    expect(await politica.permitido(usuario(PerfilUsuario.ADMINISTRADOR), { acao: 'etapas:editar', escopoOperacional: { tipo: 'recurso', recurso: 'documento', parametro: 'id' } }, CONTRATO_ID)).toBe(false);
+    expect(await politica.permitido(usuario(PerfilUsuario.ADMINISTRADOR), { acao: 'etapas:editar', escopoOperacional: etapaReal }, 'forjado')).toBe(false);
+  });
+});
