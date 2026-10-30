@@ -5,6 +5,7 @@ import { useState, type ReactNode } from "react";
 import Session from "supertokens-web-js/recipe/session";
 import { MenuLateral, MenuMobile } from "./menu-modulos";
 import { IndicadorCarregamento } from "./indicador-carregamento";
+import { ProtecaoSessaoInterna } from "./protecao-sessao-interna";
 import { useRepositorioConsultas } from "./provedor-consultas";
 import { IdentificacaoUsuario } from "../dashboard/components/identificacao-usuario";
 
@@ -18,7 +19,7 @@ export function EstruturaInterna({ children }: { children: ReactNode }) {
 
   // Este componente interno é DESMONTADO ao sair para /login.
   // Assim, o estado `saindo` nunca atravessa duas sessões diferentes.
-  return <CabecalhoInterno rota={rota}>{children}</CabecalhoInterno>;
+  return <ProtecaoSessaoInterna><CabecalhoInterno rota={rota}>{children}</CabecalhoInterno></ProtecaoSessaoInterna>;
 }
 
 function CabecalhoInterno({ rota, children }: { rota: string; children: ReactNode }) {

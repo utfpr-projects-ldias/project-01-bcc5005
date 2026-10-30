@@ -7,6 +7,7 @@ import Session from 'supertokens-web-js/recipe/session';
 const mockReplace = jest.fn();
 jest.mock('next/navigation', () => ({ usePathname: jest.fn(), useRouter: () => ({ replace: mockReplace }) }));
 jest.mock('supertokens-web-js/recipe/session', () => ({ __esModule: true, default: { signOut: jest.fn() } }));
+jest.mock('./protecao-sessao-interna', () => ({ ProtecaoSessaoInterna: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 jest.mock('./menu-modulos', () => ({
   MenuLateral: () => <aside aria-label="Navegação principal" data-testid="menu-estavel">Menu lateral</aside>,
   MenuMobile: () => <nav aria-label="Navegação móvel">Menu móvel</nav>,
