@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { useEtapas, useMutacoesEtapas } from '@/hooks/use-etapas';
+import { useEntregaveis } from '@/hooks/use-entregaveis';
+import { EntregaveisDaEtapa } from './entregaveis-da-etapa';
 import { ErroEtapa, STATUS_ETAPA, type DadosEtapa, type Etapa } from '@/lib/etapas';
 import { FormularioEtapa } from './formulario-etapa';
 
@@ -36,6 +38,7 @@ export function PainelEtapas({ contratoId, habilitado, podeGerenciar }: {
   const ordenadas = ordemProvisoria && etapas ? ordemProvisoria.map((id) => etapas.find((e) => e.id === id)).filter((e): e is Etapa => !!e) : etapas;
   const itemEditando = editor && editor !== 'nova' ? etapas?.find((e) => e.id === editor) : undefined;
   const podeEscrever = habilitado && podeGerenciar && !erroProtegido && !bloqueio;
+  const entregaveisQuery = useEntregaveis(contratoId, habilitado && !erroProtegido && !bloqueio && !!etapas);
 
   async function atualizar() {
     setErroAcao(''); setAvisoAcao('');
@@ -137,6 +140,9 @@ export function PainelEtapas({ contratoId, habilitado, podeGerenciar }: {
         {etapa.avisoVigencia && <p role="note" className="mt-3 rounded-lg border border-amber-600/45 p-3 text-sm text-foreground">
           Atenção: as datas previstas desta etapa estão fora da vigência atual do contrato. Revise o planejamento; nenhuma data foi alterada automaticamente.
         </p>}
+        <EntregaveisDaEtapa contratoId={contratoId} etapaId={etapa.id}
+          dados={entregaveisQuery.dados} erro={entregaveisQuery.erro}
+          carregando={entregaveisQuery.carregando} atualizar={entregaveisQuery.atualizar} podeCriar={podeEscrever} />
         {podeEscrever && editor === etapa.id && itemEditando && <div id={`formulario-etapa-${etapa.id}`} className="etapa-form-expandido mt-4">
           <FormularioEtapa key={etapa.id} inicial={itemEditando} onSalvar={salvar} onCancelar={() => setEditor(null)}
             onSalvandoMudou={setSalvandoFormulario} />

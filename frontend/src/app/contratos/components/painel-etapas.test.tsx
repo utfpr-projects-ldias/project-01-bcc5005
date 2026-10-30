@@ -1,3 +1,6 @@
+jest.mock('@/hooks/use-entregaveis', () => ({
+  useEntregaveis: () => ({ dados: [], carregando: false, erro: undefined, atualizar: jest.fn().mockResolvedValue([]) }),
+}));
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { PainelEtapas } from './painel-etapas';
 import { useEtapas, useMutacoesEtapas } from '@/hooks/use-etapas';
