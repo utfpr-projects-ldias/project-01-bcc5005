@@ -5,6 +5,7 @@ import { AcaoAuditoria, type TipoEntidadeAuditada } from './acao-auditoria.js';
 @Entity({ name: 'eventos_auditoria' })
 @Index('idx_eventos_auditoria_entidade', ['entidadeTipo', 'entidadeId', 'registradoEm'])
 @Index('idx_eventos_auditoria_ator', ['atorSupertokensUserId', 'registradoEm'])
+@Index('idx_eventos_auditoria_contrato', ['contratoId', 'registradoEm'], { where: '"contrato_id" IS NOT NULL' })
 export class EventoAuditoria {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -26,6 +27,10 @@ export class EventoAuditoria {
   // Referência lógica: HU05-01 ainda não criou a tabela contratos.
   @Column({ name: 'entidade_id', type: 'varchar', length: 255 })
   entidadeId!: string;
+
+  /** Contexto derivado do banco; nullable para histórico de usuário e linhas antigas. */
+  @Column({ name: 'contrato_id', type: 'uuid', nullable: true })
+  contratoId!: string | null;
 
   @Column({ name: 'dados_anteriores', type: 'jsonb', nullable: true })
   dadosAnteriores!: Record<string, unknown> | null;
