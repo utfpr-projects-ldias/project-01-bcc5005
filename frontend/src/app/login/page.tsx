@@ -5,6 +5,7 @@ import Link from "next/link";
 import { LinkVoltar } from "@/app/components/link-voltar";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { useRepositorioConsultas } from "@/app/components/provedor-consultas";
 import { signIn } from "supertokens-web-js/recipe/emailpassword";
 import { doesSessionExist } from "supertokens-web-js/recipe/session";
 import { consultarMeuPerfil, ErroApi } from "@/lib/admin-usuarios";
@@ -22,6 +23,7 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
+  const cache = useRepositorioConsultas();
   const [formData, setFormData] = useState<LoginFormValues>({
     email: "",
     password: "",
@@ -41,6 +43,7 @@ export default function LoginPage() {
           const perfil = await consultarMeuPerfil();
           if (!montado) return;
           if (perfil.ativo) {
+            cache.limpar(); // Nova entrada na area interna: nao reutilizar dados privados anteriores.
             setFase("redirecionando");
             router.replace("/dashboard");
             return;
@@ -60,7 +63,7 @@ export default function LoginPage() {
     }
     void verificarSessao();
     return () => { montado = false; };
-  }, [router]);
+  }, [router, cache]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -106,6 +109,7 @@ export default function LoginPage() {
         setServerError("E-mail ou senha inválidos, ou login não permitido.");
         return;
       }
+      cache.limpar();
       setFase("redirecionando");
       router.replace("/dashboard");
       router.refresh();

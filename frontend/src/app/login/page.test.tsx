@@ -1,4 +1,5 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { renderComConsultas } from '@/test-utils';
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import LoginPage from "./page";
 import { signIn } from "supertokens-web-js/recipe/emailpassword";
 import { doesSessionExist } from "supertokens-web-js/recipe/session";
@@ -20,7 +21,7 @@ beforeEach(() => { jest.clearAllMocks(); sessao.mockResolvedValue(false); });
 test("login espera a verificação inicial sem mostrar formulário", async () => {
   let resolver!: (value: boolean) => void;
   sessao.mockReturnValue(new Promise<boolean>((res) => { resolver = res; }));
-  render(<LoginPage />);
+  renderComConsultas(<LoginPage />);
   expect(screen.getByRole("status")).toHaveTextContent("Verificando sessão");
   expect(screen.queryByRole("button", { name: "Entrar" })).not.toBeInTheDocument();
   await act(async () => { resolver(false); });
@@ -30,7 +31,7 @@ test("login espera a verificação inicial sem mostrar formulário", async () =>
 test("se já tem sessão ativa e domínio ativo, vai direto ao dashboard", async () => {
   sessao.mockResolvedValue(true);
   perfil.mockResolvedValue({ id: "a", nome: "Admin Teste", email: "admin@exemplo.com", perfil: "ADMINISTRADOR", ativo: true });
-  render(<LoginPage />);
+  renderComConsultas(<LoginPage />);
   await waitFor(() => expect(substituir).toHaveBeenCalledWith("/dashboard"));
   expect(entrar).not.toHaveBeenCalled();
   expect(screen.queryByRole("button", { name: "Entrar" })).not.toBeInTheDocument();
@@ -38,7 +39,7 @@ test("se já tem sessão ativa e domínio ativo, vai direto ao dashboard", async
 
 test("login usa valores preenchidos no DOM, mesmo sem disparar onChange (autofill)", async () => {
   entrar.mockResolvedValue({ status: "OK" } as Awaited<ReturnType<typeof signIn>>);
-  render(<LoginPage />);
+  renderComConsultas(<LoginPage />);
   await screen.findByRole("button", { name: "Entrar" });
   const email = screen.getByLabelText("E-mail") as HTMLInputElement;
   const senha = screen.getByLabelText("Senha") as HTMLInputElement;
@@ -53,7 +54,7 @@ test("login usa valores preenchidos no DOM, mesmo sem disparar onChange (autofil
 
 test("credenciais inválidas mostram erro, não falso sucesso", async () => {
   entrar.mockResolvedValue({ status: "WRONG_CREDENTIALS_ERROR" } as Awaited<ReturnType<typeof signIn>>);
-  render(<LoginPage />);
+  renderComConsultas(<LoginPage />);
   await screen.findByRole("button", { name: "Entrar" });
   fireEvent.change(screen.getByLabelText("E-mail"), { target: { value: "admin@exemplo.com" } });
   fireEvent.change(screen.getByLabelText("Senha"), { target: { value: "errada" } });

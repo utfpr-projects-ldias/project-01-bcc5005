@@ -5,6 +5,7 @@ import { useState, type ReactNode } from "react";
 import Session from "supertokens-web-js/recipe/session";
 import { MenuLateral, MenuMobile } from "./menu-modulos";
 import { IndicadorCarregamento } from "./indicador-carregamento";
+import { useRepositorioConsultas } from "./provedor-consultas";
 import { IdentificacaoUsuario } from "../dashboard/components/identificacao-usuario";
 
 /** O layout raiz permanece montado mesmo ao navegar entre login e dashboard. */
@@ -22,6 +23,7 @@ export function EstruturaInterna({ children }: { children: ReactNode }) {
 
 function CabecalhoInterno({ rota, children }: { rota: string; children: ReactNode }) {
   const router = useRouter();
+  const cache = useRepositorioConsultas();
   const [saindo, setSaindo] = useState(false);
   const [erroSaida, setErroSaida] = useState("");
 
@@ -41,6 +43,7 @@ function CabecalhoInterno({ rota, children }: { rota: string; children: ReactNod
     setErroSaida("");
     try {
       await Session.signOut();
+      cache.limpar(); // Apenas apos logout CONFIRMADO; aborta requests da sessao anterior.
       // Ao entrar em /login, CabecalhoInterno será desmontado e limpará o estado.
       router.replace("/login");
     } catch {

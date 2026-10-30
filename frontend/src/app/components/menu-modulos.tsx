@@ -2,18 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import { consultarMeuPerfil, type MeuPerfil } from "@/lib/admin-usuarios";
+import { useMeuPerfil } from '@/hooks/use-meu-perfil';
 
 type Item = { nome: string; href?: string; aviso?: string };
 
 function useItens(): Item[] {
-  const [perfil, setPerfil] = useState<MeuPerfil | null>(null);
-  useEffect(() => {
-    let valido = true;
-    void consultarMeuPerfil().then((p) => { if (valido) setPerfil(p); }).catch(() => { if (valido) setPerfil(null); });
-    return () => { valido = false; };
-  }, []);
+  const { dados: perfil } = useMeuPerfil();
   return [
     { nome: 'Dashboard', href: '/dashboard' },
     // HU05, Sprint 03: CRUD real integrado à API na continuidade TEC07.

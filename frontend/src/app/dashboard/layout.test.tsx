@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { renderComConsultas } from '@/test-utils';
+import { screen, waitFor } from "@testing-library/react";
 import DashboardLayout from "./layout";
 import { doesSessionExist } from "supertokens-web-js/recipe/session";
 import { consultarMeuPerfil, ErroApi } from "@/lib/admin-usuarios";
@@ -20,7 +21,7 @@ beforeEach(() => {
 
 test("não mostra conteúdo quando sessão não existe", async () => {
   sessao.mockResolvedValue(false);
-  render(<DashboardLayout><div data-testid="protegido">Conteúdo protegido</div></DashboardLayout>);
+  renderComConsultas(<DashboardLayout><div data-testid="protegido">Conteúdo protegido</div></DashboardLayout>);
   await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/login"));
   expect(perfil).not.toHaveBeenCalled();
   expect(screen.queryByTestId("protegido")).not.toBeInTheDocument();
@@ -28,7 +29,7 @@ test("não mostra conteúdo quando sessão não existe", async () => {
 
 test("mostra conteúdo apenas após backend confirmar usuário ativo", async () => {
   sessao.mockResolvedValue(true);
-  render(<DashboardLayout><div data-testid="protegido">Conteúdo protegido</div></DashboardLayout>);
+  renderComConsultas(<DashboardLayout><div data-testid="protegido">Conteúdo protegido</div></DashboardLayout>);
   expect(await screen.findByTestId("protegido")).toBeInTheDocument();
   expect(perfil).toHaveBeenCalledTimes(1);
 });
@@ -36,7 +37,7 @@ test("mostra conteúdo apenas após backend confirmar usuário ativo", async () 
 test("usuário inativado com cookie válido não entra no dashboard", async () => {
   sessao.mockResolvedValue(true);
   perfil.mockRejectedValue(new ErroApi(403, "Inativo"));
-  render(<DashboardLayout><div data-testid="protegido">Conteúdo protegido</div></DashboardLayout>);
+  renderComConsultas(<DashboardLayout><div data-testid="protegido">Conteúdo protegido</div></DashboardLayout>);
   expect(await screen.findByRole("alert")).toHaveTextContent(/conta inativa/i);
   expect(screen.queryByTestId("protegido")).not.toBeInTheDocument();
 });

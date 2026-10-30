@@ -2,41 +2,33 @@
 
 import { LinkVoltar } from '@/app/components/link-voltar';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { consultarMeuPerfil, type UsuarioPublico } from '@/lib/admin-usuarios';
-import { criarContrato, listarResponsaveis, type DadosContrato } from '@/lib/contratos';
+import { useMeuPerfil } from '@/hooks/use-meu-perfil';
+import { useResponsaveis, useMutacoesContrato } from '@/hooks/use-contratos';
+import { type DadosContrato } from '@/lib/contratos';
 import { AreaContratos, Aviso } from '../components/area-contratos';
 import { FormularioContrato } from '../components/formulario-contrato';
 import { ConfirmacaoSimples } from '@/app/components/confirmacao-simples';
 
 export default function NovoContratoPage() {
   const router = useRouter();
-  const [verificando, setVerificando] = useState(true);
-  const [autorizado, setAutorizado] = useState(false);
-  const [responsaveis, setResponsaveis] = useState<UsuarioPublico[]>([]);
-  const [listaIncompleta, setListaIncompleta] = useState(false);
+  const { dados: perfil, erro: erroPerfil, carregando: perfilCarregando } = useMeuPerfil();
+  const autorizado = !!perfil?.ativo && perfil.perfil === 'ADMINISTRADOR';
+  const responsaveisQuery = useResponsaveis(autorizado);
+  const { criar } = useMutacoesContrato();
+  const verificando = perfilCarregando || (autorizado && responsaveisQuery.carregando);
+  const responsaveis = responsaveisQuery.dados?.usuarios ?? [];
+  const listaIncompleta = !!responsaveisQuery.dados?.incompleta;
+  const erroAcesso = erroPerfil || responsaveisQuery.erro ? (erroPerfil instanceof Error ? erroPerfil.message : responsaveisQuery.erro instanceof Error ? responsaveisQuery.erro.message : 'Falha ao consultar autorização.') : '';
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [pendente, setPendente] = useState<DadosContrato | null>(null);
-  useEffect(() => {
-    let vivo = true;
-    void (async () => {
-      try {
-        const usuario = await consultarMeuPerfil();
-        if (!usuario.ativo || usuario.perfil !== 'ADMINISTRADOR') { if (vivo) setErro('Acesso restrito ao Administrador.'); return; }
-        const lista = await listarResponsaveis();
-        if (vivo) { setResponsaveis(lista.usuarios); setListaIncompleta(lista.incompleta); setAutorizado(true); }
-      } catch (e) { if (vivo) setErro(e instanceof Error ? e.message : 'Não foi possível validar a sessão.'); }
-      finally { if (vivo) setVerificando(false); }
-    })();
-    return () => { vivo = false; };
-  }, []);
   async function confirmarCadastro() {
     if (!pendente || salvando) return;
     setErro(''); setSalvando(true);
     try {
-      const criado = await criarContrato(pendente);
+      const criado = await criar(pendente);
       setPendente(null);
       router.push(`/contratos/${encodeURIComponent(criado.id)}`);
     } catch (e) {
@@ -46,7 +38,7 @@ export default function NovoContratoPage() {
   }
   return <AreaContratos titulo="Cadastrar contrato">
     <LinkVoltar href="/contratos">Voltar aos contratos</LinkVoltar>
-    {verificando ? <Aviso>Verificando sua autorização...</Aviso> : !autorizado ? <><h2 className="text-lg font-semibold">Acesso restrito</h2><Aviso erro>{erro}</Aviso></> : <>
+    {verificando ? <Aviso>Verificando sua autorização...</Aviso> : !autorizado || erroAcesso ? <><h2 className="text-lg font-semibold">Acesso restrito</h2><Aviso erro>{erroAcesso || "Acesso restrito ao Administrador."}</Aviso></> : <>
       {listaIncompleta && <Aviso>A lista de responsáveis foi limitada. Use apenas usuários ativos encontrados ou deixe o vínculo em branco.</Aviso>}
       {erro && <Aviso erro>{erro}</Aviso>}
       <FormularioContrato responsaveis={responsaveis} onSalvar={async dados => { setErro(''); setPendente(dados); }} salvando={salvando} />

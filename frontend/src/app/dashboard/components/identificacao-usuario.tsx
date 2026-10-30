@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { consultarMeuPerfil, type MeuPerfil } from "@/lib/admin-usuarios";
+import { useMeuPerfil } from '@/hooks/use-meu-perfil';
+import type { MeuPerfil } from '@/lib/admin-usuarios';
 
 const nomes: Record<MeuPerfil["perfil"], string> = {
   ADMINISTRADOR: "Administrador", GESTOR: "Gestor", COLABORADOR: "Colaborador",
@@ -9,19 +9,7 @@ const nomes: Record<MeuPerfil["perfil"], string> = {
 
 /** Identidade vem do servidor, não de e-mail, localStorage ou mock. */
 export function IdentificacaoUsuario() {
-  const [perfil, setPerfil] = useState<MeuPerfil | null>(null);
-  const [erro, setErro] = useState(false);
-  useEffect(() => {
-    let ativo = true;
-    const atualizar = () => {
-      void consultarMeuPerfil().then((dados) => {
-        if (ativo) { setPerfil(dados); setErro(false); }
-      }).catch(() => { if (ativo) setErro(true); });
-    };
-    atualizar();
-    window.addEventListener("perfil-atualizado", atualizar);
-    return () => { ativo = false; window.removeEventListener("perfil-atualizado", atualizar); };
-  }, []);
+  const { dados: perfil, erro } = useMeuPerfil();
   if (!perfil) return <span role="status" className="text-xs text-foreground/60">{erro ? "Perfil indisponível" : "Consultando conta..."}</span>;
   return (
     <div className="min-w-0 text-right text-xs sm:text-sm" aria-label="Conta autenticada">

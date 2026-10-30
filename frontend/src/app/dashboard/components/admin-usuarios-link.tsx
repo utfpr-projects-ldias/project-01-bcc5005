@@ -1,21 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { consultarMeuPerfil } from "@/lib/admin-usuarios";
+import { useMeuPerfil } from '@/hooks/use-meu-perfil';
 
 /** Menu é apenas UX: o NestJS continua responsável pela autorização real. */
 export function AdminUsuariosLink() {
-  const [administrador, setAdministrador] = useState(false);
-
-  useEffect(() => {
-    let ativo = true;
-    void consultarMeuPerfil().then((perfil) => {
-      if (ativo) setAdministrador(perfil.ativo && perfil.perfil === "ADMINISTRADOR");
-    }).catch(() => { if (ativo) setAdministrador(false); });
-    return () => { ativo = false; };
-  }, []);
-
+  const { dados: perfil } = useMeuPerfil();
+  const administrador = !!perfil?.ativo && perfil.perfil === 'ADMINISTRADOR';
   if (!administrador) return null;
   return (
     <Link href="/admin/usuarios"
