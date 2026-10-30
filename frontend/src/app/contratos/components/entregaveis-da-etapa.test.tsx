@@ -38,3 +38,14 @@ test('carregando, vazio e erro de autorizacao nunca exibem registros antigos', (
   expect(screen.getByRole('alert')).toHaveTextContent('Acesso negado');
   expect(screen.queryByRole('link')).not.toBeInTheDocument();
 });
+
+test('HU07-04: exibe cadastro somente para quem pode planejar, sem esconder listagem', () => {
+  const livre = render(<EntregaveisDaEtapa {...props} podeCriar={false} />);
+  expect(screen.queryByRole('button', { name: 'Novo entregável' })).not.toBeInTheDocument();
+  livre.rerender(<EntregaveisDaEtapa {...props} podeCriar />);
+  fireEvent.click(screen.getByRole('button', { name: 'Novo entregável' }));
+  expect(screen.getByRole('form', { name: 'Cadastrar entregável' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Cadastrando entregável' }));
+  expect(screen.queryByRole('form', { name: 'Cadastrar entregável' })).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Relatório de instalação' })).toBeInTheDocument();
+});

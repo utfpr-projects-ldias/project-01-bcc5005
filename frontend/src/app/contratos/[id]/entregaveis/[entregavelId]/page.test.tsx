@@ -1,13 +1,16 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import DetalheEntregavelPage, { ConteudoEntregavel } from './page';
 import { useMeuPerfil } from '@/hooks/use-meu-perfil';
 import { useDetalheEntregavel } from '@/hooks/use-entregaveis';
+import { useAcessoContrato } from '@/hooks/use-contratos';
 import type { Entregavel } from '@/lib/entregaveis';
 jest.mock('next/navigation', () => ({ useParams: () => ({ id: 'contrato-a', entregavelId: 'e-1' }) }));
 jest.mock('@/hooks/use-meu-perfil', () => ({ useMeuPerfil: jest.fn() }));
 jest.mock('@/hooks/use-entregaveis', () => ({ useDetalheEntregavel: jest.fn() }));
+jest.mock('@/hooks/use-contratos', () => ({ useAcessoContrato: jest.fn() }));
 const perfil = useMeuPerfil as jest.Mock;
 const detalhe = useDetalheEntregavel as jest.Mock;
+const acesso = useAcessoContrato as jest.Mock;
 const item: Entregavel = {
   id: 'e-1', contratoId: 'contrato-a', etapaId: 'etapa-a', nome: 'Manutenção mensal', codigo: 'M-01', descricao: 'Execução técnica', tipo: 'RECORRENTE',
   responsavelId: 'pessoa-1', inicioPrevisto: '2026-10-01', terminoPrevisto: '2026-12-31',
@@ -18,7 +21,7 @@ const item: Entregavel = {
     { id: 'prova-2', tipoEvidencia: 'Foto', descricao: null, obrigatoria: false }],
 };
 const estado = (dados: unknown, extra = {}) => ({ dados, erro: undefined, carregando: false, atualizar: jest.fn(), ...extra });
-beforeEach(() => { perfil.mockReturnValue(estado({ ativo: true })); detalhe.mockReturnValue(estado(item)); });
+beforeEach(() => { perfil.mockReturnValue(estado({ ativo: true })); detalhe.mockReturnValue(estado(item)); acesso.mockReturnValue(estado({ podeEditar: false })); });
 test('visao separa planejamento, criterio proximo de execucao e checklist esperado', () => {
   render(<ConteudoEntregavel item={item} />);
   expect(screen.getByRole('heading', { name: 'Manutenção mensal' })).toBeInTheDocument();
@@ -49,4 +52,18 @@ test('item de outro contrato nunca aparece e conta inativa desabilita consulta',
   view.rerender(<DetalheEntregavelPage />);
   expect(detalhe).toHaveBeenLastCalledWith('contrato-a', 'e-1', false);
   expect(screen.queryByText('Manutenção mensal')).not.toBeInTheDocument();
+});
+
+test('leitor sem permissão de edição não vê formulário de planejamento', () => {
+  render(<DetalheEntregavelPage />);
+  expect(screen.queryByRole('button', { name: 'Editar entregável' })).not.toBeInTheDocument();
+});
+test('gestor autorizado pode alternar editor no próprio botão', () => {
+  perfil.mockReturnValue(estado({ ativo: true, perfil: 'GESTOR' }));
+  acesso.mockReturnValue(estado({ podeEditar: true }));
+  render(<DetalheEntregavelPage />);
+  fireEvent.click(screen.getByRole('button', { name: 'Editar entregável' }));
+  expect(screen.getByRole('form', { name: 'Editar entregável Manutenção mensal' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Editando entregável' }));
+  expect(screen.queryByRole('form', { name: 'Editar entregável Manutenção mensal' })).not.toBeInTheDocument();
 });

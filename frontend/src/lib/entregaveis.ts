@@ -1,4 +1,6 @@
-/** HU07-03 — somente leitura do planejamento real da API HU07-02. */
+import type { DadosPlanejamentoEntregavel } from './validacao-entregavel';
+
+/** HU07-03/HU07-04 — leitura e escrita do planejamento real da API HU07-02. */
 export type TipoEntregavel = 'UNICO' | 'QUANTITATIVO' | 'RECORRENTE' | 'CONTINUO' | 'MARCO';
 export type PeriodicidadeEntregavel = 'DIARIA' | 'SEMANAL' | 'MENSAL' | 'TRIMESTRAL' | 'SEMESTRAL' | 'ANUAL';
 export const ROTULOS_TIPO: Record<TipoEntregavel, string> = {
@@ -64,3 +66,27 @@ export const detalharEntregavel = (contratoId: string, entregavelId: string, sig
 export function dataPlanejada(valor: string | null): string {
   return valor && /^\d{4}-\d{2}-\d{2}$/.test(valor) ? valor.split('-').reverse().join('/') : 'Não informada';
 }
+
+/** HU07-04 — escrita real de planejamento; o NestJS continua autoridade de permissão. */
+async function alterarEntregavel<T>(caminho: string, metodo: 'POST' | 'PATCH', dados: DadosPlanejamentoEntregavel): Promise<T> {
+  let resposta: Response;
+  try {
+    resposta = await fetch(`${API}${caminho}`, { method: metodo, credentials: 'include', cache: 'no-store',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify(dados) });
+  } catch { throw new ErroEntregavel(0, 'Sem conexão com a API. Seus dados permanecem no formulário.'); }
+  if (!resposta.ok) {
+    const mensagens: Record<number, string> = {
+      400: 'Os parâmetros informados não foram aceitos pelo backend. Revise campos e vínculo do responsável.',
+      401: 'Sua sessão expirou. Entre novamente.',
+      403: 'Você não tem permissão de planejamento neste contrato.',
+      404: 'Contrato, etapa ou entregável não encontrado neste vínculo.',
+      409: 'Conflito de replanejamento: há ocorrências vinculadas ou dados concorrentes. Nenhum registro foi apagado. Atualize antes de tentar novamente.',
+    };
+    throw new ErroEntregavel(resposta.status, mensagens[resposta.status] ?? 'Falha ao salvar o planejamento. Tente novamente.');
+  }
+  return await resposta.json() as T;
+}
+export const criarEntregavel = (contratoId: string, dados: DadosPlanejamentoEntregavel) =>
+  alterarEntregavel<Entregavel>(base(contratoId), 'POST', dados);
+export const editarEntregavel = (contratoId: string, id: string, dados: DadosPlanejamentoEntregavel) =>
+  alterarEntregavel<Entregavel>(`${base(contratoId)}/${encodeURIComponent(id)}`, 'PATCH', dados);

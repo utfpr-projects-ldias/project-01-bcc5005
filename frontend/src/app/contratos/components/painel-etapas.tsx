@@ -142,7 +142,7 @@ export function PainelEtapas({ contratoId, habilitado, podeGerenciar }: {
         </p>}
         <EntregaveisDaEtapa contratoId={contratoId} etapaId={etapa.id}
           dados={entregaveisQuery.dados} erro={entregaveisQuery.erro}
-          carregando={entregaveisQuery.carregando} atualizar={entregaveisQuery.atualizar} />
+          carregando={entregaveisQuery.carregando} atualizar={entregaveisQuery.atualizar} podeCriar={podeEscrever} />
         {podeEscrever && editor === etapa.id && itemEditando && <div id={`formulario-etapa-${etapa.id}`} className="etapa-form-expandido mt-4">
           <FormularioEtapa key={etapa.id} inicial={itemEditando} onSalvar={salvar} onCancelar={() => setEditor(null)}
             onSalvandoMudou={setSalvandoFormulario} />

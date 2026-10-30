@@ -1,8 +1,13 @@
 'use client';
 import { useParams } from 'next/navigation';
+import { useState } from 'react';
 import { LinkVoltar } from '@/app/components/link-voltar';
 import { AreaContratos, Aviso } from '@/app/contratos/components/area-contratos';
 import { useMeuPerfil } from '@/hooks/use-meu-perfil';
+import { useAcessoContrato } from '@/hooks/use-contratos';
+import { FormularioEntregavel } from '@/app/contratos/components/formulario-entregavel';
+import { editarEntregavel } from '@/lib/entregaveis';
+import type { DadosPlanejamentoEntregavel } from '@/lib/validacao-entregavel';
 import { useDetalheEntregavel } from '@/hooks/use-entregaveis';
 import { dataPlanejada, ROTULOS_PERIODICIDADE, ROTULOS_TIPO, type Entregavel } from '@/lib/entregaveis';
 
@@ -64,11 +69,23 @@ export function ConteudoEntregavel({ item }: { item: Entregavel }) {
 }
 export default function DetalheEntregavelPage() {
   const { id: contratoId, entregavelId } = useParams<{ id: string; entregavelId: string }>();
+  const [editando, setEditando] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [sucesso, setSucesso] = useState('');
   const perfil = useMeuPerfil();
   const habilitado = Boolean(perfil.dados?.ativo && !perfil.erro);
   const consulta = useDetalheEntregavel(contratoId, entregavelId, habilitado);
+  const acesso = useAcessoContrato(contratoId, habilitado);
+  const podeEditar = habilitado && !acesso.erro && !!acesso.dados?.podeEditar &&
+    ['ADMINISTRADOR', 'GESTOR'].includes(perfil.dados?.perfil ?? '');
+  async function salvar(dados: DadosPlanejamentoEntregavel) {
+    await editarEntregavel(contratoId, entregavelId, dados);
+    setEditando(false); setSucesso('Planejamento atualizado com sucesso.');
+    // Revalidar também a lista ao retornar ao contrato, sem confiar em cache antigo.
+    void consulta.atualizar().catch(() => {});
+  }
   // Nao exibir dados de cache se a identidade perdeu acesso ou se a API negou a consulta.
-  const erro = perfil.erro || consulta.erro;
+  const erro = perfil.erro || consulta.erro || acesso.erro;
   const item = !erro && habilitado && consulta.dados?.contratoId === contratoId &&
     consulta.dados?.id === entregavelId ? consulta.dados : undefined;
   return <AreaContratos titulo="Detalhe do entregável">
@@ -77,6 +94,19 @@ export default function DetalheEntregavelPage() {
     {Boolean(erro) && <Aviso erro>{erro instanceof Error ? erro.message : 'Falha na consulta do entregável.'}</Aviso>}
     {!perfil.carregando && !erro && !habilitado && <Aviso erro>Conta sem autorização para consultar entregáveis.</Aviso>}
     {!perfil.carregando && habilitado && !consulta.carregando && !erro && !item && <Aviso erro>Entregável não encontrado neste contrato.</Aviso>}
-    {item && <ConteudoEntregavel item={item} />}
+    {sucesso && <p role="status" className="rounded-lg border border-brand-green/40 p-3 text-sm text-brand-neon">{sucesso}</p>}
+    {item && podeEditar && <button type="button" disabled={salvando} aria-expanded={editando}
+      aria-controls="edicao-entregavel" onClick={() => { setEditando((anterior) => !anterior); setSucesso(''); }}
+      className="inline-flex items-center gap-2 rounded-lg border border-brand-green/50 px-4 py-2 text-sm font-semibold text-brand-neon disabled:opacity-50">
+      {editando ? 'Editando entregável' : 'Editar entregável'}
+      <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8"
+        className={`h-4 w-4 transition-transform duration-300 motion-reduce:transition-none ${editando ? 'rotate-180' : ''}`}>
+        <path d="m5 7.5 5 5 5-5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+    </button>}
+    {item && podeEditar && editando && <div id="edicao-entregavel" className="etapa-form-expandido">
+      <FormularioEntregavel key={item.id} etapaId={item.etapaId} inicial={item} onSalvar={salvar}
+        onCancelar={() => setEditando(false)} onSalvandoMudou={setSalvando} />
+    </div>}
+    {item && !editando && <ConteudoEntregavel item={item} />}
   </AreaContratos>;
 }
