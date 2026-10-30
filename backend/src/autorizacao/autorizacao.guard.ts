@@ -11,13 +11,12 @@ import type { Response } from 'express';
 import { UsuariosService } from '../usuarios/usuarios.service.js';
 import { CHAVE_POLITICA, type Politica } from './politica.decorator.js';
 import { PoliticaAcessoService } from './politica-acesso.service.js';
+import { politicaOperacional } from './politicas-operacionais.js';
+import { ResolverEscopoContratoService } from './resolver-escopo-contrato.service.js';
 import { SessaoSuperTokensService } from './sessao-supertokens.service.js';
 import type { RequisicaoAutorizada } from './usuario-autenticado.js';
 
-/**
- * Global: políticas explícitas em rotas de domínio + default-deny para namespaces
- * reservados. /auth continua na TEC07-04; /protected/ping permanece técnico.
- */
+/** Guard global fail-closed: a autorização real sempre ocorre no backend. */
 @Injectable()
 export class AutorizacaoGuard implements CanActivate {
   constructor(
@@ -25,6 +24,7 @@ export class AutorizacaoGuard implements CanActivate {
     private readonly sessoes: SessaoSuperTokensService,
     private readonly usuarios: UsuariosService,
     private readonly politicaAcesso: PoliticaAcessoService,
+    private readonly escopos: ResolverEscopoContratoService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -34,12 +34,8 @@ export class AutorizacaoGuard implements CanActivate {
     const politica = this.reflector.getAllAndOverride<Politica>(CHAVE_POLITICA, [
       context.getHandler(), context.getClass(),
     ]);
-    // Nenhum controller sob /contratos ou /admin/usuarios fica público por omissão.
     const publica = /^\/$/i.test(req.path) || /^\/auth(?!\/me(?:\/|$))(?:\/|$)/i.test(req.path) || /^\/protected\/ping(?:\/|$)/i.test(req.path);
     if (!politica && publica) return true;
-    // Todo novo controller (etapas, evidências, documentos etc.) é fechado por padrão.
-    // Mesmo uma rota interna sem decorator precisa de sessão ativa e falha 403.
-
 
     const supertokensUserId = await this.sessoes.identificar(req, res);
     const usuario = await this.usuarios.buscarAtivoPorSupertokensId(supertokensUserId);
@@ -54,17 +50,29 @@ export class AutorizacaoGuard implements CanActivate {
 
     if (!politica) throw new ForbiddenException('Rota interna sem política de autorização');
 
-    // ID obrigatoriamente obtido de parâmetro de rota, nunca do body/query.
+    const operacao = politicaOperacional(politica.acao);
+    if (operacao) {
+      const escopo = politica.escopoOperacional;
+      // Rota operativa sem escopo válido ou com recurso incompatível: fechada.
+      if (!escopo || escopo.tipo !== operacao.escopo ||
+        (escopo.tipo === 'recurso' && escopo.recurso !== operacao.recurso)) {
+        throw new ForbiddenException('Política operacional inválida');
+      }
+      const contratoRaiz = await this.escopos.resolver(escopo, req.params ?? {});
+      if (!contratoRaiz) throw new NotFoundException('Recurso não encontrado');
+      const permitido = await this.politicaAcesso.permitido(req.usuarioDominio, politica, contratoRaiz);
+      if (!permitido) throw new NotFoundException('Recurso não encontrado');
+      return true;
+    }
+
+    // Compatibilidade com as operações de Contratos/Usuários já implementadas.
     const valorContrato = politica.parametroContrato
       ? req.params?.[politica.parametroContrato]
       : undefined;
-    const contratoId = typeof valorContrato === 'string'
-      ? valorContrato
-      : undefined;
+    const contratoId = typeof valorContrato === 'string' ? valorContrato : undefined;
     const permitido = await this.politicaAcesso.permitido(req.usuarioDominio, politica, contratoId);
     if (!permitido) {
       if (politica.acao === 'contratos:visualizar' || politica.acao === 'contratos:editar') {
-        // Evita confirmar a existência de ID de contrato alheio (RNF-02).
         throw new NotFoundException('Contrato não encontrado');
       }
       throw new ForbiddenException('Operação não autorizada');
