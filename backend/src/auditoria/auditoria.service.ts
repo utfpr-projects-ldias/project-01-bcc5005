@@ -13,6 +13,21 @@ export type AlteracaoAuditavel = {
   dadosPosteriores?: Record<string, unknown> | null;
 };
 
+/**
+ * Contrato de integração v1 — implementado exclusivamente pelo módulo proprietário.
+ * O EntityManager é o da transação que grava o evento; consultar a FK persistida,
+ * não um contratoId fornecido pelo DTO/cliente. Retornar null se o ID não existir.
+ */
+export type TipoContextoExtensivel = Exclude<
+  TipoEntidadeAuditada, 'CONTRATO' | 'USUARIO' | 'ETAPA'
+>;
+export type ResolvedorContextoAuditoria = (
+  manager: EntityManager,
+  entidadeId: string,
+) => Promise<string | null>;
+
+const UUID_CONTRATO = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 // Os snapshots são de campos de negócio selecionados pelo serviço chamador.
 // Nunca enviar o corpo HTTP bruto, identidade enviada pelo navegador ou credenciais.
 const CAMPO_SENSIVEL = /senha|password|token|secret|api.?key|cookie|authorization|credencial|hash|session|sessao|chave.?privada|private.?key/i;
@@ -66,7 +81,32 @@ function validarEvento(evento: AlteracaoAuditavel): void {
 
 @Injectable()
 export class AuditoriaService {
+  private readonly resolvedoresContexto = new Map<
+    TipoContextoExtensivel, ResolvedorContextoAuditoria
+  >();
+
   constructor(private readonly dataSource: DataSource) {}
+
+  /**
+   * Cada HU/TEC registra UM resolvedor para sua entidade no onModuleInit.
+   * Tipos legados e Etapa possuem resolução própria e não podem ser substituídos.
+   * O registro falha se dois módulos tentarem se declarar donos do mesmo tipo.
+   */
+  registrarResolvedorContexto(
+    tipo: TipoContextoExtensivel,
+    resolvedor: ResolvedorContextoAuditoria,
+  ): void {
+    const permitidos: readonly string[] = [
+      'ENTREGAVEL', 'OCORRENCIA', 'ATIVIDADE', 'DOCUMENTO',
+    ];
+    if (!permitidos.includes(tipo) || typeof resolvedor !== 'function') {
+      throw new Error('Tipo ou resolvedor de auditoria inválido');
+    }
+    if (this.resolvedoresContexto.has(tipo)) {
+      throw new Error(`Resolvedor de auditoria já registrado: ${tipo}`);
+    }
+    this.resolvedoresContexto.set(tipo, resolvedor);
+  }
 
   /**
    * Forma recomendada para HU05-02: alteração de domínio + evento na MESMA transação.
@@ -114,7 +154,8 @@ export class AuditoriaService {
    * CONTRATO: o ID vem da própria entidade persistida pelo chamador na transação.
    * ETAPA: resolver pela FK real da Etapa já persistida usando o MESMO manager.
    * USUARIO: não pertence a um contrato único, portanto NULL.
-   * Demais entidades: NULL até suas relações persistidas existirem (HU07/08/09/TEC08).
+   * Demais entidades: NULL até o módulo dono registrar um resolvedor persistido.
+   * Com resolvedor, NULL/ID inválido aborta a transação.
    * É proibido preencher esse campo com DTO, querystring ou chave estrangeira presumida.
    */
   private async resolverContratoRaiz(
@@ -122,15 +163,28 @@ export class AuditoriaService {
     evento: AlteracaoAuditavel,
   ): Promise<string | null> {
     if (evento.entidadeTipo === 'CONTRATO') return evento.entidadeId;
-    if (evento.entidadeTipo !== 'ETAPA') return null;
-    const etapa = await manager.getRepository(Etapa).findOne({
-      where: { id: evento.entidadeId },
-      select: { contratoId: true },
-    });
-    if (!etapa?.contratoId) {
-      throw new Error('Etapa auditada não encontrada no banco para obter contrato raiz');
+    if (evento.entidadeTipo === 'USUARIO') return null;
+    if (evento.entidadeTipo === 'ETAPA') {
+      const etapa = await manager.getRepository(Etapa).findOne({
+        where: { id: evento.entidadeId },
+        select: { contratoId: true },
+      });
+      if (!etapa?.contratoId) {
+        throw new Error('Etapa auditada não encontrada no banco para obter contrato raiz');
+      }
+      return etapa.contratoId;
     }
-    return etapa.contratoId;
+
+    // Compatibilidade: até o módulo dono existir, eventos antigos dos tipos
+    // operacionais podem continuar sem contexto (NULL). Quando houver adapter,
+    // falhas/retornos inválidos bloqueiam a transação para impedir contexto forjado.
+    const resolvedor = this.resolvedoresContexto.get(evento.entidadeTipo);
+    if (!resolvedor) return null;
+    const contratoRaiz = await resolvedor(manager, evento.entidadeId);
+    if (typeof contratoRaiz !== 'string' || !UUID_CONTRATO.test(contratoRaiz)) {
+      throw new Error('Recurso auditado sem contrato raiz persistido válido');
+    }
+    return contratoRaiz;
   }
 
   private validarAtor(ator: UsuarioAutenticado): void {
