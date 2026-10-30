@@ -7,6 +7,7 @@ import Session from 'supertokens-web-js/recipe/session';
 const mockReplace = jest.fn();
 jest.mock('next/navigation', () => ({ usePathname: jest.fn(), useRouter: () => ({ replace: mockReplace }) }));
 jest.mock('supertokens-web-js/recipe/session', () => ({ __esModule: true, default: { signOut: jest.fn() } }));
+jest.mock('./protecao-sessao-interna', () => ({ ProtecaoSessaoInterna: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 jest.mock('./menu-modulos', () => ({
   MenuLateral: () => <aside aria-label="Navegação principal" data-testid="menu-estavel">Menu lateral</aside>,
   MenuMobile: () => <nav aria-label="Navegação móvel">Menu móvel</nav>,
@@ -74,4 +75,11 @@ test('falha ao sair restaura o botão e mostra mensagem, sem travar a sessão', 
   expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível sair');
   expect(screen.getByRole('button', { name: 'Sair' })).toBeEnabled();
   expect(mockReplace).not.toHaveBeenCalled();
+});
+
+test('cabecalho fixo e opaco nao deixa textos de paginas longas visiveis atras dele', () => {
+  const { container } = renderComConsultas(<EstruturaInterna><p>Contrato longo</p></EstruturaInterna>);
+  const header = container.querySelector('header');
+  expect(header).toHaveClass('bg-background');
+  expect(header).not.toHaveClass('bg-background/95');
 });

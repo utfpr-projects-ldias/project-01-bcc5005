@@ -1,10 +1,12 @@
 import { render, screen } from '@testing-library/react';
 import DetalheContratoPage from './page';
+import { useConsulta } from '@/app/components/provedor-consultas';
 import { useMeuPerfil } from '@/hooks/use-meu-perfil';
 import { useContrato, useAcessoContrato } from '@/hooks/use-contratos';
 import type { Contrato } from '@/lib/contratos';
 
 jest.mock('next/navigation', () => ({ useParams: () => ({ id: 'contrato-real' }) }));
+jest.mock('@/app/components/provedor-consultas', () => ({ useConsulta: jest.fn() }));
 jest.mock('@/hooks/use-meu-perfil', () => ({ useMeuPerfil: jest.fn() }));
 jest.mock('@/hooks/use-contratos', () => ({ useContrato: jest.fn(), useAcessoContrato: jest.fn() }));
 jest.mock('../components/painel-etapas', () => ({
@@ -22,6 +24,7 @@ const contrato: Contrato = {
 };
 const retorno = (dados: unknown) => ({ dados, carregando: false, erro: undefined, atualizando: false });
 beforeEach(() => {
+  (useConsulta as jest.Mock).mockReturnValue(retorno(undefined));
   perfil.mockReturnValue(retorno({ ativo: true, perfil: 'GESTOR' }));
   contratoQuery.mockReturnValue(retorno(contrato));
   acessoQuery.mockReturnValue(retorno({ podeEditar: true }));
@@ -46,4 +49,24 @@ test('HU06-03: sem acesso ao contrato não expõe o painel nem registros', () =>
   render(<DetalheContratoPage />);
   expect(screen.queryByTestId('painel-etapas')).not.toBeInTheDocument();
   expect(screen.getByText('Acesso negado')).toBeInTheDocument();
+});
+
+test('administrador consulta nome do responsavel sem revelar API administrativa a gestor', () => {
+  perfil.mockReturnValue(retorno({ ativo: true, perfil: 'ADMINISTRADOR' }));
+  contratoQuery.mockReturnValue(retorno({ ...contrato, responsavelInternoId: 'funcionario-1' }));
+  (useConsulta as jest.Mock).mockReturnValue(retorno({ nome: 'Maria Gestora', email: 'gestora@example.test' }));
+  render(<DetalheContratoPage />);
+  expect(screen.getByText('Maria Gestora — gestora@example.test')).toBeInTheDocument();
+  expect(useConsulta).toHaveBeenCalledWith(
+    ['contratos', 'responsavel', 'funcionario-1'], expect.any(Function),
+    expect.objectContaining({ habilitada: true }),
+  );
+});
+test('consulta administrativa desabilitada para Gestor no detalhe', () => {
+  contratoQuery.mockReturnValue(retorno({ ...contrato, responsavelInternoId: 'funcionario-1' }));
+  render(<DetalheContratoPage />);
+  expect(useConsulta).toHaveBeenCalledWith(
+    ['contratos', 'responsavel', 'funcionario-1'], expect.any(Function),
+    expect.objectContaining({ habilitada: false }),
+  );
 });

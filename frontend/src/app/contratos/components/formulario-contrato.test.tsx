@@ -59,3 +59,17 @@ test('limites de caracteres e mensagens explicativas de modo de cálculo', () =>
   expect(screen.getByLabelText('Descrição')).toHaveAttribute('maxLength', '3000');
   expect(screen.getByLabelText('Observações')).toHaveAttribute('maxLength', '2000');
 });
+
+test('edicao nao reutiliza silenciosamente termino antigo em duracao ambigua', async () => {
+  const salvar = jest.fn().mockResolvedValue(undefined);
+  render(<FormularioContrato inicial={{ ...inicial, inicioVigencia: '2026-01-31', terminoVigencia: '2027-01-30' }} responsaveis={[]} onSalvar={salvar} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Duração em meses' }));
+  fireEvent.change(screen.getByLabelText('Duração em meses *'), { target: { value: '1' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+  expect(await screen.findByText(/Confirme explicitamente o término/)).toBeInTheDocument();
+  expect(salvar).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByLabelText(/Confirmo a data de término explícita/));
+  fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+  await waitFor(() => expect(salvar).toHaveBeenCalledTimes(1));
+  expect(salvar.mock.calls[0][0].terminoVigencia).toBe('2027-01-30');
+});

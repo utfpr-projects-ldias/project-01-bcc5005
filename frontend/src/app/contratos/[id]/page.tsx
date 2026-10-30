@@ -1,6 +1,8 @@
 'use client';
 
 import { LinkVoltar } from '@/app/components/link-voltar';
+import { useConsulta } from '@/app/components/provedor-consultas';
+import { buscarFuncionarioPorId } from '@/lib/admin-usuarios';
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -36,6 +38,17 @@ export default function DetalheContratoPage() {
   const carregando = verificando || (!!perfil?.ativo && (contratoQuery.carregando || acessoQuery.carregando));
   const contrato = !erroConsulta && perfil?.ativo ? contratoQuery.dados : undefined;
   const podeEditar = !erroConsulta && !!acessoQuery.dados?.podeEditar;
+  const responsavelId = contrato?.responsavelInternoId ?? null;
+  // Administradores podem consultar o nome na API ja existente; outros perfis
+  // nao tentam acessar /admin/usuarios nem recebem dados que lhes sao negados.
+  const responsavelQuery = useConsulta(
+    ['contratos', 'responsavel', responsavelId ?? 'nenhum'],
+    () => buscarFuncionarioPorId(responsavelId!),
+    { habilitada: Boolean(responsavelId && perfil?.ativo && perfil.perfil === 'ADMINISTRADOR'), validadeMs: 30_000 },
+  );
+  const responsavelVisivel = responsavelQuery.dados
+    ? `${responsavelQuery.dados.nome?.trim() || 'Nome não informado'} — ${responsavelQuery.dados.email}`
+    : responsavelId;
   return <AreaContratos titulo="Detalhes do contrato">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <LinkVoltar href="/contratos">Voltar aos contratos</LinkVoltar>
@@ -61,7 +74,7 @@ export default function DetalheContratoPage() {
         ]} />
       <GrupoDados titulo="Responsáveis e observações" descricao="O responsável interno é uma referência administrativa; acessos por contrato são concedidos na Administração."
         campos={[
-          ['Responsável interno (identificador)', contrato.responsavelInternoId],
+          ['Responsável interno', responsavelVisivel],
           ['Fiscal/gestor público (informativo)', contrato.fiscalGestor], ['Observações', contrato.observacoes],
         ]} />
       <PainelEtapas key={contrato.id} contratoId={contrato.id} habilitado={!!perfil?.ativo}

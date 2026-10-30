@@ -1,0 +1,12 @@
+{
+  "responsavel": "",
+  "data": "",
+  "contratoExistente": false,
+  "desktop": false,
+  "mobile": false,
+  "teclado": false,
+  "validacaoGestor": false,
+  "validacaoColaborador": false,
+  "sessaoExpirada": false,
+  "observacoes": "Preencher após usar a aplicação real. Não alterar para true sem evidência."
+}

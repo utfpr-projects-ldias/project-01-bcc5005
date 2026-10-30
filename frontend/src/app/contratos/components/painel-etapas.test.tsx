@@ -117,3 +117,49 @@ describe('HU06-03 — painel no contrato', () => {
     expect(screen.getByText('Sessão expirada')).toBeInTheDocument();
   });
 });
+
+test('botões de criação e edição alternam expandido/recolhido no próprio botão, sem salvar', () => {
+  render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
+  const novo = screen.getByRole('button', { name: 'Nova etapa' });
+  expect(novo).toHaveAttribute('aria-expanded', 'false');
+  fireEvent.click(novo);
+  const criando = screen.getByRole('button', { name: 'Cadastrando etapa' });
+  expect(criando).toBeEnabled();
+  expect(criando).toHaveAttribute('aria-expanded', 'true');
+  expect(criando.querySelector('svg')).not.toBeNull();
+  expect(document.getElementById('formulario-nova-etapa')).toHaveClass('etapa-form-expandido');
+  fireEvent.change(screen.getByLabelText('Nome *'), { target: { value: 'Rascunho não salvo' } });
+  fireEvent.click(criando);
+  expect(document.getElementById('formulario-nova-etapa')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Nova etapa' })).toHaveAttribute('aria-expanded', 'false');
+  fireEvent.click(screen.getByRole('button', { name: 'Nova etapa' }));
+  expect(screen.getByLabelText('Nome *')).toHaveValue('');
+  fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+  fireEvent.click(screen.getByRole('button', { name: 'Editar etapa Planejamento' }));
+  const editando = screen.getByRole('button', { name: 'Editando etapa Planejamento' });
+  expect(editando).toBeEnabled();
+  expect(editando).toHaveAttribute('aria-expanded', 'true');
+  expect(editando.querySelector('svg')).not.toBeNull();
+  expect(document.getElementById('formulario-etapa-etapa-1')).toHaveClass('etapa-form-expandido');
+  fireEvent.click(editando);
+  expect(document.getElementById('formulario-etapa-etapa-1')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Editar etapa Planejamento' })).toHaveAttribute('aria-expanded', 'false');
+  expect(criar).not.toHaveBeenCalled();
+  expect(editar).not.toHaveBeenCalled();
+});
+
+test('durante salvamento, não permite recolher ou trocar de formulário', async () => {
+  let concluir!: (valor: Etapa) => void;
+  editar.mockImplementationOnce(() => new Promise<Etapa>((resolve) => { concluir = resolve; }));
+  render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
+  fireEvent.click(screen.getByRole('button', { name: 'Editar etapa Planejamento' }));
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Salvar etapa' })); });
+  expect(screen.getByRole('button', { name: 'Editando etapa Planejamento' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Nova etapa' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Cancelar' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Atualizar etapas' })).toBeDisabled();
+  await act(async () => { concluir(base); });
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Editando etapa Planejamento' })).not.toBeInTheDocument());
+  expect(screen.getByRole('button', { name: 'Editar etapa Planejamento' })).toBeEnabled();
+});
