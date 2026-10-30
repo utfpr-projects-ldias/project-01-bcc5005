@@ -4,9 +4,9 @@ import { LinkVoltar } from '@/app/components/link-voltar';
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { consultarMeuPerfil } from '@/lib/admin-usuarios';
-import { buscarContrato, consultarAcessoContrato, dataCivil, MODOS, STATUS, type Contrato } from '@/lib/contratos';
+import { useMeuPerfil } from '@/hooks/use-meu-perfil';
+import { useContrato, useAcessoContrato } from '@/hooks/use-contratos';
+import { dataCivil, MODOS, STATUS } from '@/lib/contratos';
 import { AreaContratos, Aviso } from '../components/area-contratos';
 
 type Par = [titulo: string, valor: string | null | undefined];
@@ -27,24 +27,14 @@ function GrupoDados({ titulo, descricao, campos }: { titulo: string; descricao?:
 
 export default function DetalheContratoPage() {
   const { id } = useParams<{ id: string }>();
-  const [contrato, setContrato] = useState<Contrato | null>(null);
-  const [podeEditar, setPodeEditar] = useState(false);
-  const [carregando, setCarregando] = useState(true);
-  const [erro, setErro] = useState('');
-  useEffect(() => {
-    let vivo = true;
-    void (async () => {
-      try {
-        const perfil = await consultarMeuPerfil();
-        if (!perfil.ativo) throw new Error('Conta inativa');
-        const [c, acesso] = await Promise.all([buscarContrato(id), consultarAcessoContrato(id)]);
-        if (vivo) { setContrato(c); setPodeEditar(acesso.podeEditar); }
-      } catch (e) { if (vivo) setErro(e instanceof Error ? e.message : 'Não foi possível consultar o contrato.'); }
-      finally { if (vivo) setCarregando(false); }
-    })();
-    return () => { vivo = false; };
-  }, [id]);
-
+  const { dados: perfil, carregando: verificando, erro: erroPerfil } = useMeuPerfil();
+  const contratoQuery = useContrato(id, !!perfil?.ativo);
+  const acessoQuery = useAcessoContrato(id, !!perfil?.ativo);
+  const erroConsulta = erroPerfil || contratoQuery.erro || acessoQuery.erro;
+  const erro = erroConsulta instanceof Error ? erroConsulta.message : erroConsulta ? 'Não foi possível consultar o contrato.' : '';
+  const carregando = verificando || (!!perfil?.ativo && (contratoQuery.carregando || acessoQuery.carregando));
+  const contrato = !erroConsulta && perfil?.ativo ? contratoQuery.dados : undefined;
+  const podeEditar = !erroConsulta && !!acessoQuery.dados?.podeEditar;
   return <AreaContratos titulo="Detalhes do contrato">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <LinkVoltar href="/contratos">Voltar aos contratos</LinkVoltar>

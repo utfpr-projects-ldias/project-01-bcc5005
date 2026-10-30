@@ -1,4 +1,5 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { renderComConsultas } from '@/test-utils';
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import AdministracaoUsuariosPage from "./page";
 import CadastrarFuncionarioPage from "./novo/page";
 import { PainelAdministracao } from "./components/painel-administracao";
@@ -48,7 +49,7 @@ beforeEach(() => {
 });
 
 test("listagem exibe ação de cadastro ao lado de atualizar, sem formulário", async () => {
-  render(<AdministracaoUsuariosPage />);
+  renderComConsultas(<AdministracaoUsuariosPage />);
   const lista = await screen.findByRole("region", { name: "Funcionários" });
   expect(within(lista).getByText("gestor@exemplo.com")).toBeInTheDocument();
   expect(paginados).toHaveBeenCalled();
@@ -59,7 +60,7 @@ test("listagem exibe ação de cadastro ao lado de atualizar, sem formulário", 
 });
 
 test("editar é link para página própria", async () => {
-  render(<AdministracaoUsuariosPage />);
+  renderComConsultas(<AdministracaoUsuariosPage />);
   const lista = await screen.findByRole("region", { name: "Funcionários" });
   expect(within(lista).getByRole("link", { name: "Editar gestor@exemplo.com" }))
     .toHaveAttribute("href", "/admin/usuarios/b/editar");
@@ -68,27 +69,27 @@ test("editar é link para página própria", async () => {
 
 test("Gestor não acessa listagem", async () => {
   eu.mockResolvedValue({ ...admin, perfil: "GESTOR" });
-  render(<AdministracaoUsuariosPage />);
+  renderComConsultas(<AdministracaoUsuariosPage />);
   expect(await screen.findByRole("heading", { name: "Acesso restrito" })).toBeInTheDocument();
   expect(paginados).not.toHaveBeenCalled();
 });
 
 test("sessão expirada redireciona sem mostrar dados", async () => {
   eu.mockRejectedValue(new ErroApi(401, "Sessão expirada"));
-  render(<AdministracaoUsuariosPage />);
+  renderComConsultas(<AdministracaoUsuariosPage />);
   await waitFor(() => expect(substituir).toHaveBeenCalledWith("/login"));
   expect(screen.queryByText("gestor@exemplo.com")).not.toBeInTheDocument();
 });
 
 test("abas ativos e arquivados usam filtro servidor", async () => {
-  render(<AdministracaoUsuariosPage />);
+  renderComConsultas(<AdministracaoUsuariosPage />);
   await screen.findByText("gestor@exemplo.com");
   fireEvent.click(screen.getByRole("button", { name: /Arquivados \(/ }));
   await waitFor(() => expect(paginados).toHaveBeenCalledWith(expect.objectContaining({ ativo: false, pagina: 1 })));
 });
 
 test("cadastrar possui formulário isolado e valida senha antes da API", async () => {
-  render(<CadastrarFuncionarioPage />);
+  renderComConsultas(<CadastrarFuncionarioPage />);
   await screen.findByRole("heading", { name: "Nova conta de funcionário", level: 2 });
   expect(screen.queryByRole("region", { name: "Funcionários" })).not.toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("Nome completo"), { target: { value: gestor.nome } });
@@ -102,7 +103,7 @@ test("cadastrar possui formulário isolado e valida senha antes da API", async (
 
 test("cadastro válido grava via API e retorna à listagem", async () => {
   criar.mockResolvedValue(gestor);
-  render(<CadastrarFuncionarioPage />);
+  renderComConsultas(<CadastrarFuncionarioPage />);
   await screen.findByRole("heading", { name: "Nova conta de funcionário", level: 2 });
   fireEvent.change(screen.getByLabelText("Nome completo"), { target: { value: gestor.nome } });
   fireEvent.change(screen.getByLabelText("E-mail"), { target: { value: "GESTOR@EXEMPLO.COM" } });
@@ -114,7 +115,7 @@ test("cadastro válido grava via API e retorna à listagem", async () => {
 });
 
 test("edição abre por UUID consultando API individual, mesmo fora das 100 primeiras contas", async () => {
-  render(<PainelAdministracao vista="edicao" idEdicao="b" />);
+  renderComConsultas(<PainelAdministracao vista="edicao" idEdicao="b" />);
   expect(await screen.findByRole("heading", { name: /Conta de Gestor de Teste/ })).toBeInTheDocument();
   expect(porId).toHaveBeenCalledWith("b");
   expect(paginados).not.toHaveBeenCalled();
@@ -124,7 +125,7 @@ test("edição abre por UUID consultando API individual, mesmo fora das 100 prim
 
 test("edição salva o PATCH e permanece na página para gerenciar credenciais", async () => {
   atualizar.mockResolvedValue({ ...gestor, perfil: "COLABORADOR", ativo: false });
-  render(<PainelAdministracao vista="edicao" idEdicao="b" />);
+  renderComConsultas(<PainelAdministracao vista="edicao" idEdicao="b" />);
   await screen.findByLabelText("Perfil de acesso");
   fireEvent.change(screen.getByLabelText("Perfil de acesso"), { target: { value: "COLABORADOR" } });
   fireEvent.click(screen.getByRole("button", { name: "Salvar dados da conta" }));
@@ -134,7 +135,7 @@ test("edição salva o PATCH e permanece na página para gerenciar credenciais",
 
 test("editar Administrador permite somente o próprio nome", async () => {
   porId.mockResolvedValue(admin);
-  render(<PainelAdministracao vista="edicao" idEdicao="a" />);
+  renderComConsultas(<PainelAdministracao vista="edicao" idEdicao="a" />);
   await screen.findByLabelText("Nome completo");
   expect(screen.queryByLabelText("Perfil de acesso")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Novo e-mail")).not.toBeInTheDocument();
@@ -143,7 +144,7 @@ test("editar Administrador permite somente o próprio nome", async () => {
 test("edição de credenciais não usa o PATCH de domínio", async () => {
   atualizarEmail.mockResolvedValue({ ...gestor, email: "novo@exemplo.com" });
   redefinirSenha.mockResolvedValue(undefined);
-  render(<PainelAdministracao vista="edicao" idEdicao="b" />);
+  renderComConsultas(<PainelAdministracao vista="edicao" idEdicao="b" />);
   await screen.findByRole("heading", { name: /Conta de Gestor de Teste/ });
   fireEvent.click(screen.getByText("Alterar e-mail", { exact: false, selector: "summary" }));
   fireEvent.change(screen.getByLabelText("Novo e-mail"), { target: { value: "novo@exemplo.com" } });
@@ -158,7 +159,7 @@ test("edição de credenciais não usa o PATCH de domínio", async () => {
 });
 
 test("edição mantém retorno para lista e ações próprias sem recriar a navegação", async () => {
-  render(<PainelAdministracao vista="edicao" idEdicao="b" />);
+  renderComConsultas(<PainelAdministracao vista="edicao" idEdicao="b" />);
   await screen.findByRole("heading", { name: /Conta de Gestor de Teste/ });
   expect(screen.queryByRole("complementary", { name: "Navegação principal" })).not.toBeInTheDocument();
   expect(screen.queryByRole("navigation", { name: "Navegação móvel" })).not.toBeInTheDocument();
@@ -168,7 +169,7 @@ test("edição mantém retorno para lista e ações próprias sem recriar a nave
 
 test("arquivamento ainda exige confirmação visual simples", async () => {
   atualizar.mockResolvedValue({ ...gestor, ativo: false });
-  render(<AdministracaoUsuariosPage />);
+  renderComConsultas(<AdministracaoUsuariosPage />);
   await screen.findByText("gestor@exemplo.com");
   fireEvent.click(screen.getByRole("button", { name: "Arquivar" }));
   const dialogo = screen.getByRole("dialog", { name: "Arquivar funcionário?" });
@@ -179,11 +180,11 @@ test("arquivamento ainda exige confirmação visual simples", async () => {
 
 
 test("cadastro e listagem não remontam navegação global", async () => {
-  const { unmount } = render(<CadastrarFuncionarioPage />);
+  const { unmount } = renderComConsultas(<CadastrarFuncionarioPage />);
   await screen.findByRole("heading", { name: "Nova conta de funcionário", level: 2 });
   expect(screen.queryByRole("complementary", { name: "Navegação principal" })).not.toBeInTheDocument();
   unmount();
-  render(<AdministracaoUsuariosPage />);
+  renderComConsultas(<AdministracaoUsuariosPage />);
   await screen.findByRole("region", { name: "Funcionários" });
   expect(screen.queryByRole("complementary", { name: "Navegação principal" })).not.toBeInTheDocument();
 });
@@ -195,7 +196,7 @@ test("vários vínculos existentes aparecem e não podem ser adicionados duas ve
     { id: "ct3", numeroContrato: "003/26", orgaoContratante: "Universidade", status: "PLANEJAMENTO" },
   ]);
   acessos.mockResolvedValue([{ contratoId: "ct1", podeEditar: true }, { contratoId: "ct2", podeEditar: false }]);
-  render(<PainelAdministracao vista="edicao" idEdicao="b" />);
+  renderComConsultas(<PainelAdministracao vista="edicao" idEdicao="b" />);
   await screen.findByRole("heading", { name: /Conta de Gestor de Teste/ });
   fireEvent.click(screen.getByText("Acesso aos contratos", { exact: false, selector: "summary" }));
   const lista = screen.getByRole("region", { name: "Contratos vinculados" });
@@ -213,7 +214,7 @@ test("vários vínculos existentes aparecem e não podem ser adicionados duas ve
 
 
 test("administração não duplica cabeçalho de rota nem identificação de sessão", async () => {
-  const { container } = render(<PainelAdministracao vista="edicao" idEdicao="b" />);
+  const { container } = renderComConsultas(<PainelAdministracao vista="edicao" idEdicao="b" />);
   await screen.findByRole("heading", { name: /Conta de Gestor de Teste/ });
   // O título da rota e o perfil logado agora pertencem exclusivamente ao layout global.
   expect(screen.queryByRole("heading", { name: /^Editar funcionário$/ })).not.toBeInTheDocument();
@@ -224,7 +225,7 @@ test("administração não duplica cabeçalho de rota nem identificação de ses
 
 test("atualizar funcionários mostra spinner dentro do botão mantendo lista visível", async () => {
   let concluir!: (valor: { itens: typeof gestor[]; pagina: number; limite: number; total: number; totalPaginas: number }) => void;
-  render(<AdministracaoUsuariosPage />);
+  renderComConsultas(<AdministracaoUsuariosPage />);
   await screen.findByText("gestor@exemplo.com");
   paginados.mockImplementation((opcoes) => {
     if (opcoes.limite === 1) return Promise.resolve({ itens: [], pagina: 1, limite: 1, total: 2, totalPaginas: 1 });
@@ -234,6 +235,9 @@ test("atualizar funcionários mostra spinner dentro do botão mantendo lista vis
   expect(screen.getByRole("button", { name: "Atualizando..." })).toBeDisabled();
   expect(screen.getByRole("button", { name: "Atualizando..." }).querySelector(".animate-spin")).not.toBeNull();
   expect(screen.getByText("gestor@exemplo.com")).toBeInTheDocument();
+  // O repositorio inicia a consulta numa microtask: aguardar o fetch real,
+  // em vez de tentar resolver uma Promise que ainda nao foi criada.
+  await waitFor(() => expect(concluir).toEqual(expect.any(Function)));
   await act(async () => { concluir({ itens: [gestor], pagina: 1, limite: 20, total: 1, totalPaginas: 1 }); });
   await waitFor(() => expect(screen.getByRole("button", { name: "Atualizar lista" })).toBeEnabled());
 });

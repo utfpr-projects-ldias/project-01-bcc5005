@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { IndicadorCarregamento } from "@/app/components/indicador-carregamento";
 import { LinkVoltar } from "@/app/components/link-voltar";
@@ -15,6 +15,10 @@ import {
   type MeuPerfil, type UsuarioPublico, type PaginaUsuarios,
   type ContratoResumo, type PermissaoFuncionario,
 } from "@/lib/admin-usuarios";
+import { useRepositorioConsultas } from '@/app/components/provedor-consultas';
+import { chaveTexto } from '@/lib/repositorio-consultas';
+import { CHAVES_FUNCIONARIOS } from '@/hooks/use-funcionarios';
+import { CHAVE_PERFIL } from '@/hooks/use-meu-perfil';
 
 const nomeCompleto = z.string().min(3, "Informe nome e sobrenome.").max(160, "Nome muito longo.")
   .regex(/^\p{L}[\p{L}\p{M}'’.-]*(?:[ \t]+\p{L}[\p{L}\p{M}'’.-]*)+$/u,
@@ -52,6 +56,8 @@ function nomePerfil(p: UsuarioPublico["perfil"]): string {
 
 export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cadastro' | 'edicao'; idEdicao?: string }) {
   const router = useRouter();
+  const cache = useRepositorioConsultas();
+  const ultimaLista = useRef(0);
   const [carregando, setCarregando] = useState(true);
   const [autorizado, setAutorizado] = useState(false);
   const [erroAcesso, setErroAcesso] = useState("");
@@ -64,6 +70,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
   const [quantidades, setQuantidades] = useState({ ativos: 0, arquivados: 0 });
   const [erroLista, setErroLista] = useState("");
   const [atualizando, setAtualizando] = useState(false);
+  const [mudandoConsulta, setMudandoConsulta] = useState(false);
   const [avisoAtualizacao, setAvisoAtualizacao] = useState("");
   const [editando, setEditando] = useState<UsuarioPublico | null>(null);
   const [form, setForm] = useState({ ...inicial });
@@ -94,21 +101,33 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
   }, [router]);
 
   const carregarLista = useCallback(async (a: "ativos" | "arquivados", p: number, termo: string) => {
+    const requisicao = ++ultimaLista.current;
     const ativa = a === "ativos";
     const [paginaDados, ativos, arquivados] = await Promise.all([
-      consultarUsuariosPaginados({ ativo: ativa, pagina: p, busca: termo }),
-      consultarUsuariosPaginados({ ativo: true, pagina: 1, limite: 1 }),
-      consultarUsuariosPaginados({ ativo: false, pagina: 1, limite: 1 }),
+      cache.buscar(chaveTexto(CHAVES_FUNCIONARIOS.lista(ativa, p, termo)), () => consultarUsuariosPaginados({ ativo: ativa, pagina: p, busca: termo })),
+      cache.buscar(chaveTexto(CHAVES_FUNCIONARIOS.totais(true)), async () => (await consultarUsuariosPaginados({ ativo: true, pagina: 1, limite: 1 })).total, { validadeMs: 10_000 }),
+      cache.buscar(chaveTexto(CHAVES_FUNCIONARIOS.totais(false)), async () => (await consultarUsuariosPaginados({ ativo: false, pagina: 1, limite: 1 })).total, { validadeMs: 10_000 }),
     ]);
+    // A resposta antiga nunca substitui a aba/filtro/pagina mais recentes.
+    if (requisicao !== ultimaLista.current) return;
     setLista(paginaDados);
-    setQuantidades({ ativos: ativos.total, arquivados: arquivados.total });
-  }, []);
+    setQuantidades({ ativos, arquivados });
+  }, [cache]);
+  const invalidarListas = useCallback(() => {
+    cache.invalidar(['usuarios', 'lista']);
+    cache.invalidar(['usuarios', 'total']);
+    cache.invalidar(['usuarios', 'responsaveis']);
+  }, [cache]);
+  const invalidarPermissoes = useCallback((id: string) => {
+    cache.invalidar(CHAVES_FUNCIONARIOS.permissoes(id));
+    cache.invalidar(['contratos']);
+  }, [cache]);
 
   useEffect(() => {
     let vivo = true;
     void (async () => {
       try {
-        const perfil = await consultarMeuPerfil();
+        const perfil = await cache.buscar(chaveTexto(CHAVE_PERFIL), () => consultarMeuPerfil(), { validadeMs: 10_000 });
         if (!vivo) return;
         if (!perfil.ativo || perfil.perfil !== "ADMINISTRADOR") {
           setErroAcesso("Você não tem permissão para acessar a administração de usuários."); return;
@@ -118,14 +137,15 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
           await carregarLista("ativos", 1, "");
         } else if (vista === "edicao") {
           if (!idEdicao) { setErroAcesso("Funcionário não informado."); return; }
-          const alvo = await buscarFuncionarioPorId(idEdicao);
+          const alvo = await cache.buscar(chaveTexto(CHAVES_FUNCIONARIOS.detalhe(idEdicao)), () => buscarFuncionarioPorId(idEdicao));
           if (!vivo) return;
           setEditando(alvo);
           setEdicao({ nome: alvo.nome ?? "", perfil: alvo.perfil === "ADMINISTRADOR" ? "GESTOR" : alvo.perfil, ativo: alvo.ativo });
           setEmailNovo(alvo.email);
           if (alvo.perfil !== "ADMINISTRADOR") {
             const [acessos, disponiveis] = await Promise.all([
-              listarPermissoesFuncionario(alvo.id), listarContratosAdministracao(),
+              cache.buscar(chaveTexto(CHAVES_FUNCIONARIOS.permissoes(alvo.id)), () => listarPermissoesFuncionario(alvo.id)),
+              cache.buscar(chaveTexto(CHAVES_FUNCIONARIOS.contratos), () => listarContratosAdministracao()),
             ]);
             if (!vivo) return;
             setPermissoes(acessos); setContratos(disponiveis); setContratoId(disponiveis[0]?.id ?? "");
@@ -137,23 +157,23 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
       } finally { if (vivo) setCarregando(false); }
     })();
     return () => { vivo = false; };
-  }, [carregarLista, cuidarSessao, vista, idEdicao]);
+  }, [carregarLista, cuidarSessao, vista, idEdicao, cache]);
 
   async function recarregar(a = aba, p = pagina, q = filtro) {
     setAtualizando(true); setErroLista(""); setAvisoAtualizacao("");
     try { await carregarLista(a, p, q); setAvisoAtualizacao("Lista atualizada."); }
     catch (e) { if (!cuidarSessao(e)) setErroLista(`${erroLegivel(e)} A lista pode estar desatualizada.`); }
-    finally { setAtualizando(false); }
+    finally { setAtualizando(false); setMudandoConsulta(false); }
   }
 
   function trocarAba(nova: "ativos" | "arquivados") {
-    setAba(nova); setPagina(1); void recarregar(nova, 1, filtro);
+    setMudandoConsulta(true); setAba(nova); setPagina(1); void recarregar(nova, 1, filtro);
   }
   function pesquisar(evento: FormEvent) {
-    evento.preventDefault(); setFiltro(busca.trim()); setPagina(1); void recarregar(aba, 1, busca.trim());
+    evento.preventDefault(); setMudandoConsulta(true); setFiltro(busca.trim()); setPagina(1); void recarregar(aba, 1, busca.trim());
   }
   function mudarPagina(nova: number) {
-    setPagina(nova); void recarregar(aba, nova, filtro);
+    setMudandoConsulta(true); setPagina(nova); void recarregar(aba, nova, filtro);
   }
 
   async function cadastrar(evento: FormEvent<HTMLFormElement>) {
@@ -173,6 +193,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
         nome: valido.data.nome, email: valido.data.email, perfil: valido.data.perfil,
         senhaInicial: valido.data.senhaInicial,
       });
+      invalidarListas();
       setForm({ ...inicial }); setMensagem(`Funcionário ${criado.email} cadastrado com sucesso.`);
       router.replace("/admin/usuarios");
     } catch (e) { if (!cuidarSessao(e)) setErroFormulario(erroLegivel(e)); }
@@ -198,8 +219,10 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
       const atualizado = await atualizarFuncionario(editando.id, dados);
       if (atualizado.id === minhaConta?.id) {
         setMinhaConta((u) => u ? { ...u, nome: atualizado.nome } : u);
-        window.dispatchEvent(new Event("perfil-atualizado"));
+        cache.invalidar(CHAVE_PERFIL);
       }
+      invalidarListas();
+      cache.gravar(chaveTexto(CHAVES_FUNCIONARIOS.detalhe(atualizado.id)), atualizado);
       setMensagem(`Dados de ${atualizado.email} atualizados.`);
       setEditando(atualizado);
       setEdicao({ nome: atualizado.nome ?? "", perfil: atualizado.perfil === "ADMINISTRADOR" ? "GESTOR" : atualizado.perfil, ativo: atualizado.ativo });
@@ -214,6 +237,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
       await atualizarFuncionario(u.id, { ativo: !u.ativo });
       setMensagem(`Conta ${u.email} ${u.ativo ? "arquivada" : "reativada"}.`);
 
+      invalidarListas();
       await carregarLista(aba, 1, filtro); setPagina(1);
       setConfirmacao(null);
     } catch (e) { setConfirmacao(null); if (!cuidarSessao(e)) setErroLista(erroLegivel(e)); }
@@ -225,6 +249,9 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
     setEnviando(true); setErroFormulario("");
     try {
       const atualizado = await alterarEmailFuncionario(editando.id, emailNovo.trim().toLowerCase());
+      invalidarListas();
+      cache.gravar(chaveTexto(CHAVES_FUNCIONARIOS.detalhe(atualizado.id)), atualizado);
+      if (atualizado.id === minhaConta?.id) cache.invalidar(CHAVE_PERFIL);
       setEditando(atualizado); setMensagem("E-mail atualizado no sistema e no SuperTokens.");
     } catch (e) { if (!cuidarSessao(e)) setErroFormulario(erroLegivel(e)); }
     finally { setEnviando(false); }
@@ -255,7 +282,8 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
       await concederPermissaoFuncionario(editando.id, {
         contratoId: contratoSelecionado, podeEditar: editando.perfil === "GESTOR" && podeEditar,
       });
-      setPermissoes(await listarPermissoesFuncionario(editando.id));
+      invalidarPermissoes(editando.id);
+      setPermissoes(await cache.buscar(chaveTexto(CHAVES_FUNCIONARIOS.permissoes(editando.id)), () => listarPermissoesFuncionario(editando.id), { forcar: true }));
       setContratoId(""); setPodeEditar(false);
       setMensagem("Contrato vinculado ao funcionário.");
     } catch (e) { if (!cuidarSessao(e)) setErroPermissoes(erroLegivel(e)); }
@@ -266,7 +294,8 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
     setAtualizandoVinculo(vinculo.contratoId); setErroPermissoes("");
     try {
       await concederPermissaoFuncionario(editando.id, { contratoId: vinculo.contratoId, podeEditar: !vinculo.podeEditar });
-      setPermissoes(await listarPermissoesFuncionario(editando.id));
+      invalidarPermissoes(editando.id);
+      setPermissoes(await cache.buscar(chaveTexto(CHAVES_FUNCIONARIOS.permissoes(editando.id)), () => listarPermissoesFuncionario(editando.id), { forcar: true }));
       setMensagem("Nível de acesso atualizado.");
     } catch (erro) { if (!cuidarSessao(erro)) setErroPermissoes(erroLegivel(erro)); }
     finally { setAtualizandoVinculo(""); }
@@ -276,12 +305,15 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
     setEnviando(true); setErroPermissoes("");
     try {
       await revogarPermissaoFuncionario(editando.id, contrato);
+      invalidarPermissoes(editando.id);
       setPermissoes((atual) => atual.filter((p) => p.contratoId !== contrato));
       setMensagem("Permissão revogada.");
       setConfirmacao(null);
     } catch (e) { setConfirmacao(null); if (!cuidarSessao(e)) setErroPermissoes(erroLegivel(e)); }
     finally { setEnviando(false); }
   }
+
+  const listaVisivel = mudandoConsulta ? { ...lista, itens: [], total: 0 } : lista;
 
   if (carregando) return <main role="status" className="min-h-screen flex items-center justify-center p-6"><IndicadorCarregamento texto="Verificando acesso à administração..." /></main>;
   if (!autorizado) return (
@@ -327,10 +359,10 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
             </form>
             {erroLista && <p role="alert" className="mt-3 text-sm text-red-400">{erroLista}</p>}
             <p role="status" className="mt-2 min-h-4 text-xs text-foreground/65">{avisoAtualizacao}</p>
-            <p className="mt-3 text-xs text-foreground/65">{lista.total} resultados · Página {lista.pagina} de {lista.totalPaginas}</p>
-            {lista.itens.length === 0 ? <p className="mt-5 text-sm text-foreground/70">Nenhum funcionário nesta consulta.</p> : (
+            <p className="mt-3 text-xs text-foreground/65">{listaVisivel.total} resultados · Página {lista.pagina} de {listaVisivel.totalPaginas}</p>
+            {listaVisivel.itens.length === 0 ? <p className="mt-5 text-sm text-foreground/70">Nenhum funcionário nesta consulta.</p> : (
               <ul className="mt-3 space-y-3">
-                {lista.itens.map((u) => (
+                {listaVisivel.itens.map((u) => (
                   <li key={u.id} className="min-w-0 rounded-xl border border-brand-green/20 p-3">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
@@ -349,8 +381,8 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
             )}
             <div className="mt-5 flex items-center gap-3">
               <button type="button" className={botao} disabled={atualizando || pagina <= 1} onClick={() => mudarPagina(pagina - 1)}>Anterior</button>
-              <span className="text-sm" aria-live="polite">{pagina}/{lista.totalPaginas}</span>
-              <button type="button" className={botao} disabled={atualizando || pagina >= lista.totalPaginas} onClick={() => mudarPagina(pagina + 1)}>Próxima</button>
+              <span className="text-sm" aria-live="polite">{pagina}/{listaVisivel.totalPaginas}</span>
+              <button type="button" className={botao} disabled={atualizando || pagina >= listaVisivel.totalPaginas} onClick={() => mudarPagina(pagina + 1)}>Próxima</button>
             </div>
           </section>}
 

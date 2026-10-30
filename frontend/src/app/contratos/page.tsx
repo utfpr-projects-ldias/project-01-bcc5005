@@ -2,66 +2,29 @@
 
 import Link from 'next/link';
 import { IndicadorCarregamento } from '@/app/components/indicador-carregamento';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { consultarMeuPerfil, type MeuPerfil } from '@/lib/admin-usuarios';
-import { ErroContrato, listarContratos, STATUS, MODOS, dataCivil, type Contrato, type StatusContrato } from '@/lib/contratos';
+import { useMemo, useState } from 'react';
+import { useMeuPerfil } from '@/hooks/use-meu-perfil';
+import { useListaContratos } from '@/hooks/use-contratos';
+import { STATUS, MODOS, dataCivil, type Contrato, type StatusContrato } from '@/lib/contratos';
 import { AreaContratos, Aviso } from './components/area-contratos';
 
-function mensagemErro(erro: unknown): string {
-  return erro instanceof Error ? erro.message : 'Não foi possível carregar os contratos.';
-}
-
-async function consultarContratosAutorizados() {
-  const usuario = await consultarMeuPerfil();
-  if (!usuario.ativo) throw new ErroContrato(403, 'Conta inativa.');
-  const dados = await listarContratos();
-  return { usuario, dados };
-}
+const LISTA_VAZIA: Contrato[] = [];
 
 export default function ContratosListPage() {
-  const [perfil, setPerfil] = useState<MeuPerfil | null>(null);
-  const [contratos, setContratos] = useState<Contrato[]>([]);
-  const [carregando, setCarregando] = useState(true);
-  const [atualizando, setAtualizando] = useState(false);
+  const { dados: perfil, erro: erroPerfil } = useMeuPerfil();
+  const lista = useListaContratos(!!perfil?.ativo);
+  const contratos = !lista.erro && perfil?.ativo ? lista.dados ?? LISTA_VAZIA : LISTA_VAZIA;
+  const carregando = !!perfil?.ativo && lista.carregando;
+  const atualizando = lista.atualizando;
+  const erro = erroPerfil ? 'Não foi possível validar sua conta.' : lista.erro ? (lista.erro instanceof Error ? lista.erro.message : 'Não foi possível carregar os contratos.') : '';
   const [avisoAtualizacao, setAvisoAtualizacao] = useState('');
-  const [erro, setErro] = useState('');
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState<StatusContrato | ''>('');
-  // Consulta ao backend sempre com o perfil autenticado, sem confiar em IDs do navegador.
-  const carregar = useCallback(async () => {
-    setAtualizando(true);
+  async function carregar() {
     setAvisoAtualizacao('');
-    setErro('');
-    try {
-      const { usuario, dados } = await consultarContratosAutorizados();
-      setPerfil(usuario);
-      setContratos(dados);
-      setAvisoAtualizacao('Lista atualizada.');
-    } catch (e) {
-      setErro(`${mensagemErro(e)} A listagem anterior foi mantida.`);
-    } finally {
-      setAtualizando(false);
-    }
-  }, []);
-
-  // O carregamento inicial só atualiza o estado após a resolução assíncrona,
-  // evitando setState síncrono no efeito (react-hooks/set-state-in-effect).
-  useEffect(() => {
-    let montado = true;
-    void consultarContratosAutorizados()
-      .then(({ usuario, dados }) => {
-        if (!montado) return;
-        setPerfil(usuario);
-        setContratos(dados);
-      })
-      .catch((e: unknown) => {
-        if (montado) setErro(mensagemErro(e));
-      })
-      .finally(() => {
-        if (montado) setCarregando(false);
-      });
-    return () => { montado = false; };
-  }, []);
+    try { await lista.atualizar(); setAvisoAtualizacao('Lista atualizada.'); }
+    catch { /* mensagem vem do estado da consulta; dados protegidos nao sao exibidos em 403 */ }
+  }
   const visiveis = useMemo(() => contratos.filter(c => {
     const texto = `${c.numeroContrato} ${c.orgaoContratante} ${c.objeto}`.toLocaleLowerCase('pt-BR');
     return (!filtro || c.status === filtro) && texto.includes(busca.toLocaleLowerCase('pt-BR').trim());
@@ -71,13 +34,13 @@ export default function ContratosListPage() {
       <div><h2 className="text-lg font-semibold text-brand-neon">Contratos cadastrados</h2>
         <p className="text-sm text-foreground/70">{perfil?.perfil === 'ADMINISTRADOR' ? 'Carteira completa autorizada' : 'Somente contratos vinculados à sua conta'} · Dados do PostgreSQL</p></div>
       <div className="flex gap-2">
-        <button type="button" onClick={() => void carregar()} disabled={atualizando || carregando} aria-busy={atualizando} className="inline-flex min-h-10 min-w-36 items-center justify-center rounded-lg border border-brand-green/40 px-3 py-2 text-sm transition-colors hover:bg-brand-green/10 disabled:opacity-60">{atualizando ? <IndicadorCarregamento compacto texto="Atualizando..." /> : 'Atualizar lista'}</button>
+        <button type="button" onClick={() => void carregar()} disabled={atualizando || carregando || !perfil?.ativo} aria-busy={atualizando} className="inline-flex min-h-10 min-w-36 items-center justify-center rounded-lg border border-brand-green/40 px-3 py-2 text-sm transition-colors hover:bg-brand-green/10 disabled:opacity-60">{atualizando ? <IndicadorCarregamento compacto texto="Atualizando..." /> : 'Atualizar lista'}</button>
         {perfil?.perfil === 'ADMINISTRADOR' && <Link href="/contratos/novo" className="rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-background">Cadastrar contrato</Link>}
       </div>
     </section>
     <p role="status" className="min-h-4 text-xs text-foreground/65">{avisoAtualizacao}</p>
     {erro && <div className="space-y-2"><Aviso erro>{erro}</Aviso><button type="button" onClick={() => void carregar()} disabled={atualizando} className="text-sm text-brand-neon underline disabled:opacity-50">Tentar novamente</button></div>}
-    {carregando ? <Aviso>Carregando contratos reais...</Aviso> : !perfil && erro ? null : <>
+    {!perfil ? <Aviso>{erro || "Verificando perfil..."}</Aviso> : carregando ? <Aviso>Carregando contratos reais...</Aviso> : erro ? null : <>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div><label htmlFor="busca-contrato" className="mb-1 block text-sm">Buscar por número, órgão ou objeto</label>
           <input id="busca-contrato" className="w-full rounded-lg border border-brand-green/30 bg-background p-2" value={busca} onChange={e => setBusca(e.target.value)} /></div>
