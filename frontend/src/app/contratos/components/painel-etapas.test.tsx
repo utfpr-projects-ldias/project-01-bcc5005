@@ -117,3 +117,25 @@ describe('HU06-03 — painel no contrato', () => {
     expect(screen.getByText('Sessão expirada')).toBeInTheDocument();
   });
 });
+
+test('botoes expandem uma unica vez, exibem seta e ficam indisponiveis ate Cancelar', () => {
+  render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
+  const novo = screen.getByRole('button', { name: 'Nova etapa' });
+  expect(novo).toHaveAttribute('aria-expanded', 'false');
+  fireEvent.click(novo);
+  const criando = screen.getByRole('button', { name: 'Cadastrando etapa' });
+  expect(criando).toBeDisabled();
+  expect(criando).toHaveAttribute('aria-expanded', 'true');
+  expect(criando.querySelector('svg')).not.toBeNull();
+  expect(document.getElementById('formulario-nova-etapa')).toHaveClass('etapa-form-expandido');
+  fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+  expect(screen.getByRole('button', { name: 'Nova etapa' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Editar etapa Planejamento' }));
+  const editando = screen.getByRole('button', { name: 'Editando etapa Planejamento' });
+  expect(editando).toBeDisabled();
+  expect(editando).toHaveAttribute('aria-expanded', 'true');
+  expect(editando.querySelector('svg')).not.toBeNull();
+  expect(document.getElementById('formulario-etapa-etapa-1')).toHaveClass('etapa-form-expandido');
+  fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+  expect(screen.getByRole('button', { name: 'Editar etapa Planejamento' })).toBeEnabled();
+});

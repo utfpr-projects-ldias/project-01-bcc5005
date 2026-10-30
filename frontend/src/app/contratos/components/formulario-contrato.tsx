@@ -44,6 +44,7 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
   });
   const [modo, setModo] = useState<'data' | 'meses'>('data');
   const [meses, setMeses] = useState('12');
+  const [terminoManualConfirmado, setTerminoManualConfirmado] = useState(false);
   const [erros, setErros] = useState<ErrosContrato>({});
   const [erroGeral, setErroGeral] = useState('');
   const calculado = modo === 'meses' ? terminoPorMeses(form.inicioVigencia, Number(meses)) : null;
@@ -56,6 +57,7 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
   });
   function atualizar<K extends keyof DadosContrato>(campo: K, valor: DadosContrato[K]) {
     setForm(atual => ({ ...atual, [campo]: valor }));
+    if (campo === 'inicioVigencia') setTerminoManualConfirmado(false);
     setErros(atuais => ({ ...atuais, [campo]: undefined }));
     setErroGeral('');
   }
@@ -67,8 +69,8 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
       const duracao = duracaoMesesSchema.safeParse(meses);
       if (!duracao.success) errosExtras.meses = 'Informe um número inteiro de 1 a 1200 meses.';
     }
-    if (modo === 'meses' && fimAmbiguo && !form.terminoVigencia) {
-      errosExtras.terminoVigencia = 'Informe explicitamente o término para esse caso de calendário.';
+    if (modo === 'meses' && fimAmbiguo && (!form.terminoVigencia || !terminoManualConfirmado)) {
+      errosExtras.terminoVigencia = 'Confirme explicitamente o término neste caso de calendário, mesmo ao editar um contrato existente.';
     }
     const validacao = validarContrato({ ...form, terminoVigencia: termino });
     if (!validacao.sucesso || Object.keys(errosExtras).length) {
@@ -98,7 +100,7 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
       <p className="text-sm text-foreground/65">Informe início e término. Como alternativa, calcule a data de término pela duração em meses.</p>
       <div className="flex flex-wrap gap-2" role="group" aria-label="Modo da vigência">
         <button type="button" aria-pressed={modo === 'data'} onClick={() => { setModo('data'); setErros({}); }} className={`rounded-lg border px-3 py-2 text-sm ${modo === 'data' ? 'border-brand-green bg-brand-green/10 font-semibold' : 'border-brand-green/30'}`}>Informar término</button>
-        <button type="button" aria-pressed={modo === 'meses'} onClick={() => { setModo('meses'); setErros({}); }} className={`rounded-lg border px-3 py-2 text-sm ${modo === 'meses' ? 'border-brand-green bg-brand-green/10 font-semibold' : 'border-brand-green/30'}`}>Duração em meses</button>
+        <button type="button" aria-pressed={modo === 'meses'} onClick={() => { setModo('meses'); setTerminoManualConfirmado(false); setErros({}); }} className={`rounded-lg border px-3 py-2 text-sm ${modo === 'meses' ? 'border-brand-green bg-brand-green/10 font-semibold' : 'border-brand-green/30'}`}>Duração em meses</button>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         <Campo titulo="Início da vigência" id="inicio" obrigatorio erro={erroDo('inicioVigencia')}>
@@ -106,12 +108,19 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
         {modo === 'data' ? <Campo titulo="Término da vigência" id="fim" obrigatorio erro={erroDo('terminoVigencia')}>
           <input id="fim" type="date" className={input} min={form.inicioVigencia || undefined} value={form.terminoVigencia} onChange={e => atualizar('terminoVigencia', e.target.value)} {...acessibilidade('fim', 'terminoVigencia')} /></Campo> :
           <Campo titulo="Duração em meses" id="meses" obrigatorio erro={erros.meses} ajuda="O término é calculado considerando vigência inclusiva.">
-            <input id="meses" type="number" min={1} max={1200} step={1} className={input} value={meses} onChange={e => { setMeses(e.target.value); setErros(v => ({ ...v, meses: undefined })); }} aria-invalid={!!erros.meses} aria-describedby={erros.meses ? 'meses-erro' : 'meses-ajuda'} /></Campo>}
+            <input id="meses" type="number" min={1} max={1200} step={1} className={input} value={meses} onChange={e => { setMeses(e.target.value); setTerminoManualConfirmado(false); setErros(v => ({ ...v, meses: undefined })); }} aria-invalid={!!erros.meses} aria-describedby={erros.meses ? 'meses-erro' : 'meses-ajuda'} /></Campo>}
       </div>
       {modo === 'meses' && (calculado ? <p role="status" className="text-sm text-foreground/75">Término calculado: <strong>{calculado.split('-').reverse().join('/')}</strong> (vigência inclusiva).</p> :
         <p className="text-sm text-amber-600 dark:text-amber-300">Para mês curto, fim de mês ou data ainda inválida, informe a data final quando disponível. A convenção para casos ambíguos depende de decisão do cliente.</p>)}
       {fimAmbiguo && <Campo titulo="Data de término explícita" id="fim-manual" obrigatorio erro={erroDo('terminoVigencia')}>
-        <input id="fim-manual" type="date" className={input} min={form.inicioVigencia || undefined} value={form.terminoVigencia} onChange={e => atualizar('terminoVigencia', e.target.value)} {...acessibilidade('fim-manual', 'terminoVigencia')} /></Campo>}
+        <input id="fim-manual" type="date" className={input} min={form.inicioVigencia || undefined} value={form.terminoVigencia}
+          onChange={e => { atualizar('terminoVigencia', e.target.value); setTerminoManualConfirmado(Boolean(e.target.value)); }}
+          {...acessibilidade('fim-manual', 'terminoVigencia')} />
+        {Boolean(form.terminoVigencia) && <label className="mt-2 flex items-start gap-2 text-xs text-foreground/80">
+          <input type="checkbox" checked={terminoManualConfirmado} onChange={e => { setTerminoManualConfirmado(e.target.checked); setErros(atuais => ({ ...atuais, terminoVigencia: undefined })); }}
+            className="mt-0.5 accent-brand-green" />
+          Confirmo a data de término explícita acima para esta duração ambígua.
+        </label>}</Campo>}
     </fieldset>
 
     <div className="rounded-2xl border border-brand-green/25 bg-brand-darkgreen/10 p-4 md:p-6 space-y-4">
