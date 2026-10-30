@@ -25,6 +25,7 @@ import { StatusEtapa } from './status-etapa.enum.js';
  * campos. O codigo, quando presente, NÃO é único por decisão técnica provisória.
  */
 @Entity({ name: 'etapas' })
+@Unique('uq_etapas_id_contrato', ['id', 'contratoId'])
 @Unique('uq_etapas_contrato_sequencia', ['contratoId', 'sequencia'], {
   deferrable: 'INITIALLY IMMEDIATE',
 })

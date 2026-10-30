@@ -10,6 +10,7 @@ import { AutorizacaoModule } from './autorizacao/autorizacao.module.js';
 import { AuditoriaModule } from './auditoria/auditoria.module.js';
 import { ContratosModule } from './contratos/contratos.module.js';
 import { EtapasModule } from './etapas/etapas.module.js';
+import { EntregaveisModule } from './entregaveis/entregaveis.module.js';
 
 
 @Module({
@@ -26,6 +27,7 @@ import { EtapasModule } from './etapas/etapas.module.js';
     AuditoriaModule,
     ContratosModule,
     EtapasModule,
+    EntregaveisModule,
   ],
   controllers: [
     AppController,
