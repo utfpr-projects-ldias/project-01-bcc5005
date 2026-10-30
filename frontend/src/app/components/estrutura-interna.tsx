@@ -55,7 +55,7 @@ function CabecalhoInterno({ rota, children }: { rota: string; children: ReactNod
   return <div className="flex min-h-screen min-w-0 bg-background font-sans text-foreground">
     <MenuLateral />
     <div className="flex min-w-0 flex-1 flex-col">
-      <header className="sticky top-0 z-40 flex min-h-20 flex-wrap items-center justify-between gap-3 border-b border-brand-green/20 bg-background/95 px-4 py-3 md:px-8">
+      <header className="sticky top-0 z-40 flex min-h-20 flex-wrap items-center justify-between gap-3 border-b border-brand-green/20 bg-background px-4 py-3 md:px-8">
         <h1 className="min-w-0 text-xl font-bold">{titulo}</h1>
         <div className="flex min-w-0 flex-wrap items-center gap-3">
           <IdentificacaoUsuario />

@@ -75,3 +75,10 @@ test('falha ao sair restaura o botão e mostra mensagem, sem travar a sessão', 
   expect(screen.getByRole('button', { name: 'Sair' })).toBeEnabled();
   expect(mockReplace).not.toHaveBeenCalled();
 });
+
+test('cabecalho fixo e opaco nao deixa textos de paginas longas visiveis atras dele', () => {
+  const { container } = renderComConsultas(<EstruturaInterna><p>Contrato longo</p></EstruturaInterna>);
+  const header = container.querySelector('header');
+  expect(header).toHaveClass('bg-background');
+  expect(header).not.toHaveClass('bg-background/95');
+});
