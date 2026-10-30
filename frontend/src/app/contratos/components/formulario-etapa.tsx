@@ -8,8 +8,9 @@ const campoClasse = 'w-full min-w-0 rounded-lg border border-brand-green/30 bg-b
 
 type Campo = keyof DadosEtapa;
 
-export function FormularioEtapa({ inicial, onSalvar, onCancelar }: {
+export function FormularioEtapa({ inicial, onSalvar, onCancelar, onSalvandoMudou }: {
   inicial?: Etapa; onSalvar: (dados: DadosEtapa) => Promise<void>; onCancelar: () => void;
+  onSalvandoMudou?: (salvando: boolean) => void;
 }) {
   const [dados, setDados] = useState<DadosEtapa>(() => inicial ? {
     nome: inicial.nome, codigo: inicial.codigo, descricao: inicial.descricao,
@@ -39,11 +40,11 @@ export function FormularioEtapa({ inicial, onSalvar, onCancelar }: {
       setErros(resultado.erros); setErroGeral('Confira os campos destacados.');
       return;
     }
-    setErros({}); setErroGeral(''); setSalvando(true);
+    setErros({}); setErroGeral(''); setSalvando(true); onSalvandoMudou?.(true);
     try { await onSalvar(resultado.dados); }
     catch (erro) {
       setErroGeral(erro instanceof ErroEtapa ? erro.message : 'Não foi possível salvar a etapa. Seus dados foram mantidos.');
-    } finally { setSalvando(false); }
+    } finally { setSalvando(false); onSalvandoMudou?.(false); }
   }
   return <form noValidate aria-label={inicial ? `Editar etapa ${inicial.nome}` : 'Criar etapa'} onSubmit={(e) => void enviar(e)}
     className="min-w-0 space-y-4 rounded-2xl border border-brand-green/40 bg-brand-darkgreen/10 p-4 md:p-5">
