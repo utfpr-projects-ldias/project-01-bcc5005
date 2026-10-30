@@ -79,7 +79,7 @@ export function FormularioEtapa({ inicial, onSalvar, onCancelar, onSalvandoMudou
         onChange={(e) => mudar('observacoes', e.target.value || null)} />{mensagem('observacoes')}</div>
     {erroGeral && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-red-400">{erroGeral}</p>}
     <div className="flex flex-wrap justify-end gap-2">
-      <button type="button" onClick={onCancelar} disabled={salvando} className="rounded-lg border border-brand-green/40 px-4 py-2 text-sm disabled:opacity-50">Cancelar</button>
+      <button type="button" onClick={onCancelar} disabled={salvando} className="rounded-lg border border-brand-green/40 px-4 py-2 text-sm transition-colors hover:bg-brand-green/10 disabled:opacity-50">Voltar sem salvar</button>
       <button type="submit" disabled={salvando} className="rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-background disabled:opacity-50">
         {salvando ? 'Salvando etapa...' : 'Salvar etapa'}
       </button>

@@ -65,7 +65,7 @@ test('checklist preserva IDs ao editar e valida obrigatoriedade', () => {
   ]);
   r.evidenciasEsperadas[0].tipoEvidencia = '';
   expect(validarEntregavel(r).sucesso).toBe(false);
-  r.evidenciasEsperadas = Array.from({ length: 101 }, (_, i) => ({ chave: String(i), tipoEvidencia: 'Arquivo', descricao: '', obrigatoria: true }));
+  r.evidenciasEsperadas = Array.from({ length: 11 }, (_, i) => ({ chave: String(i), tipoEvidencia: 'Arquivo', descricao: '', obrigatoria: true }));
   expect(validarEntregavel(r).sucesso).toBe(false);
 });
 test('alteração estrutural é detectada e não presume replanejamento autorizado', () => {
@@ -78,4 +78,14 @@ test('alteração estrutural é detectada e não presume replanejamento autoriza
   } as Entregavel;
   expect(mudouEstrutura(r, inicial)).toBe(false);
   r.periodicidade = 'ANUAL'; expect(mudouEstrutura(r, inicial)).toBe(true);
+});
+
+test('checklist permite 10 evidências e rejeita a décima primeira', () => {
+  const r = modelo('UNICO');
+  r.evidenciasEsperadas = Array.from({ length: 10 }, (_, i) => ({ chave: String(i), tipoEvidencia: 'Documento', descricao: '', obrigatoria: true }));
+  expect(validarEntregavel(r).sucesso).toBe(true);
+  r.evidenciasEsperadas.push({ chave: '11', tipoEvidencia: 'Foto', descricao: '', obrigatoria: false });
+  const resposta = validarEntregavel(r);
+  expect(resposta.sucesso).toBe(false);
+  if (!resposta.sucesso) expect(resposta.erros.evidenciasEsperadas).toContain('10');
 });

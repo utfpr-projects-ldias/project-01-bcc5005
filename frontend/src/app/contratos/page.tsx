@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { IndicadorCarregamento } from '@/app/components/indicador-carregamento';
+import { useAtualizacaoVisivel } from '@/hooks/use-atualizacao-visivel';
 import { useMemo, useState } from 'react';
 import { useMeuPerfil } from '@/hooks/use-meu-perfil';
 import { useListaContratos } from '@/hooks/use-contratos';
@@ -18,6 +19,7 @@ export default function ContratosListPage() {
   const atualizando = lista.atualizando;
   const erro = erroPerfil ? 'Não foi possível validar sua conta.' : lista.erro ? (lista.erro instanceof Error ? lista.erro.message : 'Não foi possível carregar os contratos.') : '';
   const [avisoAtualizacao, setAvisoAtualizacao] = useState('');
+  const atualizacaoVisivel = useAtualizacaoVisivel();
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState<StatusContrato | ''>('');
   async function carregar() {
@@ -34,7 +36,7 @@ export default function ContratosListPage() {
       <div><h2 className="text-lg font-semibold text-brand-neon">Contratos cadastrados</h2>
         <p className="text-sm text-foreground/70">{perfil?.perfil === 'ADMINISTRADOR' ? 'Carteira completa autorizada' : 'Somente contratos vinculados à sua conta'} · Dados do PostgreSQL</p></div>
       <div className="flex gap-2">
-        <button type="button" onClick={() => void carregar()} disabled={atualizando || carregando || !perfil?.ativo} aria-busy={atualizando} className="inline-flex min-h-10 min-w-36 items-center justify-center rounded-lg border border-brand-green/40 px-3 py-2 text-sm transition-colors hover:bg-brand-green/10 disabled:opacity-60">{atualizando ? <IndicadorCarregamento compacto texto="Atualizando..." /> : 'Atualizar lista'}</button>
+        <button type="button" onClick={() => void atualizacaoVisivel.executar(carregar).catch(() => {})} disabled={atualizando || atualizacaoVisivel.ocupado || carregando || !perfil?.ativo} aria-busy={atualizando || atualizacaoVisivel.ocupado} className="inline-flex min-h-10 min-w-36 items-center justify-center rounded-lg border border-brand-green/40 px-3 py-2 text-sm transition-colors hover:bg-brand-green/10 disabled:opacity-60">{atualizando || atualizacaoVisivel.ocupado ? <IndicadorCarregamento compacto texto="Atualizando..." /> : 'Atualizar lista'}</button>
         {perfil?.perfil === 'ADMINISTRADOR' && <Link href="/contratos/novo" className="rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-background">Cadastrar contrato</Link>}
       </div>
     </section>

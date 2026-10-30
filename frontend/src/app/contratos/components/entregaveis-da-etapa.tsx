@@ -1,6 +1,8 @@
 'use client';
 import Link from 'next/link';
 import { useState } from 'react';
+import { IndicadorCarregamento } from '@/app/components/indicador-carregamento';
+import { useAtualizacaoVisivel } from '@/hooks/use-atualizacao-visivel';
 import { FormularioEntregavel } from './formulario-entregavel';
 import { criarEntregavel } from '@/lib/entregaveis';
 import type { DadosPlanejamentoEntregavel } from '@/lib/validacao-entregavel';
@@ -14,6 +16,12 @@ export function EntregaveisDaEtapa({ contratoId, etapaId, dados, carregando, err
   const [aberto, setAberto] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [aviso, setAviso] = useState('');
+  const atualizacaoVisivel = useAtualizacaoVisivel();
+  async function atualizarVisivel() {
+    setAviso('');
+    try { await atualizar(); setAviso('Lista de entregáveis atualizada.'); }
+    catch { setAviso('Não foi possível atualizar os entregáveis. Tente novamente.'); }
+  }
   async function cadastrar(dados: DadosPlanejamentoEntregavel) {
     await criarEntregavel(contratoId, dados);
     setAberto(false); setAviso('Entregável cadastrado com sucesso.');
@@ -37,16 +45,17 @@ export function EntregaveisDaEtapa({ contratoId, etapaId, dados, carregando, err
           className={`h-4 w-4 transition-transform duration-300 motion-reduce:transition-none ${aberto ? 'rotate-180' : ''}`}>
           <path d="m5 7.5 5 5 5-5" strokeLinecap="round" strokeLinejoin="round" /></svg>
       </button>}
-      <button type="button" disabled={carregando || salvando} onClick={() => void atualizar().catch(() => {})}
-        className="rounded-lg border border-brand-green/40 px-3 py-1.5 text-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-neon disabled:opacity-50">
-        Atualizar entregáveis
+      <button type="button" disabled={carregando || salvando || atualizacaoVisivel.ocupado} aria-busy={atualizacaoVisivel.ocupado}
+        onClick={() => void atualizacaoVisivel.executar(atualizarVisivel).catch(() => {})}
+        className="inline-flex min-h-9 min-w-40 items-center justify-center rounded-lg border border-brand-green/40 px-3 py-1.5 text-xs transition-colors hover:bg-brand-green/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-neon disabled:cursor-wait disabled:opacity-60">
+        {atualizacaoVisivel.ocupado ? <IndicadorCarregamento compacto texto="Atualizando entregáveis..." /> : 'Atualizar entregáveis'}
       </button>
       </div>
     </div>
     <p className="mt-1 text-xs text-foreground/65">Obrigações desta etapa. Evidências esperadas não são comprovação de execução.</p>
     {aviso && <p role="status" className="mt-2 text-sm text-brand-neon">{aviso}</p>}
     {podeCriar && !erro && aberto && <div id={`cadastro-entregavel-${etapaId}`} className="etapa-form-expandido mt-3">
-      <FormularioEntregavel etapaId={etapaId} onSalvar={cadastrar} onCancelar={() => setAberto(false)}
+      <FormularioEntregavel contratoId={contratoId} etapaId={etapaId} onSalvar={cadastrar} onCancelar={() => setAberto(false)}
         onSalvandoMudou={setSalvando} />
     </div>}
     {carregando && !dados && !erro && <p role="status" className="mt-3 text-sm">Carregando entregáveis...</p>}
@@ -68,7 +77,7 @@ export function EntregaveisDaEtapa({ contratoId, etapaId, dados, carregando, err
         </div>
         <dl className="mt-2 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
           <div><dt className="text-foreground/60">Término previsto</dt><dd>{dataPlanejada(e.terminoPrevisto)}</dd></div>
-          <div className="min-w-0"><dt className="text-foreground/60">Responsável cadastral</dt><dd className="break-all">{e.responsavelId ?? 'Não definido'}</dd></div>
+          <div className="min-w-0"><dt className="text-foreground/60">Responsável cadastral</dt><dd className="break-all">{e.responsavel ? `${e.responsavel.nome || 'Nome não informado'} — ${e.responsavel.email}` : e.responsavelId ? 'Responsável atribuído' : 'Não definido'}</dd></div>
         </dl>
       </li>)}
     </ul>}

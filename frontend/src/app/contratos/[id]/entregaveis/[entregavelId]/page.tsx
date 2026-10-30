@@ -25,7 +25,7 @@ export function ConteudoEntregavel({ item }: { item: Entregavel }) {
   const campos: Campo[] = [
     ['Código', item.codigo], ['Tipo', ROTULOS_TIPO[item.tipo]],
     ['Início previsto', dataPlanejada(item.inicioPrevisto)], ['Término previsto', dataPlanejada(item.terminoPrevisto)],
-    ['Responsável cadastral (identificador)', item.responsavelId],
+    ['Responsável cadastral', item.responsavel ? `${item.responsavel.nome || 'Nome não informado'} — ${item.responsavel.email}` : item.responsavelId ? 'Responsável atribuído' : null],
     ...(item.tipo === 'QUANTITATIVO' ? [
       ['Quantidade prevista', item.quantidadePrevista], ['Unidade de medida', item.unidadeMedida],
     ] as Campo[] : []),
@@ -104,7 +104,7 @@ export default function DetalheEntregavelPage() {
         <path d="m5 7.5 5 5 5-5" strokeLinecap="round" strokeLinejoin="round" /></svg>
     </button>}
     {item && podeEditar && editando && <div id="edicao-entregavel" className="etapa-form-expandido">
-      <FormularioEntregavel key={item.id} etapaId={item.etapaId} inicial={item} onSalvar={salvar}
+      <FormularioEntregavel key={item.id} contratoId={contratoId} etapaId={item.etapaId} inicial={item} onSalvar={salvar}
         onCancelar={() => setEditando(false)} onSalvandoMudou={setSalvando} />
     </div>}
     {item && !editando && <ConteudoEntregavel item={item} />}

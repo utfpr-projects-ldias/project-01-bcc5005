@@ -2,7 +2,7 @@ import {
   BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, QueryFailedError, Repository } from 'typeorm';
+import { DataSource, EntityManager, ILike, QueryFailedError, Repository } from 'typeorm';
 
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
@@ -90,6 +90,7 @@ function visao(e: Entregavel, itens: EvidenciaEsperada[]) {
     id: e.id, contratoId: e.contratoId, etapaId: e.etapaId,
     codigo: e.codigo, nome: e.nome, descricao: e.descricao, tipo: e.tipo,
     responsavelId: e.responsavelId,
+    responsavel: e.responsavel ? { nome: e.responsavel.nome, email: e.responsavel.email } : null,
     inicioPrevisto: e.inicioPrevisto, terminoPrevisto: e.terminoPrevisto,
     quantidadePrevista: e.quantidadePrevista, quantidadeRealizada: e.quantidadeRealizada,
     unidadeMedida: e.unidadeMedida, periodicidade: e.periodicidade,
@@ -133,6 +134,29 @@ export class EntregaveisService implements OnModuleInit {
     private readonly auditoria: AuditoriaService,
     private readonly escopos: ResolverEscopoContratoService,
   ) {}
+
+  /** Busca exclusivamente funcionários ativos, por contrato autorizado no guard. Não concede vínculos. */
+  async consultarResponsaveis(busca?: string, pagina = 1) {
+    if (typeof busca !== 'undefined' && (typeof busca !== 'string' || busca.length > 100)) {
+      throw new BadRequestException('Busca inválida (máximo 100 caracteres)');
+    }
+    if (!Number.isInteger(pagina) || pagina < 1 || pagina > 1000) {
+      throw new BadRequestException('Página inválida');
+    }
+    const filtro = (busca ?? '').trim();
+    const padrao = '%' + filtro.replace(/[%_\\]/g, (caractere) => '\\' + caractere) + '%';
+    const where = filtro
+      ? [
+        { ativo: true, nome: ILike(padrao) },
+        { ativo: true, email: ILike(padrao) },
+        ...( /^[0-9a-f-]{36}$/i.test(filtro) ? [{ ativo: true, id: filtro }] : []),
+      ] : { ativo: true };
+    const [itens, total] = await this.dataSource.getRepository(Usuario).findAndCount({
+      select: { id: true, nome: true, email: true }, where,
+      order: { nome: 'ASC', email: 'ASC' }, take: 20, skip: (pagina - 1) * 20,
+    });
+    return { itens: itens.map(({ id, nome, email }) => ({ id, nome, email })), pagina, total, totalPaginas: Math.max(1, Math.ceil(total / 20)) };
+  }
 
   onModuleInit(): void {
     // O contrato raiz é resolvido exclusivamente por entidade persistida.
@@ -187,6 +211,7 @@ export class EntregaveisService implements OnModuleInit {
     if (etapaId) await this.validarEtapa(this.dataSource.manager, contratoId, etapaId);
     const registros = await this.entregaveis.find({
       where: etapaId ? { contratoId, etapaId } : { contratoId },
+      relations: { responsavel: true },
       order: { etapaId: 'ASC', nome: 'ASC', id: 'ASC' },
     });
     const ids = registros.map((e) => e.id);
@@ -197,7 +222,7 @@ export class EntregaveisService implements OnModuleInit {
   }
 
   async detalhar(contratoId: string, id: string) {
-    const e = await this.entregaveis.findOneBy({ id, contratoId });
+    const e = await this.entregaveis.findOne({ where: { id, contratoId }, relations: { responsavel: true } });
     if (!e) throw new NotFoundException('Entregável não encontrado');
     return visao(e, await this.itens(this.dataSource.manager, id));
   }
@@ -307,7 +332,7 @@ export class EntregaveisService implements OnModuleInit {
         const anteriores = await this.itens(m, id);
         const porId = new Map(anteriores.map((item) => [item.id, item]));
         const enviados = new Set<string>();
-        if (!Array.isArray(itens) || itens.length > 100) throw new BadRequestException('Checklist inválido');
+        if (!Array.isArray(itens) || itens.length > 10) throw new BadRequestException('Checklist inválido');
         for (const item of itens) {
           if (!textoObrigatorio(item.tipoEvidencia, 100) ||
             (item.descricao != null && !textoObrigatorio(item.descricao, 3000)) ||

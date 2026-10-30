@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { EntregaveisDaEtapa } from './entregaveis-da-etapa';
 import { ErroEntregavel, type Entregavel } from '@/lib/entregaveis';
 const c = 'contrato-a';
@@ -13,6 +13,7 @@ const e: Entregavel = {
 };
 const atualizar = jest.fn().mockResolvedValue([]);
 const props = { contratoId: c, etapaId: etapa, dados: [e], carregando: false, atualizar };
+beforeEach(() => atualizar.mockClear());
 test('lista contrato/etapa reais, tipo, prazo, link acessivel e nenhum status ficticio', () => {
   render(<EntregaveisDaEtapa {...props} />);
   const lista = screen.getByRole('list', { name: 'Entregáveis planejados da etapa' });
@@ -21,8 +22,7 @@ test('lista contrato/etapa reais, tipo, prazo, link acessivel e nenhum status fi
   expect(lista).toHaveTextContent('Único');
   expect(lista).toHaveTextContent('30/11/2026');
   expect(screen.queryByText(/100%/)).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Atualizar entregáveis' }));
-  expect(atualizar).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole('button', { name: 'Atualizar entregáveis' })).toBeEnabled();
 });
 test('isola etapa e contrato mesmo que API retorne item trocado', () => {
   render(<EntregaveisDaEtapa {...props} dados={[{ ...e, etapaId: 'outra-etapa' }, { ...e, id: 'b', contratoId: 'outro' }]} />);
@@ -48,4 +48,32 @@ test('HU07-04: exibe cadastro somente para quem pode planejar, sem esconder list
   fireEvent.click(screen.getByRole('button', { name: 'Cadastrando entregável' }));
   expect(screen.queryByRole('form', { name: 'Cadastrar entregável' })).not.toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Relatório de instalação' })).toBeInTheDocument();
+});
+
+test('exibe nome e e-mail do responsável retornados pela API, sem UUID técnico', () => {
+  const usuario = { nome: 'Maria Souza', email: 'maria@example.org' };
+  render(<EntregaveisDaEtapa {...props} dados={[{ ...e, responsavelId: 'uuid-qa', responsavel: usuario }]} />);
+  expect(screen.getByText('Maria Souza — maria@example.org')).toBeInTheDocument();
+  expect(screen.queryByText('uuid-qa')).not.toBeInTheDocument();
+});
+
+
+test('Atualizar entregáveis: loading mínimo, bloqueio de clique repetido e aviso no estado vazio', async () => {
+  jest.useFakeTimers();
+  try {
+    render(<EntregaveisDaEtapa {...props} dados={[]} />);
+    expect(screen.getByText('Nenhum entregável cadastrado nesta etapa.')).toBeInTheDocument();
+    const botao = screen.getByRole('button', { name: 'Atualizar entregáveis' });
+    act(() => { fireEvent.click(botao); fireEvent.click(botao); });
+    expect(atualizar).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Atualizando entregáveis...' })).toBeDisabled();
+    await act(async () => { await Promise.resolve(); await jest.advanceTimersByTimeAsync(649); });
+    expect(screen.getByRole('button', { name: 'Atualizando entregáveis...' })).toBeDisabled();
+    await act(async () => { await jest.advanceTimersByTimeAsync(1); });
+    expect(screen.getByRole('button', { name: 'Atualizar entregáveis' })).toBeEnabled();
+    expect(screen.getByText('Lista de entregáveis atualizada.')).toBeInTheDocument();
+    expect(screen.getByText('Nenhum entregável cadastrado nesta etapa.')).toBeInTheDocument();
+  } finally {
+    jest.useRealTimers();
+  }
 });

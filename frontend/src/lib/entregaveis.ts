@@ -18,6 +18,7 @@ export type Entregavel = {
   id: string; contratoId: string; etapaId: string; codigo: string | null;
   nome: string; descricao: string | null; tipo: TipoEntregavel;
   responsavelId: string | null;
+  responsavel?: { nome: string | null; email: string } | null;
   inicioPrevisto: string | null; terminoPrevisto: string | null;
   quantidadePrevista: string | null; quantidadeRealizada: string | null;
   unidadeMedida: string | null; periodicidade: PeriodicidadeEntregavel | null;
@@ -61,6 +62,14 @@ export const listarEntregaveis = (contratoId: string, signal?: AbortSignal) =>
   consultar<Entregavel[]>(base(contratoId), signal);
 export const detalharEntregavel = (contratoId: string, entregavelId: string, signal?: AbortSignal) =>
   consultar<Entregavel>(`${base(contratoId)}/${encodeURIComponent(entregavelId)}`, signal);
+
+/** Consulta protegida para responsáveis ativos; exige autorização de planejamento no contrato. */
+export type ResponsavelEntregavel = { id: string; nome: string | null; email: string };
+export type PaginaResponsaveisEntregavel = { itens: ResponsavelEntregavel[]; pagina: number; total: number; totalPaginas: number };
+export function pesquisarResponsaveisEntregavel(contratoId: string, busca = '', signal?: AbortSignal): Promise<PaginaResponsaveisEntregavel> {
+  const parametros = new URLSearchParams({ busca: busca.trim().slice(0, 100), pagina: '1' });
+  return consultar<PaginaResponsaveisEntregavel>(`${base(contratoId)}/responsaveis?${parametros}`, signal);
+}
 
 /** Data civil: sem Date(), timezone ou alteração automática da data armazenada. */
 export function dataPlanejada(valor: string | null): string {

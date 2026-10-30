@@ -46,7 +46,9 @@ def validar(relatorios: list[dict]) -> list[str]:
                 erros.append(f'{perfil}: não há cinco tipos reais distintos')
             if not r.get('etapaCriada'):
                 erros.append(f'{perfil}: etapa real HU06 não demonstrada')
-            for trecho in ('Cinco POST', 'Cinco PATCH', 'PostgreSQL', 'Network Chromium'):
+            for trecho in ('Cinco POST', 'Cinco PATCH', 'PostgreSQL', 'Network Chromium',
+                           'Etapa: modal acessível', 'Atualizar entregáveis: spinner',
+                           'Checklist: limite de 10', 'Responsável: seleção única por e-mail'):
                 if not any(trecho in str(p) for p in provas):
                     erros.append(f'{perfil}: falta evidência {trecho}')
         elif perfil == 'sem-vinculo':

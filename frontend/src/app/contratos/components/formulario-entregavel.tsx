@@ -1,13 +1,13 @@
 'use client';
-import { useId, useRef, useState, type FormEvent } from 'react';
-import { ErroEntregavel, ROTULOS_PERIODICIDADE, ROTULOS_TIPO, type Entregavel } from '@/lib/entregaveis';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { ErroEntregavel, ROTULOS_PERIODICIDADE, ROTULOS_TIPO, pesquisarResponsaveisEntregavel, type ResponsavelEntregavel, type Entregavel } from '@/lib/entregaveis';
 import { DESCRICOES_TIPO, PERIODICIDADES, TIPOS, inicialEntregavel, mudouEstrutura,
   validarEntregavel, type DadosPlanejamentoEntregavel, type ErrosEntregavel, type RascunhoEntregavel } from '@/lib/validacao-entregavel';
 
 const estilo = 'w-full min-w-0 rounded-lg border border-brand-green/35 bg-background px-3 py-2.5 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-neon aria-invalid:border-red-500';
 function Seta() { return <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4"><path d="m4 10 4 4 8-8" /></svg>; }
-export function FormularioEntregavel({ etapaId, inicial, onSalvar, onCancelar, onSalvandoMudou }: {
-  etapaId: string; inicial?: Entregavel; onSalvar: (dados: DadosPlanejamentoEntregavel) => Promise<void>;
+export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, onCancelar, onSalvandoMudou }: {
+  contratoId?: string; etapaId: string; inicial?: Entregavel; onSalvar: (dados: DadosPlanejamentoEntregavel) => Promise<void>;
   onCancelar: () => void; onSalvandoMudou?: (salvando: boolean) => void;
 }) {
   const prefixo = useId().replace(/:/g, '');
@@ -18,6 +18,44 @@ export function FormularioEntregavel({ etapaId, inicial, onSalvar, onCancelar, o
   const [erroGeral, setErroGeral] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [confirmado, setConfirmado] = useState(false);
+  const [buscaResponsavel, setBuscaResponsavel] = useState('');
+  const [responsaveis, setResponsaveis] = useState<ResponsavelEntregavel[]>([]);
+  const [listaAberta, setListaAberta] = useState(false);
+  const [consultandoResponsavel, setConsultandoResponsavel] = useState(false);
+  const [erroResponsavel, setErroResponsavel] = useState('');
+  const [responsavelEscolhido, setResponsavelEscolhido] = useState<ResponsavelEntregavel | null>(() =>
+    inicial?.responsavelId ? { id: inicial.responsavelId, email: inicial.responsavel?.email ?? '', nome: inicial.responsavel?.nome ?? null } : null);
+  useEffect(() => {
+    if (!contratoId || responsavelEscolhido || buscaResponsavel.trim().length < 2) return;
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setConsultandoResponsavel(true);
+      try {
+        const resultado = await pesquisarResponsaveisEntregavel(contratoId, buscaResponsavel, controller.signal);
+        if (!controller.signal.aborted) { setResponsaveis(resultado.itens.filter((u) => u.email.toLowerCase().includes(buscaResponsavel.trim().toLowerCase()))); setErroResponsavel(''); }
+      } catch (erro) {
+        if (!controller.signal.aborted) {
+          setResponsaveis([]);
+          setErroResponsavel(erro instanceof ErroEntregavel ? erro.message : 'Não foi possível pesquisar e-mails.');
+        }
+      } finally { if (!controller.signal.aborted) setConsultandoResponsavel(false); }
+    }, 280);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [contratoId, buscaResponsavel, responsavelEscolhido]);
+  function escolherResponsavel(usuario: ResponsavelEntregavel) {
+    setResponsavelEscolhido(usuario);
+    atualizar('responsavelId', usuario.id);
+    setBuscaResponsavel('');
+    setResponsaveis([]);
+    setListaAberta(false);
+  }
+  function limparResponsavel() {
+    setResponsavelEscolhido(null);
+    atualizar('responsavelId', '');
+    setBuscaResponsavel('');
+    setResponsaveis([]);
+    setListaAberta(false);
+  }
   const estrutural = mudouEstrutura(dados, inicial);
   const excluidos = !!inicial && inicial.evidenciasEsperadas.some((e) => !dados.evidenciasEsperadas.some((item) => item.id === e.id));
   const exigeConfirmacao = estrutural || excluidos;
@@ -79,11 +117,47 @@ export function FormularioEntregavel({ etapaId, inicial, onSalvar, onCancelar, o
         <input id={formId('terminoPrevisto')} type="date" className={estilo} value={dados.terminoPrevisto} {...campoErro('terminoPrevisto')}
           onChange={(e) => atualizar('terminoPrevisto', e.target.value)} />{mensagem('terminoPrevisto')}</div>
     </div>
-    <div><label className="mb-1 block text-sm" htmlFor={formId('responsavelId')}>Responsável cadastral (UUID v4, opcional)</label>
-      <input id={formId('responsavelId')} className={estilo} value={dados.responsavelId} {...campoErro('responsavelId')}
-        placeholder="Identificador do usuário ativo" onChange={(e) => atualizar('responsavelId', e.target.value)} />
+    <div className="space-y-2">
+      <p className="block text-sm font-semibold">Responsável pelo entregável (opcional)</p>
+      <p className="text-xs text-foreground/70">Um funcionário ativo, selecionado pelo e-mail. Deixe sem atribuição se não houver responsável definido. Atribuir responsabilidade não libera acesso ao contrato.</p>
+      {responsavelEscolhido ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brand-green/45 bg-brand-green/10 px-3 py-3">
+        <div className="min-w-0"><p className="text-xs font-medium text-foreground/65">Responsável atribuído</p>
+          <p className="break-all font-semibold text-brand-neon">{responsavelEscolhido.email || 'Funcionário cadastrado'}</p>
+          {responsavelEscolhido.nome && <p className="text-xs text-foreground/70">{responsavelEscolhido.nome}</p>}
+        </div>
+        <button type="button" disabled={salvando} onClick={limparResponsavel}
+          className="rounded-lg border border-brand-green/45 px-3 py-2 text-sm transition-colors hover:bg-brand-green/20 focus-visible:outline-2 focus-visible:outline-brand-neon disabled:opacity-50">Remover atribuição</button>
+      </div> : <div className="relative">
+        <label className="sr-only" htmlFor={formId('email-responsavel')}>Buscar responsável por e-mail</label>
+        <input id={formId('email-responsavel')} type="search" inputMode="email" autoComplete="off" className={estilo} maxLength={100}
+          value={buscaResponsavel} placeholder="Digite o e-mail do funcionário"
+          role="combobox" aria-autocomplete="list" aria-expanded={listaAberta && responsaveis.length > 0}
+          aria-controls={formId('opcoes-responsavel')} {...campoErro('responsavelId')}
+          disabled={salvando || !contratoId}
+          onChange={(e) => { setBuscaResponsavel(e.target.value); setListaAberta(true); setResponsaveis([]); setErroResponsavel(''); }}
+          onFocus={() => setListaAberta(true)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') { e.stopPropagation(); setListaAberta(false); }
+            if (e.key === 'Enter' && listaAberta && responsaveis.length === 1) {
+              e.preventDefault(); escolherResponsavel(responsaveis[0]);
+            }
+          }} />
+        {listaAberta && responsaveis.length > 0 && <div id={formId('opcoes-responsavel')} role="listbox"
+          aria-label="E-mails encontrados" className="absolute z-30 mt-1 max-h-52 w-full overflow-y-auto rounded-lg border border-brand-green/50 bg-background p-1 shadow-2xl">
+          {responsaveis.map((usuario) => <button key={usuario.id} role="option" aria-selected={false} type="button"
+            className="block w-full rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-brand-green/20 focus-visible:bg-brand-green/20 focus-visible:outline-2 focus-visible:outline-brand-neon"
+            onMouseDown={(e) => e.preventDefault()} onClick={() => escolherResponsavel(usuario)}>
+            <span className="block break-all font-medium">{usuario.email}</span>
+            {usuario.nome && <span className="block text-xs text-foreground/65">{usuario.nome}</span>}
+          </button>)}
+        </div>}
+      </div>}
+      {!responsavelEscolhido && <p className="text-xs text-foreground/65">Nenhum responsável atribuído. Digite ao menos dois caracteres e selecione o e-mail encontrado.</p>}
+      {consultandoResponsavel && !responsavelEscolhido && <p role="status" className="text-xs text-foreground/70">Pesquisando e-mails...</p>}
+      {erroResponsavel && <p role="alert" className="text-xs text-red-400">{erroResponsavel}</p>}
+      {!erroResponsavel && !consultandoResponsavel && !responsavelEscolhido && buscaResponsavel.length >= 2 && !responsaveis.length &&
+        <p className="text-xs text-foreground/65">Nenhum funcionário ativo encontrado com esse e-mail.</p>}
       {mensagem('responsavelId')}
-      <p className="mt-1 text-xs text-foreground/65">O responsável deve existir e estar ativo. Informar o ID não concede acesso ao contrato; permissões são definidas na Administração.</p>
     </div>
     {dados.tipo === 'QUANTITATIVO' && <div className="grid gap-4 sm:grid-cols-2">
       <div><label className="mb-1 block text-sm" htmlFor={formId('quantidadePrevista')}>Quantidade prevista *</label>
@@ -111,7 +185,7 @@ export function FormularioEntregavel({ etapaId, inicial, onSalvar, onCancelar, o
       <textarea id={formId('observacoes')} className={estilo} rows={2} maxLength={3000} value={dados.observacoes}
         onChange={(e) => atualizar('observacoes', e.target.value)} />{mensagem('observacoes')}</div>
     <fieldset className="min-w-0 space-y-3 rounded-xl border border-brand-green/25 p-3 sm:p-4">
-      <legend className="px-1 font-semibold">Evidências esperadas (0 a 100)</legend>
+      <legend className="px-1 font-semibold">Evidências esperadas (máximo de 10)</legend>
       <p className="text-sm text-foreground/70">Somente o checklist de planejamento; nenhum upload ou comprovação será criado.</p>
       {dados.evidenciasEsperadas.map((item, indice) => <div key={item.chave} className="min-w-0 space-y-3 rounded-lg border border-brand-green/20 bg-background/60 p-3">
         <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-sm">Item {indice + 1}</strong>
@@ -131,7 +205,7 @@ export function FormularioEntregavel({ etapaId, inicial, onSalvar, onCancelar, o
           onChange={(e) => trocarItem(indice, 'obrigatoria', e.target.checked)} /> Obrigatória</label>
       </div>)}
       <button type="button" className="inline-flex items-center gap-2 rounded-lg border border-brand-green/50 px-3 py-2 text-sm disabled:opacity-50"
-        disabled={salvando || dados.evidenciasEsperadas.length >= 100}
+        disabled={salvando || dados.evidenciasEsperadas.length >= 10}
         onClick={() => { const chave = `novo-${++proximaChave.current}`; setDados((prev) => ({ ...prev, evidenciasEsperadas: [...prev.evidenciasEsperadas,
           { chave, tipoEvidencia: '', descricao: '', obrigatoria: false }] })); }}>
         + Adicionar evidência esperada</button>

@@ -113,7 +113,7 @@ def pg_direto(raiz: Path, contrato: str, etapa: str, ids: list[str]) -> dict:
         await db.connect();
         await db.query('BEGIN READ ONLY');
         const [contrato, etapa, ids] = [process.argv[1], process.argv[2], JSON.parse(process.argv[3])];
-        const es = await db.query(`SELECT e.id, e.contrato_id, e.etapa_id, e.nome, e.codigo, e.tipo,
+        const es = await db.query(`SELECT e.id, e.contrato_id, e.etapa_id, e.nome, e.codigo, e.tipo, e.responsavel_id,
            e.quantidade_prevista, e.unidade_medida, e.periodicidade, e.configuracao_periodicidade,
            e.peso, e.status_execucao, e.percentual_execucao, e.situacao_comprovacao,
            e.quantidade_realizada, e.criterio_conclusao,
@@ -147,6 +147,8 @@ def conferir_db_por_api(pg: dict, registros: list[dict], etapa_id: str) -> None:
                'FKs persistidas não correspondem ao contrato/etapa da API')
         exigir((e['tipo'], e['nome'], e['codigo']) == (x['tipo'], x['nome'], x['codigo']),
                f'SQL e API divergentes para {x["codigo"]}')
+        exigir((str(e['responsavel_id']) if e['responsavel_id'] else None) == x.get('responsavelId'),
+               'Responsável cadastral divergente entre PostgreSQL e API')
         exigir(e['status_execucao'] is None and e['percentual_execucao'] is None and
                e['situacao_comprovacao'] is None and e['quantidade_realizada'] is None,
                'HU07 indevidamente marcou execução/comprovação')
@@ -175,6 +177,103 @@ def preencher_checklist(form, marca: str, tipo: str) -> None:
             form.locator('fieldset input[type="checkbox"]').nth(0).check()
 
 
+def verificar_modal_etapa(page, painel, etapa_nome: str, saida: dict) -> None:
+    """Testa edição em modal com Esc e Voltar, sem alteração de rota nem persistência."""
+    etapa = painel.locator('ol[aria-label="Etapas em ordem de execução"] > li').filter(
+        has=page.get_by_role('heading', name=etapa_nome, exact=True))
+    etapa.wait_for(timeout=25000)
+    botao = etapa.get_by_role('button', name=f'Editar etapa {etapa_nome}')
+    url_original = page.url
+    botao.scroll_into_view_if_needed()
+    posicao_anterior = page.evaluate('window.scrollY')
+    botao.click()
+    dialogo = page.get_by_role('dialog', name=re.compile('Editar etapa'))
+    dialogo.wait_for(timeout=10000)
+    exigir(dialogo.get_attribute('aria-modal') == 'true', 'Edição de etapa não abriu modal acessível')
+    exigir(botao.locator('svg').count() == 0, 'Botão Editar etapa ainda tem seta de expansão')
+    exigir(dialogo.get_by_role('form', name=f'Editar etapa {etapa_nome}').count() == 1,
+           'Modal não contém o formulário correto de edição')
+    page.keyboard.press('Escape')
+    dialogo.wait_for(state='detached', timeout=10000)
+    exigir(page.url == url_original, 'Esc navegou para fora do contrato')
+    exigir(botao.evaluate('(el) => document.activeElement === el'), 'Foco não retornou ao botão Editar')
+    botao.click()
+    dialogo = page.get_by_role('dialog', name=re.compile('Editar etapa'))
+    dialogo.get_by_role('button', name='Voltar sem salvar').click()
+    dialogo.wait_for(state='detached', timeout=10000)
+    exigir(page.url == url_original, 'Voltar no modal navegou indevidamente')
+    exigir(abs(page.evaluate('window.scrollY') - posicao_anterior) <= 3,
+           'Voltar causou salto de scroll na página do contrato')
+    exigir(botao.evaluate('(el) => document.activeElement === el'), 'Voltar não restaurou foco do botão Editar')
+    botao.click()
+    dialogo = page.get_by_role('dialog', name=re.compile('Editar etapa'))
+    dialogo.get_by_role('button', name='Fechar edição da etapa').click()
+    dialogo.wait_for(state='detached', timeout=10000)
+    exigir(botao.evaluate('(el) => document.activeElement === el'), 'Botão Fechar não restaurou foco')
+    botao.click()
+    dialogo = page.get_by_role('dialog', name=re.compile('Editar etapa'))
+    dialogo.locator('xpath=..').click(position={'x': 2, 'y': 2})
+    dialogo.wait_for(state='detached', timeout=10000)
+    exigir(page.url == url_original and abs(page.evaluate('window.scrollY') - posicao_anterior) <= 3,
+           'Clicar fora do modal alterou a rota ou rolou para o topo')
+    saida['provas'].append('Etapa: modal acessível, Esc, Voltar, X, clique fora, foco e scroll preservados')
+
+
+def verificar_atualizacao_entregaveis(page, bloco, saida: dict) -> None:
+    """Clicar de verdade, comprovar spinner/bloqueio mínimo e voltar à tela de lista vazia."""
+    botao = bloco.get_by_role('button', name='Atualizar entregáveis')
+    botao.wait_for(timeout=10000)
+    inicio = time.monotonic()
+    botao.click()
+    carregando = bloco.get_by_role('button', name='Atualizando entregáveis...')
+    exigir(carregando.is_disabled(), 'Botão de refresh não está bloqueado durante atualização')
+    carregando.get_by_text('Atualizando entregáveis...').wait_for(timeout=10000)
+    botao.wait_for(timeout=10000)
+    exigir(time.monotonic() - inicio >= 0.55, 'Indicador de atualização desapareceu cedo demais')
+    exigir(botao.is_enabled(), 'Botão de atualização permaneceu bloqueado')
+    exigir(bloco.get_by_text('Lista de entregáveis atualizada.').count() == 1,
+           'Atualização não deu retorno visual')
+    saida['provas'].append('Atualizar entregáveis: spinner, bloqueio por >= 650 ms nominal e feedback na lista vazia')
+
+
+def verificar_checklist_maximo(form, saida: dict) -> None:
+    """Exercita o teto de dez itens na UI sem enviar estes rascunhos ao backend."""
+    adicionar = form.get_by_role('button', name=re.compile('Adicionar evidência esperada'))
+    for _ in range(10):
+        adicionar.click()
+    exigir(adicionar.is_disabled(), 'Checklist permitiu mais de 10 itens na UI')
+    exigir(form.get_by_role('button', name=re.compile('Remover evidência esperada')).count() == 10,
+           'Dez itens não foram renderizados')
+    for _ in range(10):
+        form.get_by_role('button', name='Remover evidência esperada 1').click()
+    exigir(adicionar.is_enabled(), 'Checklist não liberou adição após remoção')
+    saida['provas'].append('Checklist: limite de 10 validado na UI, removido sem persistir rascunhos')
+
+
+def selecionar_responsavel_real(page, form, api: str, contrato: str, saida: dict) -> dict:
+    """Não insere UUID visível: busca e seleciona diretamente pelo e-mail."""
+    resposta = requisitar(page, api, rota(contrato) + '/responsaveis')
+    exigir(resposta['status'] == 200 and isinstance(resposta['body'], dict),
+           f'Pesquisa de funcionários deveria retornar 200, veio {resposta["status"]}')
+    usuarios = resposta['body'].get('itens')
+    exigir(isinstance(usuarios, list) and len(usuarios) > 0,
+           'Contrato de QA exige ao menos um funcionário ativo pesquisável')
+    pessoa = usuarios[0]
+    exigir(UUID.fullmatch(pessoa['id']) and bool(pessoa.get('email')),
+           'API de responsável não retornou ID e e-mail válidos')
+    campo = form.get_by_role('combobox', name='Buscar responsável por e-mail')
+    campo.fill(pessoa['email'])
+    opcao = form.get_by_role('option', name=re.compile(re.escape(pessoa['email'])))
+    opcao.wait_for(timeout=15000)
+    opcao.click()
+    exigir(form.get_by_text(pessoa['email'], exact=True).count() == 1,
+           'E-mail escolhido não ficou identificado no formulário')
+    exigir(form.get_by_role('button', name='Remover atribuição').count() == 1,
+           'Atribuição individual não permite remover o responsável')
+    saida['provas'].append('Responsável: seleção única por e-mail na API protegida, sem digitar UUID')
+    return pessoa
+
+
 def criar_cinco_na_ui(page, api: str, web: str, contrato: str, saida: dict) -> tuple[str, list[dict]]:
     """TODOS os POSTs partem dos botões da interface Next — não do validador."""
     marca = secrets.token_hex(4).upper()
@@ -198,6 +297,7 @@ def criar_cinco_na_ui(page, api: str, web: str, contrato: str, saida: dict) -> t
     etapa_id = etapas[0]['id']
     saida['etapaCriada'] = etapa_id
     saida['provas'].append('Etapa HU06 criada pelo formulário Next e persistida na API real')
+    verificar_modal_etapa(page, painel, etapa_nome, saida)
     registros = []
     for n, tipo in enumerate(TIPOS, 1):
         # A UI pode mudar o tamanho da listagem após cada inserção.
@@ -205,8 +305,15 @@ def criar_cinco_na_ui(page, api: str, web: str, contrato: str, saida: dict) -> t
             has=page.get_by_role('heading', name=etapa_nome, exact=True))
         pagina_etapa.wait_for(timeout=25000)
         bloco = pagina_etapa.locator('section[aria-label="Entregáveis da etapa"]')
+        if n == 1:
+            verificar_atualizacao_entregaveis(page, bloco, saida)
         bloco.get_by_role('button', name='Novo entregável').click()
         form = bloco.get_by_role('form', name='Cadastrar entregável')
+        if n == 1:
+            verificar_checklist_maximo(form, saida)
+            responsavel = selecionar_responsavel_real(page, form, api, contrato, saida)
+        else:
+            responsavel = None
         codigo = f'QA706-{marca}-{n}'
         nome = f'QA HU07-06 {tipo} {marca}'
         form.locator('input[id$="-codigo"]').fill(codigo)
@@ -231,6 +338,10 @@ def criar_cinco_na_ui(page, api: str, web: str, contrato: str, saida: dict) -> t
         x = encontrados[0]
         exigir(x['etapaId'] == etapa_id and x['tipo'] == tipo and len(x['evidenciasEsperadas']) == 2,
                f'Campos/checklist do tipo {tipo} não persistiram')
+        if responsavel is not None:
+            exigir(x.get('responsavelId') == responsavel['id'] and
+                   (x.get('responsavel') or {}).get('email') == responsavel['email'],
+                   'Responsável escolhido na UI não persistiu com nome/e-mail na API')
         exigir(sorted(i['obrigatoria'] for i in x['evidenciasEsperadas']) == [False, True],
                'Checklist obrigatório/opcional incorreto')
         exigir(all(x[k] is None for k in ('statusExecucao', 'percentualExecucao', 'situacaoComprovacao', 'quantidadeRealizada')),

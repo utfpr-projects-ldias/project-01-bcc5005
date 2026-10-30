@@ -75,11 +75,11 @@ describe('HU07-05 — DTOs do contrato HTTP sem campos de execução', () => {
   it('permite criar checklist obrigatório/opcional com nested validation real', async () => {
     expect(await validate(plainToInstance(CriarEntregavelDto, valido))).toHaveLength(0);
   });
-  it('recusa lista acima de 100, item sem obrigatoria e etapa inválida', async () => {
+  it('recusa lista acima de 10, item sem obrigatoria e etapa inválida', async () => {
     for (const invalido of [
       { ...valido, etapaId: 'outra-etapa' },
       { ...valido, evidenciasEsperadas: [{ tipoEvidencia: 'ATA' }] },
-      { ...valido, evidenciasEsperadas: Array.from({ length: 101 }, () => ({ tipoEvidencia: 'ATA', obrigatoria: true })) },
+      { ...valido, evidenciasEsperadas: Array.from({ length: 11 }, () => ({ tipoEvidencia: 'ATA', obrigatoria: true })) },
     ]) {
       expect((await validate(plainToInstance(CriarEntregavelDto, invalido))).length).toBeGreaterThan(0);
     }
@@ -88,5 +88,32 @@ describe('HU07-05 — DTOs do contrato HTTP sem campos de execução', () => {
     expect(await validate(plainToInstance(EditarEntregavelDto, { nome: 'Nova descrição' }))).toHaveLength(0);
     expect((await validate(plainToInstance(EditarEntregavelDto, { tipo: null }))).length).toBeGreaterThan(0);
     expect((await validate(plainToInstance(SubstituirChecklistDto, { itens: [{ tipoEvidencia: 'FOTO' }] }))).length).toBeGreaterThan(0);
+  });
+});
+
+describe('HU07 — limite e política de pesquisa de responsáveis', () => {
+  it('somente quem pode planejar pesquisa funcionários ativos no contexto do contrato', async () => {
+    // Os decorators gravam metadata na função. Recuperar o descriptor evita
+    // capturar um método não vinculado (typescript/unbound-method).
+    const metodo = Object.getOwnPropertyDescriptor(EntregaveisController.prototype, 'consultarResponsaveis')?.value as object | undefined;
+    expect(metodo).toBeDefined();
+    if (!metodo) throw new Error('Rota de responsáveis ausente');
+    const rotas = Reflect.getMetadata('path', metodo);
+    expect(rotas).toBe('responsaveis');
+    const politica = Reflect.getMetadata(CHAVE_POLITICA, metodo);
+    expect(politica).toEqual({ acao: 'entregaveis:criar',
+      escopoOperacional: { tipo: 'contrato', parametro: 'contratoId' } });
+    expect(await politicas.permitido(pessoa(PerfilUsuario.ADMINISTRADOR), politica, contrato)).toBe(true);
+    buscarVinculo.mockResolvedValueOnce({ podeEditar: false } as PermissaoContrato);
+    expect(await politicas.permitido(pessoa(PerfilUsuario.GESTOR), politica, contrato)).toBe(false);
+    buscarVinculo.mockResolvedValueOnce({ podeEditar: true } as PermissaoContrato);
+    expect(await politicas.permitido(pessoa(PerfilUsuario.GESTOR), politica, contrato)).toBe(true);
+    expect(await politicas.permitido(pessoa(PerfilUsuario.COLABORADOR), politica, contrato)).toBe(false);
+  });
+  it('aceita dez evidências e rejeita onze tanto no POST quanto no PUT', async () => {
+    const itens = Array.from({ length: 10 }, () => ({ tipoEvidencia: 'FOTO', obrigatoria: true }));
+    expect(await validate(plainToInstance(CriarEntregavelDto, { etapaId: etapa, nome: 'Entrega', tipo: 'UNICO', evidenciasEsperadas: itens }))).toHaveLength(0);
+    expect(await validate(plainToInstance(SubstituirChecklistDto, { itens }))).toHaveLength(0);
+    expect((await validate(plainToInstance(SubstituirChecklistDto, { itens: [...itens, itens[0]] }))).length).toBeGreaterThan(0);
   });
 });

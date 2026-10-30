@@ -5,7 +5,7 @@
 ## O que este primeiro commit prova
 
 - Jest no backend executa o contrato de autorização EXTRAÍDO dos decorators reais do controller; ADMIN, Gestor com/sem `podeEditar`, Colaborador e usuário sem vínculo. `responsavelId` não substitui PermissaoContrato.
-- DTOs com `class-validator`: UUIDs, campos obrigatórios, checklist de 100 itens, flag obrigatória, PATCH nulo rejeitado.
+- DTOs com `class-validator`: UUIDs, campos obrigatórios, checklist limitado a 10 itens (decisão de UX pós-HU07-06), flag obrigatória, PATCH nulo rejeitado.
 - Jest no frontend garante a consistência do payload dos cinco tipos, a separação entre planejamento e execução, a configuração recorrente V1 e erros de entrada.
 - E2E isolado em PostgreSQL real (`app_hu07_test`, schema único descartável) cobre persistência dos cinco tipos, quantidade decimal, FK composta de contrato/etapa, tipos/recorrência inválidos, checklist e leitura em segunda conexão.
 

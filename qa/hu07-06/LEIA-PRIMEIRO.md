@@ -21,6 +21,17 @@ python3 -m venv /tmp/venv-hu07-06
 
 **Importante:** o script abre janela de login, pausa apenas para você autenticar cada conta e, depois, automatiza os testes. Não transmite senhas ao terminal ou a relatórios. Arquivos JSON de resultado são criados em `/tmp`, e não entram no PR.
 
+## Ajustes pós-HU07-06 — modal, refresh e responsável
+
+O fluxo de navegador foi sincronizado com a interface revisada. Ele **também** exige que a edição
+existente de Etapa abra em modal, que Esc/Voltar/X/clique fora fechem sem navegar, foco e scroll preservados, que o botão de atualização
+mostre loading/bloqueio visível, que o checklist limite a 10 itens e que o responsável seja
+escolhido por e-mail, com confirmação por API e SQL. O consolidador exige essas quatro provas novas em cada cenário de escrita. Esses testes só são provados pela
+execução REAL de Chromium com sessão SuperTokens, não pelos quatro testes locais adicionais.
+
+Durante o QA de escrita, o script faz operações reais e permanentes apenas no contrato de QA,
+enquanto os dez itens provisórios de checklist são criados e retirados **antes do POST**.
+
 ## 1. Verificação técnica (uma vez, antes do commit)
 
 ```bash

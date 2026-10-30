@@ -65,7 +65,7 @@ export function validarEntregavel(r: RascunhoEntregavel): { sucesso: true; dados
     if (t && (!t.trim() || t.length > maximo)) erros[campo] = `Revise o campo (até ${maximo} caracteres e sem valor somente com espaços).`;
   }
   if (!TIPOS.includes(r.tipo)) erros.tipo = 'Escolha um tipo de entregável válido.';
-  if (r.responsavelId.trim() && !uuid4(r.responsavelId.trim())) erros.responsavelId = 'Informe um UUID v4 válido do usuário ativo ou deixe em branco.';
+  if (r.responsavelId.trim() && !uuid4(r.responsavelId.trim())) erros.responsavelId = 'Selecione um funcionário ativo ou deixe em branco.';
   if (r.inicioPrevisto && !dataValida(r.inicioPrevisto)) erros.inicioPrevisto = 'Data civil inválida.';
   if (r.terminoPrevisto && !dataValida(r.terminoPrevisto)) erros.terminoPrevisto = 'Data civil inválida.';
   if (r.inicioPrevisto && r.terminoPrevisto && r.terminoPrevisto < r.inicioPrevisto) erros.terminoPrevisto = 'O término não pode anteceder o início.';
@@ -83,7 +83,7 @@ export function validarEntregavel(r: RascunhoEntregavel): { sucesso: true; dados
   if (r.peso.trim() && (!decimal(r.peso.trim(), 3, 4) || Number(r.peso.trim()) > 100)) {
     erros.peso = 'Peso entre 0 e 100, com até 4 casas decimais.';
   }
-  if (r.evidenciasEsperadas.length > 100) erros.evidenciasEsperadas = 'Máximo de 100 itens.';
+  if (r.evidenciasEsperadas.length > 10) erros.evidenciasEsperadas = 'Máximo de 10 itens.';
   r.evidenciasEsperadas.forEach((e, indice) => {
     if (!e.tipoEvidencia.trim() || e.tipoEvidencia.length > 100) erros[`evidencias.${indice}.tipoEvidencia`] = 'Informe o tipo da evidência (até 100 caracteres).';
     if (e.descricao && (!e.descricao.trim() || e.descricao.length > 3000)) erros[`evidencias.${indice}.descricao`] = 'Descrição inválida (até 3000 caracteres).';

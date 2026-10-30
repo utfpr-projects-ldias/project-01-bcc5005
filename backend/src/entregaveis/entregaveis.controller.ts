@@ -1,5 +1,5 @@
 import {
-  Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Put,
+  BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Put,
   Query, Req, UsePipes, ValidationPipe,
 } from '@nestjs/common';
 import { ExigirPoliticaOperacional } from '../autorizacao/politica.decorator.js';
@@ -25,6 +25,17 @@ export class EntregaveisController {
   @ExigirPoliticaOperacional('entregaveis:criar', { tipo: 'contrato', parametro: 'contratoId' })
   criar(@Param('contratoId') contratoId: string, @Body() dto: CriarEntregavelDto, @Req() req: RequisicaoAutorizada) {
     return this.service.criar(contratoId, dto, req.usuarioDominio!);
+  }
+
+  /** Somente perfis com permissão de planejamento podem pesquisar funcionários ativos. */
+  @Get('responsaveis')
+  @ExigirPoliticaOperacional('entregaveis:criar', { tipo: 'contrato', parametro: 'contratoId' })
+  consultarResponsaveis(@Query('busca') busca?: string, @Query('pagina') pagina?: string) {
+    const numero = pagina === undefined ? 1 : Number(pagina);
+    if (!Number.isInteger(numero) || numero < 1 || numero > 1000) {
+      throw new BadRequestException('Página inválida');
+    }
+    return this.service.consultarResponsaveis(busca, numero);
   }
 
   @Get(':entregavelId')

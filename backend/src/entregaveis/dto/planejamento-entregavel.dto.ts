@@ -24,7 +24,7 @@ export class CriarEntregavelDto {
   @IsOptional() @IsString() peso?: string | null;
   @IsOptional() @IsString() @MaxLength(5000) criterioConclusao?: string | null;
   @IsOptional() @IsString() @MaxLength(3000) observacoes?: string | null;
-  @IsOptional() @IsArray() @ArrayMaxSize(100) @ValidateNested({ each: true })
+  @IsOptional() @IsArray() @ArrayMaxSize(10) @ValidateNested({ each: true })
   @Type(() => ItemEvidenciaEsperadaDto) evidenciasEsperadas?: ItemEvidenciaEsperadaDto[];
 }
 
@@ -45,7 +45,7 @@ export class EditarEntregavelDto {
   @IsOptional() @IsString() peso?: string | null;
   @IsOptional() @IsString() @MaxLength(5000) criterioConclusao?: string | null;
   @IsOptional() @IsString() @MaxLength(3000) observacoes?: string | null;
-  @IsOptional() @IsArray() @ArrayMaxSize(100) @ValidateNested({ each: true })
+  @IsOptional() @IsArray() @ArrayMaxSize(10) @ValidateNested({ each: true })
   @Type(() => ItemEvidenciaEsperadaDto) evidenciasEsperadas?: ItemEvidenciaEsperadaDto[];
 }
 
@@ -57,7 +57,7 @@ export class ItemEvidenciaEsperadaDto {
 }
 
 export class SubstituirChecklistDto {
-  @IsArray() @ArrayMaxSize(100) @ValidateNested({ each: true })
+  @IsArray() @ArrayMaxSize(10) @ValidateNested({ each: true })
   @Type(() => ItemEvidenciaEsperadaDto)
   itens!: ItemEvidenciaEsperadaDto[];
 }

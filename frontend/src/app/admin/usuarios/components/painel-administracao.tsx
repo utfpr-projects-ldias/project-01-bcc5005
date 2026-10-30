@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { IndicadorCarregamento } from "@/app/components/indicador-carregamento";
+import { useAtualizacaoVisivel } from "@/hooks/use-atualizacao-visivel";
 import { LinkVoltar } from "@/app/components/link-voltar";
 import { ConfirmacaoSimples } from "@/app/components/confirmacao-simples";
 import { useRouter } from "next/navigation";
@@ -70,6 +71,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
   const [quantidades, setQuantidades] = useState({ ativos: 0, arquivados: 0 });
   const [erroLista, setErroLista] = useState("");
   const [atualizando, setAtualizando] = useState(false);
+  const atualizacaoVisivel = useAtualizacaoVisivel();
   const [mudandoConsulta, setMudandoConsulta] = useState(false);
   const [avisoAtualizacao, setAvisoAtualizacao] = useState("");
   const [editando, setEditando] = useState<UsuarioPublico | null>(null);
@@ -343,7 +345,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 id="titulo-lista" className="text-lg font-semibold">Funcionários</h2>
               <div className="flex flex-wrap gap-2">
-                <button type="button" className={botao + " min-w-32"} onClick={() => void recarregar()} disabled={atualizando} aria-busy={atualizando}>{atualizando ? <IndicadorCarregamento compacto texto="Atualizando..." /> : "Atualizar lista"}</button>
+                <button type="button" className={botao + " inline-flex min-w-36 items-center justify-center transition-colors disabled:cursor-wait"} onClick={() => void atualizacaoVisivel.executar(() => recarregar()).catch(() => {})} disabled={atualizando || atualizacaoVisivel.ocupado} aria-busy={atualizando || atualizacaoVisivel.ocupado}>{atualizando || atualizacaoVisivel.ocupado ? <IndicadorCarregamento compacto texto="Atualizando..." /> : "Atualizar lista"}</button>
                 <Link href="/admin/usuarios/novo" className={acao}>Cadastrar funcionário</Link>
               </div>
             </div>

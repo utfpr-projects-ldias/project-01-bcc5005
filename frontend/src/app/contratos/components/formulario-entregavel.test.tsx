@@ -66,3 +66,40 @@ test('erro HTTP preserva campos; clique duplo só dispara uma mutação', async 
   await waitFor(() => expect(screen.getByRole('button', { name: 'Cadastrar entregável' })).toBeEnabled());
   expect(screen.getByLabelText('Nome *')).toHaveValue('Serviço planejado');
 });
+
+test('limite 10 impede adicionar mais itens, sem apagar o checklist anterior', () => {
+  montar();
+  const adicionar = screen.getByRole('button', { name: /Adicionar evidência esperada/ });
+  for (let n = 0; n < 10; n++) fireEvent.click(adicionar);
+  expect(screen.getAllByRole('button', { name: /Remover evidência esperada/ })).toHaveLength(10);
+  expect(adicionar).toBeDisabled();
+  expect(screen.getByText(/máximo de 10/)).toBeInTheDocument();
+});
+
+test('responsável é único, opcional e escolhido somente pelo e-mail sem expor UUID', async () => {
+  const usuario = { id: '12345678-1234-4123-8123-123456789abc', nome: 'Maria da Silva', email: 'maria@example.org' };
+  global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ itens: [usuario], total: 1, pagina: 1, totalPaginas: 1 }) });
+  render(<FormularioEntregavel contratoId="contrato-a" etapaId="etapa-a" onSalvar={gravar} onCancelar={cancelar} />);
+  expect(screen.queryByRole('combobox', { name: 'Responsável pelo entregável (opcional)' })).not.toBeInTheDocument();
+  expect(screen.getByText(/Nenhum responsável atribuído/)).toBeInTheDocument();
+  const busca = screen.getByRole('combobox', { name: 'Buscar responsável por e-mail' });
+  fireEvent.change(busca, { target: { value: 'maria@' } });
+  const opcao = await screen.findByRole('option', { name: /maria@example.org/ });
+  fireEvent.click(opcao);
+  expect(screen.getByText('maria@example.org')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Remover atribuição' })).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Nome *'), { target: { value: 'Entregável da equipe' } });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Cadastrar entregável' })); });
+  expect(gravar).toHaveBeenCalledWith(expect.objectContaining({ responsavelId: usuario.id }));
+  fireEvent.click(screen.getByRole('button', { name: 'Remover atribuição' }));
+  expect(screen.getByRole('combobox', { name: 'Buscar responsável por e-mail' })).toBeInTheDocument();
+});
+
+test('e-mail apenas digitado, sem opção selecionada, não cria vínculo automaticamente', async () => {
+  global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ itens: [], total: 0, pagina: 1, totalPaginas: 1 }) });
+  render(<FormularioEntregavel contratoId="contrato-a" etapaId="etapa-a" onSalvar={gravar} onCancelar={cancelar} />);
+  fireEvent.change(screen.getByRole('combobox', { name: 'Buscar responsável por e-mail' }), { target: { value: 'inexistente@empresa.org' } });
+  fireEvent.change(screen.getByLabelText('Nome *'), { target: { value: 'Obrigação sem responsável' } });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Cadastrar entregável' })); });
+  expect(gravar).toHaveBeenCalledWith(expect.objectContaining({ responsavelId: null }));
+});
