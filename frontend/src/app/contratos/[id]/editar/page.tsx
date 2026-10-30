@@ -17,7 +17,9 @@ export default function EditarContratoPage() {
   const admin = !!perfil?.ativo && perfil.perfil === 'ADMINISTRADOR';
   const contratoQuery = useContrato(id, !!perfil?.ativo);
   const acessoQuery = useAcessoContrato(id, !!perfil?.ativo);
-  const responsaveisQuery = useResponsaveis(!!admin && !!acessoQuery.dados?.podeEditar);
+  // Apenas o Administrador pode gerenciar o responsável interno.
+  // A consulta é restrita no backend e somente é feita com permissão efetiva de edição.
+  const responsaveisQuery = useResponsaveis(admin && !!acessoQuery.dados?.podeEditar);
   const { editar } = useMutacoesContrato();
   const carregando = verificando || (!!perfil?.ativo && (contratoQuery.carregando || acessoQuery.carregando || (admin && acessoQuery.dados?.podeEditar && responsaveisQuery.carregando)));
   const erroConsulta = erroPerfil || contratoQuery.erro || acessoQuery.erro || responsaveisQuery.erro;
