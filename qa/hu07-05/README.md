@@ -28,3 +28,7 @@ bash /tmp/hu07-passo5/VALIDAR-HU07-05.sh "$PWD"
 Rode esse comando dentro da raiz do repositório. Depois dos resultados positivos, adicione somente este primeiro commit à branch da HU07-05 e deixe HU07-06 para um segundo commit no mesmo PR.
 
 **Escopo:** testes e automação de QA. README principal, migrations, backend operacional, frontend operacional e dados do DB de desenvolvimento permanecem intocados.
+
+## Regressão extra: histórico do modal e ordem de etapas
+
+Testes frontend HU06/HU07 validam que o botão Voltar físico (evento `popstate`) fecha apenas o modal, que as ações X/Esc/clique fora/Voltar sem salvar consomem exatamente uma entrada de histórico, preservam foco/URL e que Subir/Descer aciona animação FLIP dos dois cartões. São testes unitários DOM, **não** equivalem a navegador autenticado; o roteiro HU07-06 exige prova real posterior.

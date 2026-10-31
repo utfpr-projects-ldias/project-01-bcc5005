@@ -24,7 +24,7 @@ python3 -m venv /tmp/venv-hu07-06
 ## Ajustes pós-HU07-06 — modal, refresh e responsável
 
 O fluxo de navegador foi sincronizado com a interface revisada. Ele **também** exige que a edição
-existente de Etapa abra em modal, que Esc/Voltar/X/clique fora fechem sem navegar, foco e scroll preservados, que o botão de atualização
+existente de Etapa abra em modal, que Esc, X, clique fora, Voltar sem salvar **e Voltar físico do mouse/navegador** fechem sem navegar, foco e scroll preservados, que o botão de atualização
 mostre loading/bloqueio visível, que o checklist limite a 10 itens e que o responsável seja
 escolhido por e-mail, com confirmação por API e SQL. O consolidador exige essas quatro provas novas em cada cenário de escrita. Esses testes só são provados pela
 execução REAL de Chromium com sessão SuperTokens, não pelos quatro testes locais adicionais.
@@ -109,3 +109,9 @@ git push origin feature/hu07-05-06-testes-integracao-entregaveis
 ```
 
 Nunca commite JSONs de evidência com IDs de contratos reais sem aprovação da equipe. O PR pode intitular-se **HU07-05/06 — Testes, integração real e QA de Entregáveis**. O aceite da HU07-06 depende de evidência real; o mero commit da automação não significa que as cinco sessões já foram executadas.
+
+## Retorno do navegador e transição de etapas (correção HU07)
+
+Abrir o modal de edição de etapas insere um estado de histórico **na mesma URL**. O botão lateral Voltar do mouse, Alt+Esquerda e Voltar do navegador devem consumir somente esse estado e fechar o diálogo, mantendo a rolagem e o foco no botão de origem. X, Esc, clique fora e Voltar sem salvar também removem a entrada temporária; salvar faz o mesmo. O QA real exige prova do Voltar físico.
+
+Subir/Descer utiliza animação FLIP de 340 ms sobre os cartões completos. A suíte Jest com DOM simulado verifica a transição (Web Animations API); testar visualmente a suavidade no Firefox/Chromium e com `prefers-reduced-motion` é complementar. Não significa aprovação de integração real sem os cinco perfis.

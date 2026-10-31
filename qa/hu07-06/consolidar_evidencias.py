@@ -47,7 +47,7 @@ def validar(relatorios: list[dict]) -> list[str]:
             if not r.get('etapaCriada'):
                 erros.append(f'{perfil}: etapa real HU06 não demonstrada')
             for trecho in ('Cinco POST', 'Cinco PATCH', 'PostgreSQL', 'Network Chromium',
-                           'Etapa: modal acessível', 'Atualizar entregáveis: spinner',
+                           'Etapa: modal acessível', 'Voltar do mouse/navegador', 'Atualizar entregáveis: spinner',
                            'Checklist: limite de 10', 'Responsável: seleção única por e-mail'):
                 if not any(trecho in str(p) for p in provas):
                     erros.append(f'{perfil}: falta evidência {trecho}')

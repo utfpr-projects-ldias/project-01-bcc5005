@@ -9,7 +9,7 @@ class Consolidacao(unittest.TestCase):
         provas = ['Sessão real SuperTokens', 'Logout SuperTokens real']
         if escrita:
             provas += ['Cinco POST', 'Cinco PATCH', 'Conferência PostgreSQL', 'Network Chromium',
-                       'Etapa: modal acessível', 'Atualizar entregáveis: spinner',
+                       'Etapa: modal acessível, Voltar do mouse/navegador', 'Atualizar entregáveis: spinner',
                        'Checklist: limite de 10', 'Responsável: seleção única por e-mail']
         elif perfil == 'sem-vinculo':
             provas.append('Sem vínculo: leitura bloqueada')
@@ -44,6 +44,13 @@ class Consolidacao(unittest.TestCase):
             if r['perfilSolicitado'] == 'administrador':
                 r['provas'] = [p for p in r['provas'] if 'Etapa: modal' not in p]
         self.assertTrue(any('modal' in erro for erro in validar(lista)))
+
+    def test_rejeita_relatorio_sem_prova_do_voltar_fisico(self):
+        lista = [self.relatorio(p) for p in PERFIS]
+        for r in lista:
+            if r['perfilSolicitado'] == 'administrador':
+                r['provas'] = [p.replace('Voltar do mouse/navegador', 'Voltar sem salvar') for p in r['provas']]
+        self.assertTrue(any('Voltar do mouse/navegador' in erro for erro in validar(lista)))
 
     def test_cinco_papeis_aceitos_com_evidencias(self):
         self.assertEqual([], validar([self.relatorio(p) for p in PERFIS]))

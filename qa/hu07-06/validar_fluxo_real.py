@@ -197,6 +197,19 @@ def verificar_modal_etapa(page, painel, etapa_nome: str, saida: dict) -> None:
     dialogo.wait_for(state='detached', timeout=10000)
     exigir(page.url == url_original, 'Esc navegou para fora do contrato')
     exigir(botao.evaluate('(el) => document.activeElement === el'), 'Foco não retornou ao botão Editar')
+    # Voltar pelo botão lateral do mouse/atalho do navegador: deve consumir a
+    # entrada temporária do histórico, não navegar para o dashboard/URL anterior.
+    botao.click()
+    dialogo = page.get_by_role('dialog', name=re.compile('Editar etapa'))
+    exigir(page.evaluate("Boolean(window.history.state?.__modalEtapa)"),
+           'Modal não registrou entrada reversível no histórico')
+    page.evaluate('window.history.back()')
+    dialogo.wait_for(state='detached', timeout=10000)
+    exigir(page.url == url_original, 'Voltar do mouse saiu da página do contrato')
+    exigir(abs(page.evaluate('window.scrollY') - posicao_anterior) <= 3,
+           'Voltar do mouse pulou a rolagem para o topo')
+    exigir(botao.evaluate('(el) => document.activeElement === el'),
+           'Voltar do mouse não devolveu o foco ao botão Editar')
     botao.click()
     dialogo = page.get_by_role('dialog', name=re.compile('Editar etapa'))
     dialogo.get_by_role('button', name='Voltar sem salvar').click()
@@ -216,7 +229,7 @@ def verificar_modal_etapa(page, painel, etapa_nome: str, saida: dict) -> None:
     dialogo.wait_for(state='detached', timeout=10000)
     exigir(page.url == url_original and abs(page.evaluate('window.scrollY') - posicao_anterior) <= 3,
            'Clicar fora do modal alterou a rota ou rolou para o topo')
-    saida['provas'].append('Etapa: modal acessível, Esc, Voltar, X, clique fora, foco e scroll preservados')
+    saida['provas'].append('Etapa: modal acessível, Esc, Voltar do mouse/navegador, Voltar sem salvar, X, clique fora, foco e scroll preservados')
 
 
 def verificar_atualizacao_entregaveis(page, bloco, saida: dict) -> None:
