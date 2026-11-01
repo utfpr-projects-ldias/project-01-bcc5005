@@ -12,8 +12,8 @@ class CredenciaisPrivadas(unittest.TestCase):
     def test_caminho_padrao_fica_na_pasta_gitignored_do_projeto(self):
         self.assertEqual(CAMINHO_PADRAO.parent.name, '.local')
         self.assertEqual(CAMINHO_PADRAO.name, 'credenciais.json')
-        ignore = CAMINHO_PADRAO.parent.parent / '.gitignore'
-        self.assertIn('/.local/', ignore.read_text())
+        ignore = CAMINHO_PADRAO.parents[3] / '.gitignore'
+        self.assertIn('qa/**/.local/', ignore.read_text())
 
     def montar_arquivo(self, raiz: Path):
         arquivo = raiz / 'qa.json'

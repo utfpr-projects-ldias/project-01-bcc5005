@@ -54,6 +54,12 @@ function dataBR(data: string): string {
 function nomePerfil(p: UsuarioPublico["perfil"]): string {
   return p === "ADMINISTRADOR" ? "Administrador" : p === "GESTOR" ? "Gestor" : "Colaborador";
 }
+/** Resumo apenas visual: não afeta os identificadores usados pela API. */
+function abreviarIdentificacao(valor: string, limite: number): string {
+  const caracteres = Array.from(valor.trim());
+  return caracteres.length <= limite ? caracteres.join("") : `${caracteres.slice(0, limite - 1).join("")}…`;
+}
+
 
 export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cadastro' | 'edicao'; idEdicao?: string }) {
   const router = useRouter();
@@ -454,12 +460,17 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                           <ul className="mt-2 space-y-2 text-sm">
                             {permissoes.map((v) => {
                               const contrato = contratos.find((c) => c.id === v.contratoId);
-                              return <li key={v.contratoId} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brand-green/20 p-3">
+                              return <li key={v.contratoId} className="flex min-w-0 flex-col gap-3 rounded-lg border border-brand-green/20 p-3 sm:flex-row sm:items-center sm:justify-between">
                                 <div className="min-w-0 flex-1">
-                                  <p className="font-medium break-words">{contrato ? `${contrato.numeroContrato} — ${contrato.orgaoContratante}` : `Contrato ${v.contratoId}`}</p>
-                                  <p className="text-xs text-foreground/65">{v.podeEditar && editando.perfil === "GESTOR" ? "Leitura e edição" : "Somente leitura"}</p>
+                                  {contrato ? <>
+                                    <p title={contrato.numeroContrato} className="truncate font-medium">{abreviarIdentificacao(contrato.numeroContrato, 24)}</p>
+                                    <p title={contrato.orgaoContratante} className="truncate text-xs text-foreground/70">{abreviarIdentificacao(contrato.orgaoContratante, 28)}</p>
+                                    <p className="text-xs text-foreground/60">Código #{contrato.codigoPublico}</p>
+                                    <details className="mt-1 text-xs text-foreground/70"><summary className="cursor-pointer">Ver identificação completa</summary><p className="mt-1 [overflow-wrap:anywhere]">{contrato.numeroContrato} — {contrato.orgaoContratante}</p></details>
+                                  </> : <p className="break-all font-medium">Contrato {v.contratoId}</p>}
+                                  <p className="mt-1 text-xs text-foreground/65">{v.podeEditar && editando.perfil === "GESTOR" ? "Leitura e edição" : "Somente leitura"}</p>
                                 </div>
-                                <div className="flex flex-wrap gap-2">
+                                <div className="flex shrink-0 flex-wrap gap-2">
                                   {editando.perfil === "GESTOR" && <button type="button" className={botao} disabled={enviando || !!atualizandoVinculo || !editando.ativo} onClick={() => void alternarPermissao(v)}>{atualizandoVinculo === v.contratoId ? <IndicadorCarregamento compacto texto="Atualizando..." /> : v.podeEditar ? "Remover edição" : "Permitir edição"}</button>}
                                   <button type="button" className={botao} disabled={enviando || !!atualizandoVinculo} onClick={() => setConfirmacao({ tipo: "permissao", contratoId: v.contratoId, email: editando.email })}>Revogar acesso</button>
                                 </div>
@@ -471,10 +482,10 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                         <section className="border-t border-brand-green/20 pt-4" aria-label="Conceder novo acesso">
                           <h4 className="text-sm font-semibold">Adicionar acesso</h4>
                           {contratosLivres.length === 0 ? <p className="mt-2 text-sm text-foreground/60">Não há outros contratos disponíveis para vincular. Crie um contrato ou revise os vínculos acima.</p> :
-                            <form onSubmit={(e) => void salvarPermissao(e)} className="mt-3 space-y-3">
+                            <form onSubmit={(e) => void salvarPermissao(e)} className="mt-3 min-w-0 space-y-3">
                               <label htmlFor="contrato-permissao" className="block text-sm">Selecionar contrato ainda não vinculado</label>
-                              <select id="contrato-permissao" className={campo} value={contratoSelecionado} onChange={(e) => setContratoId(e.target.value)}>
-                                {contratosLivres.map((c) => <option value={c.id} key={c.id}>{c.numeroContrato} — {c.orgaoContratante}</option>)}
+                              <select id="contrato-permissao" className={`${campo} max-w-[20rem] text-sm`} value={contratoSelecionado} onChange={(e) => setContratoId(e.target.value)}>
+                                {contratosLivres.map((c) => <option value={c.id} key={c.id}>#{c.codigoPublico} · {abreviarIdentificacao(c.numeroContrato, 14)} · {abreviarIdentificacao(c.orgaoContratante, 14)}</option>)}
                               </select>
                               {editando.perfil === "GESTOR" && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={podeEditar} onChange={(e) => setPodeEditar(e.target.checked)} />Permitir também edição</label>}
                               <button type="submit" disabled={enviando || !contratoSelecionado || !editando.ativo} className={acao}>{enviando ? <IndicadorCarregamento compacto texto="Vinculando..." /> : "Adicionar vínculo"}</button>

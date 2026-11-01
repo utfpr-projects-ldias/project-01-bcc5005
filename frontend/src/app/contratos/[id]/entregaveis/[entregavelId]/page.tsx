@@ -46,7 +46,7 @@ export function ConteudoEntregavel({ item }: { item: Entregavel }) {
     <section className="space-y-2 rounded-2xl border border-brand-green/25 bg-brand-darkgreen/10 p-4 md:p-6">
       <h2 className="text-lg font-semibold text-brand-neon">Critério de conclusão</h2>
       <p className="whitespace-pre-wrap break-words text-sm">{item.criterioConclusao?.trim() || 'Critério não informado no planejamento.'}</p>
-      <p className="text-xs text-foreground/65">O acompanhamento da execução e a conclusão serão disponibilizados com o motor TEC09. Nenhum progresso foi presumido.</p>
+      <p className="text-xs text-foreground/65">O acompanhamento da execução ainda não está disponível. Nenhum progresso é calculado automaticamente nesta tela.</p>
     </section>
     <section className="space-y-3 rounded-2xl border border-brand-green/25 bg-brand-darkgreen/10 p-4 md:p-6">
       <h2 className="text-lg font-semibold text-brand-neon">Evidências esperadas</h2>
@@ -63,7 +63,7 @@ export function ConteudoEntregavel({ item }: { item: Entregavel }) {
     </section>
     <section className="space-y-2 rounded-2xl border border-dashed border-brand-green/25 p-4 md:p-6">
       <h2 className="text-base font-semibold">Próximas integrações</h2>
-      <p className="text-sm text-foreground/70">Ocorrências (HU09), diário de atividades (HU08) e evidências reais (HU10) serão vinculados a este entregável nas respectivas entregas. Nenhuma ação está disponível nesta etapa.</p>
+      <p className="text-sm text-foreground/70">O registro de ocorrências, atividades e evidências ainda não está disponível nesta tela.</p>
     </section>
   </div>;
 }

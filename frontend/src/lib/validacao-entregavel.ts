@@ -25,7 +25,7 @@ export const PERIODICIDADES: PeriodicidadeEntregavel[] = ['DIARIA', 'SEMANAL', '
 export const DESCRICOES_TIPO: Record<TipoEntregavel, string> = {
   UNICO: 'Uma obrigação pontual. O andamento será registrado pelo módulo de execução.',
   QUANTITATIVO: 'Obrigação mensurável: quantidade prevista positiva e unidade são necessárias.',
-  RECORRENTE: 'Obrigação que se repete com frequência fixa. As ocorrências serão geradas na HU09.',
+  RECORRENTE: 'Obrigação periódica. Defina a frequência para orientar o planejamento; o acompanhamento por ocorrências ainda não está disponível.',
   CONTINUO: 'Atividade mantida ao longo do período. O tempo decorrido não representa progresso automático.',
   MARCO: 'Marco contratual atingido em uma condição verificável. A data efetiva será tratada na execução.',
 };

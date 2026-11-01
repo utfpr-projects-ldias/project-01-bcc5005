@@ -1,7 +1,7 @@
 # Execução atual: dados QA apenas dentro do repositório
 
 O ambiente de teste, navegadores, credenciais e relatórios ficam em
-`qa/hu07-06/.local/`, **ignorado pelo Git** (arquivo `qa/hu07-06/.gitignore`).
+`qa/hu07-06/.local/`, **ignorado pelo Git** (`.gitignore` único na raiz do repositório).
 Não versionar ou anexar `.local/` e não fornecer senhas em comandos, mensagens ou JSONs.
 
 ```bash

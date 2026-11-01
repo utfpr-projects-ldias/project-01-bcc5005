@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useMeuPerfil } from '@/hooks/use-meu-perfil';
 import { useContrato, useAcessoContrato } from '@/hooks/use-contratos';
-import { dataCivil, MODOS, STATUS } from '@/lib/contratos';
+import { dataCivil, MODOS, STATUS, rotuloCodigoPublico } from '@/lib/contratos';
 import { AreaContratos, Aviso } from '../components/area-contratos';
 import { PainelEtapas } from '../components/painel-etapas';
 
@@ -48,7 +48,7 @@ export default function DetalheContratoPage() {
   );
   const responsavelVisivel = responsavelQuery.dados
     ? `${responsavelQuery.dados.nome?.trim() || 'Nome não informado'} — ${responsavelQuery.dados.email}`
-    : responsavelId;
+    : responsavelId ? 'Responsável interno cadastrado' : null;
   return <AreaContratos titulo="Detalhes do contrato">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <LinkVoltar href="/contratos">Voltar aos contratos</LinkVoltar>
@@ -58,11 +58,11 @@ export default function DetalheContratoPage() {
     {carregando ? <Aviso>Carregando contrato...</Aviso> : erro ? <Aviso erro>{erro}</Aviso> : contrato ? <>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0 w-full"><h2 title={contrato.numeroContrato} className="line-clamp-2 max-w-full [overflow-wrap:anywhere] text-2xl font-bold leading-snug text-brand-neon">{contrato.numeroContrato}</h2>
-          <p className="mt-1 max-w-full [overflow-wrap:anywhere] text-sm text-foreground/70">{contrato.orgaoContratante}</p></div>
+          <p className="mt-1 text-xs font-medium text-foreground/60">Código {rotuloCodigoPublico(contrato.codigoPublico)}</p><p className="mt-1 max-w-full [overflow-wrap:anywhere] text-sm text-foreground/70">{contrato.orgaoContratante}</p></div>
         <span className="rounded-full border border-brand-green/30 bg-brand-green/10 px-3 py-1.5 text-xs font-medium">{STATUS[contrato.status]}</span>
       </div>
       <GrupoDados titulo="Identificação" campos={[
-        ['Objeto contratual', contrato.objeto], ['Número do contrato', contrato.numeroContrato],
+        ['Objeto contratual', contrato.objeto], ['Número do contrato', contrato.numeroContrato], ['Código de identificação', rotuloCodigoPublico(contrato.codigoPublico)],
         ['Órgão contratante', contrato.orgaoContratante], ['Processo administrativo', contrato.processoAdministrativo],
         ['Unidade responsável', contrato.unidadeResponsavel], ['Descrição', contrato.descricao],
       ]} />

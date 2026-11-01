@@ -22,6 +22,10 @@ export class Contrato {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
+  /** Identificação pública amigável; UUID continua sendo a chave primária e das URLs. */
+  @Column({ name: 'codigo_publico', type: 'varchar', length: 5, unique: true, update: false })
+  codigoPublico!: string;
+
   @Column({ name: 'numero_contrato', type: 'varchar', length: 100 })
   numeroContrato!: string;
 

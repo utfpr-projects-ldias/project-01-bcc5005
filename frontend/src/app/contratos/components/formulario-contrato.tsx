@@ -37,8 +37,10 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
   { inicial?: Contrato; responsaveis: UsuarioPublico[]; onSalvar: (dados: DadosContrato) => Promise<void>; salvando?: boolean; podeDefinirResponsavel?: boolean }) {
   const [form, setForm] = useState<DadosContrato>(() => {
     if (!inicial) return { ...dadosIniciais };
-    const { id, ...dados } = inicial;
+    // O identificador público é somente leitura: jamais compõe um PATCH.
+    const { id, codigoPublico, ...dados } = inicial;
     void id;
+    void codigoPublico;
     return { ...dados, dataAssinatura: dataCivil(inicial.dataAssinatura) || null,
       inicioVigencia: dataCivil(inicial.inicioVigencia), terminoVigencia: dataCivil(inicial.terminoVigencia) };
   });
@@ -47,6 +49,13 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
   const [terminoManualConfirmado, setTerminoManualConfirmado] = useState(false);
   const [erros, setErros] = useState<ErrosContrato>({});
   const [erroGeral, setErroGeral] = useState('');
+  // Uma atribuição existente pode não constar na lista de usuários selecionáveis
+  // (conta inativa, lista parcial ou gestor sem permissão de administração).
+  // A interface usa o estado neutro, mas preserva o ID original até que o
+  // usuário altere explicitamente o campo: editar outros dados não apaga vínculos.
+  const responsavelSelecionavel = !form.responsavelInternoId ||
+    responsaveis.some(usuario => usuario.id === form.responsavelInternoId);
+  const responsavelExibido = responsavelSelecionavel ? (form.responsavelInternoId ?? '') : '';
   const calculado = modo === 'meses' ? terminoPorMeses(form.inicioVigencia, Number(meses)) : null;
   const fimAmbiguo = modo === 'meses' && Boolean(form.inicioVigencia) && duracaoMesesSchema.safeParse(meses).success && calculado === null;
   const termino = modo === 'meses' && calculado ? calculado : form.terminoVigencia;
@@ -152,9 +161,8 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
           <Campo titulo="Fiscal/gestor público" id="fiscal" erro={erroDo('fiscalGestor')} ajuda="Identificação informativa do representante público; não cria usuário nem acesso externo." contador={{ valor: (form.fiscalGestor ?? '').length, max: LIMITES_CONTRATO.fiscalGestor }}>
             <input id="fiscal" className={input} maxLength={LIMITES_CONTRATO.fiscalGestor} value={form.fiscalGestor ?? ''} onChange={e => atualizar('fiscalGestor', e.target.value || null)} {...acessibilidade('fiscal', 'fiscalGestor', true)} /></Campo>
           <Campo titulo="Responsável interno (usuário ativo)" id="responsavel" erro={erroDo('responsavelInternoId')} ajuda="Pessoa de referência. Não substitui os vínculos de acesso definidos na Administração de funcionários.">
-            <select id="responsavel" className={input} disabled={!podeDefinirResponsavel} value={form.responsavelInternoId ?? ''} onChange={e => atualizar('responsavelInternoId', e.target.value || null)} {...acessibilidade('responsavel', 'responsavelInternoId', true)}>
+            <select id="responsavel" className={input} disabled={!podeDefinirResponsavel} value={responsavelExibido} onChange={e => atualizar('responsavelInternoId', e.target.value || null)} {...acessibilidade('responsavel', 'responsavelInternoId', true)}>
               <option value="">Não atribuído</option>
-              {form.responsavelInternoId && !responsaveis.some(u => u.id === form.responsavelInternoId) && <option value={form.responsavelInternoId}>Responsável atribuído (identificador reservado)</option>}
               {responsaveis.map(u => <option key={u.id} value={u.id}>{u.nome?.trim() || 'Nome não informado'} — {u.email}</option>)}</select></Campo>
         </div>
         <Campo titulo="Descrição" id="descricao" erro={erroDo('descricao')} ajuda="Detalhamento adicional do objeto e do contexto do contrato." contador={{ valor: (form.descricao ?? '').length, max: LIMITES_CONTRATO.descricao }}>

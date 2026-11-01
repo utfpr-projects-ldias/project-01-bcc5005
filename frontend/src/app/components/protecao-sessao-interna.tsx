@@ -18,7 +18,10 @@ export function ProtecaoSessaoInterna({ children }: { children: ReactNode }) {
   const router = useRouter();
   const cache = useRepositorioConsultas();
   const [estado, setEstado] = useState<Estado>("verificando");
+  const [versaoIdentidade, setVersaoIdentidade] = useState(0);
   const ultimoUsuario = useRef<string | null>(null);
+  const [jaAutorizado, setJaAutorizado] = useState(false);
+  const perdeuFocoEm = useRef<number | null>(null);
 
   useEffect(() => {
     let montado = true;
@@ -44,8 +47,13 @@ export function ProtecaoSessaoInterna({ children }: { children: ReactNode }) {
         }
         // Se a identidade mudou com o mesmo layout Next montado, nunca reutilizar
         // dados privados da conta anterior.
-        if (ultimoUsuario.current && ultimoUsuario.current !== perfil.id) cache.limpar();
+        if (ultimoUsuario.current && ultimoUsuario.current !== perfil.id) {
+          cache.limpar();
+          // Formulários locais pertencentes à identidade anterior não são reutilizados.
+          setVersaoIdentidade(versao => versao + 1);
+        }
         ultimoUsuario.current = perfil.id;
+        setJaAutorizado(true);
         setEstado("autorizado");
       } catch (erro) {
         if (!montado) return;
@@ -63,18 +71,36 @@ export function ProtecaoSessaoInterna({ children }: { children: ReactNode }) {
       }
     }
     void verificar();
-    const aoFoco = () => { void verificar(); };
+    const aoPerderFoco = () => { perdeuFocoEm.current = Date.now(); };
+    const aoFoco = () => {
+      const inicio = perdeuFocoEm.current;
+      perdeuFocoEm.current = null;
+      // Capturadores de tela e seletores de janela roubam o foco brevemente.
+      // Não desmontar/revalidar um formulário por um desfoque momentâneo.
+      // Após ausências prolongadas, continuar revalidando o usuário real.
+      if (inicio !== null && Date.now() - inicio >= 0 && Date.now() - inicio < 4000) return;
+      void verificar();
+    };
     const aoVoltar = () => { if (!document.hidden) void verificar(); };
+    window.addEventListener("blur", aoPerderFoco);
     window.addEventListener("focus", aoFoco);
     document.addEventListener("visibilitychange", aoVoltar);
     return () => {
       montado = false;
+      window.removeEventListener("blur", aoPerderFoco);
       window.removeEventListener("focus", aoFoco);
       document.removeEventListener("visibilitychange", aoVoltar);
     };
   }, [router, cache]);
 
-  if (estado === "autorizado") return <>{children}</>;
+  if (estado === "autorizado" || (estado === "verificando" && jaAutorizado)) return <>
+    {/* Mesmo durante a revalidação, o formulário e seus estados continuam montados.
+        Ocultar o conteúdo enquanto se verificam permissões evita expor dados antigos. */}
+    <div key={versaoIdentidade} className={estado === "autorizado" ? "contents" : "hidden"}>{children}</div>
+    {estado === "verificando" && <div className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground" role="status">
+      <IndicadorCarregamento texto="Verificando sessão e permissões..." />
+    </div>}
+  </>;
   if (estado === "verificando" || estado === "redirecionando") return (
     <div className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground" role="status">
       <IndicadorCarregamento texto="Verificando sessão e permissões..." />

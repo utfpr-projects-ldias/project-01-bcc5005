@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ProtecaoSessaoInterna } from './protecao-sessao-interna';
 import { useRepositorioConsultas } from './provedor-consultas';
 import { doesSessionExist } from 'supertokens-web-js/recipe/session';
@@ -71,4 +71,53 @@ test('troca de usuário com layout persistente invalida dados privados antigos',
   await act(async () => { window.dispatchEvent(new Event('focus')); });
   await waitFor(() => expect(mockLimpar).toHaveBeenCalled());
   expect(screen.getByText('Área interna')).toBeInTheDocument();
+});
+
+
+test('captura de tela com perda rápida de foco não reinicia formulário nem revalida a sessão', async () => {
+  render(<ProtecaoSessaoInterna><input aria-label="Rascunho" defaultValue="Em edição" /></ProtecaoSessaoInterna>);
+  const campo = await screen.findByRole('textbox', { name: 'Rascunho' });
+  fireEvent.change(campo, { target: { value: 'Ainda estou editando' } });
+  const consultas = perfil.mock.calls.length;
+  await act(async () => {
+    window.dispatchEvent(new Event('blur'));
+    window.dispatchEvent(new Event('focus'));
+  });
+  expect(perfil).toHaveBeenCalledTimes(consultas);
+  expect(screen.getByRole('textbox', { name: 'Rascunho' })).toBe(campo);
+  expect(campo).toHaveValue('Ainda estou editando');
+});
+
+test('revalidação com foco após ausência prolongada mantém formulário montado e protege os dados', async () => {
+  const agora = jest.spyOn(Date, 'now');
+  let instante = 1000;
+  agora.mockImplementation(() => instante);
+  try {
+    render(<ProtecaoSessaoInterna><input aria-label="Rascunho" defaultValue="Valor original" /></ProtecaoSessaoInterna>);
+    const campo = await screen.findByRole('textbox', { name: 'Rascunho' });
+    fireEvent.change(campo, { target: { value: 'Texto sem salvar' } });
+    let liberar!: (u: typeof usuario) => void;
+    perfil.mockImplementationOnce(() => new Promise<typeof usuario>(res => { liberar = res; }));
+    await act(async () => { window.dispatchEvent(new Event('blur')); });
+    instante += 5000;
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    expect(campo.isConnected).toBe(true);
+    expect(campo.closest('.hidden')).not.toBeNull();
+    await act(async () => { liberar(usuario); });
+    expect(screen.getByRole('textbox', { name: 'Rascunho' })).toBe(campo);
+    expect(campo).toHaveValue('Texto sem salvar');
+  } finally { agora.mockRestore(); }
+});
+
+
+test('troca da identidade remonta formulário e descarta rascunho do usuário anterior', async () => {
+  render(<ProtecaoSessaoInterna><input aria-label="Rascunho" defaultValue="Vazio" /></ProtecaoSessaoInterna>);
+  const antigo = await screen.findByRole('textbox', { name: 'Rascunho' });
+  fireEvent.change(antigo, { target: { value: 'Privado do usuário A' } });
+  perfil.mockResolvedValueOnce({ ...usuario, id: '22222222-2222-4222-8222-222222222222' });
+  await act(async () => { window.dispatchEvent(new Event('focus')); });
+  const novo = screen.getByRole('textbox', { name: 'Rascunho' });
+  expect(novo).not.toBe(antigo);
+  expect(novo).toHaveValue('Vazio');
+  expect(mockLimpar).toHaveBeenCalled();
 });

@@ -216,12 +216,12 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
         onChange={(e) => atualizar('periodicidade', e.target.value as RascunhoEntregavel['periodicidade'])}>
         <option value="">Selecione</option>{PERIODICIDADES.map((p) => <option key={p} value={p}>{ROTULOS_PERIODICIDADE[p]}</option>)}
       </select>{mensagem('periodicidade')}
-      <p className="mt-1 text-xs text-foreground/65">Configuração enviada: versão 1. Personalizada ainda não foi homologada; ocorrências serão geradas na HU09.</p>
+      <p className="mt-1 text-xs text-foreground/65">Selecione a frequência prevista. O acompanhamento de cada ocorrência ainda não está disponível.</p>
     </div>}
     <div><label className="mb-1 block text-sm" htmlFor={formId('peso')}>Peso operacional (%) — opcional</label>
       <input id={formId('peso')} className={estilo} inputMode="decimal" value={dados.peso} {...campoErro('peso')}
         placeholder="Ex.: 20.0000" onChange={(e) => atualizar('peso', e.target.value)} />{mensagem('peso')}
-      <p className="mt-1 text-xs text-foreground/65">Peso físico, não financeiro. No modo ponderado, a soma de 100% entre entregáveis será validada em TEC09; não é requisito individual.</p></div>
+      <p className="mt-1 text-xs text-foreground/65">Peso operacional, sem relação com valores financeiros. Em contratos com cálculo ponderado, os pesos devem totalizar 100% para compor o avanço; essa verificação geral ainda não está disponível aqui.</p></div>
     <div><label className="mb-1 block text-sm" htmlFor={formId('criterioConclusao')}>Critério de conclusão {['CONTINUO','MARCO'].includes(dados.tipo) ? '*' : '(opcional)'}</label>
       <textarea id={formId('criterioConclusao')} className={estilo} rows={3} maxLength={5000} value={dados.criterioConclusao} {...campoErro('criterioConclusao')}
         onChange={(e) => atualizar('criterioConclusao', e.target.value)} />{mensagem('criterioConclusao')}</div>
@@ -257,7 +257,7 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
     </fieldset>
     {exigeConfirmacao && <div className="space-y-2 rounded-xl border border-amber-500/50 bg-amber-500/5 p-3 text-sm">
       <p role="note" className="font-semibold">Atenção ao replanejamento</p>
-      <p>Tipo, periodicidade, prazo ou etapa foram alterados, ou itens foram removidos do checklist. Parâmetros incompatíveis serão limpos ao salvar, mas permanecem neste formulário caso você retorne ao tipo anterior. Itens removidos serão registrados em auditoria. Se houver ocorrências vinculadas, a API pode bloquear a alteração (409), sem apagá-las.</p>
+      <p>Tipo, periodicidade, prazo ou etapa foram alterados, ou itens foram removidos do checklist. Parâmetros incompatíveis serão limpos ao salvar, mas permanecem neste formulário caso você retorne ao tipo anterior. Itens removidos serão registrados em auditoria. Se houver ocorrências vinculadas, o sistema pode impedir a alteração, sem apagá-las.</p>
       <label className="flex items-start gap-2"><input type="checkbox" checked={confirmado} onChange={(e) => setConfirmado(e.target.checked)} /> Confirmo que compreendi essas alterações.</label>
     </div>}
     {erroGeral && <p role="alert" className="rounded-lg border border-red-500/45 p-3 text-sm text-red-400">{erroGeral}</p>}

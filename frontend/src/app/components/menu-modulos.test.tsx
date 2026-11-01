@@ -9,14 +9,14 @@ const perfil = consultarMeuPerfil as jest.MockedFunction<typeof consultarMeuPerf
 
 beforeEach(() => jest.clearAllMocks());
 
-test("B3 libera listagem real de contratos e classifica Atividades como Sprint 04", async () => {
+test("B3 libera contratos e mostra módulos indisponíveis sem linguagem interna", async () => {
   perfil.mockResolvedValue({ id: "u", nome: "Colaborador de Teste", email: "teste@example.com", perfil: "COLABORADOR", ativo: true });
   // Verifica a ausência do link administrativo após a consulta do perfil terminar.
   await act(async () => {
     renderComConsultas(<MenuMobile />);
   });
   expect(screen.getByRole("link", { name: /Contratos/ })).toHaveAttribute("href", "/contratos");
-  expect(screen.getByText(/Sprint 04 · em desenvolvimento/)).toBeInTheDocument();
+  expect(screen.getByText(/Atividades · Indisponível/)).toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "Funcionários" })).not.toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "Minha conta" })).not.toBeInTheDocument();
 });

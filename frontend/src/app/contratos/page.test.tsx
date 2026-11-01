@@ -6,7 +6,7 @@ import { listarContratos } from '@/lib/contratos';
 
 jest.mock('@/lib/admin-usuarios', () => ({ consultarMeuPerfil: jest.fn() }));
 jest.mock('@/lib/contratos', () => ({
-  listarContratos: jest.fn(), STATUS: { PLANEJAMENTO: 'Planejamento' }, MODOS: { SIMPLES: 'Simples' }, dataCivil: (x: string) => x,
+  listarContratos: jest.fn(), STATUS: { PLANEJAMENTO: 'Planejamento' }, MODOS: { SIMPLES: 'Simples' }, dataCivil: (x: string) => x, rotuloCodigoPublico: (c: string) => `#${c}`,
 }));
 jest.mock('./components/area-contratos', () => ({
   AreaContratos: ({ children }: { children: React.ReactNode }) => <main>{children}</main>,
@@ -25,7 +25,7 @@ test('HU05-06: busca dados reais e não apresenta fixture CT-001/2026', async ()
 });
 
 test('HU05-06: contrato real abre detalhe pelo UUID', async () => {
-  listar.mockResolvedValue([{ id: '11111111-1111-4111-8111-111111111111', numeroContrato: 'REAL-2026', orgaoContratante: 'UTFPR', objeto: 'Serviços', status: 'PLANEJAMENTO', modoCalculo: 'SIMPLES', inicioVigencia: '2026-01-01', terminoVigencia: '2026-12-31' } as Awaited<ReturnType<typeof listarContratos>>[number]]);
+  listar.mockResolvedValue([{ id: '11111111-1111-4111-8111-111111111111', codigoPublico: '00427', numeroContrato: 'REAL-2026', orgaoContratante: 'UTFPR', objeto: 'Serviços', status: 'PLANEJAMENTO', modoCalculo: 'SIMPLES', inicioVigencia: '2026-01-01', terminoVigencia: '2026-12-31' } as Awaited<ReturnType<typeof listarContratos>>[number]]);
   await act(async () => { renderComConsultas(<ContratosListPage />); });
   expect(screen.getByText('REAL-2026')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Detalhes' })).toHaveAttribute('href', '/contratos/11111111-1111-4111-8111-111111111111');
@@ -40,7 +40,7 @@ test('HU05-06: não oferece criar a Colaborador', async () => {
 
 
 test('atualizar lista mantém contratos na tela sem piscar durante requisição pendente', async () => {
-  const contrato = { id: '11111111-1111-4111-8111-111111111111', numeroContrato: 'QA-2026',
+  const contrato = { id: '11111111-1111-4111-8111-111111111111', codigoPublico: '18352', numeroContrato: 'QA-2026',
     orgaoContratante: 'UTFPR', objeto: 'Serviços', status: 'PLANEJAMENTO', modoCalculo: 'SIMPLES',
     inicioVigencia: '2026-01-01', terminoVigencia: '2026-12-31' } as Awaited<ReturnType<typeof listarContratos>>[number];
   let concluir!: (c: Awaited<ReturnType<typeof listarContratos>>) => void;
@@ -56,4 +56,23 @@ test('atualizar lista mantém contratos na tela sem piscar durante requisição 
   await act(async () => { concluir([contrato]); });
   await waitFor(() => expect(screen.getByRole('button', { name: 'Atualizar lista' })).toBeEnabled());
   expect(screen.getByText('QA-2026')).toBeInTheDocument();
+});
+
+
+test('localiza por #00427 e 00427 sem perder busca por órgão, e mostra código junto ao número', async () => {
+  listar.mockResolvedValue([{ id: 'uuid-do-contrato', codigoPublico: '00427', numeroContrato: '123/2026',
+    orgaoContratante: 'Órgão institucional', objeto: 'Serviço especializado', status: 'PLANEJAMENTO',
+    modoCalculo: 'SIMPLES', inicioVigencia: '2026-01-01', terminoVigencia: '2026-12-31',
+  } as Awaited<ReturnType<typeof listarContratos>>[number]]);
+  await act(async () => { renderComConsultas(<ContratosListPage />); });
+  const campo = screen.getByLabelText('Buscar por código, número, órgão ou objeto');
+  expect(screen.getByText('Código #00427')).toBeInTheDocument();
+  fireEvent.change(campo, { target: { value: '#00427' } });
+  expect(screen.getByRole('link', { name: 'Detalhes' })).toBeInTheDocument();
+  fireEvent.change(campo, { target: { value: '00427' } });
+  expect(screen.getByRole('link', { name: 'Detalhes' })).toBeInTheDocument();
+  fireEvent.change(campo, { target: { value: 'institucional' } });
+  expect(screen.getByRole('link', { name: 'Detalhes' })).toBeInTheDocument();
+  fireEvent.change(campo, { target: { value: '#99999' } });
+  expect(screen.queryByRole('link', { name: 'Detalhes' })).not.toBeInTheDocument();
 });

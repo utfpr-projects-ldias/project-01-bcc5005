@@ -10,12 +10,10 @@ function useItens(): Item[] {
   const { dados: perfil } = useMeuPerfil();
   return [
     { nome: 'Dashboard', href: '/dashboard' },
-    // HU05, Sprint 03: CRUD real integrado à API na continuidade TEC07.
     { nome: 'Contratos', href: '/contratos' },
-    // HU08 ainda pertence à Sprint 04, não ao débito histórico de HU05.
-    { nome: 'Atividades', aviso: 'Sprint 04 · em desenvolvimento' },
-    { nome: 'Evidências', aviso: 'Sprint 05' },
-    { nome: 'Relatórios', aviso: 'Sprint 06' },
+    { nome: 'Atividades', aviso: 'Indisponível' },
+    { nome: 'Evidências', aviso: 'Indisponível' },
+    { nome: 'Relatórios', aviso: 'Indisponível' },
     ...(perfil?.ativo && perfil.perfil === 'ADMINISTRADOR' ? [{ nome: 'Funcionários', href: '/admin/usuarios' }, { nome: 'Minha conta', href: '/usuario' }] : []),
   ];
 }

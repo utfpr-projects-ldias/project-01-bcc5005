@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { FormularioContrato } from './formulario-contrato';
 import type { Contrato } from '@/lib/contratos';
 const inicial: Contrato = {
-  id: '11111111-1111-4111-8111-111111111111', numeroContrato: '001/2026', processoAdministrativo: null,
+  id: '11111111-1111-4111-8111-111111111111', codigoPublico: '00427', numeroContrato: '001/2026', processoAdministrativo: null,
   orgaoContratante: 'UTFPR', unidadeResponsavel: null, objeto: 'Prestação de serviços', descricao: null,
   dataAssinatura: null, inicioVigencia: '2026-10-17', terminoVigencia: '2027-10-16', status: 'PLANEJAMENTO',
   responsavelInternoId: null, fiscalGestor: null, modoCalculo: 'SIMPLES', observacoes: null,
@@ -25,6 +25,7 @@ test('edição envia payload DTO sem id e sem string vazia em data de assinatura
   await waitFor(() => expect(salvar).toHaveBeenCalledTimes(1));
   const enviado = salvar.mock.calls[0][0];
   expect(enviado).not.toHaveProperty('id');
+  expect(enviado).not.toHaveProperty('codigoPublico');
   expect(enviado.dataAssinatura).toBeNull();
   expect(enviado.numeroContrato).toBe('001/2026');
 });
@@ -72,4 +73,42 @@ test('edicao nao reutiliza silenciosamente termino antigo em duracao ambigua', a
   fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
   await waitFor(() => expect(salvar).toHaveBeenCalledTimes(1));
   expect(salvar.mock.calls[0][0].terminoVigencia).toBe('2027-01-30');
+});
+
+
+test('responsável fora da lista aparece como Não atribuído sem expor ID nem apagar vínculo ao editar outro campo', async () => {
+  const salvar = jest.fn().mockResolvedValue(undefined);
+  const idAnterior = '22222222-2222-4222-8222-222222222222';
+  render(<FormularioContrato inicial={{ ...inicial, responsavelInternoId: idAnterior }} responsaveis={[]} onSalvar={salvar} />);
+  const seletor = screen.getByLabelText('Responsável interno (usuário ativo)') as HTMLSelectElement;
+  expect(seletor).toHaveValue('');
+  expect(seletor).toHaveTextContent('Não atribuído');
+  expect(seletor).not.toHaveTextContent(/identificador reservado/i);
+  fireEvent.change(screen.getByLabelText('Número do contrato *'), { target: { value: '123/2026' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+  await waitFor(() => expect(salvar).toHaveBeenCalledTimes(1));
+  expect(salvar.mock.calls[0][0].responsavelInternoId).toBe(idAnterior);
+});
+
+test('seleção explícita de Não atribuído remove vínculo anterior não selecionável', async () => {
+  const salvar = jest.fn().mockResolvedValue(undefined);
+  render(<FormularioContrato inicial={{ ...inicial, responsavelInternoId: '22222222-2222-4222-8222-222222222222' }} responsaveis={[]} onSalvar={salvar} />);
+  const seletor = screen.getByLabelText('Responsável interno (usuário ativo)');
+  // A seleção nativa já mostra a opção neutra; change explícito sinaliza
+  // intenção de remover a atribuição, sem depender de valor reservado.
+  fireEvent.change(seletor, { target: { value: '' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+  await waitFor(() => expect(salvar).toHaveBeenCalledTimes(1));
+  expect(salvar.mock.calls[0][0].responsavelInternoId).toBeNull();
+});
+
+
+test('responsável ativo presente na lista segue identificado pelo nome, sem fallback', () => {
+  const id = '22222222-2222-4222-8222-222222222222';
+  const responsavel = { id, nome: 'Gestor Exemplo', email: 'gestor@example.com', perfil: 'GESTOR' as const, ativo: true, criadoEm: '2026-11-01T00:00:00.000Z' };
+  render(<FormularioContrato inicial={{ ...inicial, responsavelInternoId: id }} responsaveis={[responsavel]} onSalvar={jest.fn()} />);
+  const seletor = screen.getByLabelText('Responsável interno (usuário ativo)');
+  expect(seletor).toHaveValue(id);
+  expect(seletor).toHaveTextContent('Gestor Exemplo');
+  expect(seletor).not.toHaveTextContent(/identificador reservado/i);
 });

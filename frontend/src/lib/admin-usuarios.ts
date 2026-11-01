@@ -26,7 +26,7 @@ export type AtualizarFuncionario = {
 
 export type PaginaUsuarios = { itens: UsuarioPublico[]; pagina: number; limite: number; total: number; totalPaginas: number };
 export type PermissaoFuncionario = { contratoId: string; podeEditar: boolean };
-export type ContratoResumo = { id: string; numeroContrato: string; orgaoContratante: string; status: string };
+export type ContratoResumo = { id: string; codigoPublico: string; numeroContrato: string; orgaoContratante: string; status: string };
 
 const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/$/, "");
 
