@@ -20,42 +20,54 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
   const [confirmado, setConfirmado] = useState(false);
   const [buscaResponsavel, setBuscaResponsavel] = useState('');
   const [responsaveis, setResponsaveis] = useState<ResponsavelEntregavel[]>([]);
+  // Mantém a lista anterior estável até chegar a próxima resposta; nenhuma seleção é feita sem clique/Enter.
+  const [pesquisaConcluida, setPesquisaConcluida] = useState<string | null>(null);
   const [listaAberta, setListaAberta] = useState(false);
+  const [indiceDestacado, setIndiceDestacado] = useState(-1);
+  const [totalResponsaveis, setTotalResponsaveis] = useState(0);
   const [consultandoResponsavel, setConsultandoResponsavel] = useState(false);
   const [erroResponsavel, setErroResponsavel] = useState('');
   const [responsavelEscolhido, setResponsavelEscolhido] = useState<ResponsavelEntregavel | null>(() =>
     inicial?.responsavelId ? { id: inicial.responsavelId, email: inicial.responsavel?.email ?? '', nome: inicial.responsavel?.nome ?? null } : null);
   useEffect(() => {
-    if (!contratoId || responsavelEscolhido || buscaResponsavel.trim().length < 2) return;
+    if (!contratoId || responsavelEscolhido || !listaAberta ||
+      (buscaResponsavel.trim().length > 0 && buscaResponsavel.trim().length < 2)) return;
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       setConsultandoResponsavel(true);
       try {
         const resultado = await pesquisarResponsaveisEntregavel(contratoId, buscaResponsavel, controller.signal);
-        if (!controller.signal.aborted) { setResponsaveis(resultado.itens.filter((u) => u.email.toLowerCase().includes(buscaResponsavel.trim().toLowerCase()))); setErroResponsavel(''); }
+        if (!controller.signal.aborted) {
+          const opcoes = resultado.itens.filter((u) => u.email.toLowerCase().includes(buscaResponsavel.trim().toLowerCase()));
+          setResponsaveis(opcoes); setPesquisaConcluida(buscaResponsavel.trim().toLowerCase());
+          setTotalResponsaveis(resultado.total); setIndiceDestacado(-1); setErroResponsavel('');
+        }
       } catch (erro) {
         if (!controller.signal.aborted) {
-          setResponsaveis([]);
+          setResponsaveis([]); setPesquisaConcluida(buscaResponsavel.trim().toLowerCase()); setTotalResponsaveis(0);
           setErroResponsavel(erro instanceof ErroEntregavel ? erro.message : 'Não foi possível pesquisar e-mails.');
         }
       } finally { if (!controller.signal.aborted) setConsultandoResponsavel(false); }
     }, 280);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [contratoId, buscaResponsavel, responsavelEscolhido]);
+  }, [contratoId, buscaResponsavel, responsavelEscolhido, listaAberta]);
   function escolherResponsavel(usuario: ResponsavelEntregavel) {
     setResponsavelEscolhido(usuario);
     atualizar('responsavelId', usuario.id);
     setBuscaResponsavel('');
     setResponsaveis([]);
-    setListaAberta(false);
+    setListaAberta(false); setIndiceDestacado(-1);
   }
   function limparResponsavel() {
     setResponsavelEscolhido(null);
     atualizar('responsavelId', '');
     setBuscaResponsavel('');
     setResponsaveis([]);
-    setListaAberta(false);
+    setListaAberta(false); setIndiceDestacado(-1);
   }
+  const emailDigitado = buscaResponsavel.trim().toLowerCase();
+  const opcoesVisiveis = responsaveis.filter((u) => u.email.toLowerCase().includes(emailDigitado));
+  const aguardandoBusca = listaAberta && (emailDigitado.length === 0 || emailDigitado.length >= 2) && pesquisaConcluida !== emailDigitado;
   const estrutural = mudouEstrutura(dados, inicial);
   const excluidos = !!inicial && inicial.evidenciasEsperadas.some((e) => !dados.evidenciasEsperadas.some((item) => item.id === e.id));
   const exigeConfirmacao = estrutural || excluidos;
@@ -119,44 +131,76 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
     </div>
     <div className="space-y-2">
       <p className="block text-sm font-semibold">Responsável pelo entregável (opcional)</p>
-      <p className="text-xs text-foreground/70">Um funcionário ativo, selecionado pelo e-mail. Deixe sem atribuição se não houver responsável definido. Atribuir responsabilidade não libera acesso ao contrato.</p>
+      <p className="text-xs text-foreground/70">Um usuário ativo (inclusive Administrador), selecionado pelo e-mail. Deixe sem atribuição se não houver responsável definido. Atribuir responsabilidade não libera acesso ao contrato.</p>
       {responsavelEscolhido ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brand-green/45 bg-brand-green/10 px-3 py-3">
         <div className="min-w-0"><p className="text-xs font-medium text-foreground/65">Responsável atribuído</p>
-          <p className="break-all font-semibold text-brand-neon">{responsavelEscolhido.email || 'Funcionário cadastrado'}</p>
+          <p className="break-all font-semibold text-brand-neon">{responsavelEscolhido.email || 'Usuário cadastrado'}</p>
           {responsavelEscolhido.nome && <p className="text-xs text-foreground/70">{responsavelEscolhido.nome}</p>}
         </div>
         <button type="button" disabled={salvando} onClick={limparResponsavel}
           className="rounded-lg border border-brand-green/45 px-3 py-2 text-sm transition-colors hover:bg-brand-green/20 focus-visible:outline-2 focus-visible:outline-brand-neon disabled:opacity-50">Remover atribuição</button>
       </div> : <div className="relative">
         <label className="sr-only" htmlFor={formId('email-responsavel')}>Buscar responsável por e-mail</label>
-        <input id={formId('email-responsavel')} type="search" inputMode="email" autoComplete="off" className={estilo} maxLength={100}
-          value={buscaResponsavel} placeholder="Digite o e-mail do funcionário"
-          role="combobox" aria-autocomplete="list" aria-expanded={listaAberta && responsaveis.length > 0}
-          aria-controls={formId('opcoes-responsavel')} {...campoErro('responsavelId')}
-          disabled={salvando || !contratoId}
-          onChange={(e) => { setBuscaResponsavel(e.target.value); setListaAberta(true); setResponsaveis([]); setErroResponsavel(''); }}
-          onFocus={() => setListaAberta(true)}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') { e.stopPropagation(); setListaAberta(false); }
-            if (e.key === 'Enter' && listaAberta && responsaveis.length === 1) {
-              e.preventDefault(); escolherResponsavel(responsaveis[0]);
-            }
-          }} />
-        {listaAberta && responsaveis.length > 0 && <div id={formId('opcoes-responsavel')} role="listbox"
-          aria-label="E-mails encontrados" className="absolute z-30 mt-1 max-h-52 w-full overflow-y-auto rounded-lg border border-brand-green/50 bg-background p-1 shadow-2xl">
-          {responsaveis.map((usuario) => <button key={usuario.id} role="option" aria-selected={false} type="button"
-            className="block w-full rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-brand-green/20 focus-visible:bg-brand-green/20 focus-visible:outline-2 focus-visible:outline-brand-neon"
-            onMouseDown={(e) => e.preventDefault()} onClick={() => escolherResponsavel(usuario)}>
+        <div className="flex items-stretch rounded-lg border border-brand-green/45 bg-background focus-within:ring-2 focus-within:ring-brand-neon/70">
+          <input id={formId('email-responsavel')} type="search" inputMode="email" autoComplete="off"
+            className="min-w-0 flex-1 rounded-l-lg bg-transparent px-3 py-2.5 text-sm text-foreground outline-none aria-invalid:border-red-500"
+            maxLength={100} value={buscaResponsavel} placeholder="Digite ou escolha um e-mail"
+            role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={listaAberta}
+            aria-controls={formId('opcoes-responsavel')}
+            aria-activedescendant={listaAberta && indiceDestacado >= 0 && opcoesVisiveis[indiceDestacado]
+              ? formId(`opcao-responsavel-${opcoesVisiveis[indiceDestacado].id}`) : undefined}
+            {...campoErro('responsavelId')} disabled={salvando || !contratoId}
+            onChange={(e) => { setBuscaResponsavel(e.target.value); setListaAberta(true); setIndiceDestacado(-1); setConsultandoResponsavel(false); setErroResponsavel(''); }}
+            onFocus={() => setListaAberta(true)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') { e.stopPropagation(); setListaAberta(false); setIndiceDestacado(-1); }
+              if (e.key === 'ArrowDown') {
+                e.preventDefault(); setListaAberta(true);
+                if (opcoesVisiveis.length) setIndiceDestacado((i) => (i + 1) % opcoesVisiveis.length);
+              }
+              if (e.key === 'ArrowUp') {
+                e.preventDefault(); setListaAberta(true);
+                if (opcoesVisiveis.length) setIndiceDestacado((i) => (i <= 0 ? opcoesVisiveis.length - 1 : i - 1));
+              }
+              if (e.key === 'Enter' && listaAberta && opcoesVisiveis.length && (indiceDestacado >= 0 || opcoesVisiveis.length === 1)) {
+                e.preventDefault(); escolherResponsavel(opcoesVisiveis[indiceDestacado >= 0 ? indiceDestacado : 0]);
+              }
+            }} />
+          <button type="button" disabled={salvando || !contratoId} aria-haspopup="listbox"
+            aria-controls={formId('opcoes-responsavel')} aria-expanded={listaAberta}
+            aria-label={listaAberta ? 'Fechar lista de responsáveis' : 'Abrir lista de responsáveis'}
+            title={listaAberta ? 'Fechar lista' : 'Mostrar usuários ativos'}
+            className="inline-flex w-11 shrink-0 cursor-pointer items-center justify-center rounded-r-lg border-l border-brand-green/45 text-brand-neon transition-colors duration-200 hover:bg-brand-green/20 focus-visible:outline-2 focus-visible:outline-brand-neon disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={() => { setListaAberta((aberta) => !aberta); setIndiceDestacado(-1); }}>
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              className={`h-5 w-5 transition-transform duration-200 ${listaAberta ? 'rotate-180' : ''}`}>
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+        </div>
+        {listaAberta && <div id={formId('opcoes-responsavel')} role="listbox" aria-label="E-mails encontrados"
+          className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-brand-green/50 bg-background p-1 shadow-2xl">
+          {(consultandoResponsavel || aguardandoBusca) && <p role="status" className="px-3 py-2 text-xs text-foreground/65">Buscando e-mails...</p>}
+          {!consultandoResponsavel && !aguardandoBusca && !opcoesVisiveis.length && <p className="px-3 py-2 text-xs text-foreground/65">
+            {buscaResponsavel.length === 1 ? 'Digite mais um caractere para pesquisar.' : 'Nenhum e-mail disponível para essa busca.'}
+          </p>}
+          {!aguardandoBusca && opcoesVisiveis.map((usuario, indice) => <button key={usuario.id} id={formId(`opcao-responsavel-${usuario.id}`)}
+            role="option" aria-selected={indice === indiceDestacado} type="button"
+            className={`block w-full cursor-pointer rounded-md px-3 py-2 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-brand-neon ${indice === indiceDestacado ? 'bg-brand-green/25' : 'hover:bg-brand-green/20'}`}
+            onMouseDown={(e) => e.preventDefault()} onMouseEnter={() => setIndiceDestacado(indice)}
+            onClick={() => escolherResponsavel(usuario)}>
             <span className="block break-all font-medium">{usuario.email}</span>
             {usuario.nome && <span className="block text-xs text-foreground/65">{usuario.nome}</span>}
           </button>)}
+          {!consultandoResponsavel && !aguardandoBusca && totalResponsaveis > opcoesVisiveis.length && <p className="border-t border-brand-green/20 px-3 py-2 text-xs text-foreground/65">
+            Mostrando até {opcoesVisiveis.length} de {totalResponsaveis} contas ativas; refine pelo e-mail.
+          </p>}
         </div>}
       </div>}
-      {!responsavelEscolhido && <p className="text-xs text-foreground/65">Nenhum responsável atribuído. Digite ao menos dois caracteres e selecione o e-mail encontrado.</p>}
-      {consultandoResponsavel && !responsavelEscolhido && <p role="status" className="text-xs text-foreground/70">Pesquisando e-mails...</p>}
+      {!responsavelEscolhido && <p className="text-xs text-foreground/65">Nenhum responsável atribuído. Digite parte do e-mail ou abra a lista de usuários ativos e selecione uma opção.</p>}
       {erroResponsavel && <p role="alert" className="text-xs text-red-400">{erroResponsavel}</p>}
-      {!erroResponsavel && !consultandoResponsavel && !responsavelEscolhido && buscaResponsavel.length >= 2 && !responsaveis.length &&
-        <p className="text-xs text-foreground/65">Nenhum funcionário ativo encontrado com esse e-mail.</p>}
+      {!erroResponsavel && !consultandoResponsavel && !responsavelEscolhido && buscaResponsavel.length >= 2 && !responsaveis.length && !listaAberta &&
+        <p className="text-xs text-foreground/65">Nenhum usuário ativo encontrado com esse e-mail.</p>}
       {mensagem('responsavelId')}
     </div>
     {dados.tipo === 'QUANTITATIVO' && <div className="grid gap-4 sm:grid-cols-2">

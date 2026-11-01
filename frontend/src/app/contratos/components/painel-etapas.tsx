@@ -10,6 +10,7 @@ import { FormularioEtapa } from './formulario-etapa';
 import { ModalEtapa } from './modal-etapa';
 import { IndicadorCarregamento } from '@/app/components/indicador-carregamento';
 import { useAtualizacaoVisivel } from '@/hooks/use-atualizacao-visivel';
+import { ajustarRestauracaoHistorico } from '@/lib/historico-modal-scroll';
 
 function dataBR(valor: string | null): string {
   return valor && /^\d{4}-\d{2}-\d{2}$/.test(valor) ? valor.split('-').reverse().join('/') : 'Não informada';
@@ -53,7 +54,7 @@ export function PainelEtapas({ contratoId, habilitado, podeGerenciar }: {
       if (Math.abs(window.scrollY - anterior.y) > 1 || Math.abs(window.scrollX - anterior.x) > 1) {
         window.scrollTo({ left: anterior.x, top: anterior.y, behavior: 'instant' });
       }
-      window.history.scrollRestoration = anterior.restauracao;
+      ajustarRestauracaoHistorico(anterior.restauracao);
     };
     if (typeof window.requestAnimationFrame === 'function') window.requestAnimationFrame(restaurar);
     else restaurar();
@@ -80,7 +81,7 @@ export function PainelEtapas({ contratoId, habilitado, podeGerenciar }: {
         x: window.scrollX, y: window.scrollY,
         restauracao: window.history.scrollRestoration,
       };
-      window.history.scrollRestoration = 'manual';
+      ajustarRestauracaoHistorico('manual');
       // Preservar o estado do Next.js (__NA, etc.) é necessário para o App Router.
       window.history.pushState({ ...estadoPreservado, __modalEtapa: marcador }, '', window.location.href);
       historicoModal.current = marcador;

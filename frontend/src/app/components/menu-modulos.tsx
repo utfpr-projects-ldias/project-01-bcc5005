@@ -16,7 +16,7 @@ function useItens(): Item[] {
     { nome: 'Atividades', aviso: 'Sprint 04 · em desenvolvimento' },
     { nome: 'Evidências', aviso: 'Sprint 05' },
     { nome: 'Relatórios', aviso: 'Sprint 06' },
-    ...(perfil?.ativo && perfil.perfil === 'ADMINISTRADOR' ? [{ nome: 'Administração', href: '/admin/usuarios' }] : []),
+    ...(perfil?.ativo && perfil.perfil === 'ADMINISTRADOR' ? [{ nome: 'Funcionários', href: '/admin/usuarios' }, { nome: 'Minha conta', href: '/usuario' }] : []),
   ];
 }
 

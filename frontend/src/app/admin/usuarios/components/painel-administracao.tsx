@@ -315,7 +315,11 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
     finally { setEnviando(false); }
   }
 
-  const listaVisivel = mudandoConsulta ? { ...lista, itens: [], total: 0 } : lista;
+  const listaVisivel = mudandoConsulta ? { ...lista, itens: [], total: 0 } : {
+    ...lista,
+    // Proteção visual adicional; a paginação e os totais corretos vêm do backend filtrado.
+    itens: lista.itens.filter((usuario) => usuario.perfil !== 'ADMINISTRADOR'),
+  };
 
   if (carregando) return <main role="status" className="min-h-screen flex items-center justify-center p-6"><IndicadorCarregamento texto="Verificando acesso à administração..." /></main>;
   if (!autorizado) return (

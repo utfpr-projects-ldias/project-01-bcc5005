@@ -17,14 +17,16 @@ test("B3 libera listagem real de contratos e classifica Atividades como Sprint 0
   });
   expect(screen.getByRole("link", { name: /Contratos/ })).toHaveAttribute("href", "/contratos");
   expect(screen.getByText(/Sprint 04 · em desenvolvimento/)).toBeInTheDocument();
-  expect(screen.queryByRole("link", { name: "Administração" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "Funcionários" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "Minha conta" })).not.toBeInTheDocument();
 });
 
 test("B3 mantém navegação de Contratos e administração restrita ao ADMIN", async () => {
   perfil.mockResolvedValue({ id: "u", nome: "Administrador de Teste", email: "admin@example.com", perfil: "ADMINISTRADOR", ativo: true });
   renderComConsultas(<MenuLateral />);
   expect(screen.getByRole("link", { name: /Contratos/ })).toHaveAttribute("href", "/contratos");
-  const entrada = await screen.findByRole("link", { name: "Administração" });
+  const entrada = await screen.findByRole("link", { name: "Funcionários" });
   expect(entrada).toHaveAttribute("href", "/admin/usuarios");
   expect(entrada).toHaveAttribute("aria-current", "page");
+  expect(screen.getByRole("link", { name: "Minha conta" })).toHaveAttribute("href", "/usuario");
 });

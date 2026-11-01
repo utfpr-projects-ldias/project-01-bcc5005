@@ -9,3 +9,20 @@ coverage/
 *.log
 
 *.tsbuildinfo
+
+# QA: artefatos locais, credenciais e dependencias nao vao ao Git.
+qa/.local/
+qa/**/.local/
+qa/**/venv/
+qa/**/.venv/
+qa/**/browsers/
+qa/**/relatorios/
+qa/**/execucoes/
+qa/**/*.zip
+qa/**/credenciais.json
+__pycache__/
+*.py[cod]
+.pytest_cache/
+**/.env
+**/.env.*
+!**/.env.example

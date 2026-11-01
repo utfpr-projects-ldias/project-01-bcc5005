@@ -104,3 +104,11 @@ export function atualizarFuncionario(id: string, dados: AtualizarFuncionario): P
     method: "PATCH", body: JSON.stringify(dados),
   });
 }
+
+/** Autosserviço: nenhum ID de outro usuário pode ser informado pelo cliente. */
+export function alterarMeuEmail(email: string, senhaAtual: string): Promise<MeuPerfil> {
+  return requisitar<MeuPerfil>('/usuarios/me/email', { method: 'PATCH', body: JSON.stringify({ email, senhaAtual }) });
+}
+export function alterarMinhaSenha(senhaAtual: string, novaSenha: string): Promise<void> {
+  return requisitar<void>('/usuarios/me/senha', { method: 'PUT', body: JSON.stringify({ senhaAtual, novaSenha }) });
+}

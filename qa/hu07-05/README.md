@@ -32,3 +32,12 @@ Rode esse comando dentro da raiz do repositório. Depois dos resultados positivo
 ## Regressão extra: histórico do modal e ordem de etapas
 
 Testes frontend HU06/HU07 validam que o botão Voltar físico (evento `popstate`) fecha apenas o modal, que as ações X/Esc/clique fora/Voltar sem salvar consomem exatamente uma entrada de histórico, preservam foco/URL e que Subir/Descer aciona animação FLIP dos dois cartões. São testes unitários DOM, **não** equivalem a navegador autenticado; o roteiro HU07-06 exige prova real posterior.
+
+
+### Responsáveis e contas administrativas (ajuste de regressão HU07-06)
+
+A listagem **Funcionários** exclui o perfil Administrador porque a conta é gerenciada
+por **Minha conta**, mas `GET /contratos/:contratoId/entregaveis/responsaveis`
+pode sugerir **qualquer usuário ativo**, incluindo Administrador, para uma atribuição
+exclusivamente cadastral. A rota continua exigindo permissão de planejamento;
+atribuir um responsável não concede nem revoga acesso ao contrato.

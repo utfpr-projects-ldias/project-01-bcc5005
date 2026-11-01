@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """HU07-06 — integração verificável pelo navegador Next + SuperTokens + Nest + PostgreSQL.
 
-Sessões são criadas por login humano no Chromium; cookies/senhas/tokens não são
-armazenados ou impressos. Gravações ficam no contrato indicado, somente com opt-in.
+Sessões SuperTokens são criadas por login real no Chromium (manual ou automático
+com credenciais de arquivo local protegido). Senhas, cookies e tokens não vão ao relatório.
+Gravações ficam no contrato indicado, somente com opt-in.
 """
 from __future__ import annotations
 
@@ -16,6 +17,8 @@ import subprocess
 import sys
 import time
 from urllib.parse import quote, urlsplit
+
+from credenciais_locais import carregar_credenciais, entrar_no_next
 
 UUID = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$', re.I)
 PERFIS = {
@@ -40,6 +43,7 @@ def argumentos() -> argparse.Namespace:
     p.add_argument('--escrita', action='store_true', help='Cria uma etapa e CINCO entregáveis no banco DEV')
     p.add_argument('--confirmar-persistencia', action='store_true', help='Consinto com dados QA permanentes no contrato')
     p.add_argument('--entregavel-id', help='UUID existente para checagem de leitura/negação nos perfis sem escrita')
+    p.add_argument('--retomar-relatorio', type=Path, help='JSON reprovado com etapa criada e nenhum entregável; retoma sem duplicar a etapa')
     p.add_argument('--outro-contrato-id', help='Contrato adicional para comprovar anti-IDOR')
     p.add_argument('--validar-banco', action='store_true', help='Conferência SQL de leitura no PostgreSQL do ambiente DEV')
     p.add_argument('--reiniciar-backend', action='store_true', help='Reinicia APENAS o container backend; requer --escrita')
@@ -47,6 +51,8 @@ def argumentos() -> argparse.Namespace:
     p.add_argument('--api-url', default='http://localhost:3001')
     p.add_argument('--largura', type=int, default=1280)
     p.add_argument('--saida', type=Path, help='Arquivo JSON exclusivo para evidências; não armazena tokens ou senhas')
+    p.add_argument('--login-automatico', action='store_true', help='Preenche login real usando arquivo privado local, sem pausa')
+    p.add_argument('--credenciais-arquivo', type=Path, help='Caminho opcional do arquivo privado, fora do Git')
     a = p.parse_args()
     for arg in ('contrato_id', 'entregavel_id', 'outro_contrato_id'):
         v = getattr(a, arg)
@@ -54,16 +60,24 @@ def argumentos() -> argparse.Namespace:
             p.error(f'--{arg.replace("_", "-")} precisa ser UUID válido')
     if a.escrita and (not a.confirmar_persistencia or not PERFIS[a.perfil][2]):
         p.error('--escrita exige --confirmar-persistencia e perfil administrador/gestor-edicao')
+    if a.retomar_relatorio and not a.escrita:
+        p.error('--retomar-relatorio exige --escrita e --confirmar-persistencia')
     if a.reiniciar_backend and not a.escrita:
         p.error('--reiniciar-backend só é permitido no cenário de escrita')
     if not a.escrita and not a.entregavel_id:
         p.error('cenários de leitura/negação exigem --entregavel-id de um registro de QA existente')
+    if a.credenciais_arquivo and not a.login_automatico:
+        p.error('--credenciais-arquivo exige --login-automatico')
     if a.largura < 320 or a.largura > 2560:
         p.error('--largura deve estar entre 320 e 2560')
     for arg in ('frontend_url', 'api_url'):
         v = urlsplit(getattr(a, arg))
         if v.scheme not in ('http', 'https') or not v.netloc or v.query or v.fragment:
             p.error(f'URL inválida: --{arg.replace("_", "-")}')
+    if a.login_automatico:
+        for endereco in (a.frontend_url, a.api_url):
+            if urlsplit(endereco).hostname not in ('localhost', '127.0.0.1'):
+                p.error('Login automático restrito a localhost/127.0.0.1 em ambiente DEV')
     return a
 
 
@@ -232,21 +246,53 @@ def verificar_modal_etapa(page, painel, etapa_nome: str, saida: dict) -> None:
     saida['provas'].append('Etapa: modal acessível, Esc, Voltar do mouse/navegador, Voltar sem salvar, X, clique fora, foco e scroll preservados')
 
 
+def validar_transicoes_refresh(eventos: list[dict]) -> float:
+    """Prova transição REAL do DOM (MutationObserver), sem esperar locator transitório."""
+    inicio = next((e for e in eventos if e['ocupado'] and e['desabilitado']), None)
+    exigir(inicio is not None, f'Não houve botão ocupado/desabilitado: {eventos!r}')
+    fim = next((e for e in eventos if e['t'] > inicio['t'] and not e['ocupado'] and not e['desabilitado']), None)
+    exigir(fim is not None, f'Atualização não concluiu/habilitou novamente: {eventos!r}')
+    duracao = fim['t'] - inicio['t']
+    exigir(duracao >= 550, f'Loading menor que o mínimo observável: {duracao:.0f} ms')
+    return duracao
+
+
 def verificar_atualizacao_entregaveis(page, bloco, saida: dict) -> None:
-    """Clicar de verdade, comprovar spinner/bloqueio mínimo e voltar à tela de lista vazia."""
+    """Observa atributos reais antes de clicar; não procura texto de apenas 650ms depois do clique."""
     botao = bloco.get_by_role('button', name='Atualizar entregáveis')
     botao.wait_for(timeout=10000)
-    inicio = time.monotonic()
+    botao.evaluate("""(el) => {
+      const dados = { eventos: [] };
+      const registrar = () => {
+        const atual = { t: performance.now(), ocupado: el.getAttribute('aria-busy') === 'true',
+          desabilitado: el.disabled, texto: (el.textContent || '').trim() };
+        const anterior = dados.eventos[dados.eventos.length - 1];
+        if (!anterior || anterior.ocupado !== atual.ocupado || anterior.desabilitado !== atual.desabilitado) {
+          dados.eventos.push(atual);
+        }
+      };
+      const observer = new MutationObserver(registrar);
+      observer.observe(el, { attributes: true, childList: true, subtree: true, characterData: true });
+      registrar();
+      window.__qaRefreshHU07 = { dados, observer };
+    }""")
     botao.click()
-    carregando = bloco.get_by_role('button', name='Atualizando entregáveis...')
-    exigir(carregando.is_disabled(), 'Botão de refresh não está bloqueado durante atualização')
-    carregando.get_by_text('Atualizando entregáveis...').wait_for(timeout=10000)
-    botao.wait_for(timeout=10000)
-    exigir(time.monotonic() - inicio >= 0.55, 'Indicador de atualização desapareceu cedo demais')
+    bloco.get_by_text('Lista de entregáveis atualizada.').wait_for(timeout=10000)
+    limite = time.monotonic() + 10
+    while time.monotonic() < limite:
+        terminado = botao.evaluate('(el) => !el.disabled && el.getAttribute("aria-busy") !== "true"')
+        if terminado: break
+        page.wait_for_timeout(40)
+    eventos = page.evaluate("""() => {
+      const ref = window.__qaRefreshHU07;
+      if (!ref) return [];
+      ref.observer.disconnect();
+      delete window.__qaRefreshHU07;
+      return ref.dados.eventos;
+    }""")
+    duracao = validar_transicoes_refresh(eventos)
     exigir(botao.is_enabled(), 'Botão de atualização permaneceu bloqueado')
-    exigir(bloco.get_by_text('Lista de entregáveis atualizada.').count() == 1,
-           'Atualização não deu retorno visual')
-    saida['provas'].append('Atualizar entregáveis: spinner, bloqueio por >= 650 ms nominal e feedback na lista vazia')
+    saida['provas'].append(f'Atualizar entregáveis: transição real aria-busy/disabled e retorno em {duracao:.0f} ms, feedback visível')
 
 
 def verificar_checklist_maximo(form, saida: dict) -> None:
@@ -258,7 +304,7 @@ def verificar_checklist_maximo(form, saida: dict) -> None:
     exigir(form.get_by_role('button', name=re.compile('Remover evidência esperada')).count() == 10,
            'Dez itens não foram renderizados')
     for _ in range(10):
-        form.get_by_role('button', name='Remover evidência esperada 1').click()
+        form.get_by_role('button', name='Remover evidência esperada 1', exact=True).click()
     exigir(adicionar.is_enabled(), 'Checklist não liberou adição após remoção')
     saida['provas'].append('Checklist: limite de 10 validado na UI, removido sem persistir rascunhos')
 
@@ -274,6 +320,15 @@ def selecionar_responsavel_real(page, form, api: str, contrato: str, saida: dict
     pessoa = usuarios[0]
     exigir(UUID.fullmatch(pessoa['id']) and bool(pessoa.get('email')),
            'API de responsável não retornou ID e e-mail válidos')
+    # O dropdown deve aceitar seleção pelo mouse e limitar a quantidade exibida.
+    abrir = form.get_by_role('button', name='Abrir lista de responsáveis')
+    abrir.click()
+    lista = form.get_by_role('listbox', name='E-mails encontrados')
+    lista.get_by_role('option').first.wait_for(timeout=15000)
+    exigir(1 <= lista.get_by_role('option').count() <= 20,
+           'Dropdown deveria limitar os resultados a 20 opções de funcionário')
+    form.get_by_role('button', name='Fechar lista de responsáveis').click()
+    saida['provas'].append('Responsável: menu por seta com até 20 e-mails e nomes, selecionável com mouse')
     campo = form.get_by_role('combobox', name='Buscar responsável por e-mail')
     campo.fill(pessoa['email'])
     opcao = form.get_by_role('option', name=re.compile(re.escape(pessoa['email'])))
@@ -287,29 +342,43 @@ def selecionar_responsavel_real(page, form, api: str, contrato: str, saida: dict
     return pessoa
 
 
-def criar_cinco_na_ui(page, api: str, web: str, contrato: str, saida: dict) -> tuple[str, list[dict]]:
+def criar_cinco_na_ui(page, api: str, web: str, contrato: str, saida: dict, retomar: dict | None = None) -> tuple[str, list[dict]]:
     """TODOS os POSTs partem dos botões da interface Next — não do validador."""
-    marca = secrets.token_hex(4).upper()
-    etapa_nome = f'QA HU07-06 Etapa {marca}'
-    etapa_codigo = f'QA706-{marca}'
     page.goto(f'{web}/contratos/{quote(contrato)}', wait_until='domcontentloaded')
     painel = page.locator('section[aria-labelledby="titulo-etapas"]')
     painel.wait_for(timeout=25000)
-    painel.get_by_role('button', name='Nova etapa').click()
-    form = painel.get_by_role('form', name='Criar etapa')
-    form.locator('#etapa-nome').fill(etapa_nome)
-    form.locator('#etapa-codigo').fill(etapa_codigo)
     caminho_etapas = f'/contratos/{quote(contrato)}/etapas'
-    with page.expect_response(lambda r: r.request.method == 'POST' and urlsplit(r.url).path == caminho_etapas
-                              and r.status == 201, timeout=25000):
-        form.get_by_role('button', name='Salvar etapa').click()
+    if retomar is None:
+        marca = secrets.token_hex(4).upper()
+        etapa_nome = f'QA HU07-06 Etapa {marca}'
+        etapa_codigo = f'QA706-{marca}'
+        painel.get_by_role('button', name='Nova etapa').click()
+        form = painel.get_by_role('form', name='Criar etapa')
+        form.locator('#etapa-nome').fill(etapa_nome)
+        form.locator('#etapa-codigo').fill(etapa_codigo)
+        with page.expect_response(lambda r: r.request.method == 'POST' and urlsplit(r.url).path == caminho_etapas
+                                  and r.status == 201, timeout=25000):
+            form.get_by_role('button', name='Salvar etapa').click()
     resp = requisitar(page, api, caminho_etapas)
-    exigir(resp['status'] == 200 and isinstance(resp['body'], list), 'Falha ao consultar etapa recém-criada')
-    etapas = [e for e in resp['body'] if e.get('nome') == etapa_nome and e.get('codigo') == etapa_codigo]
-    exigir(len(etapas) == 1, 'Etapa real HU06 não persistiu corretamente')
+    exigir(resp['status'] == 200 and isinstance(resp['body'], list), 'Falha ao consultar etapa real')
+    if retomar is None:
+        etapas = [e for e in resp['body'] if e.get('nome') == etapa_nome and e.get('codigo') == etapa_codigo]
+    else:
+        etapas = [e for e in resp['body'] if e.get('id') == retomar['etapaCriada']
+                  and e.get('nome', '').startswith('QA HU07-06 Etapa ')]
+        exigir(len(etapas) == 1, 'Etapa do relatório anterior não existe neste contrato ou não pertence a QA')
+        etapa_nome, etapa_codigo = etapas[0]['nome'], etapas[0]['codigo']
+        marca = etapa_codigo.removeprefix('QA706-')
+        exigir(re.fullmatch(r'[A-F0-9]{8}', marca) is not None,
+               'Código da etapa retomada não é da HU07-06')
+    exigir(len(etapas) == 1, 'Etapa HU06 não persistiu de forma única')
     etapa_id = etapas[0]['id']
     saida['etapaCriada'] = etapa_id
-    saida['provas'].append('Etapa HU06 criada pelo formulário Next e persistida na API real')
+    if retomar is None:
+        saida['provas'].append('Etapa HU06 criada pelo formulário Next e persistida na API real')
+    else:
+        saida['retomadaDe'] = retomar.get('inicioUtc')
+        saida['provas'].append('Etapa HU06 já criada pelo teste anterior; UUID confirmado em GET real (sem duplicação)')
     verificar_modal_etapa(page, painel, etapa_nome, saida)
     registros = []
     for n, tipo in enumerate(TIPOS, 1):
@@ -404,6 +473,17 @@ def criar_cinco_na_ui(page, api: str, web: str, contrato: str, saida: dict) -> t
     return etapa_id, registros
 
 
+def validar_relatorio_retomada(arquivo: Path, contrato: str, perfil: str) -> dict:
+    """Somente estágio confirmado, sem um único entregável criado no teste anterior."""
+    dado = json.loads(arquivo.read_text(encoding='utf-8'))
+    exigir(dado.get('contratoId') == contrato and dado.get('perfilSolicitado') == perfil,
+           'Relatório de retomada pertence a outro contrato/perfil')
+    exigir(dado.get('status') == 'REPROVADO' and UUID.fullmatch(dado.get('etapaCriada') or '')
+           and dado.get('entregaveisCriados') == [],
+           'Somente retomar relatório reprovado com etapa e zero entregáveis; evite duplicação')
+    return dado
+
+
 def main() -> int:
     args = argumentos()
     try:
@@ -415,13 +495,20 @@ def main() -> int:
     api = args.api_url.rstrip('/')
     web = args.frontend_url.rstrip('/')
     raiz = Path(__file__).resolve().parents[2]
+    retomar = None
+    if args.retomar_relatorio:
+        try:
+            retomar = validar_relatorio_retomada(args.retomar_relatorio, contrato, args.perfil)
+        except (ValueError, OSError, AssertionError) as exc:
+            print(f'[HU07-06] Retomada bloqueada: {exc}', file=sys.stderr)
+            return 2
     saida = {
         'hu': 'HU07-06', 'tipoTeste': 'NAVEGADOR_REAL_SEM_MOCK',
         'inicioUtc': datetime.now(timezone.utc).isoformat(),
         'perfilSolicitado': args.perfil, 'contratoId': contrato,
         'largura': args.largura, 'escrita': args.escrita,
         'etapaCriada': None, 'entregaveisCriados': [], 'provas': [],
-        'rede': [], 'status': 'EM_ANDAMENTO',
+        'rede': [], 'sqlValidado': False, 'status': 'EM_ANDAMENTO',
     }
     try:
         with sync_playwright() as pw:
@@ -435,10 +522,22 @@ def main() -> int:
                     saida['rede'].append({'metodo': r.request.method, 'caminho': path, 'http': r.status})
             page.on('response', vigiar)
             page.goto(web + '/login', wait_until='domcontentloaded')
-            print('\n[HU07-06] Login REAL no Chromium, usuário de teste:', args.perfil)
-            input('Entre na conta correspondente e confirme o dashboard; depois pressione ENTER: ')
+            print('\n[HU07-06] Login REAL no Chromium, cenário:', args.perfil)
+            email_esperado = None
+            if args.login_automatico:
+                email_esperado, senha = carregar_credenciais(args.perfil, args.credenciais_arquivo)
+                try:
+                    entrar_no_next(page, email_esperado, senha)
+                finally:
+                    del senha
+                print('[HU07-06] Autenticação pelo formulário Next concluída (credencial privada local).')
+            else:
+                input('Entre na conta correspondente e confirme o dashboard; depois pressione ENTER: ')
             me = requisitar(page, api, '/usuarios/me')
             exigir(me['status'] == 200, f'Sessão SuperTokens inválida: HTTP {me["status"]}')
+            if email_esperado:
+                exigir(str(me['body'].get('email', '')).strip().casefold() == email_esperado.casefold(),
+                       'A sessão autenticada não corresponde à conta configurada para este cenário')
             perfil = me['body'].get('perfil')
             esperado, pode_ler, pode_escrever = PERFIS[args.perfil]
             if esperado is not None:
@@ -447,10 +546,37 @@ def main() -> int:
                 exigir(perfil in ('GESTOR', 'COLABORADOR'), 'Sem vínculo deve ser gestor/colaborador')
             exigir(me['body'].get('ativo') is True, 'Usuário de domínio não está ativo')
             saida['provas'].append('Sessão real SuperTokens, usuário de domínio ativo e perfil validado')
+            if perfil == 'ADMINISTRADOR':
+                page.goto(f'{web}/usuario', wait_until='domcontentloaded')
+                page.get_by_role('form', name='Alterar meu e-mail').wait_for(timeout=20000)
+                page.get_by_role('form', name='Alterar minha senha').wait_for(timeout=20000)
+                exigir(page.get_by_role('link', name='Voltar a Funcionários').count() == 0,
+                       'Minha conta ainda contém o link Voltar a Funcionários')
+                exigir(page.get_by_role('form', name='Alterar meu e-mail').get_by_label('Senha atual').count() == 1,
+                       'Minha conta do Administrador não exige a senha atual')
+                # DTO rejeita payload inválido ANTES de qualquer chamada de mutação/identidade.
+                invalidos = requisitar(page, api, '/usuarios/me/email', 'PATCH', {'email': 'inválido'})
+                exigir(invalidos['status'] == 400, 'Endpoint de credencial aceitou ausência de senha atual')
+                saida['provas'].append('Administrador: Minha conta própria acessível, formulários protegidos e DTO rejeita ausência de senha')
+                # O mesmo admin não deve ser gerenciável em Funcionários.
+                # A busca no servidor pelo e-mail próprio cobre toda a paginação, não só a primeira página.
+                email_admin = me['body']['email']
+                consulta = requisitar(page, api,
+                    '/admin/usuarios/consulta?ativo=true&pagina=1&limite=20&busca=' + quote(email_admin, safe=''))
+                exigir(consulta['status'] == 200 and consulta['body'].get('total') == 0,
+                       'A API de Funcionários ainda lista a conta do próprio Administrador')
+                page.goto(web + '/admin/usuarios', wait_until='domcontentloaded')
+                area_funcionarios = page.get_by_role('region', name='Funcionários')
+                area_funcionarios.wait_for(timeout=20000)
+                exigir(area_funcionarios.get_by_text(email_admin, exact=True).count() == 0,
+                       'A interface Funcionários exibe a conta administrativa')
+                saida['provas'].append('Administrador: conta própria ausente de Funcionários (API e interface); Minha conta separada')
             acesso = requisitar(page, api, f'/contratos/{quote(contrato)}/acesso')
             if pode_ler:
                 exigir(acesso['status'] == 200 and bool(acesso['body'].get('podeEditar')) == pode_escrever,
-                       'Acesso ao contrato não corresponde ao cenário; confira vínculo/podeEditar')
+                       f'Vínculo divergente para {args.perfil}: HTTP {acesso["status"]}, '
+                       f'podeEditar={acesso.get("body", {}).get("podeEditar") if isinstance(acesso.get("body"), dict) else "indisponível"}; '
+                       'configure o funcionário pelo e-mail antes de executar este cenário')
             else:
                 exigir(acesso['status'] in (403, 404), 'Perfil sem vínculo obteve permissão de contrato')
             caminho_lista = rota(contrato)
@@ -477,17 +603,21 @@ def main() -> int:
                 corpo_invalido = {'__qaTestePermissaoSemEscrita': True}
                 post = requisitar(page, api, caminho_lista, 'POST', corpo_invalido)
                 patch = requisitar(page, api, rota(contrato, args.entregavel_id), 'PATCH', corpo_invalido)
-                exigir(post['status'] == 403 and patch['status'] == 403,
-                       f'Backend deveria bloquear POST/PATCH antes de validar body: {post["status"]}/{patch["status"]}')
+                exigir(post['status'] in (403, 404) and patch['status'] in (403, 404),
+                       f'Backend permitiu POST/PATCH ou retornou status inesperado: {post["status"]}/{patch["status"]}')
+                # 404 é a política deliberada do guard operacional para não revelar o recurso.
+                saida['negacoesEscrita'] = {'POST': post['status'], 'PATCH': patch['status']}
                 if args.validar_banco:
                     # Para papel de leitura, apenas consulta livre de efeitos colaterais; auditoria não é exigida.
                     psql = consultar_pg_leitor(raiz, contrato, args.entregavel_id)
                     exigir(psql['id'] == args.entregavel_id and psql['etapa_id'] == etapa,
                            'SQL/rota não correspondem ao entregável solicitado')
-                saida['provas'].append('Leitor: detalhe Next real, nenhuma ação de edição e POST/PATCH HTTP 403')
+                    saida['sqlValidado'] = True
+                    saida['provas'].append('PostgreSQL direto: leitor comparou identificador, contrato e etapa')
+                saida['provas'].append(f'Leitor: detalhe Next real, nenhuma ação de edição e POST/PATCH negados HTTP {post["status"]}/{patch["status"]}')
             else:
                 if args.escrita:
-                    etapa, registros = criar_cinco_na_ui(page, api, web, contrato, saida)
+                    etapa, registros = criar_cinco_na_ui(page, api, web, contrato, saida, retomar)
                     saida['idsEntregaveis'] = [x['id'] for x in registros]
                     if args.reiniciar_backend:
                         subprocess.run(['docker', 'compose', 'restart', 'backend'], cwd=raiz, check=True)
@@ -514,6 +644,7 @@ def main() -> int:
                     if args.validar_banco:
                         pg = pg_direto(raiz, contrato, etapa, [x['id'] for x in registros])
                         conferir_db_por_api(pg, registros, etapa)
+                        saida['sqlValidado'] = True
                         saida['provas'].append('PostgreSQL direto: vínculos, tipos, checklist, status NULL, auditoria e parâmetros HU09/TEC09')
                     saida['provas'].append('GET real pós-reload: cinco entregáveis únicos, sem duplicidade')
                 else:

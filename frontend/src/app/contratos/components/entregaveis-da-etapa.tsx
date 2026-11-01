@@ -14,6 +14,7 @@ export function EntregaveisDaEtapa({ contratoId, etapaId, dados, carregando, err
   carregando: boolean; erro?: unknown; atualizar: () => Promise<unknown>; podeCriar?: boolean;
 }) {
   const [aberto, setAberto] = useState(false);
+  const [iniciado, setIniciado] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [aviso, setAviso] = useState('');
   const atualizacaoVisivel = useAtualizacaoVisivel();
@@ -24,7 +25,7 @@ export function EntregaveisDaEtapa({ contratoId, etapaId, dados, carregando, err
   }
   async function cadastrar(dados: DadosPlanejamentoEntregavel) {
     await criarEntregavel(contratoId, dados);
-    setAberto(false); setAviso('Entregável cadastrado com sucesso.');
+    setAberto(false); setIniciado(false); setAviso('Entregável cadastrado com sucesso.');
     // Se a leitura falhar depois do POST, o sucesso do cadastro não se perde.
     void atualizar().catch(() => {});
   }
@@ -38,7 +39,7 @@ export function EntregaveisDaEtapa({ contratoId, etapaId, dados, carregando, err
       <div className="flex flex-wrap items-center gap-2">
       {podeCriar && !erro && <button type="button" disabled={salvando} aria-expanded={aberto}
         aria-controls={`cadastro-entregavel-${etapaId}`}
-        onClick={() => { setAberto((anterior) => !anterior); setAviso(''); }}
+        onClick={() => { setIniciado(true); setAberto((anterior) => !anterior); setAviso(''); }}
         className="inline-flex items-center gap-2 rounded-lg border border-brand-green bg-brand-green/15 px-3 py-1.5 text-xs font-semibold text-brand-neon disabled:opacity-50">
         {aberto ? 'Cadastrando entregável' : 'Novo entregável'}
         <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8"
@@ -54,7 +55,7 @@ export function EntregaveisDaEtapa({ contratoId, etapaId, dados, carregando, err
     </div>
     <p className="mt-1 text-xs text-foreground/65">Obrigações desta etapa. Evidências esperadas não são comprovação de execução.</p>
     {aviso && <p role="status" className="mt-2 text-sm text-brand-neon">{aviso}</p>}
-    {podeCriar && !erro && aberto && <div id={`cadastro-entregavel-${etapaId}`} className="etapa-form-expandido mt-3">
+    {podeCriar && !erro && iniciado && <div id={`cadastro-entregavel-${etapaId}`} hidden={!aberto} className="mt-3">
       <FormularioEntregavel contratoId={contratoId} etapaId={etapaId} onSalvar={cadastrar} onCancelar={() => setAberto(false)}
         onSalvandoMudou={setSalvando} />
     </div>}

@@ -77,3 +77,16 @@ test('Atualizar entregáveis: loading mínimo, bloqueio de clique repetido e avi
     jest.useRealTimers();
   }
 });
+
+
+test('recolher e reabrir cadastro preserva rascunho sem animation; envio bem-sucedido reinicia', async () => {
+  const atualizar = jest.fn().mockResolvedValue(undefined);
+  const { rerender } = render(<EntregaveisDaEtapa contratoId="qa" etapaId="etapa" dados={[]} carregando={false} atualizar={atualizar} podeCriar />);
+  fireEvent.click(screen.getByRole('button', { name: 'Novo entregável' }));
+  fireEvent.change(screen.getByLabelText('Nome *'), { target: { value: 'Rascunho não enviado' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Cadastrando entregável' }));
+  expect(screen.queryByLabelText('Nome *')).not.toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Novo entregável' }));
+  expect(screen.getByLabelText('Nome *')).toHaveValue('Rascunho não enviado');
+  rerender(<EntregaveisDaEtapa contratoId="qa" etapaId="etapa" dados={[]} carregando={false} atualizar={atualizar} podeCriar />);
+});

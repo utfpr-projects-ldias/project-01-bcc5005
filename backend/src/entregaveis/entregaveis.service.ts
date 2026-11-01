@@ -135,7 +135,7 @@ export class EntregaveisService implements OnModuleInit {
     private readonly escopos: ResolverEscopoContratoService,
   ) {}
 
-  /** Busca exclusivamente funcionários ativos, por contrato autorizado no guard. Não concede vínculos. */
+  /** Busca usuários ativos, inclusive Administrador, apenas para atribuição cadastral. Não concede vínculos. */
   async consultarResponsaveis(busca?: string, pagina = 1) {
     if (typeof busca !== 'undefined' && (typeof busca !== 'string' || busca.length > 100)) {
       throw new BadRequestException('Busca inválida (máximo 100 caracteres)');

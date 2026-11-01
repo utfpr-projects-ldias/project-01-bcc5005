@@ -44,6 +44,8 @@ def argumentos() -> argparse.Namespace:
     parser.add_argument("--validar-banco", action="store_true", help="Confere linhas de etapas diretamente no PostgreSQL via container backend")
     parser.add_argument("--outro-contrato-id", help="UUID de segundo contrato legível; testa rota aninhada com ID de etapa alheia")
     parser.add_argument("--saida", type=Path, help="Salva evidência JSON local sem credenciais/tokens/cookies")
+    parser.add_argument("--login-automatico", action="store_true", help="Login DEV real usando as credenciais privadas da HU07-06")
+    parser.add_argument("--credenciais-arquivo", type=Path, help="Opcional: arquivo privado DEV local (0600)")
     parser.add_argument("--largura", type=int, default=1280, help="Largura da viewport em pixels; repita com 390 para QA mobile")
     args = parser.parse_args()
     for campo in ("contrato_id", "outro_contrato_id"):
@@ -60,6 +62,12 @@ def argumentos() -> argparse.Namespace:
         parser.error("--reiniciar-backend requer --escrita, para validar registros criados na sessão")
     if args.largura < 320 or args.largura > 2560:
         parser.error("--largura deve estar entre 320 e 2560")
+    if args.login_automatico:
+        from urllib.parse import urlparse
+        for campo in ("frontend_url", "api_url"):
+            url = urlparse(getattr(args, campo))
+            if url.scheme != "http" or url.hostname not in ("localhost", "127.0.0.1") or url.username or url.password or url.query or url.fragment:
+                parser.error("Login DEV automático permitido apenas em HTTP localhost/127.0.0.1")
     for campo in ("frontend_url", "api_url"):
         valor = getattr(args, campo)
         if urlsplit(valor).scheme not in {"http", "https"} or not urlsplit(valor).netloc:
@@ -166,14 +174,32 @@ def main() -> int:
 
             print("\n[HU06-05] Navegador real iniciado com perfil ISOLADO, sem sessão salva.")
             page.goto(web + "/login", wait_until="domcontentloaded")
-            print("Faça login manualmente na janela do Chromium com o perfil indicado:", args.perfil)
-            input("Após ver o dashboard e confirmar o login, pressione ENTER aqui no terminal: ")
+            email_esperado = None
+            if args.login_automatico:
+                # Integração reutiliza a MESMA fonte de credenciais do QA HU07-06.
+                # Não registra email/senha no JSON, cookies ou headers de autenticação.
+                sys.path.insert(0, str(raiz / "qa" / "hu07-06"))
+                from credenciais_locais import carregar_credenciais, entrar_no_next
+                email_esperado, senha = carregar_credenciais(args.perfil, args.credenciais_arquivo)
+                try:
+                    entrar_no_next(page, email_esperado, senha)
+                finally:
+                    del senha
+                print("[HU06-05] Login real pelo formulário Next concluído (configuração privada).")
+            else:
+                print("Faça login manualmente na janela do Chromium com o perfil indicado:", args.perfil)
+                input("Após ver o dashboard e confirmar o login, pressione ENTER aqui no terminal: ")
             perfil = chamar_api(page, api, "/usuarios/me")
             garantir(perfil["status"] == 200, f"Sessão real/usuário ativo inválido: HTTP {perfil['status']}")
             papel = perfil["body"].get("perfil")
             papel_esperado, editar = PERFIS[args.perfil]
             if papel_esperado:
                 garantir(papel == papel_esperado, f"Perfil incorreto: esperado {papel_esperado}, recebido {papel}")
+            if args.login_automatico:
+                garantir(str(perfil["body"].get("email", "")).casefold() == email_esperado.casefold(),
+                         "A identidade autenticada não corresponde à conta DEV configurada")
+                if args.perfil == "sem-vinculo":
+                    garantir(papel == "COLABORADOR", "Cenário sem vínculo deve usar o Colaborador DEV, não Admin")
             garantir(perfil["body"].get("ativo") is True, "Usuário de domínio deve estar ativo")
             saida["provas"].append("Login real SuperTokens + /usuarios/me 200 + usuário ativo")
             print("[OK] Autenticação SuperTokens real, usuário ativo, perfil de domínio:", papel)
@@ -220,7 +246,7 @@ def main() -> int:
                     saida["provas"].append("Usuário leitura: sem botões de gestão + POST bloqueado no backend")
                     print("[OK] Perfil leitor: UI sem escrita e API negou POST")
                 else:
-                    garantir(painel.get_by_role("button", name="Nova etapa").count() == 1,
+                    garantir(painel.get_by_role("button", name="Nova etapa", exact=True).count() == 1,
                              "Gestor/Admin autorizado não vê botão Nova etapa")
 
                 if args.outro_contrato_id:

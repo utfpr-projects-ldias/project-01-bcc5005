@@ -38,6 +38,8 @@ def validar(relatorios: list[dict]) -> list[str]:
             erros.append(f'{perfil}: prova de sessão real ausente')
         if not any('Logout' in str(p) for p in provas):
             erros.append(f'{perfil}: prova de logout HTTP 401 ausente')
+        if perfil != 'sem-vinculo' and r.get('sqlValidado') is not True:
+            erros.append(f'{perfil}: exige confirmação estruturada sqlValidado=true da consulta SQL real')
         if perfil in {'administrador', 'gestor-edicao'}:
             if r.get('escrita') is not True:
                 erros.append(f'{perfil}: exige escrita real pelo formulário')
@@ -47,15 +49,19 @@ def validar(relatorios: list[dict]) -> list[str]:
             if not r.get('etapaCriada'):
                 erros.append(f'{perfil}: etapa real HU06 não demonstrada')
             for trecho in ('Cinco POST', 'Cinco PATCH', 'PostgreSQL', 'Network Chromium',
-                           'Etapa: modal acessível', 'Voltar do mouse/navegador', 'Atualizar entregáveis: spinner',
+                           'Etapa: modal acessível', 'Voltar do mouse/navegador', 'Atualizar entregáveis: transição real aria-busy/disabled',
                            'Checklist: limite de 10', 'Responsável: seleção única por e-mail'):
                 if not any(trecho in str(p) for p in provas):
                     erros.append(f'{perfil}: falta evidência {trecho}')
         elif perfil == 'sem-vinculo':
             if not any('Sem vínculo' in str(p) for p in provas):
                 erros.append('sem-vinculo: falta prova de leitura negada')
-        elif not any('POST/PATCH HTTP 403' in str(p) for p in provas):
-            erros.append(f'{perfil}: falta prova de POST e PATCH negados')
+        else:
+            negacoes = r.get('negacoesEscrita') or {}
+            if negacoes.get('POST') not in (403, 404) or negacoes.get('PATCH') not in (403, 404):
+                erros.append(f'{perfil}: falta prova estruturada de POST/PATCH 403 ou 404')
+            if not any('POST/PATCH negados HTTP' in str(p) for p in provas):
+                erros.append(f'{perfil}: falta descrição da negação POST/PATCH')
     return erros
 
 

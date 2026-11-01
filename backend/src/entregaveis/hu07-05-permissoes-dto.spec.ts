@@ -2,13 +2,15 @@ import 'reflect-metadata';
 import { jest } from '@jest/globals';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import type { Repository } from 'typeorm';
+import { type DataSource, type Repository } from 'typeorm';
 import { CHAVE_POLITICA, type Politica } from '../autorizacao/politica.decorator.js';
 import { PoliticaAcessoService } from '../autorizacao/politica-acesso.service.js';
 import type { PermissaoContrato } from '../autorizacao/permissao-contrato.entity.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
 import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
 import { EntregaveisController } from './entregaveis.controller.js';
+import { EntregaveisService } from './entregaveis.service.js';
+import type { Usuario } from '../usuarios/usuario.entity.js';
 import { CriarEntregavelDto, EditarEntregavelDto, SubstituirChecklistDto } from './dto/planejamento-entregavel.dto.js';
 
 const contrato = 'a66aabb1-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -115,5 +117,27 @@ describe('HU07 — limite e política de pesquisa de responsáveis', () => {
     expect(await validate(plainToInstance(CriarEntregavelDto, { etapaId: etapa, nome: 'Entrega', tipo: 'UNICO', evidenciasEsperadas: itens }))).toHaveLength(0);
     expect(await validate(plainToInstance(SubstituirChecklistDto, { itens }))).toHaveLength(0);
     expect((await validate(plainToInstance(SubstituirChecklistDto, { itens: [...itens, itens[0]] }))).length).toBeGreaterThan(0);
+  });
+});
+
+
+describe('HU07-05 — responsáveis ativos (incluindo Administrador) sem conceder acesso', () => {
+  it('exige usuário ativo no SQL sem excluir Administrador, preservando paginação', async () => {
+    const findAndCount = jest.fn<(...args: unknown[]) => Promise<[Usuario[], number]>>()
+      .mockResolvedValue([[], 0]);
+    const dataSource = { getRepository: () => ({ findAndCount }) } as unknown as DataSource;
+    const service = new EntregaveisService({} as never, {} as never, dataSource, {} as never, {} as never);
+    await service.consultarResponsaveis();
+    await service.consultarResponsaveis('gestor@empresa.test');
+    expect(findAndCount).toHaveBeenCalledTimes(2);
+    const todas = findAndCount.mock.calls[0]?.[0] as { where: { ativo: boolean }; take: number };
+    expect(todas.take).toBe(20);
+    expect(todas.where).toEqual({ ativo: true });
+    const filtradas = findAndCount.mock.calls[1]?.[0] as { where: Array<{ ativo: boolean; nome?: unknown; email?: unknown }> };
+    expect(filtradas.where).toHaveLength(2);
+    for (const regra of filtradas.where) {
+      expect(regra.ativo).toBe(true);
+      expect(regra).not.toHaveProperty('perfil');
+    }
   });
 });

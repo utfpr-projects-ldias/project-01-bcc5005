@@ -59,6 +59,15 @@ test("listagem exibe ação de cadastro ao lado de atualizar, sem formulário", 
   expect(screen.queryByLabelText("Senha inicial")).not.toBeInTheDocument();
 });
 
+test("a própria conta Administrador não aparece na área Funcionários, mesmo em payload legado", async () => {
+  // Defesa da UI: evita apresentar a conta no painel antes mesmo de atualizar o backend.
+  renderComConsultas(<AdministracaoUsuariosPage />);
+  const lista = await screen.findByRole("region", { name: "Funcionários" });
+  expect(within(lista).getByText("gestor@exemplo.com")).toBeInTheDocument();
+  expect(within(lista).queryByText("admin@exemplo.com")).not.toBeInTheDocument();
+  expect(within(lista).queryByRole("link", { name: "Editar admin@exemplo.com" })).not.toBeInTheDocument();
+});
+
 test("editar é link para página própria", async () => {
   renderComConsultas(<AdministracaoUsuariosPage />);
   const lista = await screen.findByRole("region", { name: "Funcionários" });
