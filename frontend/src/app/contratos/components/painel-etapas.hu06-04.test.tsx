@@ -104,6 +104,7 @@ describe('HU06-04 — estados e acessibilidade do painel (React com mocks)', () 
       [registros[0].id, registros[1].id], [registros[1].id, registros[0].id],
     );
     expect(screen.getByRole('status')).toHaveTextContent('Ordem das etapas salva');
+    expect(screen.getByRole('list', { name: 'Etapas em ordem de execução' })).toBeInTheDocument();
   });
 
   it('conflito 409 mantém ordem anterior e solicita recarga; falha 500 não altera a lista', async () => {

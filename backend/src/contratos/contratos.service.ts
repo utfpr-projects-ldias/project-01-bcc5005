@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { QueryFailedError, type EntityManager, type Repository } from 'typeorm';
+import { randomInt } from 'node:crypto';
 
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
@@ -22,6 +23,20 @@ import type { CriarContratoDto } from './dto/criar-contrato.dto.js';
 const PG_CHECK_VIOLATION = '23514';
 const PG_UNIQUE_VIOLATION = '23505';
 const PG_FK_VIOLATION = '23503';
+const CONSTRAINT_CODIGO_PUBLICO = 'uq_contratos_codigo_publico';
+const TENTATIVAS_ALEATORIAS = 24;
+const TENTATIVAS_RESERVA = 12;
+
+/** Apenas a colisão da coluna pública pode ser repetida; outros 23505 continuam 409. */
+function colisaoCodigoPublico(error: unknown): boolean {
+  if (!(error instanceof QueryFailedError)) return false;
+  const driver = error.driverError as { code?: string; constraint?: string };
+  return driver.code === PG_UNIQUE_VIOLATION && driver.constraint === CONSTRAINT_CODIGO_PUBLICO;
+}
+
+export function gerarCodigoPublico(): string {
+  return randomInt(0, 100_000).toString().padStart(5, '0');
+}
 
 /**
  * Regras de negócio da API de contratos — HU05-02.
@@ -50,38 +65,67 @@ export class ContratosService {
   ): Promise<Contrato> {
     this.validarVigencia(dto.inicioVigencia, dto.terminoVigencia);
 
-    return this.auditoria.executarComAuditoria(ator, async (manager) => {
-      const repo = manager.getRepository(Contrato);
-      await this.validarResponsavel(manager, dto.responsavelInternoId);
-      const contrato = repo.create({
-        numeroContrato: dto.numeroContrato.trim(),
-        processoAdministrativo: dto.processoAdministrativo ?? null,
-        orgaoContratante: dto.orgaoContratante.trim(),
-        unidadeResponsavel: dto.unidadeResponsavel ?? null,
-        objeto: dto.objeto.trim(),
-        descricao: dto.descricao ?? null,
-        dataAssinatura: dto.dataAssinatura ?? null,
-        inicioVigencia: dto.inicioVigencia,
-        terminoVigencia: dto.terminoVigencia,
-        status: dto.status,
-        responsavelInternoId: dto.responsavelInternoId ?? null,
-        fiscalGestor: dto.fiscalGestor ?? null,
-        modoCalculo: dto.modoCalculo,
-        observacoes: dto.observacoes ?? null,
-      });
-      const salvo = await salvarContrato(repo, contrato);
+    // Cada colisão provoca rollback da transação inteira (inclusive auditoria).
+    // Repetir um INSERT dentro da mesma transação PG abortada não funcionaria.
+    for (let tentativa = 0; tentativa < TENTATIVAS_ALEATORIAS + TENTATIVAS_RESERVA; tentativa++) {
+      try {
+        return await this.auditoria.executarComAuditoria(ator, async (manager) => {
+          const repo = manager.getRepository(Contrato);
+          await this.validarResponsavel(manager, dto.responsavelInternoId);
+          let codigoPublico = gerarCodigoPublico();
+          if (tentativa >= TENTATIVAS_ALEATORIAS) {
+            // Em uma base quase cheia, escolher aleatoriamente dentre as vagas.
+            // A constraint UNIQUE continua sendo a autoridade sob concorrência.
+            const disponiveis = await manager.query(`
+              SELECT lpad(g.n::text, 5, '0') AS codigo
+              FROM generate_series(0, 99999) AS g(n)
+              WHERE NOT EXISTS (
+                SELECT 1 FROM contratos c WHERE c.codigo_publico = lpad(g.n::text, 5, '0')
+              )
+              ORDER BY random() LIMIT 1
+            `) as { codigo: string }[];
+            if (!disponiveis.length) {
+              throw new ConflictException('Todos os 100.000 códigos de contrato já foram utilizados.');
+            }
+            codigoPublico = disponiveis[0].codigo;
+          }
+          const contrato = repo.create({
+            codigoPublico,
+            numeroContrato: dto.numeroContrato.trim(),
+            processoAdministrativo: dto.processoAdministrativo ?? null,
+            orgaoContratante: dto.orgaoContratante.trim(),
+            unidadeResponsavel: dto.unidadeResponsavel ?? null,
+            objeto: dto.objeto.trim(),
+            descricao: dto.descricao ?? null,
+            dataAssinatura: dto.dataAssinatura ?? null,
+            inicioVigencia: dto.inicioVigencia,
+            terminoVigencia: dto.terminoVigencia,
+            status: dto.status,
+            responsavelInternoId: dto.responsavelInternoId ?? null,
+            fiscalGestor: dto.fiscalGestor ?? null,
+            modoCalculo: dto.modoCalculo,
+            observacoes: dto.observacoes ?? null,
+          });
+          // Não traduzimos apenas a colisão específica: o loop externo trata-a.
+          const salvo = await salvarContrato(repo, contrato, false);
 
-      return {
-        resultado: salvo,
-        evento: {
-          acao: AcaoAuditoria.CONTRATO_CRIADO,
-          entidadeTipo: 'CONTRATO',
-          entidadeId: salvo.id,
-          dadosAnteriores: null,
-          dadosPosteriores: serializarContrato(salvo),
-        },
-      };
-    });
+          return {
+            resultado: salvo,
+            evento: {
+              acao: AcaoAuditoria.CONTRATO_CRIADO,
+              entidadeTipo: 'CONTRATO',
+              entidadeId: salvo.id,
+              dadosAnteriores: null,
+              dadosPosteriores: serializarContrato(salvo),
+            },
+          };
+        });
+      } catch (error) {
+        if (!colisaoCodigoPublico(error)) throw error;
+      }
+    }
+    // Pode ocorrer com concorrência extrema; não afirmar esgotamento sem conferi-lo.
+    throw new ConflictException('Não foi possível reservar um código disponível. Tente novamente.');
   }
 
   async listar(ator: UsuarioAutenticado): Promise<Contrato[]> {
@@ -219,12 +263,13 @@ export class ContratosService {
 async function salvarContrato(
   repo: Repository<Contrato>,
   contrato: Contrato,
+  traduzirUnicidade = true,
 ): Promise<Contrato> {
   try {
     return await repo.save(contrato);
   } catch (error: unknown) {
     if (error instanceof QueryFailedError) {
-      const erroDriver = error.driverError as { code?: string };
+      const erroDriver = error.driverError as { code?: string; constraint?: string };
       const codigo =
         erroDriver.code ?? (error as QueryFailedError & { code?: string }).code;
 
@@ -233,6 +278,7 @@ async function salvarContrato(
       }
 
       if (codigo === PG_UNIQUE_VIOLATION) {
+        if (!traduzirUnicidade && erroDriver.constraint === CONSTRAINT_CODIGO_PUBLICO) throw error;
         throw new ConflictException('Registro conflita com outro existente');
       }
 
@@ -286,6 +332,7 @@ function aplicarAtualizacao(alvo: Contrato, dto: AtualizarContratoDto): void {
 /** Snapshot serializável — evita enviar métodos/entidade crua à auditoria. */
 function serializarContrato(contrato: Contrato): Record<string, unknown> {
   return {
+    codigoPublico: contrato.codigoPublico,
     numeroContrato: contrato.numeroContrato,
     processoAdministrativo: contrato.processoAdministrativo,
     orgaoContratante: contrato.orgaoContratante,

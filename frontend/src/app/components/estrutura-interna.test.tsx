@@ -83,3 +83,12 @@ test('cabecalho fixo e opaco nao deixa textos de paginas longas visiveis atras d
   expect(header).toHaveClass('bg-background');
   expect(header).not.toHaveClass('bg-background/95');
 });
+
+
+test('Minha conta do Administrador é rota interna protegida com menu e saída', () => {
+  rota.mockReturnValue('/usuario');
+  renderComConsultas(<EstruturaInterna><p>Credenciais próprias</p></EstruturaInterna>);
+  expect(screen.getByRole('heading', { name: 'Minha conta' })).toBeInTheDocument();
+  expect(screen.getByTestId('menu-estavel')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Sair' })).toBeInTheDocument();
+});

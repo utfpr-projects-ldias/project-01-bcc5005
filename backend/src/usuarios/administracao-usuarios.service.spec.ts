@@ -111,6 +111,7 @@ describe('TEC07-AJUSTES-01: criação de conta com auditoria', () => {
     expect(dados).toHaveLength(1);
     expect(JSON.stringify(dados)).not.toContain('st-func');
     expect(JSON.stringify(dados)).not.toContain('SenhaForte');
+    expect(listar).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ perfil: expect.anything() }) }));
   });
 });
 
@@ -142,5 +143,38 @@ describe('consulta administrativa individual', () => {
   it('retorna 404 quando o ID não existe', async () => {
     buscarEmail.mockResolvedValue(null);
     await expect(svc.buscarPorId('uuid-ausente')).rejects.toThrow('Funcionário não encontrado');
+  });
+});
+
+
+describe('listagens de funcionários sem a conta Administrador', () => {
+  it('não devolve Administrador na lista legada, mesmo que esteja ativo', async () => {
+    // O filtro é aplicado no banco (antes do limite), não só no array da UI.
+    await svc.listar();
+    expect(listar).toHaveBeenCalledWith(expect.objectContaining({
+      where: { perfil: expect.objectContaining({ _type: 'not', _value: PerfilUsuario.ADMINISTRADOR }) },
+    }));
+  });
+
+  it('filtra ADMINISTRADOR antes de paginar, buscar e contabilizar ativos e arquivados', async () => {
+    const condicoes: Array<{ sql: string; params?: unknown }> = [];
+    const qb = {
+      andWhere(sql: string, params?: unknown) { condicoes.push({ sql, params }); return this; },
+      orderBy() { return this; }, addOrderBy() { return this; },
+      skip() { return this; }, take() { return this; },
+      async getManyAndCount(): Promise<[Usuario[], number]> { return [[usuario], 1]; },
+    };
+    const repoConsulta = { createQueryBuilder: () => qb } as unknown as Repository<Usuario>;
+    const consulta = new AdministracaoUsuariosService(repoConsulta,
+      {} as IdentidadesFuncionariosService, {} as DataSource, {} as AuditoriaService);
+    const dados = await consulta.consultar({ pagina: 1, limite: 20, ativo: true, busca: 'gestor' });
+    expect(dados).toMatchObject({ total: 1, totalPaginas: 1, itens: [{ id: usuario.id }] });
+    expect(condicoes[0]).toEqual({
+      sql: 'u.perfil <> :perfilAdministrador', params: { perfilAdministrador: PerfilUsuario.ADMINISTRADOR },
+    });
+    expect(condicoes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ sql: 'u.ativo = :ativo', params: { ativo: true } }),
+      expect.objectContaining({ sql: expect.stringContaining('u.email ILIKE') }),
+    ]));
   });
 });

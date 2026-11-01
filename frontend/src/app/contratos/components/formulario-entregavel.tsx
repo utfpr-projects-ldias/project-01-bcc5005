@@ -1,13 +1,13 @@
 'use client';
-import { useId, useRef, useState, type FormEvent } from 'react';
-import { ErroEntregavel, ROTULOS_PERIODICIDADE, ROTULOS_TIPO, type Entregavel } from '@/lib/entregaveis';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { ErroEntregavel, ROTULOS_PERIODICIDADE, ROTULOS_TIPO, pesquisarResponsaveisEntregavel, type ResponsavelEntregavel, type Entregavel } from '@/lib/entregaveis';
 import { DESCRICOES_TIPO, PERIODICIDADES, TIPOS, inicialEntregavel, mudouEstrutura,
   validarEntregavel, type DadosPlanejamentoEntregavel, type ErrosEntregavel, type RascunhoEntregavel } from '@/lib/validacao-entregavel';
 
 const estilo = 'w-full min-w-0 rounded-lg border border-brand-green/35 bg-background px-3 py-2.5 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-neon aria-invalid:border-red-500';
 function Seta() { return <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4"><path d="m4 10 4 4 8-8" /></svg>; }
-export function FormularioEntregavel({ etapaId, inicial, onSalvar, onCancelar, onSalvandoMudou }: {
-  etapaId: string; inicial?: Entregavel; onSalvar: (dados: DadosPlanejamentoEntregavel) => Promise<void>;
+export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, onCancelar, onSalvandoMudou }: {
+  contratoId?: string; etapaId: string; inicial?: Entregavel; onSalvar: (dados: DadosPlanejamentoEntregavel) => Promise<void>;
   onCancelar: () => void; onSalvandoMudou?: (salvando: boolean) => void;
 }) {
   const prefixo = useId().replace(/:/g, '');
@@ -18,6 +18,56 @@ export function FormularioEntregavel({ etapaId, inicial, onSalvar, onCancelar, o
   const [erroGeral, setErroGeral] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [confirmado, setConfirmado] = useState(false);
+  const [buscaResponsavel, setBuscaResponsavel] = useState('');
+  const [responsaveis, setResponsaveis] = useState<ResponsavelEntregavel[]>([]);
+  // Mantém a lista anterior estável até chegar a próxima resposta; nenhuma seleção é feita sem clique/Enter.
+  const [pesquisaConcluida, setPesquisaConcluida] = useState<string | null>(null);
+  const [listaAberta, setListaAberta] = useState(false);
+  const [indiceDestacado, setIndiceDestacado] = useState(-1);
+  const [totalResponsaveis, setTotalResponsaveis] = useState(0);
+  const [consultandoResponsavel, setConsultandoResponsavel] = useState(false);
+  const [erroResponsavel, setErroResponsavel] = useState('');
+  const [responsavelEscolhido, setResponsavelEscolhido] = useState<ResponsavelEntregavel | null>(() =>
+    inicial?.responsavelId ? { id: inicial.responsavelId, email: inicial.responsavel?.email ?? '', nome: inicial.responsavel?.nome ?? null } : null);
+  useEffect(() => {
+    if (!contratoId || responsavelEscolhido || !listaAberta ||
+      (buscaResponsavel.trim().length > 0 && buscaResponsavel.trim().length < 2)) return;
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setConsultandoResponsavel(true);
+      try {
+        const resultado = await pesquisarResponsaveisEntregavel(contratoId, buscaResponsavel, controller.signal);
+        if (!controller.signal.aborted) {
+          const opcoes = resultado.itens.filter((u) => u.email.toLowerCase().includes(buscaResponsavel.trim().toLowerCase()));
+          setResponsaveis(opcoes); setPesquisaConcluida(buscaResponsavel.trim().toLowerCase());
+          setTotalResponsaveis(resultado.total); setIndiceDestacado(-1); setErroResponsavel('');
+        }
+      } catch (erro) {
+        if (!controller.signal.aborted) {
+          setResponsaveis([]); setPesquisaConcluida(buscaResponsavel.trim().toLowerCase()); setTotalResponsaveis(0);
+          setErroResponsavel(erro instanceof ErroEntregavel ? erro.message : 'Não foi possível pesquisar e-mails.');
+        }
+      } finally { if (!controller.signal.aborted) setConsultandoResponsavel(false); }
+    }, 280);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [contratoId, buscaResponsavel, responsavelEscolhido, listaAberta]);
+  function escolherResponsavel(usuario: ResponsavelEntregavel) {
+    setResponsavelEscolhido(usuario);
+    atualizar('responsavelId', usuario.id);
+    setBuscaResponsavel('');
+    setResponsaveis([]);
+    setListaAberta(false); setIndiceDestacado(-1);
+  }
+  function limparResponsavel() {
+    setResponsavelEscolhido(null);
+    atualizar('responsavelId', '');
+    setBuscaResponsavel('');
+    setResponsaveis([]);
+    setListaAberta(false); setIndiceDestacado(-1);
+  }
+  const emailDigitado = buscaResponsavel.trim().toLowerCase();
+  const opcoesVisiveis = responsaveis.filter((u) => u.email.toLowerCase().includes(emailDigitado));
+  const aguardandoBusca = listaAberta && (emailDigitado.length === 0 || emailDigitado.length >= 2) && pesquisaConcluida !== emailDigitado;
   const estrutural = mudouEstrutura(dados, inicial);
   const excluidos = !!inicial && inicial.evidenciasEsperadas.some((e) => !dados.evidenciasEsperadas.some((item) => item.id === e.id));
   const exigeConfirmacao = estrutural || excluidos;
@@ -79,11 +129,79 @@ export function FormularioEntregavel({ etapaId, inicial, onSalvar, onCancelar, o
         <input id={formId('terminoPrevisto')} type="date" className={estilo} value={dados.terminoPrevisto} {...campoErro('terminoPrevisto')}
           onChange={(e) => atualizar('terminoPrevisto', e.target.value)} />{mensagem('terminoPrevisto')}</div>
     </div>
-    <div><label className="mb-1 block text-sm" htmlFor={formId('responsavelId')}>Responsável cadastral (UUID v4, opcional)</label>
-      <input id={formId('responsavelId')} className={estilo} value={dados.responsavelId} {...campoErro('responsavelId')}
-        placeholder="Identificador do usuário ativo" onChange={(e) => atualizar('responsavelId', e.target.value)} />
+    <div className="space-y-2">
+      <p className="block text-sm font-semibold">Responsável pelo entregável (opcional)</p>
+      <p className="text-xs text-foreground/70">Um usuário ativo (inclusive Administrador), selecionado pelo e-mail. Deixe sem atribuição se não houver responsável definido. Atribuir responsabilidade não libera acesso ao contrato.</p>
+      {responsavelEscolhido ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brand-green/45 bg-brand-green/10 px-3 py-3">
+        <div className="min-w-0"><p className="text-xs font-medium text-foreground/65">Responsável atribuído</p>
+          <p className="break-all font-semibold text-brand-neon">{responsavelEscolhido.email || 'Usuário cadastrado'}</p>
+          {responsavelEscolhido.nome && <p className="text-xs text-foreground/70">{responsavelEscolhido.nome}</p>}
+        </div>
+        <button type="button" disabled={salvando} onClick={limparResponsavel}
+          className="rounded-lg border border-brand-green/45 px-3 py-2 text-sm transition-colors hover:bg-brand-green/20 focus-visible:outline-2 focus-visible:outline-brand-neon disabled:opacity-50">Remover atribuição</button>
+      </div> : <div className="relative">
+        <label className="sr-only" htmlFor={formId('email-responsavel')}>Buscar responsável por e-mail</label>
+        <div className="flex items-stretch rounded-lg border border-brand-green/45 bg-background focus-within:ring-2 focus-within:ring-brand-neon/70">
+          <input id={formId('email-responsavel')} type="search" inputMode="email" autoComplete="off"
+            className="min-w-0 flex-1 rounded-l-lg bg-transparent px-3 py-2.5 text-sm text-foreground outline-none aria-invalid:border-red-500"
+            maxLength={100} value={buscaResponsavel} placeholder="Digite ou escolha um e-mail"
+            role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={listaAberta}
+            aria-controls={formId('opcoes-responsavel')}
+            aria-activedescendant={listaAberta && indiceDestacado >= 0 && opcoesVisiveis[indiceDestacado]
+              ? formId(`opcao-responsavel-${opcoesVisiveis[indiceDestacado].id}`) : undefined}
+            {...campoErro('responsavelId')} disabled={salvando || !contratoId}
+            onChange={(e) => { setBuscaResponsavel(e.target.value); setListaAberta(true); setIndiceDestacado(-1); setConsultandoResponsavel(false); setErroResponsavel(''); }}
+            onFocus={() => setListaAberta(true)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') { e.stopPropagation(); setListaAberta(false); setIndiceDestacado(-1); }
+              if (e.key === 'ArrowDown') {
+                e.preventDefault(); setListaAberta(true);
+                if (opcoesVisiveis.length) setIndiceDestacado((i) => (i + 1) % opcoesVisiveis.length);
+              }
+              if (e.key === 'ArrowUp') {
+                e.preventDefault(); setListaAberta(true);
+                if (opcoesVisiveis.length) setIndiceDestacado((i) => (i <= 0 ? opcoesVisiveis.length - 1 : i - 1));
+              }
+              if (e.key === 'Enter' && listaAberta && opcoesVisiveis.length && (indiceDestacado >= 0 || opcoesVisiveis.length === 1)) {
+                e.preventDefault(); escolherResponsavel(opcoesVisiveis[indiceDestacado >= 0 ? indiceDestacado : 0]);
+              }
+            }} />
+          <button type="button" disabled={salvando || !contratoId} aria-haspopup="listbox"
+            aria-controls={formId('opcoes-responsavel')} aria-expanded={listaAberta}
+            aria-label={listaAberta ? 'Fechar lista de responsáveis' : 'Abrir lista de responsáveis'}
+            title={listaAberta ? 'Fechar lista' : 'Mostrar usuários ativos'}
+            className="inline-flex w-11 shrink-0 cursor-pointer items-center justify-center rounded-r-lg border-l border-brand-green/45 text-brand-neon transition-colors duration-200 hover:bg-brand-green/20 focus-visible:outline-2 focus-visible:outline-brand-neon disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={() => { setListaAberta((aberta) => !aberta); setIndiceDestacado(-1); }}>
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              className={`h-5 w-5 transition-transform duration-200 ${listaAberta ? 'rotate-180' : ''}`}>
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+        </div>
+        {listaAberta && <div id={formId('opcoes-responsavel')} role="listbox" aria-label="E-mails encontrados"
+          className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-brand-green/50 bg-background p-1 shadow-2xl">
+          {(consultandoResponsavel || aguardandoBusca) && <p role="status" className="px-3 py-2 text-xs text-foreground/65">Buscando e-mails...</p>}
+          {!consultandoResponsavel && !aguardandoBusca && !opcoesVisiveis.length && <p className="px-3 py-2 text-xs text-foreground/65">
+            {buscaResponsavel.length === 1 ? 'Digite mais um caractere para pesquisar.' : 'Nenhum e-mail disponível para essa busca.'}
+          </p>}
+          {!aguardandoBusca && opcoesVisiveis.map((usuario, indice) => <button key={usuario.id} id={formId(`opcao-responsavel-${usuario.id}`)}
+            role="option" aria-selected={indice === indiceDestacado} type="button"
+            className={`block w-full cursor-pointer rounded-md px-3 py-2 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-brand-neon ${indice === indiceDestacado ? 'bg-brand-green/25' : 'hover:bg-brand-green/20'}`}
+            onMouseDown={(e) => e.preventDefault()} onMouseEnter={() => setIndiceDestacado(indice)}
+            onClick={() => escolherResponsavel(usuario)}>
+            <span className="block break-all font-medium">{usuario.email}</span>
+            {usuario.nome && <span className="block text-xs text-foreground/65">{usuario.nome}</span>}
+          </button>)}
+          {!consultandoResponsavel && !aguardandoBusca && totalResponsaveis > opcoesVisiveis.length && <p className="border-t border-brand-green/20 px-3 py-2 text-xs text-foreground/65">
+            Mostrando até {opcoesVisiveis.length} de {totalResponsaveis} contas ativas; refine pelo e-mail.
+          </p>}
+        </div>}
+      </div>}
+      {!responsavelEscolhido && <p className="text-xs text-foreground/65">Nenhum responsável atribuído. Digite parte do e-mail ou abra a lista de usuários ativos e selecione uma opção.</p>}
+      {erroResponsavel && <p role="alert" className="text-xs text-red-400">{erroResponsavel}</p>}
+      {!erroResponsavel && !consultandoResponsavel && !responsavelEscolhido && buscaResponsavel.length >= 2 && !responsaveis.length && !listaAberta &&
+        <p className="text-xs text-foreground/65">Nenhum usuário ativo encontrado com esse e-mail.</p>}
       {mensagem('responsavelId')}
-      <p className="mt-1 text-xs text-foreground/65">O responsável deve existir e estar ativo. Informar o ID não concede acesso ao contrato; permissões são definidas na Administração.</p>
     </div>
     {dados.tipo === 'QUANTITATIVO' && <div className="grid gap-4 sm:grid-cols-2">
       <div><label className="mb-1 block text-sm" htmlFor={formId('quantidadePrevista')}>Quantidade prevista *</label>
@@ -98,12 +216,12 @@ export function FormularioEntregavel({ etapaId, inicial, onSalvar, onCancelar, o
         onChange={(e) => atualizar('periodicidade', e.target.value as RascunhoEntregavel['periodicidade'])}>
         <option value="">Selecione</option>{PERIODICIDADES.map((p) => <option key={p} value={p}>{ROTULOS_PERIODICIDADE[p]}</option>)}
       </select>{mensagem('periodicidade')}
-      <p className="mt-1 text-xs text-foreground/65">Configuração enviada: versão 1. Personalizada ainda não foi homologada; ocorrências serão geradas na HU09.</p>
+      <p className="mt-1 text-xs text-foreground/65">Selecione a frequência prevista. O acompanhamento de cada ocorrência ainda não está disponível.</p>
     </div>}
     <div><label className="mb-1 block text-sm" htmlFor={formId('peso')}>Peso operacional (%) — opcional</label>
       <input id={formId('peso')} className={estilo} inputMode="decimal" value={dados.peso} {...campoErro('peso')}
         placeholder="Ex.: 20.0000" onChange={(e) => atualizar('peso', e.target.value)} />{mensagem('peso')}
-      <p className="mt-1 text-xs text-foreground/65">Peso físico, não financeiro. No modo ponderado, a soma de 100% entre entregáveis será validada em TEC09; não é requisito individual.</p></div>
+      <p className="mt-1 text-xs text-foreground/65">Peso operacional, sem relação com valores financeiros. Em contratos com cálculo ponderado, os pesos devem totalizar 100% para compor o avanço; essa verificação geral ainda não está disponível aqui.</p></div>
     <div><label className="mb-1 block text-sm" htmlFor={formId('criterioConclusao')}>Critério de conclusão {['CONTINUO','MARCO'].includes(dados.tipo) ? '*' : '(opcional)'}</label>
       <textarea id={formId('criterioConclusao')} className={estilo} rows={3} maxLength={5000} value={dados.criterioConclusao} {...campoErro('criterioConclusao')}
         onChange={(e) => atualizar('criterioConclusao', e.target.value)} />{mensagem('criterioConclusao')}</div>
@@ -111,7 +229,7 @@ export function FormularioEntregavel({ etapaId, inicial, onSalvar, onCancelar, o
       <textarea id={formId('observacoes')} className={estilo} rows={2} maxLength={3000} value={dados.observacoes}
         onChange={(e) => atualizar('observacoes', e.target.value)} />{mensagem('observacoes')}</div>
     <fieldset className="min-w-0 space-y-3 rounded-xl border border-brand-green/25 p-3 sm:p-4">
-      <legend className="px-1 font-semibold">Evidências esperadas (0 a 100)</legend>
+      <legend className="px-1 font-semibold">Evidências esperadas (máximo de 10)</legend>
       <p className="text-sm text-foreground/70">Somente o checklist de planejamento; nenhum upload ou comprovação será criado.</p>
       {dados.evidenciasEsperadas.map((item, indice) => <div key={item.chave} className="min-w-0 space-y-3 rounded-lg border border-brand-green/20 bg-background/60 p-3">
         <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-sm">Item {indice + 1}</strong>
@@ -131,7 +249,7 @@ export function FormularioEntregavel({ etapaId, inicial, onSalvar, onCancelar, o
           onChange={(e) => trocarItem(indice, 'obrigatoria', e.target.checked)} /> Obrigatória</label>
       </div>)}
       <button type="button" className="inline-flex items-center gap-2 rounded-lg border border-brand-green/50 px-3 py-2 text-sm disabled:opacity-50"
-        disabled={salvando || dados.evidenciasEsperadas.length >= 100}
+        disabled={salvando || dados.evidenciasEsperadas.length >= 10}
         onClick={() => { const chave = `novo-${++proximaChave.current}`; setDados((prev) => ({ ...prev, evidenciasEsperadas: [...prev.evidenciasEsperadas,
           { chave, tipoEvidencia: '', descricao: '', obrigatoria: false }] })); }}>
         + Adicionar evidência esperada</button>
@@ -139,7 +257,7 @@ export function FormularioEntregavel({ etapaId, inicial, onSalvar, onCancelar, o
     </fieldset>
     {exigeConfirmacao && <div className="space-y-2 rounded-xl border border-amber-500/50 bg-amber-500/5 p-3 text-sm">
       <p role="note" className="font-semibold">Atenção ao replanejamento</p>
-      <p>Tipo, periodicidade, prazo ou etapa foram alterados, ou itens foram removidos do checklist. Parâmetros incompatíveis serão limpos ao salvar, mas permanecem neste formulário caso você retorne ao tipo anterior. Itens removidos serão registrados em auditoria. Se houver ocorrências vinculadas, a API pode bloquear a alteração (409), sem apagá-las.</p>
+      <p>Tipo, periodicidade, prazo ou etapa foram alterados, ou itens foram removidos do checklist. Parâmetros incompatíveis serão limpos ao salvar, mas permanecem neste formulário caso você retorne ao tipo anterior. Itens removidos serão registrados em auditoria. Se houver ocorrências vinculadas, o sistema pode impedir a alteração, sem apagá-las.</p>
       <label className="flex items-start gap-2"><input type="checkbox" checked={confirmado} onChange={(e) => setConfirmado(e.target.checked)} /> Confirmo que compreendi essas alterações.</label>
     </div>}
     {erroGeral && <p role="alert" className="rounded-lg border border-red-500/45 p-3 text-sm text-red-400">{erroGeral}</p>}

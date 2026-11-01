@@ -17,7 +17,7 @@ const perfil = useMeuPerfil as jest.Mock;
 const contratoQuery = useContrato as jest.Mock;
 const acessoQuery = useAcessoContrato as jest.Mock;
 const contrato: Contrato = {
-  id: 'contrato-real', numeroContrato: '01/2026', orgaoContratante: 'Secretaria', objeto: 'Atendimento técnico',
+  id: 'contrato-real', codigoPublico: '00427', numeroContrato: '01/2026', orgaoContratante: 'Secretaria', objeto: 'Atendimento técnico',
   processoAdministrativo: null, unidadeResponsavel: null, descricao: null, dataAssinatura: null,
   inicioVigencia: '2026-10-01', terminoVigencia: '2027-10-01', status: 'EM_EXECUCAO',
   responsavelInternoId: null, fiscalGestor: null, modoCalculo: 'SIMPLES', observacoes: null,

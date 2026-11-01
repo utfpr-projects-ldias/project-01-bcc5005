@@ -121,3 +121,32 @@ O `ExperimentalWarning` do Jest VM Modules é esperado; os `ERROR [ExceptionsHan
 - `logout → 401` prova **encerramento da sessão**, não expiração temporal natural nem revogação de refresh token; investigar separadamente caso o aceite exija esse fenômeno específico.
 - O gate de integração não prova HU07; confirma que `etapas.id` é UUID persistente e FK/campo de sequência estão aptos para futura referência. O PRD mantém questões PQ-03, PQ-04 e PQ-15 pendentes. Fase 2 permanece fora do escopo.
 - JSON com identificadores internos de contratos e Etapas deve permanecer privado e ser revisado antes de anexar em repositório público.
+
+---
+
+## Automação local integrada com HU07-06 (novembro/2026)
+
+**Preferir esta seção aos comandos legados de `/tmp` e `$HOME/hu06-05-evidencias`.** O runner usa `qa/hu07-06/.local/venv`, navegador e credenciais DEV já instalados, **sem copiar senhas** para HU06. Todos os resultados ficam em `qa/hu06-05/.local/execucoes/<execução>/`, ignorados pelo Git.
+
+```bash
+cd ~/Documents/projetos/project-01-bcc5005
+bash qa/EXECUTAR-OUTROS-QA.sh \
+  --contrato-id 59220449-8c96-4faa-8b03-7be436e321a7 \
+  --confirmar-alteracoes
+```
+
+Este único comando:
+
+1. Confere preflight e **revalida os cinco JSONs reais da HU07-06**, sem recriar entregáveis.
+2. Por padrão, roda também regressões do backend e frontend, abrangendo HU07-05/06. `--pular-regressoes` é útil apenas para depuração/reexecuções, não como aceite final.
+3. Consulta vínculos reais dos funcionários configurados em `qa/hu07-06/.local/credenciais.json`.
+4. Valida HU06-05 com Administrador e Gestor com edição: **cria duas etapas por perfil**, edita, reordena, recarrega, reinicia backend e compara PostgreSQL.
+5. Ajusta permissões por API auditada para Gestor leitura, Colaborador com vínculo e sem vínculo, verifica autorização e logout. Inclui viewport móvel (390px).
+6. **Tenta restaurar os vínculos originais no fim, inclusive se houver falha**, registrando qualquer problema de restauração.
+7. Gera `resumo.json` e ZIP `EVIDENCIAS-HU06-05-PARA-ENVIO.zip`, contendo somente JSONs e logs desta execução.
+
+O comando **altera o banco de dados do ambiente DEV** criando 4 etapas permanentes; `--confirmar-alteracoes` é obrigatório. Não apaga dados e não usa `docker compose down -v`. Não iniciar duas execuções simultâneas. Em caso de falha de etapa após POST, não repetir às cegas: os dados escritos são permanentes.
+
+Para o teste de ID cruzado entre dois contratos, somente quando existir outro contrato autorizado já com etapas, acrescente `--outro-contrato-id UUID_REAL`. **Sem esse contrato, o teste cruzado permanece pendente**, não será inventado.
+
+**O gate de aceite global HU06-05 continua exigindo inspeção manual real**, inclusive validade visual desktop/mobile, teclado, conflitos, aviso de vigência e expiração NATURAL da sessão SuperTokens. Não confundir logout HTTP 401 com expiração temporal. O script gera status `APROVADO` apenas para cenários automatizados e `PENDENTE_INSPECAO_MANUAL` para o aceite global. O consolidador `consolidar_gate.py` não é alterado e não marcará artificialmente nenhum item do registro visual.

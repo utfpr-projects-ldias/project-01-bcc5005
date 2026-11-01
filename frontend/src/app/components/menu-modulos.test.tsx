@@ -9,22 +9,24 @@ const perfil = consultarMeuPerfil as jest.MockedFunction<typeof consultarMeuPerf
 
 beforeEach(() => jest.clearAllMocks());
 
-test("B3 libera listagem real de contratos e classifica Atividades como Sprint 04", async () => {
+test("B3 libera contratos e mostra módulos indisponíveis sem linguagem interna", async () => {
   perfil.mockResolvedValue({ id: "u", nome: "Colaborador de Teste", email: "teste@example.com", perfil: "COLABORADOR", ativo: true });
   // Verifica a ausência do link administrativo após a consulta do perfil terminar.
   await act(async () => {
     renderComConsultas(<MenuMobile />);
   });
   expect(screen.getByRole("link", { name: /Contratos/ })).toHaveAttribute("href", "/contratos");
-  expect(screen.getByText(/Sprint 04 · em desenvolvimento/)).toBeInTheDocument();
-  expect(screen.queryByRole("link", { name: "Administração" })).not.toBeInTheDocument();
+  expect(screen.getByText(/Atividades · Indisponível/)).toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "Funcionários" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "Minha conta" })).not.toBeInTheDocument();
 });
 
 test("B3 mantém navegação de Contratos e administração restrita ao ADMIN", async () => {
   perfil.mockResolvedValue({ id: "u", nome: "Administrador de Teste", email: "admin@example.com", perfil: "ADMINISTRADOR", ativo: true });
   renderComConsultas(<MenuLateral />);
   expect(screen.getByRole("link", { name: /Contratos/ })).toHaveAttribute("href", "/contratos");
-  const entrada = await screen.findByRole("link", { name: "Administração" });
+  const entrada = await screen.findByRole("link", { name: "Funcionários" });
   expect(entrada).toHaveAttribute("href", "/admin/usuarios");
   expect(entrada).toHaveAttribute("aria-current", "page");
+  expect(screen.getByRole("link", { name: "Minha conta" })).toHaveAttribute("href", "/usuario");
 });

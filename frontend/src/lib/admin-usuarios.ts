@@ -26,7 +26,7 @@ export type AtualizarFuncionario = {
 
 export type PaginaUsuarios = { itens: UsuarioPublico[]; pagina: number; limite: number; total: number; totalPaginas: number };
 export type PermissaoFuncionario = { contratoId: string; podeEditar: boolean };
-export type ContratoResumo = { id: string; numeroContrato: string; orgaoContratante: string; status: string };
+export type ContratoResumo = { id: string; codigoPublico: string; numeroContrato: string; orgaoContratante: string; status: string };
 
 const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/$/, "");
 
@@ -103,4 +103,12 @@ export function atualizarFuncionario(id: string, dados: AtualizarFuncionario): P
   return requisitar<UsuarioPublico>(`/admin/usuarios/${encodeURIComponent(id)}`, {
     method: "PATCH", body: JSON.stringify(dados),
   });
+}
+
+/** Autosserviço: nenhum ID de outro usuário pode ser informado pelo cliente. */
+export function alterarMeuEmail(email: string, senhaAtual: string): Promise<MeuPerfil> {
+  return requisitar<MeuPerfil>('/usuarios/me/email', { method: 'PATCH', body: JSON.stringify({ email, senhaAtual }) });
+}
+export function alterarMinhaSenha(senhaAtual: string, novaSenha: string): Promise<void> {
+  return requisitar<void>('/usuarios/me/senha', { method: 'PUT', body: JSON.stringify({ senhaAtual, novaSenha }) });
 }

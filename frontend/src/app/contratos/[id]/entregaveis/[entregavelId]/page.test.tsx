@@ -30,7 +30,7 @@ test('visao separa planejamento, criterio proximo de execucao e checklist espera
   expect(screen.getByText('31/12/2026')).toBeInTheDocument();
   expect(screen.getByRole('list', { name: 'Checklist de evidências esperadas' })).toHaveTextContent('Obrigatória');
   expect(screen.getByText('Opcional')).toBeInTheDocument();
-  expect(screen.getByText(/Nenhum progresso foi presumido/)).toBeInTheDocument();
+  expect(screen.getByText(/Nenhum progresso é calculado automaticamente nesta tela/)).toBeInTheDocument();
   expect(screen.queryByText('Comprovado')).not.toBeInTheDocument();
 });
 test('detalhe usa IDs da rota e valida correspondencia com contrato', () => {

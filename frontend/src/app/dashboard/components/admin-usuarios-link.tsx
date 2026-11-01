@@ -11,7 +11,7 @@ export function AdminUsuariosLink() {
   return (
     <Link href="/admin/usuarios"
       className="rounded-lg border border-brand-green/30 px-3 py-2 text-xs font-medium text-brand-neon transition-colors hover:bg-brand-green/10 sm:text-sm">
-      Usuários / Administração
+      Funcionários
     </Link>
   );
 }

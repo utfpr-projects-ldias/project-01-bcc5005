@@ -5,6 +5,7 @@ export type StatusContrato = 'PLANEJAMENTO' | 'EM_EXECUCAO' | 'EM_ENCERRAMENTO' 
 export type ModoCalculo = 'SIMPLES' | 'PONDERADO';
 export type Contrato = {
   id: string;
+  codigoPublico: string;
   numeroContrato: string;
   processoAdministrativo: string | null;
   orgaoContratante: string;
@@ -20,7 +21,9 @@ export type Contrato = {
   modoCalculo: ModoCalculo;
   observacoes: string | null;
 };
-export type DadosContrato = Omit<Contrato, 'id'>;
+export type DadosContrato = Omit<Contrato, 'id' | 'codigoPublico'>;
+/** Formato apenas de leitura: o servidor gera e mantém esse valor. */
+export function rotuloCodigoPublico(codigo: string): string { return `#${codigo}`; }
 export type AcessoContrato = { podeEditar: boolean };
 export const STATUS: Record<StatusContrato, string> = {
   PLANEJAMENTO: 'Planejamento', EM_EXECUCAO: 'Em execução', EM_ENCERRAMENTO: 'Em encerramento',

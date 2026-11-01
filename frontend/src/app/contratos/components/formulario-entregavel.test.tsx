@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { FormularioEntregavel } from './formulario-entregavel';
 import type { Entregavel } from '@/lib/entregaveis';
 const gravar = jest.fn().mockResolvedValue(undefined);
@@ -65,4 +65,80 @@ test('erro HTTP preserva campos; clique duplo só dispara uma mutação', async 
   await act(async () => { concluir(); });
   await waitFor(() => expect(screen.getByRole('button', { name: 'Cadastrar entregável' })).toBeEnabled());
   expect(screen.getByLabelText('Nome *')).toHaveValue('Serviço planejado');
+});
+
+test('limite 10 impede adicionar mais itens, sem apagar o checklist anterior', () => {
+  montar();
+  const adicionar = screen.getByRole('button', { name: /Adicionar evidência esperada/ });
+  for (let n = 0; n < 10; n++) fireEvent.click(adicionar);
+  expect(screen.getAllByRole('button', { name: /Remover evidência esperada/ })).toHaveLength(10);
+  expect(adicionar).toBeDisabled();
+  expect(screen.getByText(/máximo de 10/)).toBeInTheDocument();
+});
+
+test('responsável é único, opcional e escolhido somente pelo e-mail sem expor UUID', async () => {
+  const usuario = { id: '12345678-1234-4123-8123-123456789abc', nome: 'Maria da Silva', email: 'maria@example.org' };
+  global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ itens: [usuario], total: 1, pagina: 1, totalPaginas: 1 }) });
+  render(<FormularioEntregavel contratoId="contrato-a" etapaId="etapa-a" onSalvar={gravar} onCancelar={cancelar} />);
+  expect(screen.queryByRole('combobox', { name: 'Responsável pelo entregável (opcional)' })).not.toBeInTheDocument();
+  expect(screen.getByText(/Nenhum responsável atribuído/)).toBeInTheDocument();
+  const busca = screen.getByRole('combobox', { name: 'Buscar responsável por e-mail' });
+  fireEvent.change(busca, { target: { value: 'maria@' } });
+  const opcao = await screen.findByRole('option', { name: /maria@example.org/ });
+  fireEvent.click(opcao);
+  expect(screen.getByText('maria@example.org')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Remover atribuição' })).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Nome *'), { target: { value: 'Entregável da equipe' } });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Cadastrar entregável' })); });
+  expect(gravar).toHaveBeenCalledWith(expect.objectContaining({ responsavelId: usuario.id }));
+  fireEvent.click(screen.getByRole('button', { name: 'Remover atribuição' }));
+  expect(screen.getByRole('combobox', { name: 'Buscar responsável por e-mail' })).toBeInTheDocument();
+});
+
+test('e-mail apenas digitado, sem opção selecionada, não cria vínculo automaticamente', async () => {
+  global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ itens: [], total: 0, pagina: 1, totalPaginas: 1 }) });
+  render(<FormularioEntregavel contratoId="contrato-a" etapaId="etapa-a" onSalvar={gravar} onCancelar={cancelar} />);
+  fireEvent.change(screen.getByRole('combobox', { name: 'Buscar responsável por e-mail' }), { target: { value: 'inexistente@empresa.org' } });
+  fireEvent.change(screen.getByLabelText('Nome *'), { target: { value: 'Obrigação sem responsável' } });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Cadastrar entregável' })); });
+  expect(gravar).toHaveBeenCalledWith(expect.objectContaining({ responsavelId: null }));
+});
+
+
+test('dropdown de responsáveis lista até vinte e-mails com nome e permite mouse, teclado e remoção', async () => {
+  const pessoas = [
+    { id: '11111111-1111-4111-8111-111111111111', nome: 'Ana QA', email: 'ana@empresa.test' },
+    { id: '22222222-2222-4222-8222-222222222222', nome: 'Bruno QA', email: 'bruno@empresa.test' },
+    { id: '33333333-3333-4333-8333-333333333333', nome: 'Carla QA', email: 'carla@empresa.test' },
+  ];
+  global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ itens: pessoas, total: 503, pagina: 1, totalPaginas: 26 }) });
+  render(<FormularioEntregavel contratoId="contrato-a" etapaId="etapa-a" onSalvar={gravar} onCancelar={cancelar} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Abrir lista de responsáveis' }));
+  await waitFor(() => expect(within(screen.getByRole('listbox', { name: 'E-mails encontrados' })).getAllByRole('option')).toHaveLength(3));
+  expect(screen.getByText('Ana QA')).toBeInTheDocument();
+  expect(screen.getByText(/refine pelo e-mail/i)).toBeInTheDocument();
+  const campo = screen.getByRole('combobox', { name: 'Buscar responsável por e-mail' });
+  fireEvent.keyDown(campo, { key: 'ArrowDown' });
+  fireEvent.keyDown(campo, { key: 'ArrowDown' });
+  expect(screen.getByRole('option', { name: /bruno@empresa.test/ })).toHaveAttribute('aria-selected', 'true');
+  fireEvent.keyDown(campo, { key: 'Enter' });
+  expect(screen.getByText('bruno@empresa.test')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Remover atribuição' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Abrir lista de responsáveis' }));
+  const opcao = await screen.findByRole('option', { name: /carla@empresa.test/ });
+  fireEvent.click(opcao);
+  expect(screen.getByText('carla@empresa.test')).toBeInTheDocument();
+  expect(screen.queryByText('11111111-1111-4111-8111-111111111111')).not.toBeInTheDocument();
+});
+
+
+test('responsável cadastral pode ser Administrador ativo, sem incluí-lo em Funcionários', async () => {
+  const usuario = { id: '44444444-4444-4444-8444-444444444444', nome: 'Admin de QA', email: 'admin@teste.local' };
+  global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ itens: [usuario], total: 1, pagina: 1, totalPaginas: 1 }) });
+  render(<FormularioEntregavel contratoId="contrato-a" etapaId="etapa-a" onSalvar={gravar} onCancelar={cancelar} />);
+  fireEvent.change(screen.getByRole('combobox', { name: 'Buscar responsável por e-mail' }), { target: { value: 'admin@' } });
+  const opcao = await screen.findByRole('option', { name: /admin@teste.local/ });
+  fireEvent.click(opcao);
+  expect(screen.getByText('Admin de QA')).toBeInTheDocument();
+  expect(screen.queryByText(usuario.id)).not.toBeInTheDocument();
 });

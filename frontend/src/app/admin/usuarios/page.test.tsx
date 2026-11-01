@@ -59,6 +59,15 @@ test("listagem exibe ação de cadastro ao lado de atualizar, sem formulário", 
   expect(screen.queryByLabelText("Senha inicial")).not.toBeInTheDocument();
 });
 
+test("a própria conta Administrador não aparece na área Funcionários, mesmo em payload legado", async () => {
+  // Defesa da UI: evita apresentar a conta no painel antes mesmo de atualizar o backend.
+  renderComConsultas(<AdministracaoUsuariosPage />);
+  const lista = await screen.findByRole("region", { name: "Funcionários" });
+  expect(within(lista).getByText("gestor@exemplo.com")).toBeInTheDocument();
+  expect(within(lista).queryByText("admin@exemplo.com")).not.toBeInTheDocument();
+  expect(within(lista).queryByRole("link", { name: "Editar admin@exemplo.com" })).not.toBeInTheDocument();
+});
+
 test("editar é link para página própria", async () => {
   renderComConsultas(<AdministracaoUsuariosPage />);
   const lista = await screen.findByRole("region", { name: "Funcionários" });
@@ -191,17 +200,17 @@ test("cadastro e listagem não remontam navegação global", async () => {
 
 test("vários vínculos existentes aparecem e não podem ser adicionados duas vezes", async () => {
   contratos.mockResolvedValue([
-    { id: "ct1", numeroContrato: "001/26", orgaoContratante: "UTFPR", status: "PLANEJAMENTO" },
-    { id: "ct2", numeroContrato: "002/26", orgaoContratante: "Prefeitura", status: "PLANEJAMENTO" },
-    { id: "ct3", numeroContrato: "003/26", orgaoContratante: "Universidade", status: "PLANEJAMENTO" },
+    { id: "ct1", codigoPublico: "00001", numeroContrato: "001/26", orgaoContratante: "UTFPR", status: "PLANEJAMENTO" },
+    { id: "ct2", codigoPublico: "00002", numeroContrato: "002/26", orgaoContratante: "Prefeitura", status: "PLANEJAMENTO" },
+    { id: "ct3", codigoPublico: "00003", numeroContrato: "003/26", orgaoContratante: "Universidade", status: "PLANEJAMENTO" },
   ]);
   acessos.mockResolvedValue([{ contratoId: "ct1", podeEditar: true }, { contratoId: "ct2", podeEditar: false }]);
   renderComConsultas(<PainelAdministracao vista="edicao" idEdicao="b" />);
   await screen.findByRole("heading", { name: /Conta de Gestor de Teste/ });
   fireEvent.click(screen.getByText("Acesso aos contratos", { exact: false, selector: "summary" }));
   const lista = screen.getByRole("region", { name: "Contratos vinculados" });
-  expect(within(lista).getByText(/001\/26/)).toBeInTheDocument();
-  expect(within(lista).getByText(/002\/26/)).toBeInTheDocument();
+  expect(within(lista).getAllByText(/001\/26/).length).toBeGreaterThan(0);
+  expect(within(lista).getAllByText(/002\/26/).length).toBeGreaterThan(0);
   const seletor = screen.getByLabelText("Selecionar contrato ainda não vinculado");
   expect(within(seletor).getAllByRole("option")).toHaveLength(1);
   expect(within(seletor).getByRole("option", { name: /003\/26/ })).toBeInTheDocument();
@@ -240,4 +249,53 @@ test("atualizar funcionários mostra spinner dentro do botão mantendo lista vis
   await waitFor(() => expect(concluir).toEqual(expect.any(Function)));
   await act(async () => { concluir({ itens: [gestor], pagina: 1, limite: 20, total: 1, totalPaginas: 1 }); });
   await waitFor(() => expect(screen.getByRole("button", { name: "Atualizar lista" })).toBeEnabled());
+});
+
+
+test("acessos exibem resumo curto mesmo em telas largas, sem perder identificação completa", async () => {
+  const numero = "9".repeat(140);
+  const orgao = "Órgão contratante de nome excepcionalmente extenso ".repeat(5);
+  contratos.mockResolvedValue([
+    { id: "contrato-longo", codigoPublico: "84354", numeroContrato: numero, orgaoContratante: orgao, status: "PLANEJAMENTO" },
+    { id: "contrato-livre", codigoPublico: "75320", numeroContrato: "Contrato disponível muito extenso".repeat(10), orgaoContratante: "Organização extensa".repeat(10), status: "PLANEJAMENTO" },
+  ]);
+  acessos.mockResolvedValue([{ contratoId: "contrato-longo", podeEditar: true }]);
+  renderComConsultas(<PainelAdministracao vista="edicao" idEdicao="b" />);
+  await screen.findByRole("heading", { name: /Conta de Gestor de Teste/ });
+  fireEvent.click(screen.getByText("Acesso aos contratos", { exact: false, selector: "summary" }));
+  const lista = screen.getByRole("region", { name: "Contratos vinculados" });
+  const numeroCurto = within(lista).getByTitle(numero);
+  const orgaoCurto = within(lista).getByTitle(orgao.trim());
+  expect(orgaoCurto).toHaveAttribute("title", orgao);
+  expect(Array.from(numeroCurto.textContent ?? "")).toHaveLength(24);
+  expect(Array.from(orgaoCurto.textContent ?? "")).toHaveLength(28);
+  expect(numeroCurto).toHaveTextContent(/…$/);
+  expect(orgaoCurto).toHaveTextContent(/…$/);
+  expect(within(lista).getByText("Código #84354")).toBeInTheDocument();
+  const expandir = within(lista).getByRole("button", { name: "Ver identificação completa" });
+  const urlOriginal = window.location.href;
+  const estadoAnterior = window.history.state;
+  const voltar = jest.spyOn(window.history, "back").mockImplementation(() => {
+    window.history.replaceState(estadoAnterior, "", urlOriginal);
+  });
+  fireEvent.click(expandir);
+  const modal = screen.getByRole("dialog", { name: "Identificação completa do contrato" });
+  expect(modal).toHaveAttribute("aria-modal", "true");
+  expect(within(modal).getByText("Código #84354")).toBeInTheDocument();
+  expect(within(modal).getByText(numero)).toBeInTheDocument();
+  expect(within(modal).getByText(orgao.trim()).textContent).toBe(orgao);
+  expect(window.location.href).toBe(urlOriginal);
+  fireEvent.keyDown(modal, { key: "Escape" });
+  expect(screen.queryByRole("dialog", { name: "Identificação completa do contrato" })).not.toBeInTheDocument();
+  expect(expandir).toHaveFocus();
+  expect(voltar).toHaveBeenCalledTimes(1);
+  voltar.mockRestore();
+  const seletor = screen.getByLabelText("Selecionar contrato ainda não vinculado") as HTMLSelectElement;
+  expect(seletor).toHaveClass("max-w-[20rem]");
+  const opcoes = within(seletor).getAllByRole("option");
+  expect(opcoes).toHaveLength(1);
+  expect(opcoes[0]).toHaveValue("contrato-livre");
+  expect(opcoes[0]).toHaveTextContent(/^#75320 · /);
+  expect(Array.from(opcoes[0].textContent ?? "").length).toBeLessThanOrEqual(40);
+  expect(opcoes[0].textContent).not.toContain("Organização extensaOrganização extensa");
 });

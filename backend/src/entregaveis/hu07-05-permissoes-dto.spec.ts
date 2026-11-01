@@ -1,0 +1,143 @@
+import 'reflect-metadata';
+import { jest } from '@jest/globals';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import { type DataSource, type Repository } from 'typeorm';
+import { CHAVE_POLITICA, type Politica } from '../autorizacao/politica.decorator.js';
+import { PoliticaAcessoService } from '../autorizacao/politica-acesso.service.js';
+import type { PermissaoContrato } from '../autorizacao/permissao-contrato.entity.js';
+import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
+import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
+import { EntregaveisController } from './entregaveis.controller.js';
+import { EntregaveisService } from './entregaveis.service.js';
+import type { Usuario } from '../usuarios/usuario.entity.js';
+import { CriarEntregavelDto, EditarEntregavelDto, SubstituirChecklistDto } from './dto/planejamento-entregavel.dto.js';
+
+const contrato = 'a66aabb1-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const outroContrato = 'b66aabb1-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const etapa = 'c66aabb1-cccc-4ccc-8ccc-cccccccccccc';
+const pessoa = (perfil: PerfilUsuario): UsuarioAutenticado => ({
+  id: 'd66aabb1-dddd-4ddd-8ddd-dddddddddddd', email: 'qa@example.invalid',
+  supertokensUserId: 'qa-user', perfil,
+});
+const buscarVinculo = jest.fn<(...args: unknown[]) => Promise<PermissaoContrato | null>>();
+const politicas = new PoliticaAcessoService({ findOneBy: buscarVinculo } as unknown as Repository<PermissaoContrato>);
+const politica = (metodo: keyof EntregaveisController): Politica => {
+  const p = Reflect.getMetadata(CHAVE_POLITICA, EntregaveisController.prototype[metodo]) as Politica | undefined;
+  if (!p) throw new Error(`Rota sem proteção: ${String(metodo)}`);
+  return p;
+};
+
+beforeEach(() => buscarVinculo.mockReset());
+
+describe('HU07-05 — políticas reais declaradas nas rotas de entregáveis', () => {
+  it('GET usa leitura, POST/PATCH/PUT usam planejamento; recurso é resolvido da entidade', () => {
+    expect(politica('listar')).toEqual({ acao: 'entregaveis:listar',
+      escopoOperacional: { tipo: 'contrato', parametro: 'contratoId' } });
+    expect(politica('criar')).toEqual({ acao: 'entregaveis:criar',
+      escopoOperacional: { tipo: 'contrato', parametro: 'contratoId' } });
+    for (const metodo of ['detalhar', 'editar', 'atualizarChecklist'] as const) {
+      expect(politica(metodo).escopoOperacional).toEqual({
+        tipo: 'recurso', recurso: 'entregavel', parametro: 'entregavelId', parametroContratoPai: 'contratoId',
+      });
+    }
+    expect(politica('detalhar').acao).toBe('entregaveis:visualizar');
+    expect(politica('editar').acao).toBe('entregaveis:editar');
+    expect(politica('atualizarChecklist').acao).toBe('entregaveis:editar');
+  });
+
+  it('ADMIN pode planejar; GESTOR depende do vínculo e podeEditar; COLABORADOR não altera', async () => {
+    for (const metodo of ['criar', 'editar', 'atualizarChecklist'] as const) {
+      const p = politica(metodo);
+      expect(await politicas.permitido(pessoa(PerfilUsuario.ADMINISTRADOR), p, contrato)).toBe(true);
+      buscarVinculo.mockResolvedValueOnce(null);
+      expect(await politicas.permitido(pessoa(PerfilUsuario.GESTOR), p, contrato)).toBe(false);
+      buscarVinculo.mockResolvedValueOnce({ podeEditar: false } as PermissaoContrato);
+      expect(await politicas.permitido(pessoa(PerfilUsuario.GESTOR), p, contrato)).toBe(false);
+      buscarVinculo.mockResolvedValueOnce({ podeEditar: true } as PermissaoContrato);
+      expect(await politicas.permitido(pessoa(PerfilUsuario.GESTOR), p, contrato)).toBe(true);
+      expect(await politicas.permitido(pessoa(PerfilUsuario.COLABORADOR), p, contrato)).toBe(false);
+    }
+  });
+
+  it('responsável cadastral não cria vínculo; leitura sem vínculo negada e IDs inválidos falham fechados', async () => {
+    buscarVinculo.mockResolvedValueOnce(null);
+    // O responsável cadastral não participa da autorização: somente vínculo real pesquisado.
+    expect(await politicas.permitido(pessoa(PerfilUsuario.GESTOR), politica('listar'), outroContrato)).toBe(false);
+    buscarVinculo.mockResolvedValueOnce({ podeEditar: false } as PermissaoContrato);
+    expect(await politicas.permitido(pessoa(PerfilUsuario.COLABORADOR), politica('detalhar'), contrato)).toBe(true);
+    expect(await politicas.permitido(pessoa(PerfilUsuario.ADMINISTRADOR), politica('detalhar'), 'id-forjado')).toBe(false);
+    expect(buscarVinculo).toHaveBeenCalledWith({ usuarioId: pessoa(PerfilUsuario.GESTOR).id, contratoId: outroContrato });
+  });
+});
+
+describe('HU07-05 — DTOs do contrato HTTP sem campos de execução', () => {
+  const valido = { etapaId: etapa, nome: 'Obrigação verificável', tipo: 'UNICO',
+    evidenciasEsperadas: [{ tipoEvidencia: 'ATA', obrigatoria: true }, { tipoEvidencia: 'FOTO', obrigatoria: false }] };
+  it('permite criar checklist obrigatório/opcional com nested validation real', async () => {
+    expect(await validate(plainToInstance(CriarEntregavelDto, valido))).toHaveLength(0);
+  });
+  it('recusa lista acima de 10, item sem obrigatoria e etapa inválida', async () => {
+    for (const invalido of [
+      { ...valido, etapaId: 'outra-etapa' },
+      { ...valido, evidenciasEsperadas: [{ tipoEvidencia: 'ATA' }] },
+      { ...valido, evidenciasEsperadas: Array.from({ length: 11 }, () => ({ tipoEvidencia: 'ATA', obrigatoria: true })) },
+    ]) {
+      expect((await validate(plainToInstance(CriarEntregavelDto, invalido))).length).toBeGreaterThan(0);
+    }
+  });
+  it('PATCH omite campos, mas não admite tipo null; PUT rejeita itens sem booleano', async () => {
+    expect(await validate(plainToInstance(EditarEntregavelDto, { nome: 'Nova descrição' }))).toHaveLength(0);
+    expect((await validate(plainToInstance(EditarEntregavelDto, { tipo: null }))).length).toBeGreaterThan(0);
+    expect((await validate(plainToInstance(SubstituirChecklistDto, { itens: [{ tipoEvidencia: 'FOTO' }] }))).length).toBeGreaterThan(0);
+  });
+});
+
+describe('HU07 — limite e política de pesquisa de responsáveis', () => {
+  it('somente quem pode planejar pesquisa funcionários ativos no contexto do contrato', async () => {
+    // Os decorators gravam metadata na função. Recuperar o descriptor evita
+    // capturar um método não vinculado (typescript/unbound-method).
+    const metodo = Object.getOwnPropertyDescriptor(EntregaveisController.prototype, 'consultarResponsaveis')?.value as object | undefined;
+    expect(metodo).toBeDefined();
+    if (!metodo) throw new Error('Rota de responsáveis ausente');
+    const rotas = Reflect.getMetadata('path', metodo);
+    expect(rotas).toBe('responsaveis');
+    const politica = Reflect.getMetadata(CHAVE_POLITICA, metodo);
+    expect(politica).toEqual({ acao: 'entregaveis:criar',
+      escopoOperacional: { tipo: 'contrato', parametro: 'contratoId' } });
+    expect(await politicas.permitido(pessoa(PerfilUsuario.ADMINISTRADOR), politica, contrato)).toBe(true);
+    buscarVinculo.mockResolvedValueOnce({ podeEditar: false } as PermissaoContrato);
+    expect(await politicas.permitido(pessoa(PerfilUsuario.GESTOR), politica, contrato)).toBe(false);
+    buscarVinculo.mockResolvedValueOnce({ podeEditar: true } as PermissaoContrato);
+    expect(await politicas.permitido(pessoa(PerfilUsuario.GESTOR), politica, contrato)).toBe(true);
+    expect(await politicas.permitido(pessoa(PerfilUsuario.COLABORADOR), politica, contrato)).toBe(false);
+  });
+  it('aceita dez evidências e rejeita onze tanto no POST quanto no PUT', async () => {
+    const itens = Array.from({ length: 10 }, () => ({ tipoEvidencia: 'FOTO', obrigatoria: true }));
+    expect(await validate(plainToInstance(CriarEntregavelDto, { etapaId: etapa, nome: 'Entrega', tipo: 'UNICO', evidenciasEsperadas: itens }))).toHaveLength(0);
+    expect(await validate(plainToInstance(SubstituirChecklistDto, { itens }))).toHaveLength(0);
+    expect((await validate(plainToInstance(SubstituirChecklistDto, { itens: [...itens, itens[0]] }))).length).toBeGreaterThan(0);
+  });
+});
+
+
+describe('HU07-05 — responsáveis ativos (incluindo Administrador) sem conceder acesso', () => {
+  it('exige usuário ativo no SQL sem excluir Administrador, preservando paginação', async () => {
+    const findAndCount = jest.fn<(...args: unknown[]) => Promise<[Usuario[], number]>>()
+      .mockResolvedValue([[], 0]);
+    const dataSource = { getRepository: () => ({ findAndCount }) } as unknown as DataSource;
+    const service = new EntregaveisService({} as never, {} as never, dataSource, {} as never, {} as never);
+    await service.consultarResponsaveis();
+    await service.consultarResponsaveis('gestor@empresa.test');
+    expect(findAndCount).toHaveBeenCalledTimes(2);
+    const todas = findAndCount.mock.calls[0]?.[0] as { where: { ativo: boolean }; take: number };
+    expect(todas.take).toBe(20);
+    expect(todas.where).toEqual({ ativo: true });
+    const filtradas = findAndCount.mock.calls[1]?.[0] as { where: Array<{ ativo: boolean; nome?: unknown; email?: unknown }> };
+    expect(filtradas.where).toHaveLength(2);
+    for (const regra of filtradas.where) {
+      expect(regra.ativo).toBe(true);
+      expect(regra).not.toHaveProperty('perfil');
+    }
+  });
+});

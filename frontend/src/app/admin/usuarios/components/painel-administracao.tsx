@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { IndicadorCarregamento } from "@/app/components/indicador-carregamento";
+import { useAtualizacaoVisivel } from "@/hooks/use-atualizacao-visivel";
 import { LinkVoltar } from "@/app/components/link-voltar";
 import { ConfirmacaoSimples } from "@/app/components/confirmacao-simples";
+import { ModalIdentificacaoContrato } from "./modal-identificacao-contrato";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import {
@@ -53,6 +55,12 @@ function dataBR(data: string): string {
 function nomePerfil(p: UsuarioPublico["perfil"]): string {
   return p === "ADMINISTRADOR" ? "Administrador" : p === "GESTOR" ? "Gestor" : "Colaborador";
 }
+/** Resumo apenas visual: não afeta os identificadores usados pela API. */
+function abreviarIdentificacao(valor: string, limite: number): string {
+  const caracteres = Array.from(valor.trim());
+  return caracteres.length <= limite ? caracteres.join("") : `${caracteres.slice(0, limite - 1).join("")}…`;
+}
+
 
 export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cadastro' | 'edicao'; idEdicao?: string }) {
   const router = useRouter();
@@ -70,6 +78,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
   const [quantidades, setQuantidades] = useState({ ativos: 0, arquivados: 0 });
   const [erroLista, setErroLista] = useState("");
   const [atualizando, setAtualizando] = useState(false);
+  const atualizacaoVisivel = useAtualizacaoVisivel();
   const [mudandoConsulta, setMudandoConsulta] = useState(false);
   const [avisoAtualizacao, setAvisoAtualizacao] = useState("");
   const [editando, setEditando] = useState<UsuarioPublico | null>(null);
@@ -88,6 +97,8 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
   const [podeEditar, setPodeEditar] = useState(false);
   const [erroPermissoes, setErroPermissoes] = useState("");
   const [atualizandoVinculo, setAtualizandoVinculo] = useState("");
+  const [identificacaoAberta, setIdentificacaoAberta] = useState<{ contrato: ContratoResumo; gatilho: HTMLButtonElement } | null>(null);
+  const fecharIdentificacao = useCallback(() => setIdentificacaoAberta(null), []);
   const [confirmacao, setConfirmacao] = useState<
     { tipo: "conta"; usuario: UsuarioPublico } | { tipo: "permissao"; contratoId: string; email: string } | null
   >(null);
@@ -313,7 +324,11 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
     finally { setEnviando(false); }
   }
 
-  const listaVisivel = mudandoConsulta ? { ...lista, itens: [], total: 0 } : lista;
+  const listaVisivel = mudandoConsulta ? { ...lista, itens: [], total: 0 } : {
+    ...lista,
+    // Proteção visual adicional; a paginação e os totais corretos vêm do backend filtrado.
+    itens: lista.itens.filter((usuario) => usuario.perfil !== 'ADMINISTRADOR'),
+  };
 
   if (carregando) return <main role="status" className="min-h-screen flex items-center justify-center p-6"><IndicadorCarregamento texto="Verificando acesso à administração..." /></main>;
   if (!autorizado) return (
@@ -343,7 +358,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 id="titulo-lista" className="text-lg font-semibold">Funcionários</h2>
               <div className="flex flex-wrap gap-2">
-                <button type="button" className={botao + " min-w-32"} onClick={() => void recarregar()} disabled={atualizando} aria-busy={atualizando}>{atualizando ? <IndicadorCarregamento compacto texto="Atualizando..." /> : "Atualizar lista"}</button>
+                <button type="button" className={botao + " inline-flex min-w-36 items-center justify-center transition-colors disabled:cursor-wait"} onClick={() => void atualizacaoVisivel.executar(() => recarregar()).catch(() => {})} disabled={atualizando || atualizacaoVisivel.ocupado} aria-busy={atualizando || atualizacaoVisivel.ocupado}>{atualizando || atualizacaoVisivel.ocupado ? <IndicadorCarregamento compacto texto="Atualizando..." /> : "Atualizar lista"}</button>
                 <Link href="/admin/usuarios/novo" className={acao}>Cadastrar funcionário</Link>
               </div>
             </div>
@@ -448,12 +463,17 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                           <ul className="mt-2 space-y-2 text-sm">
                             {permissoes.map((v) => {
                               const contrato = contratos.find((c) => c.id === v.contratoId);
-                              return <li key={v.contratoId} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brand-green/20 p-3">
+                              return <li key={v.contratoId} className="flex min-w-0 flex-col gap-3 rounded-lg border border-brand-green/20 p-3 sm:flex-row sm:items-center sm:justify-between">
                                 <div className="min-w-0 flex-1">
-                                  <p className="font-medium break-words">{contrato ? `${contrato.numeroContrato} — ${contrato.orgaoContratante}` : `Contrato ${v.contratoId}`}</p>
-                                  <p className="text-xs text-foreground/65">{v.podeEditar && editando.perfil === "GESTOR" ? "Leitura e edição" : "Somente leitura"}</p>
+                                  {contrato ? <>
+                                    <p title={contrato.numeroContrato} className="truncate font-medium">{abreviarIdentificacao(contrato.numeroContrato, 24)}</p>
+                                    <p title={contrato.orgaoContratante} className="truncate text-xs text-foreground/70">{abreviarIdentificacao(contrato.orgaoContratante, 28)}</p>
+                                    <p className="text-xs text-foreground/60">Código #{contrato.codigoPublico}</p>
+                                    <button type="button" className="mt-1 rounded text-left text-xs text-foreground/70 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-brand-green" onClick={(evento) => setIdentificacaoAberta({ contrato, gatilho: evento.currentTarget })}>Ver identificação completa</button>
+                                  </> : <p className="break-all font-medium">Contrato {v.contratoId}</p>}
+                                  <p className="mt-1 text-xs text-foreground/65">{v.podeEditar && editando.perfil === "GESTOR" ? "Leitura e edição" : "Somente leitura"}</p>
                                 </div>
-                                <div className="flex flex-wrap gap-2">
+                                <div className="flex shrink-0 flex-wrap gap-2">
                                   {editando.perfil === "GESTOR" && <button type="button" className={botao} disabled={enviando || !!atualizandoVinculo || !editando.ativo} onClick={() => void alternarPermissao(v)}>{atualizandoVinculo === v.contratoId ? <IndicadorCarregamento compacto texto="Atualizando..." /> : v.podeEditar ? "Remover edição" : "Permitir edição"}</button>}
                                   <button type="button" className={botao} disabled={enviando || !!atualizandoVinculo} onClick={() => setConfirmacao({ tipo: "permissao", contratoId: v.contratoId, email: editando.email })}>Revogar acesso</button>
                                 </div>
@@ -465,10 +485,10 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                         <section className="border-t border-brand-green/20 pt-4" aria-label="Conceder novo acesso">
                           <h4 className="text-sm font-semibold">Adicionar acesso</h4>
                           {contratosLivres.length === 0 ? <p className="mt-2 text-sm text-foreground/60">Não há outros contratos disponíveis para vincular. Crie um contrato ou revise os vínculos acima.</p> :
-                            <form onSubmit={(e) => void salvarPermissao(e)} className="mt-3 space-y-3">
+                            <form onSubmit={(e) => void salvarPermissao(e)} className="mt-3 min-w-0 space-y-3">
                               <label htmlFor="contrato-permissao" className="block text-sm">Selecionar contrato ainda não vinculado</label>
-                              <select id="contrato-permissao" className={campo} value={contratoSelecionado} onChange={(e) => setContratoId(e.target.value)}>
-                                {contratosLivres.map((c) => <option value={c.id} key={c.id}>{c.numeroContrato} — {c.orgaoContratante}</option>)}
+                              <select id="contrato-permissao" className={`${campo} max-w-[20rem] text-sm`} value={contratoSelecionado} onChange={(e) => setContratoId(e.target.value)}>
+                                {contratosLivres.map((c) => <option value={c.id} key={c.id}>#{c.codigoPublico} · {abreviarIdentificacao(c.numeroContrato, 14)} · {abreviarIdentificacao(c.orgaoContratante, 14)}</option>)}
                               </select>
                               {editando.perfil === "GESTOR" && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={podeEditar} onChange={(e) => setPodeEditar(e.target.checked)} />Permitir também edição</label>}
                               <button type="submit" disabled={enviando || !contratoSelecionado || !editando.ativo} className={acao}>{enviando ? <IndicadorCarregamento compacto texto="Vinculando..." /> : "Adicionar vínculo"}</button>
@@ -506,6 +526,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
           </section>}
         </div>
       </div>
+      {identificacaoAberta && <ModalIdentificacaoContrato contrato={identificacaoAberta.contrato} focoRetorno={identificacaoAberta.gatilho} onFechar={fecharIdentificacao} />}
       {confirmacao && <ConfirmacaoSimples
         titulo={confirmacao.tipo === "conta" ? (confirmacao.usuario.ativo ? "Arquivar funcionário?" : "Reativar funcionário?") : "Revogar permissão?"}
         descricao={confirmacao.tipo === "conta"

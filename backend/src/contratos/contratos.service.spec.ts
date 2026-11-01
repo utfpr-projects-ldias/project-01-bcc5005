@@ -48,6 +48,7 @@ function contratoBase(
 ): Contrato {
   return {
     id: ID_CONTRATO,
+    codigoPublico: '00427',
     numeroContrato: '2026/001',
     processoAdministrativo: null,
     orgaoContratante: 'UTFPR',
@@ -183,6 +184,7 @@ describe('ContratosService', () => {
       );
 
       expect(resultado.id).toBe(ID_CONTRATO);
+      expect(resultado.codigoPublico).toMatch(/^[0-9]{5}$/);
       expect(resultado.numeroContrato).toBe('2026/001');
       expect(resultado.orgaoContratante).toBe('UTFPR');
       expect(resultado.objeto).toBe('Prestação de serviços');
@@ -190,6 +192,7 @@ describe('ContratosService', () => {
       expect(cenario.repositorio.create).toHaveBeenCalledWith(
         expect.objectContaining({
           numeroContrato: '2026/001',
+          codigoPublico: expect.stringMatching(/^[0-9]{5}$/),
           orgaoContratante: 'UTFPR',
           objeto: 'Prestação de serviços',
           processoAdministrativo: null,
@@ -514,4 +517,53 @@ describe('ContratosService', () => {
       ).rejects.toBe(erro);
     });
   });
+});
+
+describe('Código público de contratos', () => {
+  it('reserva um código de cinco dígitos, mantém UUID e registra o código na auditoria', async () => {
+    const c = montarCenario();
+    const salvo = await c.service.criar(dtoCriacao(), ator);
+    expect(salvo.id).toBe(ID_CONTRATO);
+    expect(salvo.codigoPublico).toMatch(/^[0-9]{5}$/);
+    expect(c.eventos[0].dadosPosteriores).toMatchObject({ codigoPublico: salvo.codigoPublico });
+  });
+
+  it('repete TODA a transação em uma colisão real do índice específico', async () => {
+    const c = montarCenario();
+    const erro = erroPostgres('23505');
+    Object.assign(erro.driverError, { constraint: 'uq_contratos_codigo_publico' });
+    c.repositorio.save.mockRejectedValueOnce(erro);
+    const salvo = await c.service.criar(dtoCriacao(), ator);
+    expect(salvo.codigoPublico).toMatch(/^[0-9]{5}$/);
+    expect(c.auditoria.executarComAuditoria).toHaveBeenCalledTimes(2);
+    expect(c.repositorio.save).toHaveBeenCalledTimes(2);
+    expect(c.eventos).toHaveLength(1);
+  });
+
+  it('não repete colisões de outras restrições de unicidade', async () => {
+    const c = montarCenario();
+    c.repositorio.save.mockRejectedValueOnce(erroPostgres('23505'));
+    await expect(c.service.criar(dtoCriacao(), ator)).rejects.toBeInstanceOf(ConflictException);
+    expect(c.auditoria.executarComAuditoria).toHaveBeenCalledTimes(1);
+  });
+
+  it('não altera o código público ao editar os dados do contrato', async () => {
+    const c = montarCenario();
+    c.repositorio.findOneBy.mockResolvedValue(contratoBase());
+    const salvo = await c.service.atualizar(ID_CONTRATO, { objeto: 'Novo objeto' }, ator);
+    expect(salvo.codigoPublico).toBe('00427');
+    expect(c.eventos[0].dadosPosteriores).toMatchObject({ codigoPublico: '00427' });
+  });
+});
+
+
+test('código público: esgotamento real não cria contrato e devolve 409', async () => {
+  const c = montarCenario();
+  const erro = erroPostgres('23505');
+  Object.assign(erro.driverError, { constraint: 'uq_contratos_codigo_publico' });
+  for (let i = 0; i < 24; i++) c.repositorio.save.mockRejectedValueOnce(erro);
+  Object.assign(c.manager, { query: jest.fn(async () => []) });
+  await expect(c.service.criar(dtoCriacao(), ator)).rejects.toBeInstanceOf(ConflictException);
+  expect(c.repositorio.save).toHaveBeenCalledTimes(24);
+  expect(c.eventos).toHaveLength(0);
 });

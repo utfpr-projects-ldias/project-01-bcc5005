@@ -3,7 +3,7 @@ import {
   InternalServerErrorException, Logger, NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, type Repository } from 'typeorm';
+import { DataSource, Not, type Repository } from 'typeorm';
 import type { ConsultarFuncionariosDto } from './dto/consultar-funcionarios.dto.js';
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
@@ -27,7 +27,7 @@ export class AdministracaoUsuariosService {
   ) {}
 
   async listar() {
-    const dados = await this.repositorio.find({ order: { criadoEm: 'DESC' }, take: 100 });
+    const dados = await this.repositorio.find({ where: { perfil: Not(PerfilUsuario.ADMINISTRADOR) }, order: { criadoEm: 'DESC' }, take: 100 });
     return dados.map((usuario) => this.publico(usuario));
   }
 
@@ -39,6 +39,8 @@ export class AdministracaoUsuariosService {
     // Escape de % e _ evita que a busca informada se torne padrão amplo arbitrário.
     const escapar = (valor: string) => valor.replace(/[\\%_]/g, (ch) => `\\${ch}`);
     const query = this.repositorio.createQueryBuilder('u');
+    // A administração da própria conta pertence exclusivamente ao módulo Minha conta.
+    query.andWhere('u.perfil <> :perfilAdministrador', { perfilAdministrador: PerfilUsuario.ADMINISTRADOR });
     if (filtros.ativo !== undefined) query.andWhere('u.ativo = :ativo', { ativo: filtros.ativo });
     if (busca) query.andWhere("(u.nome ILIKE :busca ESCAPE '\\' OR u.email ILIKE :busca ESCAPE '\\')", { busca: `%${escapar(busca)}%` });
     const [dados, total] = await query.orderBy('u.criadoEm', 'DESC')

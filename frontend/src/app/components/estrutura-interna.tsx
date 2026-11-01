@@ -12,7 +12,7 @@ import { IdentificacaoUsuario } from "../dashboard/components/identificacao-usua
 /** O layout raiz permanece montado mesmo ao navegar entre login e dashboard. */
 export function EstruturaInterna({ children }: { children: ReactNode }) {
   const rota = usePathname();
-  const interna = rota === "/dashboard" || rota === "/contratos" || rota.startsWith("/contratos/") ||
+  const interna = rota === "/dashboard" || rota === "/usuario" || rota === "/contratos" || rota.startsWith("/contratos/") ||
     rota === "/admin/usuarios" || rota.startsWith("/admin/usuarios/");
 
   if (!interna) return <>{children}</>;
@@ -29,8 +29,9 @@ function CabecalhoInterno({ rota, children }: { rota: string; children: ReactNod
   const [erroSaida, setErroSaida] = useState("");
 
   let titulo = "Dashboard";
-  if (rota.startsWith("/admin/usuarios")) {
-    titulo = rota === "/admin/usuarios" ? "Administração de funcionários" :
+  if (rota === "/usuario") titulo = "Minha conta";
+  else if (rota.startsWith("/admin/usuarios")) {
+    titulo = rota === "/admin/usuarios" ? "Funcionários" :
       rota === "/admin/usuarios/novo" ? "Cadastrar funcionário" : "Editar funcionário";
   } else if (rota.startsWith("/contratos")) {
     titulo = rota === "/contratos" ? "Gestão de Contratos" :
