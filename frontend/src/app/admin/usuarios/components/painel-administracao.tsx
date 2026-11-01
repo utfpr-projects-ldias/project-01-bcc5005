@@ -6,6 +6,7 @@ import { IndicadorCarregamento } from "@/app/components/indicador-carregamento";
 import { useAtualizacaoVisivel } from "@/hooks/use-atualizacao-visivel";
 import { LinkVoltar } from "@/app/components/link-voltar";
 import { ConfirmacaoSimples } from "@/app/components/confirmacao-simples";
+import { ModalIdentificacaoContrato } from "./modal-identificacao-contrato";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import {
@@ -96,6 +97,8 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
   const [podeEditar, setPodeEditar] = useState(false);
   const [erroPermissoes, setErroPermissoes] = useState("");
   const [atualizandoVinculo, setAtualizandoVinculo] = useState("");
+  const [identificacaoAberta, setIdentificacaoAberta] = useState<{ contrato: ContratoResumo; gatilho: HTMLButtonElement } | null>(null);
+  const fecharIdentificacao = useCallback(() => setIdentificacaoAberta(null), []);
   const [confirmacao, setConfirmacao] = useState<
     { tipo: "conta"; usuario: UsuarioPublico } | { tipo: "permissao"; contratoId: string; email: string } | null
   >(null);
@@ -466,7 +469,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                                     <p title={contrato.numeroContrato} className="truncate font-medium">{abreviarIdentificacao(contrato.numeroContrato, 24)}</p>
                                     <p title={contrato.orgaoContratante} className="truncate text-xs text-foreground/70">{abreviarIdentificacao(contrato.orgaoContratante, 28)}</p>
                                     <p className="text-xs text-foreground/60">Código #{contrato.codigoPublico}</p>
-                                    <details className="mt-1 text-xs text-foreground/70"><summary className="cursor-pointer">Ver identificação completa</summary><p className="mt-1 [overflow-wrap:anywhere]">{contrato.numeroContrato} — {contrato.orgaoContratante}</p></details>
+                                    <button type="button" className="mt-1 rounded text-left text-xs text-foreground/70 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-brand-green" onClick={(evento) => setIdentificacaoAberta({ contrato, gatilho: evento.currentTarget })}>Ver identificação completa</button>
                                   </> : <p className="break-all font-medium">Contrato {v.contratoId}</p>}
                                   <p className="mt-1 text-xs text-foreground/65">{v.podeEditar && editando.perfil === "GESTOR" ? "Leitura e edição" : "Somente leitura"}</p>
                                 </div>
@@ -523,6 +526,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
           </section>}
         </div>
       </div>
+      {identificacaoAberta && <ModalIdentificacaoContrato contrato={identificacaoAberta.contrato} focoRetorno={identificacaoAberta.gatilho} onFechar={fecharIdentificacao} />}
       {confirmacao && <ConfirmacaoSimples
         titulo={confirmacao.tipo === "conta" ? (confirmacao.usuario.ativo ? "Arquivar funcionário?" : "Reativar funcionário?") : "Revogar permissão?"}
         descricao={confirmacao.tipo === "conta"
