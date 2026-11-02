@@ -17,6 +17,8 @@ import { AdicionarNomeUsuarios1793300000000 } from '../src/database/migrations/1
 import { FkPermissaoContrato1793400000000 } from '../src/database/migrations/1793400000000-FkPermissaoContrato.js';
 import { CriarEtapas1793500000000 } from '../src/database/migrations/1793500000000-CriarEtapas.js';
 import { ContextoAuditoriaOperacional1793600000000 } from '../src/database/migrations/1793600000000-ContextoAuditoriaOperacional.js';
+import { CodigoPublicoContratos1793800000000 } from '../src/database/migrations/1793800000000-CodigoPublicoContratos.js';
+import { codigoPublicoLivreParaTeste } from './codigo-publico-fixture.js';
 import { Contrato } from '../src/contratos/contrato.entity.js';
 import { Usuario } from '../src/usuarios/usuario.entity.js';
 import { Etapa } from '../src/etapas/etapa.entity.js';
@@ -105,12 +107,13 @@ suite('TEC07-AJUSTES-02-03 — HTTP + PostgreSQL isolado, sessão simulada', () 
   };
 
   const criarContrato = async (numero: string): Promise<string> => {
+    const codigoPublico = await codigoPublicoLivreParaTeste(db);
     const [registro] = await db.query(`
       INSERT INTO contratos (numero_contrato, orgao_contratante, objeto,
-        inicio_vigencia, termino_vigencia, status, modo_calculo)
+        inicio_vigencia, termino_vigencia, status, modo_calculo, codigo_publico)
       VALUES ($1, 'Órgão QA', 'Teste de isolamento', '2026-10-01', '2027-10-01',
-        'PLANEJAMENTO', 'SIMPLES') RETURNING id
-    `, [numero]) as Array<{ id: string }>;
+        'PLANEJAMENTO', 'SIMPLES', $2) RETURNING id
+    `, [numero, codigoPublico]) as Array<{ id: string }>;
     return registro.id;
   };
   const criarEtapa = async (contratoId: string): Promise<string> => {
@@ -136,6 +139,7 @@ suite('TEC07-AJUSTES-02-03 — HTTP + PostgreSQL isolado, sessão simulada', () 
         CriarEventosAuditoria1793100000000, CriarContratos1793200000000,
         AdicionarNomeUsuarios1793300000000, FkPermissaoContrato1793400000000,
         CriarEtapas1793500000000, ContextoAuditoriaOperacional1793600000000,
+        CodigoPublicoContratos1793800000000,
       ],
     }).initialize();
     await db.runMigrations();

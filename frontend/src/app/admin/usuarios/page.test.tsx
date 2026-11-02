@@ -264,15 +264,23 @@ test("acessos exibem resumo curto mesmo em telas largas, sem perder identificaç
   await screen.findByRole("heading", { name: /Conta de Gestor de Teste/ });
   fireEvent.click(screen.getByText("Acesso aos contratos", { exact: false, selector: "summary" }));
   const lista = screen.getByRole("region", { name: "Contratos vinculados" });
-  const numeroCurto = within(lista).getByTitle(numero);
-  const orgaoCurto = within(lista).getByTitle(orgao.trim());
-  expect(orgaoCurto).toHaveAttribute("title", orgao);
-  expect(Array.from(numeroCurto.textContent ?? "")).toHaveLength(24);
-  expect(Array.from(orgaoCurto.textContent ?? "")).toHaveLength(28);
-  expect(numeroCurto).toHaveTextContent(/…$/);
-  expect(orgaoCurto).toHaveTextContent(/…$/);
+  const titulo = within(lista).getByTitle(numero);
+  const cartao = titulo.closest("li");
+  expect(cartao).not.toBeNull();
+  expect(cartao).toHaveClass("@container");
+  expect(titulo).toHaveClass("truncate");
+  expect(titulo).toHaveTextContent(numero); // Nome completo no DOM; ellipsis depende do espaço real.
+  expect(cartao).not.toHaveTextContent(orgao); // Órgão somente no modal de identificação.
   expect(within(lista).getByText("Código #84354")).toBeInTheDocument();
+  expect(within(lista).queryByText("Somente leitura")).not.toBeInTheDocument();
   const expandir = within(lista).getByRole("button", { name: "Ver identificação completa" });
+  expect(expandir).toHaveClass("underline");
+  expect(expandir.compareDocumentPosition(titulo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  const corpoCartao = cartao?.firstElementChild;
+  expect(corpoCartao).toHaveClass("@xl:flex-row");
+  expect(corpoCartao?.lastElementChild).toHaveClass("flex-wrap");
+  expect(within(lista).getByRole("button", { name: "Remover edição" })).toBeInTheDocument();
+  expect(within(lista).getByRole("button", { name: "Revogar acesso" })).toBeInTheDocument();
   const urlOriginal = window.location.href;
   const estadoAnterior = window.history.state;
   const voltar = jest.spyOn(window.history, "back").mockImplementation(() => {
@@ -291,11 +299,13 @@ test("acessos exibem resumo curto mesmo em telas largas, sem perder identificaç
   expect(voltar).toHaveBeenCalledTimes(1);
   voltar.mockRestore();
   const seletor = screen.getByLabelText("Selecionar contrato ainda não vinculado") as HTMLSelectElement;
-  expect(seletor).toHaveClass("max-w-[20rem]");
+  expect(seletor).toHaveClass("max-w-[26rem]", "truncate");
   const opcoes = within(seletor).getAllByRole("option");
   expect(opcoes).toHaveLength(1);
   expect(opcoes[0]).toHaveValue("contrato-livre");
-  expect(opcoes[0]).toHaveTextContent(/^#75320 · /);
-  expect(Array.from(opcoes[0].textContent ?? "").length).toBeLessThanOrEqual(40);
-  expect(opcoes[0].textContent).not.toContain("Organização extensaOrganização extensa");
+  expect(opcoes[0]).toHaveTextContent(/^#75320 · Contrato disponível/);
+  expect(opcoes[0]).toHaveAttribute("title", "Contrato disponível muito extenso".repeat(10));
+  expect(Array.from(opcoes[0].textContent ?? "").length).toBeLessThanOrEqual(44);
+  expect(opcoes[0]).toHaveTextContent(/…$/);
+  expect(opcoes[0].textContent).not.toContain("Organização extensa");
 });
