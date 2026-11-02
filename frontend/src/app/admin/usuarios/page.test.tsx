@@ -132,6 +132,23 @@ test("edição abre por UUID consultando API individual, mesmo fora das 100 prim
   expect(screen.queryByRole("region", { name: "Funcionários" })).not.toBeInTheDocument();
 });
 
+
+
+test("edição de conta com nome não referencia aviso ARIA inexistente", async () => {
+  renderComConsultas(<PainelAdministracao vista="edicao" idEdicao="b" />);
+  const nome = await screen.findByLabelText("Nome completo");
+  expect(nome).not.toHaveAttribute("aria-describedby");
+  expect(document.getElementById("aviso-nome-legado")).toBeNull();
+});
+
+test("edição de conta legada sem nome vincula o aviso ARIA visível", async () => {
+  porId.mockResolvedValue({ ...gestor, nome: null });
+  renderComConsultas(<PainelAdministracao vista="edicao" idEdicao="b" />);
+  const nome = await screen.findByLabelText("Nome completo");
+  expect(nome).toHaveAttribute("aria-describedby", "aviso-nome-legado");
+  expect(document.getElementById("aviso-nome-legado")).toHaveTextContent(/Nome legado opcional/);
+});
+
 test("edição salva o PATCH e permanece na página para gerenciar credenciais", async () => {
   atualizar.mockResolvedValue({ ...gestor, perfil: "COLABORADOR", ativo: false });
   renderComConsultas(<PainelAdministracao vista="edicao" idEdicao="b" />);

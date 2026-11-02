@@ -25,7 +25,7 @@ test("login espera a verificação inicial sem mostrar formulário", async () =>
   expect(screen.getByRole("status")).toHaveTextContent("Verificando sessão");
   expect(screen.queryByRole("button", { name: "Entrar" })).not.toBeInTheDocument();
   await act(async () => { resolver(false); });
-  expect(await screen.findByRole("button", { name: "Entrar" })).toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: "Entrar" })).toHaveClass("text-on-brand-green");
 });
 
 test("se já tem sessão ativa e domínio ativo, vai direto ao dashboard", async () => {
@@ -60,5 +60,6 @@ test("credenciais inválidas mostram erro, não falso sucesso", async () => {
   fireEvent.change(screen.getByLabelText("Senha"), { target: { value: "errada" } });
   fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
   expect(await screen.findByRole("alert")).toHaveTextContent(/E-mail ou senha inválidos/);
+  expect(screen.getByRole("alert")).toHaveClass("text-error-text");
   expect(substituir).not.toHaveBeenCalled();
 });

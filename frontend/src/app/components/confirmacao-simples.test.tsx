@@ -13,3 +13,9 @@ test('confirmação simples abre com foco em cancelar, fecha por Escape e confir
   fireEvent.click(within(dialogo).getByRole('button', { name: 'Arquivar' }));
   expect(confirmar).toHaveBeenCalledTimes(1);
 });
+
+test('confirmação não perigosa usa texto contrastante sobre verde', () => {
+  const { unmount } = render(<ConfirmacaoSimples titulo="Prosseguir?" descricao="Verificação" confirmar="Continuar" onCancelar={jest.fn()} onConfirmar={jest.fn()} />);
+  expect(screen.getByRole('button', { name: 'Continuar' })).toHaveClass('bg-brand-green', 'text-on-brand-green');
+  unmount();
+});

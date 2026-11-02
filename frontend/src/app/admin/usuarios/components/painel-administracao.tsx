@@ -44,7 +44,7 @@ type Campo = "nome" | "email" | "perfil" | "senhaInicial" | "confirmarSenha";
 type Erros = Partial<Record<Campo, string>>;
 const botao = "rounded-lg border border-brand-green/40 px-3 py-2 text-sm hover:bg-brand-green/10 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-brand-green";
 const campo = "w-full min-w-0 rounded-lg border border-brand-green/30 bg-background px-3 py-2 text-foreground focus-visible:outline-2 focus-visible:outline-brand-green";
-const acao = "rounded-lg bg-brand-green px-4 py-2.5 font-semibold text-background disabled:opacity-50";
+const acao = "rounded-lg bg-brand-green px-4 py-2.5 font-semibold text-on-brand-green disabled:opacity-50";
 
 function erroLegivel(erro: unknown): string {
   return erro instanceof ErroApi ? erro.message : "Não foi possível comunicar com o servidor. Tente novamente.";
@@ -372,7 +372,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
               <button type="submit" disabled={atualizando} className={botao}>Buscar</button>
               <button type="button" disabled={atualizando} className={botao} onClick={() => { setBusca(""); setFiltro(""); setPagina(1); void recarregar(aba, 1, ""); }}>Limpar</button>
             </form>
-            {erroLista && <p role="alert" className="mt-3 text-sm text-red-400">{erroLista}</p>}
+            {erroLista && <p role="alert" className="mt-3 text-sm text-error-text">{erroLista}</p>}
             <p role="status" className="mt-2 min-h-4 text-xs text-foreground/65">{avisoAtualizacao}</p>
             <p className="mt-3 text-xs text-foreground/65">{listaVisivel.total} resultados · Página {lista.pagina} de {listaVisivel.totalPaginas}</p>
             {listaVisivel.itens.length === 0 ? <p className="mt-5 text-sm text-foreground/70">Nenhum funcionário nesta consulta.</p> : (
@@ -406,7 +406,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
               <h2 id="titulo-formulario" className="text-lg font-semibold">{editando ? `Conta de ${editando.nome || "Nome não informado"}` : "Nova conta de funcionário"}</h2>
               {vista === "edicao" && <span className="rounded-full bg-brand-green/10 px-3 py-1 text-xs text-foreground/70">Edição administrativa</span>}
             </div>
-            {erroFormulario && <p role="alert" className="text-sm text-red-400">{erroFormulario}</p>}
+            {erroFormulario && <p role="alert" className="text-sm text-error-text">{erroFormulario}</p>}
             {vista === "edicao" && editando ? (
               <>
                 <p className="break-all text-sm text-foreground/70">Conta: {editando.email}</p>
@@ -416,7 +416,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                 <form className="space-y-4" noValidate onSubmit={(e) => void salvarEdicao(e)}>
                   <div>
                     <label htmlFor="edicao-nome" className="mb-1 block text-sm">Nome completo</label>
-                    <input id="edicao-nome" className={campo} value={edicao.nome} onChange={(e) => setEdicao((s) => ({ ...s, nome: e.target.value }))} maxLength={160} aria-describedby="aviso-nome-legado" />
+                    <input id="edicao-nome" className={campo} value={edicao.nome} onChange={(e) => setEdicao((s) => ({ ...s, nome: e.target.value }))} maxLength={160} aria-describedby={!editando.nome ? "aviso-nome-legado" : undefined} />
                     {!editando.nome && <p id="aviso-nome-legado" className="text-xs text-foreground/60">Nome legado opcional nesta edição. Ao preencher, informe nome e sobrenome.</p>}
                   </div>
                   {editando.perfil !== "ADMINISTRADOR" && <>
@@ -457,7 +457,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                       <summary className="cursor-pointer font-semibold focus-visible:outline-2 focus-visible:outline-brand-green">Acesso aos contratos <span className="ml-2 text-xs font-normal text-foreground/60">{permissoes.length} vínculo(s)</span></summary>
                       <div className="mt-4 space-y-4">
                         <p className="text-sm text-foreground/70">Cada funcionário pode ter acesso a vários contratos. Gestores podem receber edição; colaboradores, apenas leitura. Estes vínculos não alteram o responsável interno do contrato.</p>
-                        {erroPermissoes && <p role="alert" className="text-sm text-red-400">{erroPermissoes}</p>}
+                        {erroPermissoes && <p role="alert" className="text-sm text-error-text">{erroPermissoes}</p>}
                         <section aria-label="Contratos vinculados">
                           <h4 className="text-sm font-semibold">Contratos com acesso ({permissoes.length})</h4>
                           <ul className="mt-2 space-y-2 text-sm">
@@ -503,22 +503,22 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
               <form onSubmit={(e) => void cadastrar(e)} noValidate className="space-y-4">
                 <div><label htmlFor="usuario-nome" className="mb-1 block text-sm">Nome completo</label>
                   <input id="usuario-nome" className={campo} value={form.nome} onChange={(e) => setForm((s) => ({ ...s, nome: e.target.value }))} aria-invalid={!!erros.nome} maxLength={160} />
-                  {erros.nome && <p role="alert" className="text-xs text-red-400">{erros.nome}</p>}
+                  {erros.nome && <p role="alert" className="text-xs text-error-text">{erros.nome}</p>}
                 </div>
                 <div><label htmlFor="usuario-email" className="mb-1 block text-sm">E-mail</label>
                   <input id="usuario-email" type="email" className={campo} value={form.email} onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))} aria-invalid={!!erros.email} maxLength={320} />
-                  {erros.email && <p role="alert" className="text-xs text-red-400">{erros.email}</p>}
+                  {erros.email && <p role="alert" className="text-xs text-error-text">{erros.email}</p>}
                 </div>
                 <div><label htmlFor="usuario-perfil" className="mb-1 block text-sm">Perfil</label>
                   <select id="usuario-perfil" className={campo} value={form.perfil} onChange={(e) => setForm((s) => ({ ...s, perfil: e.target.value as PerfilFuncionario }))}><option value="GESTOR">Gestor</option><option value="COLABORADOR">Colaborador</option></select>
                 </div>
                 <div><label htmlFor="usuario-senha" className="mb-1 block text-sm">Senha inicial</label>
                   <input id="usuario-senha" type="password" autoComplete="new-password" className={campo} value={form.senhaInicial} onChange={(e) => setForm((s) => ({ ...s, senhaInicial: e.target.value }))} aria-invalid={!!erros.senhaInicial} />
-                  {erros.senhaInicial && <p role="alert" className="text-xs text-red-400">{erros.senhaInicial}</p>}
+                  {erros.senhaInicial && <p role="alert" className="text-xs text-error-text">{erros.senhaInicial}</p>}
                 </div>
                 <div><label htmlFor="usuario-confirmacao" className="mb-1 block text-sm">Confirmar senha</label>
                   <input id="usuario-confirmacao" type="password" autoComplete="new-password" className={campo} value={form.confirmarSenha} onChange={(e) => setForm((s) => ({ ...s, confirmarSenha: e.target.value }))} aria-invalid={!!erros.confirmarSenha} />
-                  {erros.confirmarSenha && <p role="alert" className="text-xs text-red-400">{erros.confirmarSenha}</p>}
+                  {erros.confirmarSenha && <p role="alert" className="text-xs text-error-text">{erros.confirmarSenha}</p>}
                 </div>
                 <button className={acao + " w-full"} type="submit" disabled={enviando}>{enviando ? <IndicadorCarregamento compacto texto="Cadastrando..." /> : "Cadastrar funcionário"}</button>
               </form>

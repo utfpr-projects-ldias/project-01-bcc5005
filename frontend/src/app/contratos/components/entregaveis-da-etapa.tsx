@@ -60,7 +60,7 @@ export function EntregaveisDaEtapa({ contratoId, etapaId, dados, carregando, err
         onSalvandoMudou={setSalvando} />
     </div>}
     {carregando && !dados && !erro && <p role="status" className="mt-3 text-sm">Carregando entregáveis...</p>}
-    {Boolean(erro) && <p role="alert" className="mt-3 break-words text-sm text-red-400">
+    {Boolean(erro) && <p role="alert" className="mt-3 break-words text-sm text-error-text">
       {erro instanceof Error ? erro.message : 'Falha ao consultar entregáveis.'}
     </p>}
     {!carregando && !erro && !visiveis.length && <p className="mt-3 text-sm text-foreground/70">Nenhum entregável cadastrado nesta etapa.</p>}

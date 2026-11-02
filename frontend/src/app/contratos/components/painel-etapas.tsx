@@ -185,19 +185,19 @@ export function PainelEtapas({ contratoId, habilitado, podeGerenciar }: {
           aria-busy={consulta.atualizando || atualizacaoVisivel.ocupado} className="inline-flex min-h-10 min-w-36 items-center justify-center rounded-lg border border-brand-green/40 px-3 py-2 text-sm transition-colors hover:bg-brand-green/10 focus-visible:outline-2 focus-visible:outline-brand-neon disabled:cursor-wait disabled:opacity-60">{consulta.atualizando || atualizacaoVisivel.ocupado ? <IndicadorCarregamento compacto texto="Atualizando..." /> : 'Atualizar etapas'}</button>
         {podeEscrever && <button type="button" onClick={(evento) => abrirModal('nova', evento.currentTarget)}
           disabled={reordenando || salvandoFormulario} aria-expanded={editor === 'nova'} aria-controls="formulario-nova-etapa"
-          className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-all duration-200 motion-reduce:transition-none hover:shadow-md focus-visible:outline-2 focus-visible:outline-brand-neon disabled:cursor-not-allowed ${editor === 'nova' ? 'border-brand-green bg-brand-green/15 text-brand-neon' : 'border-brand-green bg-brand-green text-background hover:brightness-110'} disabled:opacity-100`}>
+          className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-all duration-200 motion-reduce:transition-none hover:shadow-md focus-visible:outline-2 focus-visible:outline-brand-neon disabled:cursor-not-allowed ${editor === 'nova' ? 'border-brand-green bg-brand-green/15 text-brand-neon' : 'border-brand-green bg-brand-green text-on-brand-green hover:brightness-110'} disabled:opacity-100`}>
           <span>{editor === 'nova' ? 'Cadastrando etapa' : 'Nova etapa'}</span>
         </button>}
       </div>
     </div>
-    {erroAcao && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-red-400">{erroAcao}</p>}
+    {erroAcao && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-error-text">{erroAcao}</p>}
     {avisoAcao && <p role="status" className="text-sm text-brand-neon">{avisoAcao}</p>}
     {reordenando && <p role="status" className="text-sm text-foreground/65">Salvando nova ordem...</p>}
     {consulta.carregando && !etapas && !erroConsulta && !bloqueio && <p role="status" className="text-sm text-foreground/70">Carregando etapas...</p>}
-    {Boolean(erroConsulta) && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-red-400">
+    {Boolean(erroConsulta) && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-error-text">
       {erroConsulta instanceof ErroEtapa ? erroConsulta.message : 'Não foi possível consultar as etapas. Tente atualizar.'}
     </p>}
-    {bloqueio && !erroConsulta && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-red-400">O acesso às etapas precisa ser verificado novamente. Atualize a página.</p>}
+    {bloqueio && !erroConsulta && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-error-text">O acesso às etapas precisa ser verificado novamente. Atualize a página.</p>}
 
     {etapas?.length === 0 && <div className="rounded-xl border border-dashed border-brand-green/30 p-4 text-sm text-foreground/70">
       Ainda não há etapas cadastradas para este contrato. {podeEscrever ? 'Use “Nova etapa” para organizar o planejamento.' : 'O planejamento ainda não foi iniciado.'}
