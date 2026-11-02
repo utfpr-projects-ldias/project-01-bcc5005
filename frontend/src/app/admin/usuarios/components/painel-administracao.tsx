@@ -463,19 +463,19 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                           <ul className="mt-2 space-y-2 text-sm">
                             {permissoes.map((v) => {
                               const contrato = contratos.find((c) => c.id === v.contratoId);
-                              return <li key={v.contratoId} className="flex min-w-0 flex-col gap-3 rounded-lg border border-brand-green/20 p-3 sm:flex-row sm:items-center sm:justify-between">
-                                <div className="min-w-0 flex-1">
-                                  {contrato ? <>
-                                    <p title={contrato.numeroContrato} className="truncate font-medium">{abreviarIdentificacao(contrato.numeroContrato, 24)}</p>
-                                    <p title={contrato.orgaoContratante} className="truncate text-xs text-foreground/70">{abreviarIdentificacao(contrato.orgaoContratante, 28)}</p>
-                                    <p className="text-xs text-foreground/60">Código #{contrato.codigoPublico}</p>
-                                    <button type="button" className="mt-1 rounded text-left text-xs text-foreground/70 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-brand-green" onClick={(evento) => setIdentificacaoAberta({ contrato, gatilho: evento.currentTarget })}>Ver identificação completa</button>
-                                  </> : <p className="break-all font-medium">Contrato {v.contratoId}</p>}
-                                  <p className="mt-1 text-xs text-foreground/65">{v.podeEditar && editando.perfil === "GESTOR" ? "Leitura e edição" : "Somente leitura"}</p>
-                                </div>
-                                <div className="flex shrink-0 flex-wrap gap-2">
-                                  {editando.perfil === "GESTOR" && <button type="button" className={botao} disabled={enviando || !!atualizandoVinculo || !editando.ativo} onClick={() => void alternarPermissao(v)}>{atualizandoVinculo === v.contratoId ? <IndicadorCarregamento compacto texto="Atualizando..." /> : v.podeEditar ? "Remover edição" : "Permitir edição"}</button>}
-                                  <button type="button" className={botao} disabled={enviando || !!atualizandoVinculo} onClick={() => setConfirmacao({ tipo: "permissao", contratoId: v.contratoId, email: editando.email })}>Revogar acesso</button>
+                              return <li key={v.contratoId} className="@container min-w-0 rounded-lg border border-brand-green/20 p-3">
+                                <div className="flex min-w-0 flex-col gap-3 @xl:flex-row @xl:items-center @xl:justify-between">
+                                  <div className="min-w-0 flex-1 space-y-1">
+                                    {contrato ? <>
+                                      <button type="button" className="block rounded text-left text-xs text-foreground/70 underline underline-offset-4 hover:text-foreground focus-visible:outline-2 focus-visible:outline-brand-green" onClick={(evento) => setIdentificacaoAberta({ contrato, gatilho: evento.currentTarget })}>Ver identificação completa</button>
+                                      <p title={contrato.numeroContrato} className="truncate font-medium">{contrato.numeroContrato}</p>
+                                      <p className="text-xs text-foreground/60">Código #{contrato.codigoPublico}</p>
+                                    </> : <p className="break-all font-medium">Contrato {v.contratoId}</p>}
+                                  </div>
+                                  <div className="flex min-w-0 flex-wrap gap-2 @xl:shrink-0">
+                                    {editando.perfil === "GESTOR" && <button type="button" className={botao} disabled={enviando || !!atualizandoVinculo || !editando.ativo} onClick={() => void alternarPermissao(v)}>{atualizandoVinculo === v.contratoId ? <IndicadorCarregamento compacto texto="Atualizando..." /> : v.podeEditar ? "Remover edição" : "Permitir edição"}</button>}
+                                    <button type="button" className={botao} disabled={enviando || !!atualizandoVinculo} onClick={() => setConfirmacao({ tipo: "permissao", contratoId: v.contratoId, email: editando.email })}>Revogar acesso</button>
+                                  </div>
                                 </div>
                               </li>;
                             })}
@@ -487,8 +487,8 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                           {contratosLivres.length === 0 ? <p className="mt-2 text-sm text-foreground/60">Não há outros contratos disponíveis para vincular. Crie um contrato ou revise os vínculos acima.</p> :
                             <form onSubmit={(e) => void salvarPermissao(e)} className="mt-3 min-w-0 space-y-3">
                               <label htmlFor="contrato-permissao" className="block text-sm">Selecionar contrato ainda não vinculado</label>
-                              <select id="contrato-permissao" className={`${campo} max-w-[20rem] text-sm`} value={contratoSelecionado} onChange={(e) => setContratoId(e.target.value)}>
-                                {contratosLivres.map((c) => <option value={c.id} key={c.id}>#{c.codigoPublico} · {abreviarIdentificacao(c.numeroContrato, 14)} · {abreviarIdentificacao(c.orgaoContratante, 14)}</option>)}
+                              <select id="contrato-permissao" className={`${campo} max-w-[26rem] truncate text-sm`} value={contratoSelecionado} onChange={(e) => setContratoId(e.target.value)}>
+                                {contratosLivres.map((c) => <option value={c.id} key={c.id} title={c.numeroContrato}>#{c.codigoPublico} · {abreviarIdentificacao(c.numeroContrato, 35)}</option>)}
                               </select>
                               {editando.perfil === "GESTOR" && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={podeEditar} onChange={(e) => setPodeEditar(e.target.checked)} />Permitir também edição</label>}
                               <button type="submit" disabled={enviando || !contratoSelecionado || !editando.ativo} className={acao}>{enviando ? <IndicadorCarregamento compacto texto="Vinculando..." /> : "Adicionar vínculo"}</button>
