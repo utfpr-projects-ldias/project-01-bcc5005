@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   DataSource,
   MigrationExecutor,
@@ -16,35 +17,41 @@ describePostgres('Migration de contratos — PostgreSQL', () => {
   let schemaTeste: string | undefined;
 
   beforeAll(async () => {
-    dataSource = new DataSource({
-      type: 'postgres',
-      url: process.env.TEST_DATABASE_URL,
+    const url = process.env.TEST_DATABASE_URL;
+    if (!url) throw new Error('Banco E2E não informado');
+    const nomeBanco = decodeURIComponent(new URL(url).pathname.slice(1));
+    if (!nomeBanco.endsWith('_migration_test')) {
+      throw new Error('Proteção E2E: utilizar banco terminado em _migration_test');
+    }
+
+    // O schema é criado antes de inicializar o DataSource que executa a
+    // migration: SET search_path sozinho não altera o schema que o TypeORM
+    // utiliza ao consultar/registrar sua tabela de migrations.
+    schemaTeste = `hu05_05_${randomUUID().replaceAll('-', '')}`;
+    const preparacao = await new DataSource({
+      type: 'postgres', url, entities: [], synchronize: false,
+    }).initialize();
+    try {
+      await preparacao.query(`CREATE SCHEMA "${schemaTeste}"`);
+    } finally {
+      await preparacao.destroy();
+    }
+
+    dataSource = await new DataSource({
+      type: 'postgres', url, schema: schemaTeste,
       entities: [],
       migrations: [CriarContratos1793200000000],
       migrationsTableName: 'migrations_hu05_05',
       synchronize: false,
       logging: false,
-    });
-
-    await dataSource.initialize();
+    }).initialize();
 
     queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
+    await queryRunner.query(`SET search_path TO "${schemaTeste}"`);
 
-    schemaTeste =
-      `hu05_05_${process.pid}_${Date.now()}`;
-
-    await queryRunner.query(
-      `CREATE SCHEMA "${schemaTeste}"`,
-    );
-
-    await queryRunner.query(
-      `SET search_path TO "${schemaTeste}"`,
-    );
-
-    // A migration de contratos declara uma FK para usuarios(id).
-    // Criamos apenas a tabela necessária para testar essa migration
-    // isoladamente, sem executar as demais migrations do sistema.
+    // A migration histórica referencia usuarios(id). A fixture mantém
+    // somente a tabela mínima, sem tocar schemas de outras suítes.
     await queryRunner.query(`
       CREATE TABLE "usuarios" (
         "id" uuid PRIMARY KEY

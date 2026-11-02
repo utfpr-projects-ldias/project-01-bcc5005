@@ -14,6 +14,8 @@ import { AdicionarNomeUsuarios1793300000000 } from '../src/database/migrations/1
 import { FkPermissaoContrato1793400000000 } from '../src/database/migrations/1793400000000-FkPermissaoContrato.js';
 import { CriarEtapas1793500000000 } from '../src/database/migrations/1793500000000-CriarEtapas.js';
 import { ContextoAuditoriaOperacional1793600000000 } from '../src/database/migrations/1793600000000-ContextoAuditoriaOperacional.js';
+import { CodigoPublicoContratos1793800000000 } from '../src/database/migrations/1793800000000-CodigoPublicoContratos.js';
+import { codigoPublicoLivreParaTeste } from './codigo-publico-fixture.js';
 import { Contrato } from '../src/contratos/contrato.entity.js';
 import { ContratosController } from '../src/contratos/contratos.controller.js';
 import { ContratosService } from '../src/contratos/contratos.service.js';
@@ -105,16 +107,20 @@ suite('HU06-04 — regressão HTTP + PostgreSQL em base migrada', () => {
         CriarEventosAuditoria1793100000000, CriarContratos1793200000000,
         AdicionarNomeUsuarios1793300000000, FkPermissaoContrato1793400000000,
         CriarEtapas1793500000000, ContextoAuditoriaOperacional1793600000000,
+        CodigoPublicoContratos1793800000000,
       ],
     }).initialize();
     await db.runMigrations();
 
     // Contrato e etapa HISTÓRICOS persistidos ANTES de iniciar o Nest.
     const novoContrato = async (numero: string) => {
+      const codigoPublico = await codigoPublicoLivreParaTeste(db);
       const [linha] = await db.query(`INSERT INTO contratos
-        (numero_contrato, orgao_contratante, objeto, inicio_vigencia, termino_vigencia, status, modo_calculo)
-        VALUES ($1, 'Órgão QA', 'Contrato legado', '2026-10-01', '2027-03-31', 'PLANEJAMENTO', 'SIMPLES')
-        RETURNING id`, [`${numero}-${sufixo}`]) as Array<{ id: string }>;
+        (numero_contrato, orgao_contratante, objeto, inicio_vigencia, termino_vigencia,
+         status, modo_calculo, codigo_publico)
+        VALUES ($1, 'Órgão QA', 'Contrato legado', '2026-10-01', '2027-03-31',
+                'PLANEJAMENTO', 'SIMPLES', $2)
+        RETURNING id`, [`${numero}-${sufixo}`, codigoPublico]) as Array<{ id: string }>;
       contratoIds.push(linha.id);
       return linha.id;
     };

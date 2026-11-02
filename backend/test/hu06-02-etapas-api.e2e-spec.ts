@@ -14,6 +14,8 @@ import { AdicionarNomeUsuarios1793300000000 } from '../src/database/migrations/1
 import { FkPermissaoContrato1793400000000 } from '../src/database/migrations/1793400000000-FkPermissaoContrato.js';
 import { CriarEtapas1793500000000 } from '../src/database/migrations/1793500000000-CriarEtapas.js';
 import { ContextoAuditoriaOperacional1793600000000 } from '../src/database/migrations/1793600000000-ContextoAuditoriaOperacional.js';
+import { CodigoPublicoContratos1793800000000 } from '../src/database/migrations/1793800000000-CodigoPublicoContratos.js';
+import { codigoPublicoLivreParaTeste } from './codigo-publico-fixture.js';
 import { Contrato } from '../src/contratos/contrato.entity.js';
 import { Usuario } from '../src/usuarios/usuario.entity.js';
 import { Etapa } from '../src/etapas/etapa.entity.js';
@@ -64,15 +66,18 @@ suite('HU06-02 — API real e ordenação transacional PostgreSQL isolado', () =
         CriarEventosAuditoria1793100000000, CriarContratos1793200000000,
         AdicionarNomeUsuarios1793300000000, FkPermissaoContrato1793400000000,
         CriarEtapas1793500000000, ContextoAuditoriaOperacional1793600000000,
+        CodigoPublicoContratos1793800000000,
       ],
     }).initialize();
     await db.runMigrations();
     const criarContrato = async (sufixo: string) => {
+      const codigoPublico = await codigoPublicoLivreParaTeste(db);
       const [r] = await db.query(`INSERT INTO contratos
         (numero_contrato, orgao_contratante, objeto, inicio_vigencia,
-        termino_vigencia, status, modo_calculo)
+        termino_vigencia, status, modo_calculo, codigo_publico)
         VALUES ($1, 'Órgão HU06', 'Execução QA', '2026-10-01', '2027-01-01',
-        'PLANEJAMENTO', 'SIMPLES') RETURNING id`, [`HU06-02-${sufixo}-${idTeste}`]) as Array<{ id: string }>;
+        'PLANEJAMENTO', 'SIMPLES', $2) RETURNING id`,
+        [`HU06-02-${sufixo}-${idTeste}`, codigoPublico]) as Array<{ id: string }>;
       contratos.push(r.id);
       return r.id;
     };
