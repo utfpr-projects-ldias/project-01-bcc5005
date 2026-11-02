@@ -7,6 +7,9 @@
   --text-primary: #050607;
   --accent-green: #5FD34A;
   --accent-neon: #153019;
+  /* Contraste para textos sobre a cor principal e mensagens de erro. */
+  --text-on-accent-green: #050607;
+  --text-error: #b91c1c;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -17,6 +20,7 @@
     --text-primary: #F0FFE3; /* white */
     --accent-neon: #A6FF1A;  /* neon_green */
     --accent-green: #5FD34A; /* green */
+    --text-error: #fca5a5;
   }
 }
 
@@ -28,6 +32,8 @@
   --color-brand-neon: var(--accent-neon);
   --color-brand-green: var(--accent-green);
   --color-brand-white: var(--text-primary);
+  --color-on-brand-green: var(--text-on-accent-green);
+  --color-error-text: var(--text-error);
   
   --font-sans: "Poppins", var(--font-geist-sans), sans-serif;
   --font-mono: var(--font-geist-mono);

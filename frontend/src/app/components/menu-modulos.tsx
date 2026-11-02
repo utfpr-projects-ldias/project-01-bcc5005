@@ -26,7 +26,7 @@ function Itens({ compactos = false }: { compactos?: boolean }) {
   return <>
     {itens.map((item) => item.href ? (
       <Link key={item.nome} href={item.href} aria-current={ativo(item.href) ? 'page' : undefined}
-        className={`${compactos ? 'px-3 py-2' : 'block px-4 py-2.5'} rounded-lg text-sm font-medium focus-visible:outline-2 focus-visible:outline-brand-green ${ativo(item.href) ? 'bg-brand-green text-background' : 'hover:bg-brand-darkgreen/40'}`}>
+        className={`${compactos ? 'px-3 py-2' : 'block px-4 py-2.5'} rounded-lg text-sm font-medium focus-visible:outline-2 focus-visible:outline-brand-green ${ativo(item.href) ? 'bg-brand-green text-on-brand-green' : 'hover:bg-brand-darkgreen/40'}`}>
         {item.nome}{item.aviso && <span className="ml-1 text-xs font-normal opacity-70"> · {item.aviso}</span>}
       </Link>
     ) : (

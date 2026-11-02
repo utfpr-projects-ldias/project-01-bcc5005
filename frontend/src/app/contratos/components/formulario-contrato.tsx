@@ -27,7 +27,7 @@ function Campo({ titulo, id, obrigatorio = false, ajuda, erro, contador, childre
     {children}
     <div className="flex flex-wrap items-start justify-between gap-2">
       <div>{ajuda && <p id={`${id}-ajuda`} className="text-xs text-foreground/60">{ajuda}</p>}
-        {erro && <p id={`${id}-erro`} role="alert" className="text-xs text-red-400">{erro}</p>}</div>
+        {erro && <p id={`${id}-erro`} role="alert" className="text-xs text-error-text">{erro}</p>}</div>
       {contador && <span className="text-xs tabular-nums text-foreground/55">{contador.valor}/{contador.max}</span>}
     </div>
   </div>;
@@ -172,10 +172,10 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
       </div>
     </details>
     <p role="note" className="rounded-xl border border-brand-green/20 p-3 text-sm text-foreground/70">Anexos ainda não podem ser enviados por este formulário. O contrato será salvo sem arquivos.</p>
-    {erroGeral && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-red-400">{erroGeral}</p>}
+    {erroGeral && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-error-text">{erroGeral}</p>}
     <div className="flex flex-wrap items-center justify-end gap-3">
       <Link href={inicial ? `/contratos/${encodeURIComponent(inicial.id)}` : '/contratos'} className="rounded-lg border border-brand-green/40 px-4 py-2.5 text-sm">Cancelar</Link>
-      <button type="submit" disabled={salvando} className="rounded-lg bg-brand-green px-5 py-2.5 font-semibold text-background disabled:opacity-50">{salvando ? 'Salvando...' : inicial ? 'Salvar alterações' : 'Cadastrar contrato'}</button>
+      <button type="submit" disabled={salvando} className="rounded-lg bg-brand-green px-5 py-2.5 font-semibold text-on-brand-green disabled:opacity-50">{salvando ? 'Salvando...' : inicial ? 'Salvar alterações' : 'Cadastrar contrato'}</button>
     </div>
   </form>;
 }

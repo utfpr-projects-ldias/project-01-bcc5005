@@ -28,5 +28,6 @@ test("B3 mantém navegação de Contratos e administração restrita ao ADMIN", 
   const entrada = await screen.findByRole("link", { name: "Funcionários" });
   expect(entrada).toHaveAttribute("href", "/admin/usuarios");
   expect(entrada).toHaveAttribute("aria-current", "page");
+  expect(entrada).toHaveClass("bg-brand-green", "text-on-brand-green");
   expect(screen.getByRole("link", { name: "Minha conta" })).toHaveAttribute("href", "/usuario");
 });

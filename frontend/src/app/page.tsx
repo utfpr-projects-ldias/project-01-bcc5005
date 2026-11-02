@@ -56,7 +56,7 @@ export default function Home() {
           {/* Título Principal de Destaque */}
           <h1 className="text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tighter text-foreground leading-tight">
             PRD — Sistema de {" "}
-            <span className="text-brand-green">Gestão de Execução Contratual</span>.
+            <span className="text-brand-neon">Gestão de Execução Contratual</span>.
           </h1>
 
           {/* Texto de Apoio */}
@@ -68,7 +68,7 @@ export default function Home() {
           <div className="mt-6">
             <Link
               href={buttonHref}
-              className="group relative inline-flex items-center justify-center overflow-hidden rounded-full bg-brand-green px-12 py-4 text-lg font-semibold text-background transition-all duration-300 ease-out hover:scale-105 hover:shadow-lg hover:shadow-brand-green/20"
+              className="group relative inline-flex items-center justify-center overflow-hidden rounded-full bg-brand-green px-12 py-4 text-lg font-semibold text-on-brand-green transition-all duration-300 ease-out hover:scale-105 hover:shadow-lg hover:shadow-brand-green/20"
             >
               <span className="absolute inset-0 h-full w-full bg-gradient-to-r from-brand-green to-[#4bc137] opacity-0 transition-opacity duration-300 group-hover:opacity-100"></span>
               <span className="relative z-10 flex items-center gap-2">

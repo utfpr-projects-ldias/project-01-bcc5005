@@ -61,9 +61,9 @@ function CabecalhoInterno({ rota, children }: { rota: string; children: ReactNod
         <h1 className="min-w-0 text-xl font-bold">{titulo}</h1>
         <div className="flex min-w-0 flex-wrap items-center gap-3">
           <IdentificacaoUsuario />
-          {erroSaida && <p role="alert" className="text-sm text-red-400">{erroSaida}</p>}
+          {erroSaida && <p role="alert" className="text-sm text-error-text">{erroSaida}</p>}
           <button type="button" onClick={() => void sair()} disabled={saindo}
-            className="rounded-lg border border-red-500/30 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10 disabled:opacity-60">
+            className="rounded-lg border border-red-500/30 px-4 py-2 text-sm text-error-text hover:bg-red-500/10 disabled:opacity-60">
             {saindo ? <IndicadorCarregamento texto="Saindo..." compacto /> : "Sair"}
           </button>
         </div>

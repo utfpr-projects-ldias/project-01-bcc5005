@@ -40,7 +40,7 @@ export function ConfirmacaoSimples({ titulo, descricao, confirmar, ocupado = fal
           <button ref={cancelarRef} type="button" disabled={ocupado} onClick={onCancelar}
             className="rounded-lg border border-brand-green/40 px-4 py-2 text-sm font-medium disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-brand-green">Cancelar</button>
           <button ref={confirmarRef} type="button" disabled={ocupado} onClick={onConfirmar}
-            className={`rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-brand-green ${perigoso ? "bg-red-600 text-white" : "bg-brand-green text-background"}`}>
+            className={`rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-brand-green ${perigoso ? "bg-red-600 text-white" : "bg-brand-green text-on-brand-green"}`}>
             {ocupado ? "Aguarde..." : confirmar}
           </button>
         </div>

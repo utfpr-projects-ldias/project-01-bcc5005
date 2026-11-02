@@ -30,7 +30,7 @@ export function FormularioEtapa({ inicial, onSalvar, onCancelar, onSalvandoMudou
     'aria-describedby': erros[campo] ? `etapa-${campo}-erro` : undefined,
   });
   function mensagem(campo: Campo) {
-    return erros[campo] ? <p role="alert" id={`etapa-${campo}-erro`} className="mt-1 text-xs text-red-400">{erros[campo]}</p> : null;
+    return erros[campo] ? <p role="alert" id={`etapa-${campo}-erro`} className="mt-1 text-xs text-error-text">{erros[campo]}</p> : null;
   }
   async function enviar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
@@ -77,10 +77,10 @@ export function FormularioEtapa({ inicial, onSalvar, onCancelar, onSalvandoMudou
     <div><label htmlFor="etapa-observacoes" className="mb-1 block text-sm font-medium">Observações</label>
       <textarea id="etapa-observacoes" rows={2} className={campoClasse} value={dados.observacoes ?? ''}
         onChange={(e) => mudar('observacoes', e.target.value || null)} />{mensagem('observacoes')}</div>
-    {erroGeral && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-red-400">{erroGeral}</p>}
+    {erroGeral && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-error-text">{erroGeral}</p>}
     <div className="flex flex-wrap justify-end gap-2">
       <button type="button" onClick={onCancelar} disabled={salvando} className="rounded-lg border border-brand-green/40 px-4 py-2 text-sm transition-colors hover:bg-brand-green/10 disabled:opacity-50">Voltar sem salvar</button>
-      <button type="submit" disabled={salvando} className="rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-background disabled:opacity-50">
+      <button type="submit" disabled={salvando} className="rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-on-brand-green disabled:opacity-50">
         {salvando ? 'Salvando etapa...' : 'Salvar etapa'}
       </button>
     </div>

@@ -150,7 +150,7 @@ export default function LoginPage() {
         </div>
 
         {serverError && (
-          <p role="alert" className="mb-4 text-sm text-red-400">{serverError}</p>
+          <p role="alert" className="mb-4 text-sm text-error-text">{serverError}</p>
         )}
 
         {/* Formulário com Zod */}
@@ -170,7 +170,7 @@ export default function LoginPage() {
                 errors.email ? "border-red-500 focus:border-red-500" : "border-brand-green/30 focus:border-brand-neon"
               }`}
             />
-            {errors.email && <p id="erro-login-email" role="alert" className="mt-1 text-xs text-red-400">{errors.email}</p>}
+            {errors.email && <p id="erro-login-email" role="alert" className="mt-1 text-xs text-error-text">{errors.email}</p>}
           </div>
 
           <div>
@@ -188,13 +188,13 @@ export default function LoginPage() {
                 errors.password ? "border-red-500 focus:border-red-500" : "border-brand-green/30 focus:border-brand-neon"
               }`}
             />
-            {errors.password && <p id="erro-login-senha" role="alert" className="mt-1 text-xs text-red-400">{errors.password}</p>}
+            {errors.password && <p id="erro-login-senha" role="alert" className="mt-1 text-xs text-error-text">{errors.password}</p>}
           </div>
 
           <button
             type="submit"
             disabled={submitting || fase !== "pronto"}
-            className="w-full py-3 rounded-lg bg-brand-green text-background font-semibold hover:opacity-90 transition-opacity mt-2"
+            className="w-full py-3 rounded-lg bg-brand-green text-on-brand-green font-semibold hover:opacity-90 transition-opacity mt-2"
           >
             {submitting ? <IndicadorCarregamento texto="Verificando acesso..." compacto /> : "Entrar"}
           </button>

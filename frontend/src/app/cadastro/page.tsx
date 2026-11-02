@@ -27,7 +27,7 @@ export default function CadastroInativoPage() {
       <main className="flex-1 flex items-center justify-center p-6 bg-background">
         <div className="max-w-lg mx-auto text-center flex flex-col items-center gap-6 p-8 rounded-2xl border border-brand-green/20 bg-background/50 shadow-sm">
           
-          <div className="w-12 h-12 rounded-full bg-brand-green/10 flex items-center justify-center text-brand-green">
+          <div className="w-12 h-12 rounded-full bg-brand-green/10 flex items-center justify-center text-brand-neon">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
@@ -44,7 +44,7 @@ export default function CadastroInativoPage() {
           <div className="pt-4 w-full">
             <Link
               href="/login"
-              className="w-full inline-flex items-center justify-center rounded-lg bg-brand-green px-6 py-3 text-sm font-semibold text-background hover:opacity-90 transition-opacity shadow-sm"
+              className="w-full inline-flex items-center justify-center rounded-lg bg-brand-green px-6 py-3 text-sm font-semibold text-on-brand-green hover:opacity-90 transition-opacity shadow-sm"
             >
               Ir para a Página de Login
             </Link>

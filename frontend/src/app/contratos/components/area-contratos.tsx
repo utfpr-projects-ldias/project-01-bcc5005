@@ -6,5 +6,5 @@ export function AreaContratos({ children }: { titulo: string; children: ReactNod
 }
 
 export function Aviso({ children, erro = false }: { children: ReactNode; erro?: boolean }) {
-  return <p role={erro ? 'alert' : 'status'} className={`min-w-0 break-words rounded-xl border p-4 text-sm ${erro ? 'border-red-500/40 text-red-400' : 'border-brand-green/30 text-foreground/75'}`}>{children}</p>;
+  return <p role={erro ? 'alert' : 'status'} className={`min-w-0 break-words rounded-xl border p-4 text-sm ${erro ? 'border-red-500/40 text-error-text' : 'border-brand-green/30 text-foreground/75'}`}>{children}</p>;
 }

@@ -53,7 +53,7 @@ export default function DetalheContratoPage() {
     <div className="flex flex-wrap items-center justify-between gap-3">
       <LinkVoltar href="/contratos">Voltar aos contratos</LinkVoltar>
       {podeEditar && contrato && <Link href={`/contratos/${encodeURIComponent(contrato.id)}/editar`}
-        className="rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-background">Editar contrato</Link>}
+        className="rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-on-brand-green">Editar contrato</Link>}
     </div>
     {carregando ? <Aviso>Carregando contrato...</Aviso> : erro ? <Aviso erro>{erro}</Aviso> : contrato ? <>
       <div className="flex flex-wrap items-center justify-between gap-3">

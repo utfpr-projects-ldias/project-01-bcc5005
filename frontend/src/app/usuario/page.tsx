@@ -6,7 +6,7 @@ import { alterarMeuEmail, alterarMinhaSenha, ErroApi } from '@/lib/admin-usuario
 import { useRepositorioConsultas } from '@/app/components/provedor-consultas';
 
 const campo = 'w-full rounded-lg border border-brand-green/40 bg-background px-3 py-2 text-foreground focus-visible:outline-2 focus-visible:outline-brand-green';
-const botao = 'rounded-lg bg-brand-green px-4 py-2 font-semibold text-background transition hover:brightness-110 disabled:cursor-wait disabled:opacity-50';
+const botao = 'rounded-lg bg-brand-green px-4 py-2 font-semibold text-on-brand-green transition hover:brightness-110 disabled:cursor-wait disabled:opacity-50';
 function mensagemErro(e: unknown): string {
   if (e instanceof ErroApi) return e.status === 401 ? 'Senha atual incorreta ou sessão expirada.' : e.status === 409 ? 'E-mail indisponível ou senha repetida.' : e.message;
   return 'Não foi possível completar a operação.';
@@ -62,7 +62,7 @@ export default function MinhaContaPage() {
     {admin && <>
       <p className="rounded-xl border border-brand-green/30 p-4 text-sm">Conta: <strong>{perfil.nome || 'Administrador'}</strong> · {perfil.email}</p>
       {aviso && <p role="status" className="rounded-lg border border-brand-green p-3 text-sm">{aviso}</p>}
-      {falha && <p role="alert" className="rounded-lg border border-red-500/50 p-3 text-sm text-red-400">{falha}</p>}
+      {falha && <p role="alert" className="rounded-lg border border-red-500/50 p-3 text-sm text-error-text">{falha}</p>}
       <form onSubmit={enviarEmail} aria-label="Alterar meu e-mail" className="space-y-4 rounded-xl border border-brand-green/30 p-5">
         <h2 className="font-semibold">Alterar meu e-mail</h2>
         <label className="block text-sm" htmlFor="conta-email">Novo e-mail</label>

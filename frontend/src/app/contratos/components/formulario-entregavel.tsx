@@ -82,7 +82,7 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
     return { 'aria-invalid': !!erros[campo], 'aria-describedby': erros[campo] ? `${formId(campo)}-erro` : undefined };
   }
   function mensagem(campo: string) {
-    return erros[campo] ? <p role="alert" id={`${formId(campo)}-erro`} className="mt-1 text-xs text-red-400">{erros[campo]}</p> : null;
+    return erros[campo] ? <p role="alert" id={`${formId(campo)}-erro`} className="mt-1 text-xs text-error-text">{erros[campo]}</p> : null;
   }
   function trocarItem(indice: number, campo: 'tipoEvidencia' | 'descricao' | 'obrigatoria', valor: string | boolean) {
     setDados((prev) => ({ ...prev, evidenciasEsperadas: prev.evidenciasEsperadas.map((e, i) => i === indice ? { ...e, [campo]: valor } : e) }));
@@ -198,7 +198,7 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
         </div>}
       </div>}
       {!responsavelEscolhido && <p className="text-xs text-foreground/65">Nenhum responsável atribuído. Digite parte do e-mail ou abra a lista de usuários ativos e selecione uma opção.</p>}
-      {erroResponsavel && <p role="alert" className="text-xs text-red-400">{erroResponsavel}</p>}
+      {erroResponsavel && <p role="alert" className="text-xs text-error-text">{erroResponsavel}</p>}
       {!erroResponsavel && !consultandoResponsavel && !responsavelEscolhido && buscaResponsavel.length >= 2 && !responsaveis.length && !listaAberta &&
         <p className="text-xs text-foreground/65">Nenhum usuário ativo encontrado com esse e-mail.</p>}
       {mensagem('responsavelId')}
@@ -260,11 +260,11 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
       <p>Tipo, periodicidade, prazo ou etapa foram alterados, ou itens foram removidos do checklist. Parâmetros incompatíveis serão limpos ao salvar, mas permanecem neste formulário caso você retorne ao tipo anterior. Itens removidos serão registrados em auditoria. Se houver ocorrências vinculadas, o sistema pode impedir a alteração, sem apagá-las.</p>
       <label className="flex items-start gap-2"><input type="checkbox" checked={confirmado} onChange={(e) => setConfirmado(e.target.checked)} /> Confirmo que compreendi essas alterações.</label>
     </div>}
-    {erroGeral && <p role="alert" className="rounded-lg border border-red-500/45 p-3 text-sm text-red-400">{erroGeral}</p>}
+    {erroGeral && <p role="alert" className="rounded-lg border border-red-500/45 p-3 text-sm text-error-text">{erroGeral}</p>}
     <div className="flex flex-wrap justify-end gap-2">
       <button type="button" className="rounded-lg border border-brand-green/40 px-4 py-2 text-sm disabled:opacity-50" disabled={salvando} onClick={onCancelar}>Cancelar</button>
       <button type="submit" disabled={salvando || (exigeConfirmacao && !confirmado)}
-        className="inline-flex items-center gap-2 rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-background disabled:opacity-50">
+        className="inline-flex items-center gap-2 rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-on-brand-green disabled:opacity-50">
         {!salvando && <Seta />}{salvando ? 'Salvando entregável...' : inicial ? 'Salvar alterações' : 'Cadastrar entregável'}
       </button>
     </div>
