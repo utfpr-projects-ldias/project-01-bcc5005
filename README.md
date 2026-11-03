@@ -36,7 +36,7 @@ docker compose up -d --build
 docker compose ps
 ```
 
-- Se falhar o build use docker compose down -v e depois o build denovo!
+- Se falhar o build, **não** execute `docker compose down -v`: isso destrói os volumes persistentes e seus dados.
 
 ---
 
@@ -51,6 +51,10 @@ docker compose exec backend npm run admin:create -- rinaldi@gmail.com
 O último comando solicita e confirma a senha no próprio terminal. Ele é executado **uma vez por banco novo** e não recria um Administrador já existente. O comando `admin:create` faz parte da **TEC07-01** e estará disponível nas outras branches depois que essa sub-issue for integrada à `develop`.
 
 Acesse **http://localhost:3000/login**. A API NestJS fica em `http://localhost:3001`.
+
+## TEC08-01 — Storage privado (base técnica, sem upload nesta sub-issue)
+
+O Compose mantém blobs num volume nomeado `arquivos_contratuais_data`, montado **somente no backend** em `/var/lib/contratos-arquivos`, separado do PostgreSQL. Os limites de 16 MiB por arquivo e 1 GiB total são **provisórios** e não representam decisão do cliente (PQ-11). O adaptador/contrato encontra-se em `backend/src/armazenamento/`. Não existem endpoints nem documentos persistidos no SQL até TEC08-02. Consulte [`backend/docs/TEC08-01-STORAGE-PRIVADO.md`](backend/docs/TEC08-01-STORAGE-PRIVADO.md) para contrato de integração, testes não destrutivos e backup/restore. Nunca execute `docker compose down -v` em bases que queira preservar.
 
 ## Uso diário
 

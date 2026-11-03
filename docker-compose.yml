@@ -23,7 +23,11 @@ services:
     volumes:
       - ./backend:/app
       - /app/node_modules
+      - arquivos_contratuais_data:/var/lib/contratos-arquivos
     environment:
+      ARQUIVOS_DIRETORIO: /var/lib/contratos-arquivos
+      ARQUIVOS_MAX_ARQUIVO_BYTES: ${ARQUIVOS_MAX_ARQUIVO_BYTES:-16777216}
+      ARQUIVOS_MAX_TOTAL_BYTES: ${ARQUIVOS_MAX_TOTAL_BYTES:-1073741824}
       PORT: ${PORT}
       FRONTEND_URL: ${FRONTEND_URL}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}
@@ -69,3 +73,4 @@ services:
 
 volumes:
   postgres_data:
+  arquivos_contratuais_data:
