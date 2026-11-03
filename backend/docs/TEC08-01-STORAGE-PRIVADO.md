@@ -1,7 +1,7 @@
 # TEC08-01 — Política provisória, contrato de storage e operação segura
 
-**Sprint 04 · issue-pai TEC08 · referência:** PRD RF-04, RB-14/20, RNF-01/02/03/05/08/11, PQ-11.  
-**Status desta entrega:** base de armazenamento (backend/infra), **sem upload HTTP, entidade documental, migration ou interface** — tarefas da TEC08-02/03/04/05.  
+**Sprint 04 · issue-pai TEC08 · referência:** PRD RF-04, RB-14/20, RNF-01/02/03/05/08/11, PQ-11.
+**Status desta entrega:** base de armazenamento (backend/infra), **sem upload HTTP, entidade documental, migration ou interface** — tarefas da TEC08-02/03/04/05.
 **A aprovação do cliente para PQ-11 NÃO foi apresentada.** Estes limites são políticas técnicas provisórias de DEV, não requisitos comerciais homologados.
 
 ## 1. Estrutura de armazenamento
