@@ -171,7 +171,7 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
           <textarea id="observacoes" rows={4} className={input} maxLength={LIMITES_CONTRATO.observacoes} value={form.observacoes ?? ''} onChange={e => atualizar('observacoes', e.target.value || null)} {...acessibilidade('observacoes', 'observacoes', true)} /></Campo>
       </div>
     </details>
-    <p role="note" className="rounded-xl border border-brand-green/20 p-3 text-sm text-foreground/70">Anexos ainda não podem ser enviados por este formulário. O contrato será salvo sem arquivos.</p>
+    <p role="note" className="rounded-xl border border-brand-green/20 p-3 text-sm text-foreground/70">O contrato será salvo primeiro. Em seguida, você poderá anexar o PDF principal e outros documentos classificados, sem exigir arquivo no cadastro.</p>
     {erroGeral && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-error-text">{erroGeral}</p>}
     <div className="flex flex-wrap items-center justify-end gap-3">
       <Link href={inicial ? `/contratos/${encodeURIComponent(inicial.id)}` : '/contratos'} className="rounded-lg border border-brand-green/40 px-4 py-2.5 text-sm">Cancelar</Link>

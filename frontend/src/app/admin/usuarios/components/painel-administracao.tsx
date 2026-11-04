@@ -471,6 +471,12 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                                       <p title={contrato.numeroContrato} className="truncate font-medium">{contrato.numeroContrato}</p>
                                       <p className="text-xs text-foreground/60">Código #{contrato.codigoPublico}</p>
                                     </> : <p className="break-all font-medium">Contrato {v.contratoId}</p>}
+                                    <p className="text-xs text-foreground/75" data-testid={`permissao-contrato-${v.contratoId}`}>
+                                      <span className="font-medium">Permissão:</span>{' '}
+                                      {editando.perfil === "GESTOR" && v.podeEditar
+                                        ? "Leitura e edição de etapas e entregáveis; permite anexar documentos"
+                                        : "Somente leitura e visualização"}
+                                    </p>
                                   </div>
                                   <div className="flex min-w-0 flex-wrap gap-2 @xl:shrink-0">
                                     {editando.perfil === "GESTOR" && <button type="button" className={botao} disabled={enviando || !!atualizandoVinculo || !editando.ativo} onClick={() => void alternarPermissao(v)}>{atualizandoVinculo === v.contratoId ? <IndicadorCarregamento compacto texto="Atualizando..." /> : v.podeEditar ? "Remover edição" : "Permitir edição"}</button>}

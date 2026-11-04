@@ -2,8 +2,8 @@
 import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from 'react';
 
 /** Edição/criação em sobreposição: sem rolagem para o rodapé, foco contido e retorno ao gatilho. */
-export function ModalEtapa({ titulo, ocupado, onFechar, focoRetorno, children }: {
-  titulo: string; ocupado: boolean; onFechar: () => void; focoRetorno?: HTMLElement | null; children: ReactNode;
+export function ModalEtapa({ titulo, ocupado, onFechar, focoRetorno, contexto = 'Planejamento do contrato', rotuloFechar = 'Fechar edição da etapa', children }: {
+  titulo: string; ocupado: boolean; onFechar: () => void; focoRetorno?: HTMLElement | null; contexto?: string; rotuloFechar?: string; children: ReactNode;
 }) {
   const tituloId = useId();
   const painel = useRef<HTMLDivElement>(null);
@@ -12,10 +12,20 @@ export function ModalEtapa({ titulo, ocupado, onFechar, focoRetorno, children }:
     // Caso o gatilho não seja passado, usa o foco pré-modal como alternativa.
     const anteriorFoco = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const scrollAnterior = document.body.style.overflow;
+    const paddingAnterior = document.body.style.paddingRight;
+    // Compensar a largura da barra de rolagem ao bloquear o body: evita
+    // o deslocamento horizontal da página ao abrir/fechar o modal.
+    const larguraDisponivel = document.documentElement.clientWidth;
+    const larguraBarra = larguraDisponivel > 0 ? Math.max(0, window.innerWidth - larguraDisponivel) : 0;
+    if (larguraBarra > 0) {
+      const paddingAtual = Number.parseFloat(window.getComputedStyle(document.body).paddingRight) || 0;
+      document.body.style.paddingRight = `${paddingAtual + larguraBarra}px`;
+    }
     document.body.style.overflow = 'hidden';
     fecharRef.current?.focus({ preventScroll: true });
     return () => {
       document.body.style.overflow = scrollAnterior;
+      document.body.style.paddingRight = paddingAnterior;
       const destino = focoRetorno?.isConnected ? focoRetorno : anteriorFoco;
       if (destino?.isConnected) destino.focus({ preventScroll: true });
     };
@@ -37,10 +47,10 @@ export function ModalEtapa({ titulo, ocupado, onFechar, focoRetorno, children }:
     <div ref={painel} role="dialog" aria-modal="true" aria-labelledby={tituloId} onKeyDown={teclado}
       className="flex max-h-[min(90vh,900px)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-brand-green/45 bg-background text-foreground shadow-2xl">
       <header className="flex shrink-0 items-center justify-between gap-4 border-b border-brand-green/25 px-4 py-3 sm:px-6">
-        <div><p className="text-xs font-semibold uppercase tracking-wider text-foreground/60">Planejamento do contrato</p>
+        <div><p className="text-xs font-semibold uppercase tracking-wider text-foreground/60">{contexto}</p>
           <h2 id={tituloId} className="mt-1 break-words text-lg font-bold text-brand-neon">{titulo}</h2></div>
         <button ref={fecharRef} type="button" onClick={fechar} disabled={ocupado}
-          aria-label="Fechar edição da etapa" className="rounded-lg border border-brand-green/35 px-3 py-2 text-sm font-semibold transition-colors hover:bg-brand-green/15 focus-visible:outline-2 focus-visible:outline-brand-neon disabled:opacity-50">Fechar ×</button>
+          aria-label={rotuloFechar} className="rounded-lg border border-brand-green/35 px-3 py-2 text-sm font-semibold transition-colors hover:bg-brand-green/15 focus-visible:outline-2 focus-visible:outline-brand-neon disabled:opacity-50">Fechar ×</button>
       </header>
       <div className="min-h-0 overflow-y-auto overscroll-contain p-3 sm:p-5">{children}</div>
     </div>

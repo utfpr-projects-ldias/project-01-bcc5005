@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { Repository } from 'typeorm';
+import { Contrato } from '../contratos/contrato.entity.js';
 
 import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
 import { PermissaoContrato } from './permissao-contrato.entity.js';
@@ -13,7 +14,17 @@ export class PoliticaAcessoService {
   constructor(
     @InjectRepository(PermissaoContrato)
     private readonly vinculos: Repository<PermissaoContrato>,
+    @InjectRepository(Contrato) private readonly contratos: Repository<Contrato>,
   ) {}
+
+  private async disponivelParaOperacao(contratoId: string): Promise<boolean> {
+    // TypeORM mantém manager em Repository reais. Em produção a consulta é sempre
+    // feita ao banco, não a parâmetros da requisição ou filtros de frontend.
+    const encontrado = await this.contratos.findOne({
+      where: { id: contratoId }, select: { id: true, arquivadoEm: true },
+    });
+    return Boolean(encontrado && !encontrado.arquivadoEm);
+  }
 
   async permitido(usuario: UsuarioAutenticado, politica: Politica, contratoId?: string): Promise<boolean> {
     const admin = usuario.perfil === PerfilUsuario.ADMINISTRADOR;
@@ -24,6 +35,7 @@ export class PoliticaAcessoService {
       if (!escopo || escopo.tipo !== operacao.escopo ||
         (escopo.tipo === 'recurso' && escopo.recurso !== operacao.recurso)) return false;
       if (!uuidValido(contratoId)) return false;
+      if (operacao.classe !== 'leitura' && !await this.disponivelParaOperacao(contratoId)) return false;
       if (admin) return true;
       if (usuario.perfil !== PerfilUsuario.GESTOR && usuario.perfil !== PerfilUsuario.COLABORADOR) return false;
       // PQ-04 pendente: Colaborador jamais recebe edição de planejamento implicitamente.
@@ -39,11 +51,15 @@ export class PoliticaAcessoService {
       case 'usuarios:administrar':
       case 'contratos:criar':
         return admin; // PQ-03: gestor criar contrato permanece pendente
+      case 'contratos:arquivar':
+      case 'contratos:reativar':
+        return admin && uuidValido(contratoId);
       case 'contratos:listar':
         return true; // listagem permanece filtrada no SQL do módulo Contratos
       case 'contratos:visualizar':
       case 'contratos:editar': {
         if (!uuidValido(contratoId)) return false;
+        if (politica.acao === 'contratos:editar' && !await this.disponivelParaOperacao(contratoId)) return false;
         if (admin) return true;
         if (politica.acao === 'contratos:editar' && usuario.perfil !== PerfilUsuario.GESTOR) return false;
         const vinculo = await this.vinculos.findOneBy({ usuarioId: usuario.id, contratoId });

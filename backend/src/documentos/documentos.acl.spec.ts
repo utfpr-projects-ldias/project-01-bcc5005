@@ -25,7 +25,7 @@ describe('TEC08-02: contratos raiz e IDOR (ACL sem HTTP/DB real)', () => {
 
   it('leitura autorizada por vínculo, escrita somente para gestor com poder de edição', async () => {
     const vinculos = { findOneBy: jest.fn(async () => ({ podeEditar: false })) };
-    const politica = new PoliticaAcessoService(vinculos as never);
+    const politica = new PoliticaAcessoService(vinculos as never, { findOne: async () => ({ arquivadoEm: null }) } as never);
     const usuario = { id: documentoId, supertokensUserId: 'st-id', email: 'gestor@example.com', perfil: PerfilUsuario.GESTOR };
     const leitura = { acao: 'documentos:listar' as const, escopoOperacional: { tipo: 'contrato' as const, parametro: 'contratoId' } };
     const escrita = { acao: 'documentos:anexar' as const, escopoOperacional: { tipo: 'contrato' as const, parametro: 'contratoId' } };

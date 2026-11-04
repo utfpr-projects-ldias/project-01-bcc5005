@@ -30,7 +30,7 @@ export default function NovoContratoPage() {
     try {
       const criado = await criar(pendente);
       setPendente(null);
-      router.push(`/contratos/${encodeURIComponent(criado.id)}`);
+      router.push(`/contratos/${encodeURIComponent(criado.id)}?anexarDocumento=principal`);
     } catch (e) {
       setPendente(null);
       setErro(e instanceof Error ? e.message : 'Não foi possível salvar o contrato.');

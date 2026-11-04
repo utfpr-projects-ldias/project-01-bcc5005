@@ -136,6 +136,7 @@ export class ContratosService {
     // INNER JOIN evita que o cliente consiga consultar carteira alheia por parâmetros.
     return this.contratos.createQueryBuilder('c')
       .innerJoin('permissoes_contrato', 'p', 'p.contrato_id = c.id AND p.usuario_id = :usuarioId', { usuarioId: ator.id })
+      .andWhere('c.arquivado_em IS NULL')
       .orderBy('c.inicioVigencia', 'DESC')
       .addOrderBy('c.numeroContrato', 'ASC')
       .getMany();
@@ -157,6 +158,31 @@ export class ContratosService {
     return encontrado;
   }
 
+  /** Alterna arquivamento sem deletar contrato, documentos, etapas ou eventos.
+   * Exclusivo do ADMIN no guard; valida novamente dentro da transação auditada.
+   */
+  async alterarArquivamento(id: string, arquivar: boolean, ator: UsuarioAutenticado): Promise<Contrato> {
+    if (ator.perfil !== PerfilUsuario.ADMINISTRADOR) throw new ForbiddenException('Somente Administrador pode arquivar contratos');
+    return this.auditoria.executarComAuditoria(ator, async manager => {
+      const repo = manager.getRepository(Contrato);
+      const contrato = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
+      if (!contrato) throw new NotFoundException('Contrato não encontrado');
+      if (Boolean(contrato.arquivadoEm) === arquivar) {
+        throw new ConflictException(arquivar ? 'Contrato já está arquivado' : 'Contrato não está arquivado');
+      }
+      const anterior = { arquivado: Boolean(contrato.arquivadoEm), status: contrato.status };
+      contrato.arquivadoEm = arquivar ? new Date() : null;
+      contrato.arquivadoPor = arquivar ? ator.id : null;
+      const salvo = await repo.save(contrato);
+      return { resultado: salvo, evento: {
+        acao: arquivar ? AcaoAuditoria.CONTRATO_ARQUIVADO : AcaoAuditoria.CONTRATO_REATIVADO,
+        entidadeTipo: 'CONTRATO' as const, entidadeId: id,
+        dadosAnteriores: anterior,
+        dadosPosteriores: { arquivado: arquivar, status: salvo.status },
+      }};
+    });
+  }
+
   async atualizar(
     id: string,
     dto: AtualizarContratoDto,
@@ -166,6 +192,7 @@ export class ContratosService {
       const repo = manager.getRepository(Contrato);
       const existente = await repo.findOneBy({ id });
       if (!existente) throw new NotFoundException('Contrato não encontrado');
+      if (existente.arquivadoEm) throw new ConflictException('Contrato arquivado. Reative antes de editar.');
       if (dto.responsavelInternoId !== undefined) {
         if (ator.perfil !== PerfilUsuario.ADMINISTRADOR && dto.responsavelInternoId !== existente.responsavelInternoId) {
           throw new ForbiddenException('Somente Administrador pode alterar o responsável interno');

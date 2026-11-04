@@ -110,6 +110,7 @@ describe('TEC07-AJUSTES-02-04 — fixtures de consumo HU06 e TEC08', () => {
     const buscarVinculo = jest.fn(async () => ({ podeEditar: false } as PermissaoContrato));
     const acesso = new PoliticaAcessoService(
       { findOneBy: buscarVinculo } as unknown as Repository<PermissaoContrato>,
+      { findOne: async () => ({ arquivadoEm: null }) } as never,
     );
     const baixar = politicaMetodo(ExemploTec08Documentos.prototype, 'baixar');
     const anexar = politicaMetodo(ExemploTec08Documentos.prototype, 'anexar');

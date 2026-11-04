@@ -1,4 +1,6 @@
 import 'reflect-metadata';
+import { ArquivamentoLogicoContratos1794000000000 } from '../src/database/migrations/1794000000000-ArquivamentoLogicoContratos.js';
+
 import { DataSource } from 'typeorm';
 import { CriarUsuarios1792540000000 } from '../src/database/migrations/1792540000000-CriarUsuarios.js';
 import { CriarPermissoesContrato1793000000000 } from '../src/database/migrations/1793000000000-CriarPermissoesContrato.js';
@@ -41,6 +43,7 @@ suite('TEC07-AJUSTES-02-02 — escopo real no PostgreSQL isolado', () => {
         CriarEventosAuditoria1793100000000, CriarContratos1793200000000,
         AdicionarNomeUsuarios1793300000000, FkPermissaoContrato1793400000000,
         CriarEtapas1793500000000, ContextoAuditoriaOperacional1793600000000,
+        ArquivamentoLogicoContratos1794000000000,
       ],
     }).initialize();
     await db.runMigrations();
@@ -89,7 +92,7 @@ suite('TEC07-AJUSTES-02-02 — escopo real no PostgreSQL isolado', () => {
 
   it('Gestor sem vínculo não ganha acesso e ADMIN não usa contrato fictício', async () => {
     const resolver = new ResolverEscopoContratoService(db.getRepository(Contrato), db.getRepository(Etapa));
-    const politica = new PoliticaAcessoService(db.getRepository(PermissaoContrato));
+    const politica = new PoliticaAcessoService(db.getRepository(PermissaoContrato), db.getRepository(Contrato));
     const gestor = { id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', supertokensUserId: 'fake', email: 'teste@invalid', perfil: PerfilUsuario.GESTOR };
     const admin = { ...gestor, perfil: PerfilUsuario.ADMINISTRADOR };
     const escopo = { tipo: 'recurso', recurso: 'etapa', parametro: 'etapaId' } as const;

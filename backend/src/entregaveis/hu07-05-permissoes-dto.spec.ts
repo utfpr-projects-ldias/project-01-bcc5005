@@ -21,7 +21,7 @@ const pessoa = (perfil: PerfilUsuario): UsuarioAutenticado => ({
   supertokensUserId: 'qa-user', perfil,
 });
 const buscarVinculo = jest.fn<(...args: unknown[]) => Promise<PermissaoContrato | null>>();
-const politicas = new PoliticaAcessoService({ findOneBy: buscarVinculo } as unknown as Repository<PermissaoContrato>);
+const politicas = new PoliticaAcessoService({ findOneBy: buscarVinculo } as unknown as Repository<PermissaoContrato>, { findOne: async () => ({ arquivadoEm: null }) } as never);
 const politica = (metodo: keyof EntregaveisController): Politica => {
   const p = Reflect.getMetadata(CHAVE_POLITICA, EntregaveisController.prototype[metodo]) as Politica | undefined;
   if (!p) throw new Error(`Rota sem proteção: ${String(metodo)}`);

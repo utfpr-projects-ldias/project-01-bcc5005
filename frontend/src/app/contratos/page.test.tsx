@@ -2,11 +2,13 @@ import { renderComConsultas } from '@/test-utils';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import ContratosListPage from './page';
 import { consultarMeuPerfil } from '@/lib/admin-usuarios';
-import { listarContratos } from '@/lib/contratos';
+import { listarContratos, arquivarContrato, reativarContrato } from '@/lib/contratos';
 
+jest.mock('@/hooks/use-etapas', () => ({ useEtapas: jest.fn(() => ({ dados: [], carregando: false })) }));
+jest.mock('@/hooks/use-entregaveis', () => ({ useEntregaveis: jest.fn(() => ({ dados: [], carregando: false })) }));
 jest.mock('@/lib/admin-usuarios', () => ({ consultarMeuPerfil: jest.fn() }));
 jest.mock('@/lib/contratos', () => ({
-  listarContratos: jest.fn(), STATUS: { PLANEJAMENTO: 'Planejamento' }, MODOS: { SIMPLES: 'Simples' }, dataCivil: (x: string) => x, rotuloCodigoPublico: (c: string) => `#${c}`,
+  listarContratos: jest.fn(), arquivarContrato: jest.fn(), reativarContrato: jest.fn(), STATUS: { PLANEJAMENTO: 'Planejamento' }, MODOS: { SIMPLES: 'Simples' }, dataCivil: (x: string) => x, rotuloCodigoPublico: (c: string) => `#${c}`,
 }));
 jest.mock('./components/area-contratos', () => ({
   AreaContratos: ({ children }: { children: React.ReactNode }) => <main>{children}</main>,
@@ -14,6 +16,8 @@ jest.mock('./components/area-contratos', () => ({
 }));
 const perfil = consultarMeuPerfil as jest.MockedFunction<typeof consultarMeuPerfil>;
 const listar = listarContratos as jest.MockedFunction<typeof listarContratos>;
+const arquivar = arquivarContrato as jest.MockedFunction<typeof arquivarContrato>;
+const reativar = reativarContrato as jest.MockedFunction<typeof reativarContrato>;
 beforeEach(() => { jest.clearAllMocks(); perfil.mockResolvedValue({ id: 'a', nome: 'Admin', email: 'a@example.com', perfil: 'ADMINISTRADOR', ativo: true }); });
 
 test('HU05-06: busca dados reais e não apresenta fixture CT-001/2026', async () => {
@@ -75,4 +79,54 @@ test('localiza por #00427 e 00427 sem perder busca por órgão, e mostra código
   expect(screen.getByRole('link', { name: 'Detalhes' })).toBeInTheDocument();
   fireEvent.change(campo, { target: { value: '#99999' } });
   expect(screen.queryByRole('link', { name: 'Detalhes' })).not.toBeInTheDocument();
+});
+
+test('cartão mostra o planejamento real sem inventar progresso ou evidências entregues', async () => {
+  listar.mockResolvedValue([{ id: 'c-cartao', codigoPublico: '00999', numeroContrato: 'TESTE-RESUMO',
+    orgaoContratante: 'UTFPR', objeto: 'Serviço', status: 'PLANEJAMENTO', modoCalculo: 'SIMPLES',
+    inicioVigencia: '2026-01-01', terminoVigencia: '2027-01-01',
+  } as Awaited<ReturnType<typeof listarContratos>>[number]]);
+  await act(async () => { renderComConsultas(<ContratosListPage />); });
+  const resumo = screen.getByTestId('resumo-planejamento-contrato');
+  expect(resumo).toHaveTextContent('Etapas');
+  expect(resumo).toHaveTextContent('Evidências');
+  expect(resumo).toHaveTextContent('— / 0');
+  expect(resumo).toHaveTextContent('Entregas ainda não mensuradas');
+  expect(resumo.getElementsByTagName('progress')).toHaveLength(1);
+  expect(resumo).not.toHaveTextContent('0%');
+});
+
+
+test('Arquivados: ADMIN vê contratos arquivados e pode reativar; carteira ativa não mistura', async () => {
+  const atual = { id: '11111111-1111-4111-8111-111111111111', codigoPublico: '10001', numeroContrato: 'ATIVO',
+    orgaoContratante: 'UTFPR', objeto: 'Teste', status: 'PLANEJAMENTO', modoCalculo: 'SIMPLES',
+    inicioVigencia: '2026-01-01', terminoVigencia: '2026-12-31', arquivadoEm: null } as Awaited<ReturnType<typeof listarContratos>>[number];
+  const antigo = { ...atual, id: '22222222-2222-4222-8222-222222222222', numeroContrato: 'ARQUIVADO',
+    arquivadoEm: '2026-11-03T15:00:00.000Z' };
+  listar.mockResolvedValue([atual, antigo]);
+  reativar.mockResolvedValue({ ...antigo, arquivadoEm: null });
+  renderComConsultas(<ContratosListPage />);
+  expect(await screen.findByText('ATIVO')).toBeInTheDocument();
+  expect(screen.queryByText('ARQUIVADO')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Arquivados' }));
+  expect(screen.getByText('ARQUIVADO')).toBeInTheDocument();
+  expect(screen.queryByText('ATIVO')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Reativar' }));
+  expect(screen.getByRole('dialog', { name: 'Reativar contrato?' })).toBeInTheDocument();
+  expect(reativar).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+  expect(screen.queryByRole('dialog', { name: 'Reativar contrato?' })).not.toBeInTheDocument();
+});
+
+test('COLABORADOR não recebe controles de arquivamento mesmo com contrato em tela', async () => {
+  perfil.mockResolvedValue({ id: 'c', nome: null, email: 'c@example.com', perfil: 'COLABORADOR', ativo: true });
+  listar.mockResolvedValue([{ id: '11111111-1111-4111-8111-111111111111', codigoPublico: '10333', numeroContrato: 'LEITURA',
+    orgaoContratante: 'UTFPR', objeto: 'Teste', status: 'PLANEJAMENTO', modoCalculo: 'SIMPLES',
+    inicioVigencia: '2026-01-01', terminoVigencia: '2026-12-31' } as Awaited<ReturnType<typeof listarContratos>>[number]]);
+  renderComConsultas(<ContratosListPage />);
+  expect(await screen.findByText('LEITURA')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Arquivar' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Arquivados' })).not.toBeInTheDocument();
+  expect(arquivar).not.toHaveBeenCalled();
+  expect(reativar).not.toHaveBeenCalled();
 });

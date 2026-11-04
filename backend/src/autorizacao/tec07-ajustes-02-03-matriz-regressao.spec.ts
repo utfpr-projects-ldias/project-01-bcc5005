@@ -13,7 +13,7 @@ const usuario = (perfil: PerfilUsuario): UsuarioAutenticado => ({
   supertokensUserId: 'qa-seguranca', email: 'teste@invalid', perfil,
 });
 const buscarVinculo = jest.fn<() => Promise<PermissaoContrato | null>>();
-const politica = new PoliticaAcessoService({ findOneBy: buscarVinculo } as unknown as Repository<PermissaoContrato>);
+const politica = new PoliticaAcessoService({ findOneBy: buscarVinculo } as unknown as Repository<PermissaoContrato>, { findOne: async () => ({ id: CONTRATO, arquivadoEm: null }) } as never);
 const casos = Object.entries(POLITICAS_OPERACIONAIS) as Array<[
   AcaoOperacional, typeof POLITICAS_OPERACIONAIS[AcaoOperacional],
 ]>;

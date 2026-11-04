@@ -12,7 +12,7 @@ const usuario = (perfil: PerfilUsuario): UsuarioAutenticado => ({
 });
 const busca = jest.fn<() => Promise<PermissaoContrato | null>>();
 const repositorio = { findOneBy: busca } as unknown as Repository<PermissaoContrato>;
-const politica = new PoliticaAcessoService(repositorio);
+const politica = new PoliticaAcessoService(repositorio, { findOne: async () => ({ id: CONTRATO_ID, arquivadoEm: null }) } as never);
 
 beforeEach(() => busca.mockReset());
 

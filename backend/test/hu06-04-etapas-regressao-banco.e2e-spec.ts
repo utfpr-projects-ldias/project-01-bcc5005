@@ -1,4 +1,6 @@
 import 'reflect-metadata';
+import { ArquivamentoLogicoContratos1794000000000 } from '../src/database/migrations/1794000000000-ArquivamentoLogicoContratos.js';
+
 import { randomUUID } from 'node:crypto';
 import { UnauthorizedException, type INestApplication } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
@@ -87,7 +89,7 @@ suite('HU06-04 — regressão HTTP + PostgreSQL em base migrada', () => {
     app = modulo.createNestApplication();
     app.useGlobalGuards(new AutorizacaoGuard(
       modulo.get(Reflector), sessao, usuarios,
-      new PoliticaAcessoService(db.getRepository(PermissaoContrato)),
+      new PoliticaAcessoService(db.getRepository(PermissaoContrato), db.getRepository(Contrato)),
       new ResolverEscopoContratoService(db.getRepository(Contrato), db.getRepository(Etapa)),
     ));
     await app.init();
@@ -108,6 +110,7 @@ suite('HU06-04 — regressão HTTP + PostgreSQL em base migrada', () => {
         AdicionarNomeUsuarios1793300000000, FkPermissaoContrato1793400000000,
         CriarEtapas1793500000000, ContextoAuditoriaOperacional1793600000000,
         CodigoPublicoContratos1793800000000,
+        ArquivamentoLogicoContratos1794000000000,
       ],
     }).initialize();
     await db.runMigrations();

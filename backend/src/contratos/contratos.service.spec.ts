@@ -64,6 +64,7 @@ function contratoBase(
     fiscalGestor: null,
     modoCalculo: SIMPLES,
     observacoes: null,
+    arquivadoEm: null, arquivadoPor: null,
     ...alteracoes,
   };
 }
@@ -155,9 +156,10 @@ describe('Escopo de carteira de contratos (RF-40)', () => {
     const c = montarCenario();
     const getMany = jest.fn<() => Promise<Contrato[]>>().mockResolvedValue([]);
     const builder = {
-      innerJoin: jest.fn(), orderBy: jest.fn(), addOrderBy: jest.fn(), getMany,
+      innerJoin: jest.fn(), andWhere: jest.fn(), orderBy: jest.fn(), addOrderBy: jest.fn(), getMany,
     };
     builder.innerJoin.mockReturnValue(builder);
+    builder.andWhere.mockReturnValue(builder);
     builder.orderBy.mockReturnValue(builder);
     builder.addOrderBy.mockReturnValue(builder);
     Object.assign(c.repositorio, { createQueryBuilder: jest.fn(() => builder) });

@@ -22,8 +22,8 @@ import { CriarContratoDto } from './dto/criar-contrato.dto.js';
  *  4. `visualizar`/`editar` exigem `id` **da rota** (nunca body/query). Negar
  *     vira 404, para não confirmar existência de contrato alheio (RF-02).
  *
- * Não há DELETE: exclusão física proibida pela issue (RB-14). Arquivamento
- * fica para HU posterior; `status = CANCELADO` cobre o caso de negócio.
+ * Não há DELETE: arquivos e registros são preservados. Arquivamento lógico
+ * tem rotas ADMIN auditadas e não altera o status operacional.
  */
 @Controller('contratos')
 export class ContratosController {
@@ -65,4 +65,16 @@ export class ContratosController {
   ) {
     return this.contratos.atualizar(id, dto, req.usuarioDominio!);
   }
+  @Patch(':id/arquivar')
+  @ExigirPolitica('contratos:arquivar', 'id')
+  arquivar(@Param('id') id: string, @Req() req: RequisicaoAutorizada) {
+    return this.contratos.alterarArquivamento(id, true, req.usuarioDominio!);
+  }
+
+  @Patch(':id/reativar')
+  @ExigirPolitica('contratos:reativar', 'id')
+  reativar(@Param('id') id: string, @Req() req: RequisicaoAutorizada) {
+    return this.contratos.alterarArquivamento(id, false, req.usuarioDominio!);
+  }
+
 }

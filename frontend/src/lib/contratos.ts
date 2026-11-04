@@ -20,8 +20,10 @@ export type Contrato = {
   fiscalGestor: string | null;
   modoCalculo: ModoCalculo;
   observacoes: string | null;
+  arquivadoEm?: string | null;
+  arquivadoPor?: string | null;
 };
-export type DadosContrato = Omit<Contrato, 'id' | 'codigoPublico'>;
+export type DadosContrato = Omit<Contrato, 'id' | 'codigoPublico' | 'arquivadoEm' | 'arquivadoPor'>;
 /** Formato apenas de leitura: o servidor gera e mantém esse valor. */
 export function rotuloCodigoPublico(codigo: string): string { return `#${codigo}`; }
 export type AcessoContrato = { podeEditar: boolean };
@@ -62,6 +64,8 @@ export const listarContratos = () => requisitar<Contrato[]>('/contratos');
 export const buscarContrato = (id: string) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}`);
 export const consultarAcessoContrato = (id: string) => requisitar<AcessoContrato>(`/contratos/${encodeURIComponent(id)}/acesso`);
 export const criarContrato = (dados: DadosContrato) => requisitar<Contrato>('/contratos', { method: 'POST', body: JSON.stringify(dados) });
+export const arquivarContrato = (id: string) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/arquivar`, { method: 'PATCH' });
+export const reativarContrato = (id: string) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/reativar`, { method: 'PATCH' });
 export const editarContrato = (id: string, dados: Partial<DadosContrato>) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(dados) });
 
 /** A consulta de usuários ativos é administrativa, nunca liberada a não-ADMIN. */

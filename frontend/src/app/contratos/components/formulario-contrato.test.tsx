@@ -13,9 +13,9 @@ test('cadastro usa campos reais, nenhum PDF fictício nem save desabilitado', ()
   expect(screen.getByRole('button', { name: 'Cadastrar contrato' })).toBeEnabled();
   expect(screen.getByLabelText('Número do contrato *')).toBeInTheDocument();
   expect(screen.getByLabelText('Responsável interno (usuário ativo)')).toBeInTheDocument();
-  // Anexos ainda não têm upload nesta etapa: nenhum controle de arquivo deve existir.
+  // O cadastro persiste o contrato antes do upload; o arquivo não faz parte deste POST.
   expect(container.querySelector('input[type="file"]')).toBeNull();
-  expect(screen.getByRole('note')).toHaveTextContent(/Anexos ainda não podem ser enviados/i);
+  expect(screen.getByRole('note')).toHaveTextContent(/O contrato será salvo primeiro/i);
 });
 
 test('edição envia payload DTO sem id e sem string vazia em data de assinatura', async () => {

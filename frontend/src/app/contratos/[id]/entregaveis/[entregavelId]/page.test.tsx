@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import DetalheEntregavelPage, { ConteudoEntregavel } from './page';
+import DetalheEntregavelPage from './page';
+import { ConteudoEntregavel } from '@/app/contratos/components/conteudo-entregavel';
 import { useMeuPerfil } from '@/hooks/use-meu-perfil';
 import { useDetalheEntregavel } from '@/hooks/use-entregaveis';
 import { useAcessoContrato } from '@/hooks/use-contratos';
@@ -28,8 +29,8 @@ test('visao separa planejamento, criterio proximo de execucao e checklist espera
   expect(screen.getByText('Entrega dos relatórios assinados')).toBeInTheDocument();
   expect(screen.getByText('Mensal')).toBeInTheDocument();
   expect(screen.getByText('31/12/2026')).toBeInTheDocument();
-  expect(screen.getByRole('list', { name: 'Checklist de evidências esperadas' })).toHaveTextContent('Obrigatória');
-  expect(screen.getByText('Opcional')).toBeInTheDocument();
+  expect(screen.getByRole('list', { name: 'Evidências obrigatórias' })).toHaveTextContent('Obrigatória');
+  expect(screen.getByRole('list', { name: 'Evidências opcionais' })).toHaveTextContent('Opcional');
   expect(screen.getByText(/Nenhum progresso é calculado automaticamente nesta tela/)).toBeInTheDocument();
   expect(screen.queryByText('Comprovado')).not.toBeInTheDocument();
 });
@@ -64,6 +65,15 @@ test('gestor autorizado pode alternar editor no próprio botão', () => {
   render(<DetalheEntregavelPage />);
   fireEvent.click(screen.getByRole('button', { name: 'Editar entregável' }));
   expect(screen.getByRole('form', { name: 'Editar entregável Manutenção mensal' })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Editando entregável' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Fechar edição' }));
   expect(screen.queryByRole('form', { name: 'Editar entregável Manutenção mensal' })).not.toBeInTheDocument();
+});
+
+test('checklist esperado abre detalhe sem afirmar comprovação, retornando à visão do entregável', () => {
+  render(<ConteudoEntregavel item={item} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Ver detalhes da evidência esperada Relatório' }));
+  expect(screen.getByRole('region', { name: 'Detalhe da evidência esperada' })).toHaveTextContent('PDF previsto');
+  expect(screen.getByText(/Nenhum arquivo foi marcado como recebido/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /Voltar ao entregável/ }));
+  expect(screen.getByText('Entrega dos relatórios assinados')).toBeInTheDocument();
 });

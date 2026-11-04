@@ -71,3 +71,18 @@ test.each(['x', 'fundo', 'voltar'] as const)('fechar modal por %s preserva foco,
   expect(window.location.href).toBe(rota);
   expect(document.body.style.overflow).toBe(original);
 });
+
+test('modal compartilhado aceita contexto documental sem alterar a semântica de etapa', () => {
+  const fechar = jest.fn();
+  const paddingAnterior = document.body.style.paddingRight;
+  const view = render(<ModalEtapa titulo="Anexar documento contratual" contexto="Documentos do contrato"
+    rotuloFechar="Fechar anexo de documento" ocupado={false} onFechar={fechar}>
+    <p>Arquivo protegido</p>
+  </ModalEtapa>);
+  expect(screen.getByRole('dialog', { name: 'Anexar documento contratual' })).toHaveAttribute('aria-modal', 'true');
+  expect(screen.getByText('Documentos do contrato')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Fechar anexo de documento' }));
+  expect(fechar).toHaveBeenCalledTimes(1);
+  view.unmount();
+  expect(document.body.style.paddingRight).toBe(paddingAnterior);
+});

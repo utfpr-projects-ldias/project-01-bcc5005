@@ -289,7 +289,7 @@ test("acessos exibem resumo curto mesmo em telas largas, sem perder identificaç
   expect(titulo).toHaveTextContent(numero); // Nome completo no DOM; ellipsis depende do espaço real.
   expect(cartao).not.toHaveTextContent(orgao); // Órgão somente no modal de identificação.
   expect(within(lista).getByText("Código #84354")).toBeInTheDocument();
-  expect(within(lista).queryByText("Somente leitura")).not.toBeInTheDocument();
+  expect(within(lista).getByTestId("permissao-contrato-contrato-longo")).toHaveTextContent("Leitura e edição de etapas e entregáveis");
   const expandir = within(lista).getByRole("button", { name: "Ver identificação completa" });
   expect(expandir).toHaveClass("underline");
   expect(expandir.compareDocumentPosition(titulo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -325,4 +325,39 @@ test("acessos exibem resumo curto mesmo em telas largas, sem perder identificaç
   expect(Array.from(opcoes[0].textContent ?? "").length).toBeLessThanOrEqual(44);
   expect(opcoes[0]).toHaveTextContent(/…$/);
   expect(opcoes[0].textContent).not.toContain("Organização extensa");
+});
+
+
+test("permissões vinculadas mostram leitura e edição em cada contrato do gestor", async () => {
+  contratos.mockResolvedValue([
+    { id: "edicao", codigoPublico: "00001", numeroContrato: "Contrato A", orgaoContratante: "Orgão A", status: "PLANEJAMENTO" },
+    { id: "leitura", codigoPublico: "00002", numeroContrato: "Contrato B", orgaoContratante: "Orgão B", status: "PLANEJAMENTO" },
+  ]);
+  acessos.mockResolvedValue([
+    { contratoId: "edicao", podeEditar: true },
+    { contratoId: "leitura", podeEditar: false },
+  ]);
+  renderComConsultas(<PainelAdministracao vista="edicao" idEdicao="b" />);
+  await screen.findByRole("heading", { name: /Conta de Gestor de Teste/ });
+  fireEvent.click(screen.getByText("Acesso aos contratos", { exact: false, selector: "summary" }));
+  const regiao = screen.getByRole("region", { name: "Contratos vinculados" });
+  expect(within(regiao).getByTestId("permissao-contrato-edicao"))
+    .toHaveTextContent("Leitura e edição de etapas e entregáveis; permite anexar documentos");
+  expect(within(regiao).getByTestId("permissao-contrato-leitura"))
+    .toHaveTextContent("Somente leitura e visualização");
+});
+
+test("colaborador mostra apenas leitura, mesmo em permissão legada inconsistente", async () => {
+  porId.mockResolvedValue({ ...gestor, perfil: "COLABORADOR" });
+  contratos.mockResolvedValue([
+    { id: "contrato-a", codigoPublico: "00003", numeroContrato: "Contrato A", orgaoContratante: "Órgão A", status: "PLANEJAMENTO" },
+  ]);
+  acessos.mockResolvedValue([{ contratoId: "contrato-a", podeEditar: true }]);
+  renderComConsultas(<PainelAdministracao vista="edicao" idEdicao="b" />);
+  await screen.findByRole("heading", { name: /Conta de Gestor de Teste/ });
+  fireEvent.click(screen.getByText("Acesso aos contratos", { exact: false, selector: "summary" }));
+  const regiao = screen.getByRole("region", { name: "Contratos vinculados" });
+  expect(within(regiao).getByTestId("permissao-contrato-contrato-a"))
+    .toHaveTextContent("Somente leitura e visualização");
+  expect(within(regiao).queryByRole("button", { name: "Remover edição" })).not.toBeInTheDocument();
 });

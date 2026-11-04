@@ -34,5 +34,5 @@ test('HU05-06: ADMIN confirma em diálogo simples antes do POST e da navegação
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Cadastrar contrato' })); });
   await act(async () => { fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Confirmar cadastro' })); });
   expect(criar).toHaveBeenCalledWith(expect.objectContaining({ numeroContrato: 'REAL' }));
-  expect(navegar).toHaveBeenCalledWith('/contratos/11111111-1111-4111-8111-111111111111');
+  expect(navegar).toHaveBeenCalledWith('/contratos/11111111-1111-4111-8111-111111111111?anexarDocumento=principal');
 });

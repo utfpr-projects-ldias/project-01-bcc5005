@@ -1,6 +1,9 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { EntregaveisDaEtapa } from './entregaveis-da-etapa';
 import { ErroEntregavel, type Entregavel } from '@/lib/entregaveis';
+import { useDetalheEntregavel } from '@/hooks/use-entregaveis';
+jest.mock('@/hooks/use-entregaveis', () => ({ useDetalheEntregavel: jest.fn() }));
+const consultarDetalhe = useDetalheEntregavel as jest.Mock;
 const c = 'contrato-a';
 const etapa = 'etapa-a';
 const e: Entregavel = {
@@ -13,11 +16,15 @@ const e: Entregavel = {
 };
 const atualizar = jest.fn().mockResolvedValue([]);
 const props = { contratoId: c, etapaId: etapa, dados: [e], carregando: false, atualizar };
-beforeEach(() => atualizar.mockClear());
+beforeEach(() => {
+  atualizar.mockClear();
+  consultarDetalhe.mockReturnValue({ dados: e, carregando: false, erro: undefined, atualizar: jest.fn().mockResolvedValue(e) });
+});
 test('lista contrato/etapa reais, tipo, prazo, link acessivel e nenhum status ficticio', () => {
   render(<EntregaveisDaEtapa {...props} />);
   const lista = screen.getByRole('list', { name: 'Entregáveis planejados da etapa' });
-  expect(within(lista).getByText('Relatório de instalação')).toHaveAttribute('href', '/contratos/contrato-a/entregaveis/item-a');
+  expect(within(lista).getByRole('link', { name: 'Relatório de instalação' })).toHaveAttribute('aria-haspopup', 'dialog');
+  expect(within(lista).queryByRole('link', { name: 'Abrir página completa' })).not.toBeInTheDocument();
   expect(lista).toHaveTextContent('P-01');
   expect(lista).toHaveTextContent('Único');
   expect(lista).toHaveTextContent('30/11/2026');
@@ -89,4 +96,58 @@ test('recolher e reabrir cadastro preserva rascunho sem animation; envio bem-suc
   fireEvent.click(screen.getByRole('button', { name: 'Novo entregável' }));
   expect(screen.getByLabelText('Nome *')).toHaveValue('Rascunho não enviado');
   rerender(<EntregaveisDaEtapa contratoId="qa" etapaId="etapa" dados={[]} carregando={false} atualizar={atualizar} podeCriar />);
+});
+
+
+test('clique no título abre detalhe real em modal; Escape preserva contrato e scroll', () => {
+  const view = render(<EntregaveisDaEtapa {...props} podeCriar />);
+  const botao = screen.getByRole('link', { name: 'Relatório de instalação' });
+  const enderecoAntes = window.location.pathname;
+  fireEvent.click(botao);
+  expect(screen.getByRole('dialog', { name: 'Relatório de instalação' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Editar entregável' })).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Abrir página completa' })).not.toBeInTheDocument();
+  expect(within(screen.getByRole('dialog', { name: 'Relatório de instalação' }))
+    .getByRole('region', { name: 'Situação da comprovação' })).toHaveTextContent('Comprovação ainda não acompanhada');
+  expect(window.location.pathname).toBe(enderecoAntes);
+  fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  view.unmount();
+});
+
+test('modal de entregável: evidência planejada abre detalhe sem simular arquivo entregue', () => {
+  const itemComChecklist = { ...e, evidenciasEsperadas: [{ id: 'ee-1', tipoEvidencia: 'Relatório', descricao: 'Relatório mensal', obrigatoria: true }] };
+  consultarDetalhe.mockReturnValue({ dados: itemComChecklist, carregando: false, erro: undefined, atualizar: jest.fn() });
+  render(<EntregaveisDaEtapa {...props} dados={[itemComChecklist]} />);
+  fireEvent.click(screen.getByRole('link', { name: 'Relatório de instalação' }));
+  const modal = screen.getByRole('dialog', { name: 'Relatório de instalação' });
+  const areaRolagem = modal.querySelector<HTMLElement>('.overflow-y-auto');
+  expect(areaRolagem).not.toBeNull();
+  // Simula o usuário tendo rolado o painel até as evidências antes do clique.
+  areaRolagem!.scrollTop = 280;
+  expect(screen.getByRole('list', { name: 'Evidências obrigatórias' })).toBeInTheDocument();
+  const gatilhoEvidencia = screen.getByRole('button', { name: 'Ver detalhes da evidência esperada Relatório' });
+  fireEvent.click(gatilhoEvidencia);
+  expect(screen.getByRole('region', { name: 'Detalhe da evidência esperada' })).toHaveTextContent('Relatório mensal');
+  expect(screen.getByText(/Nenhum arquivo foi marcado como recebido/)).toBeInTheDocument();
+  // Ao abrir um detalhe curto, o browser pode reduzir o scrollTop para zero.
+  areaRolagem!.scrollTop = 0;
+  fireEvent.click(screen.getByRole('button', { name: /Voltar ao entregável/ }));
+  expect(screen.getByRole('heading', { name: 'Evidências esperadas' })).toBeInTheDocument();
+  expect(areaRolagem!.scrollTop).toBe(280);
+  // O botão anterior foi desmontado pelo React: a restauração precisa focar
+  // o elemento NOVO, e não uma referência DOM já desconectada.
+  expect(gatilhoEvidencia.isConnected).toBe(false);
+  const gatilhoRemontado = screen.getByRole('button', { name: 'Ver detalhes da evidência esperada Relatório' });
+  expect(gatilhoRemontado).not.toBe(gatilhoEvidencia);
+  expect(gatilhoRemontado).toHaveFocus();
+  expect(areaRolagem!.scrollTop).toBe(280);
+});
+
+test('isolamento: detalhe de outro contrato é negado mesmo que o cache da lista esteja disponível', () => {
+  consultarDetalhe.mockReturnValue({ dados: { ...e, contratoId: 'outro' }, carregando: false, erro: undefined, atualizar: jest.fn() });
+  render(<EntregaveisDaEtapa {...props} />);
+  fireEvent.click(screen.getByRole('link', { name: 'Relatório de instalação' }));
+  expect(screen.getByRole('alert')).toHaveTextContent('não encontrado');
+  expect(screen.queryByRole('heading', { name: 'Relatório de instalação' })).not.toBeInTheDocument();
 });

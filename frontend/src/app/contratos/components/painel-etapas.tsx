@@ -11,6 +11,7 @@ import { ModalEtapa } from './modal-etapa';
 import { IndicadorCarregamento } from '@/app/components/indicador-carregamento';
 import { useAtualizacaoVisivel } from '@/hooks/use-atualizacao-visivel';
 import { ajustarRestauracaoHistorico } from '@/lib/historico-modal-scroll';
+import { lerRetornoContrato, limparRetornoContrato } from '@/lib/retorno-contrato';
 
 function dataBR(valor: string | null): string {
   return valor && /^\d{4}-\d{2}-\d{2}$/.test(valor) ? valor.split('-').reverse().join('/') : 'Não informada';
@@ -44,6 +45,43 @@ export function PainelEtapas({ contratoId, habilitado, podeGerenciar }: {
   const itemEditando = editor && editor !== 'nova' ? etapas?.find((e) => e.id === editor) : undefined;
   const podeEscrever = habilitado && podeGerenciar && !erroProtegido && !bloqueio;
   const entregaveisQuery = useEntregaveis(contratoId, habilitado && !erroProtegido && !bloqueio && !!etapas);
+
+  // Recuperar a leitura da página completa apenas quando a altura REAL do
+  // contrato suporta a coordenada salva. O registro só sai de sessionStorage
+  // depois de 30 quadros estáveis; rerenders não perdem a tentativa.
+  const retornoPronto = Boolean(etapas && entregaveisQuery.dados !== undefined &&
+    !entregaveisQuery.carregando && !entregaveisQuery.erro && habilitado);
+  useEffect(() => {
+    if (!retornoPronto) return;
+    const alvo = lerRetornoContrato(contratoId);
+    if (!alvo) return;
+    let cancelado = false;
+    let id = 0;
+    let quadros = 0;
+    let estaveis = 0;
+    const recuperar = () => {
+      if (cancelado) return;
+      quadros += 1;
+      const maximo = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+      if (maximo >= alvo.y - 2) {
+        if (Math.abs(window.scrollY - alvo.y) > 2 || Math.abs(window.scrollX - alvo.x) > 2) {
+          window.scrollTo({ left: alvo.x, top: alvo.y, behavior: 'instant' });
+          estaveis = 0;
+        } else {
+          estaveis += 1;
+        }
+        if (estaveis >= 30) {
+          limparRetornoContrato(contratoId);
+          return;
+        }
+      }
+      // Permitir consultas e cartões tardios (até ~20 s). Se não houver altura
+      // suficiente, guardar o marcador para uma nova tentativa após reload.
+      if (quadros < 1200) id = window.requestAnimationFrame(recuperar);
+    };
+    id = window.requestAnimationFrame(recuperar);
+    return () => { cancelado = true; window.cancelAnimationFrame(id); };
+  }, [contratoId, retornoPronto]);
 
   const restaurarPosicaoModal = useCallback(() => {
     const anterior = posicaoModal.current;

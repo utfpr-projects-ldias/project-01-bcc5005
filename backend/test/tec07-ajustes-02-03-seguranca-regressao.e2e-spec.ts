@@ -1,4 +1,6 @@
 import 'reflect-metadata';
+import { ArquivamentoLogicoContratos1794000000000 } from '../src/database/migrations/1794000000000-ArquivamentoLogicoContratos.js';
+
 import { randomUUID } from 'node:crypto';
 import {
   Controller, Get, Patch, Post, Param, Req, UnauthorizedException,
@@ -140,6 +142,7 @@ suite('TEC07-AJUSTES-02-03 — HTTP + PostgreSQL isolado, sessão simulada', () 
         AdicionarNomeUsuarios1793300000000, FkPermissaoContrato1793400000000,
         CriarEtapas1793500000000, ContextoAuditoriaOperacional1793600000000,
         CodigoPublicoContratos1793800000000,
+        ArquivamentoLogicoContratos1794000000000,
       ],
     }).initialize();
     await db.runMigrations();
@@ -167,7 +170,7 @@ suite('TEC07-AJUSTES-02-03 — HTTP + PostgreSQL isolado, sessão simulada', () 
     idPermissaoColaborador = await conceder(usuarios.colaborador, false);
 
     const auditoria = new AuditoriaService(db);
-    const politica = new PoliticaAcessoService(db.getRepository(PermissaoContrato));
+    const politica = new PoliticaAcessoService(db.getRepository(PermissaoContrato), db.getRepository(Contrato));
     const escopos = new ResolverEscopoContratoService(db.getRepository(Contrato), db.getRepository(Etapa));
     const contratosService = new ContratosService(db.getRepository(Contrato), auditoria);
     const sessaoSimulada = {

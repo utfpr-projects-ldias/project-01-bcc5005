@@ -9,6 +9,10 @@ jest.mock('next/navigation', () => ({ useParams: () => ({ id: 'contrato-real' })
 jest.mock('@/app/components/provedor-consultas', () => ({ useConsulta: jest.fn() }));
 jest.mock('@/hooks/use-meu-perfil', () => ({ useMeuPerfil: jest.fn() }));
 jest.mock('@/hooks/use-contratos', () => ({ useContrato: jest.fn(), useAcessoContrato: jest.fn() }));
+jest.mock('../components/painel-documentos', () => ({
+  PainelDocumentos: ({ contratoId, podeAnexar }: { contratoId: string; podeAnexar: boolean }) =>
+    <section data-testid="painel-documentos">{contratoId} {podeAnexar ? 'anexa' : 'consulta'}</section>,
+}));
 jest.mock('../components/painel-etapas', () => ({
   PainelEtapas: ({ contratoId, podeGerenciar }: { contratoId: string; podeGerenciar: boolean }) =>
     <section data-testid="painel-etapas">{contratoId} {podeGerenciar ? 'gerencia' : 'consulta'}</section>,
@@ -33,21 +37,25 @@ test('HU06-03: integra Etapas uma vez ao detalhe real do Contrato sem cabeçalho
   render(<DetalheContratoPage />);
   expect(screen.getByTestId('painel-etapas')).toHaveTextContent('contrato-real gerencia');
   expect(screen.getAllByTestId('painel-etapas')).toHaveLength(1);
+  expect(screen.getByTestId('painel-documentos')).toHaveTextContent('contrato-real anexa');
   expect(screen.getByRole('heading', { name: '01/2026', level: 2 })).toBeInTheDocument();
 });
 test('HU06-03: Gestor sem edição e Colaborador nunca recebem controle de gestão', () => {
   acessoQuery.mockReturnValue(retorno({ podeEditar: false }));
   const view = render(<DetalheContratoPage />);
   expect(screen.getByTestId('painel-etapas')).toHaveTextContent('consulta');
+  expect(screen.getByTestId('painel-documentos')).toHaveTextContent('consulta');
   perfil.mockReturnValue(retorno({ ativo: true, perfil: 'COLABORADOR' }));
   acessoQuery.mockReturnValue(retorno({ podeEditar: true }));
   view.rerender(<DetalheContratoPage />);
   expect(screen.getByTestId('painel-etapas')).toHaveTextContent('consulta');
+  expect(screen.getByTestId('painel-documentos')).toHaveTextContent('consulta');
 });
 test('HU06-03: sem acesso ao contrato não expõe o painel nem registros', () => {
   contratoQuery.mockReturnValue({ ...retorno(undefined), erro: new Error('Acesso negado') });
   render(<DetalheContratoPage />);
   expect(screen.queryByTestId('painel-etapas')).not.toBeInTheDocument();
+  expect(screen.queryByTestId('painel-documentos')).not.toBeInTheDocument();
   expect(screen.getByText('Acesso negado')).toBeInTheDocument();
 });
 

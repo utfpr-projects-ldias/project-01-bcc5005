@@ -21,7 +21,8 @@ export function ProtecaoSessaoInterna({ children }: { children: ReactNode }) {
   const [versaoIdentidade, setVersaoIdentidade] = useState(0);
   const ultimoUsuario = useRef<string | null>(null);
   const [jaAutorizado, setJaAutorizado] = useState(false);
-  const perdeuFocoEm = useRef<number | null>(null);
+  const abaFicouOcultaEm = useRef<number | null>(null);
+  const ultimoRetorno = useRef<number | null>(null);
 
   useEffect(() => {
     let montado = true;
@@ -71,24 +72,28 @@ export function ProtecaoSessaoInterna({ children }: { children: ReactNode }) {
       }
     }
     void verificar();
-    const aoPerderFoco = () => { perdeuFocoEm.current = Date.now(); };
-    const aoFoco = () => {
-      const inicio = perdeuFocoEm.current;
-      perdeuFocoEm.current = null;
-      // Capturadores de tela e seletores de janela roubam o foco brevemente.
-      // Não desmontar/revalidar um formulário por um desfoque momentâneo.
-      // Após ausências prolongadas, continuar revalidando o usuário real.
-      if (inicio !== null && Date.now() - inicio >= 0 && Date.now() - inicio < 4000) return;
-      void verificar();
+    // Um menu nativo <select>, seletor de arquivo ou popup do navegador pode
+    // provocar blur/focus no Firefox sem mudança de aba. Não revalidar nesses
+    // eventos: isso faria a tela inteira piscar enquanto o usuário edita.
+    // Uma aba REALMENTE oculta sempre passa por visibilitychange.
+    const aoVoltar = () => {
+      if (document.hidden) {
+        abaFicouOcultaEm.current ??= Date.now();
+        return;
+      }
+      const inicio = abaFicouOcultaEm.current;
+      abaFicouOcultaEm.current = null;
+      if (inicio === null) return; // foco de seletor nativo, sem troca de aba
+      const agora = Date.now();
+      if (ultimoRetorno.current !== null && agora - ultimoRetorno.current < 1000) return;
+      ultimoRetorno.current = agora;
+      // Trocas breves não precisam ocultar a página. Após ausência mais longa,
+      // revalidar sessão e perfil de domínio, preservando o layout.
+      if (agora - inicio >= 4000) void verificar();
     };
-    const aoVoltar = () => { if (!document.hidden) void verificar(); };
-    window.addEventListener("blur", aoPerderFoco);
-    window.addEventListener("focus", aoFoco);
     document.addEventListener("visibilitychange", aoVoltar);
     return () => {
       montado = false;
-      window.removeEventListener("blur", aoPerderFoco);
-      window.removeEventListener("focus", aoFoco);
       document.removeEventListener("visibilitychange", aoVoltar);
     };
   }, [router, cache]);
@@ -96,8 +101,13 @@ export function ProtecaoSessaoInterna({ children }: { children: ReactNode }) {
   if (estado === "autorizado" || (estado === "verificando" && jaAutorizado)) return <>
     {/* Mesmo durante a revalidação, o formulário e seus estados continuam montados.
         Ocultar o conteúdo enquanto se verificam permissões evita expor dados antigos. */}
-    <div key={versaoIdentidade} className={estado === "autorizado" ? "contents" : "hidden"}>{children}</div>
-    {estado === "verificando" && <div className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground" role="status">
+    {/* Manter a geometria de TODAS as páginas enquanto a sessão é revalidada:
+        display:none colapsava a página e deslocava a rolagem para cima.
+        A visibilidade é ocultada e o conteúdo fica fora da árvore acessível até o aceite. */}
+    <div key={versaoIdentidade} className="contents"
+      style={{ visibility: estado === "autorizado" ? "visible" : "hidden" }}
+      aria-hidden={estado !== "autorizado"}>{children}</div>
+    {estado === "verificando" && <div className="fixed inset-0 z-[90] flex items-center justify-center bg-background/95 p-6 text-foreground" role="status">
       <IndicadorCarregamento texto="Verificando sessão e permissões..." />
     </div>}
   </>;

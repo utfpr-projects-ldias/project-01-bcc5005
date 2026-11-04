@@ -98,4 +98,11 @@ export class Contrato {
 
   @Column({ name: 'observacoes', type: 'text', nullable: true })
   observacoes!: string | null;
+
+  /** Arquivamento lógico; NULL significa ativo, sem alterar o status operacional. */
+  @Column({ name: 'arquivado_em', type: 'timestamptz', nullable: true })
+  arquivadoEm!: Date | null;
+
+  @Column({ name: 'arquivado_por', type: 'uuid', nullable: true })
+  arquivadoPor!: string | null;
 }
