@@ -28,6 +28,8 @@ export interface ArmazenamentoArquivos {
   confirmarPersistencia(referencia: ReferenciaCompensacao): void;
   /** Apaga SOMENTE um arquivo ainda pendente, com token válido emitido por salvar(). */
   removerOrfao(referencia: ReferenciaCompensacao): Promise<void>;
+  /** Exclusão física somente de metadados já excluídos em transação autorizada. */
+  removerPersistido(chave: string): Promise<void>;
 }
 
 export const ARMAZENAMENTO_ARQUIVOS = Symbol('ARMAZENAMENTO_ARQUIVOS');

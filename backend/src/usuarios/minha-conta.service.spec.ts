@@ -84,3 +84,28 @@ it('senha é própria, diferente da antiga, auditada sem revelar segredo', async
   expect(auditoriaAcao).toHaveBeenCalledTimes(2);
   expect(JSON.stringify(auditoriaAcao.mock.calls)).not.toContain('NovaForte!123456');
 });
+
+
+test('alterar nome próprio normaliza, audita e não toca SuperTokens ou credenciais', async () => {
+  const resultado = await svc.alterarNome('  Maria    Oliveira ', ator);
+  expect(resultado.nome).toBe('Maria Oliveira');
+  expect(salvar).toHaveBeenCalledWith(expect.objectContaining({ nome: 'Maria Oliveira' }));
+  expect(auditoriaTx).toHaveBeenCalledWith(manager, ator, expect.objectContaining({
+    acao: AcaoAuditoria.USUARIO_ATUALIZADO, entidadeTipo: 'USUARIO', entidadeId: ator.id,
+    dadosPosteriores: { nome: 'Maria Oliveira' },
+  }));
+  expect(EmailPassword.signIn).not.toHaveBeenCalled();
+  expect(alterarEmail).not.toHaveBeenCalled();
+});
+
+test('alteração do nome é negada se a sessão não corresponde à identidade do usuário', async () => {
+  await expect(svc.alterarNome('Maria Oliveira', { ...ator, supertokensUserId: 'outro' }))
+    .rejects.toBeInstanceOf(ForbiddenException);
+  expect(salvar).not.toHaveBeenCalled();
+  expect(auditoriaTx).not.toHaveBeenCalled();
+});
+
+test('nome não pode ser alterado sem sobrenome', async () => {
+  await expect(svc.alterarNome('NomeUnico', ator)).rejects.toThrow();
+  expect(transacao).not.toHaveBeenCalled();
+});

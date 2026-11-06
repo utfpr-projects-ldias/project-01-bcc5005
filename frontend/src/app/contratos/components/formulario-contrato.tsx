@@ -33,8 +33,8 @@ function Campo({ titulo, id, obrigatorio = false, ajuda, erro, contador, childre
   </div>;
 }
 
-export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando = false, podeDefinirResponsavel = true }:
-  { inicial?: Contrato; responsaveis: UsuarioPublico[]; onSalvar: (dados: DadosContrato) => Promise<void>; salvando?: boolean; podeDefinirResponsavel?: boolean }) {
+export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando = false, podeDefinirResponsavel = true, onCancelar }:
+  { inicial?: Contrato; responsaveis: UsuarioPublico[]; onSalvar: (dados: DadosContrato) => Promise<void>; salvando?: boolean; podeDefinirResponsavel?: boolean; onCancelar?: () => void }) {
   const [form, setForm] = useState<DadosContrato>(() => {
     if (!inicial) return { ...dadosIniciais };
     // O identificador público é somente leitura: jamais compõe um PATCH.
@@ -90,7 +90,7 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
     setErros({}); setErroGeral('');
     await onSalvar(validacao.dados);
   }
-  return <form noValidate onSubmit={e => void enviar(e)} className="space-y-5" aria-label={inicial ? 'Editar dados do contrato' : 'Cadastrar contrato'}>
+  return <form noValidate onSubmit={e => void enviar(e)} className="space-y-4" aria-label={inicial ? 'Editar dados do contrato' : 'Cadastrar contrato'}>
     <div className="rounded-2xl border border-brand-green/25 bg-brand-darkgreen/10 p-4 md:p-6 space-y-5">
       <div><h2 className="text-lg font-semibold text-brand-neon">Identificação do contrato</h2>
         <p className="mt-1 text-sm text-foreground/65">Dados administrativos. Campos com * são obrigatórios.</p></div>
@@ -160,22 +160,25 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
             <input id="assinatura" type="date" className={input} value={form.dataAssinatura ?? ''} onChange={e => atualizar('dataAssinatura', e.target.value || null)} {...acessibilidade('assinatura', 'dataAssinatura', true)} /></Campo>
           <Campo titulo="Fiscal/gestor público" id="fiscal" erro={erroDo('fiscalGestor')} ajuda="Identificação informativa do representante público; não cria usuário nem acesso externo." contador={{ valor: (form.fiscalGestor ?? '').length, max: LIMITES_CONTRATO.fiscalGestor }}>
             <input id="fiscal" className={input} maxLength={LIMITES_CONTRATO.fiscalGestor} value={form.fiscalGestor ?? ''} onChange={e => atualizar('fiscalGestor', e.target.value || null)} {...acessibilidade('fiscal', 'fiscalGestor', true)} /></Campo>
-          <Campo titulo="Responsável interno (usuário ativo)" id="responsavel" erro={erroDo('responsavelInternoId')} ajuda="Pessoa de referência. Não substitui os vínculos de acesso definidos na Administração de funcionários.">
+          <Campo titulo="Responsável pelo contrato (opcional)" id="responsavel" erro={erroDo('responsavelInternoId')} ajuda="Essa pessoa poderá consultar o contrato. Para permitir alterações, configure o acesso em Funcionários.">
             <select id="responsavel" className={input} disabled={!podeDefinirResponsavel} value={responsavelExibido} onChange={e => atualizar('responsavelInternoId', e.target.value || null)} {...acessibilidade('responsavel', 'responsavelInternoId', true)}>
               <option value="">Não atribuído</option>
               {responsaveis.map(u => <option key={u.id} value={u.id}>{u.nome?.trim() || 'Nome não informado'} — {u.email}</option>)}</select></Campo>
         </div>
         <Campo titulo="Descrição" id="descricao" erro={erroDo('descricao')} ajuda="Detalhamento adicional do objeto e do contexto do contrato." contador={{ valor: (form.descricao ?? '').length, max: LIMITES_CONTRATO.descricao }}>
-          <textarea id="descricao" rows={4} className={input} maxLength={LIMITES_CONTRATO.descricao} value={form.descricao ?? ''} onChange={e => atualizar('descricao', e.target.value || null)} {...acessibilidade('descricao', 'descricao', true)} /></Campo>
+          <textarea id="descricao" rows={3} className={input} maxLength={LIMITES_CONTRATO.descricao} value={form.descricao ?? ''} onChange={e => atualizar('descricao', e.target.value || null)} {...acessibilidade('descricao', 'descricao', true)} /></Campo>
         <Campo titulo="Observações" id="observacoes" erro={erroDo('observacoes')} ajuda="Anotações administrativas complementares, sem dados financeiros estruturados." contador={{ valor: (form.observacoes ?? '').length, max: LIMITES_CONTRATO.observacoes }}>
-          <textarea id="observacoes" rows={4} className={input} maxLength={LIMITES_CONTRATO.observacoes} value={form.observacoes ?? ''} onChange={e => atualizar('observacoes', e.target.value || null)} {...acessibilidade('observacoes', 'observacoes', true)} /></Campo>
+          <textarea id="observacoes" rows={3} className={input} maxLength={LIMITES_CONTRATO.observacoes} value={form.observacoes ?? ''} onChange={e => atualizar('observacoes', e.target.value || null)} {...acessibilidade('observacoes', 'observacoes', true)} /></Campo>
       </div>
     </details>
     <p role="note" className="rounded-xl border border-brand-green/20 p-3 text-sm text-foreground/70">O contrato será salvo primeiro. Em seguida, você poderá anexar o PDF principal e outros documentos classificados, sem exigir arquivo no cadastro.</p>
     {erroGeral && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-error-text">{erroGeral}</p>}
-    <div className="flex flex-wrap items-center justify-end gap-3">
-      <Link href={inicial ? `/contratos/${encodeURIComponent(inicial.id)}` : '/contratos'} className="rounded-lg border border-brand-green/40 px-4 py-2.5 text-sm">Cancelar</Link>
-      <button type="submit" disabled={salvando} className="rounded-lg bg-brand-green px-5 py-2.5 font-semibold text-on-brand-green disabled:opacity-50">{salvando ? 'Salvando...' : inicial ? 'Salvar alterações' : 'Cadastrar contrato'}</button>
+    <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-brand-green/20 px-1 pt-4 pb-2">
+      {onCancelar ? <button type="button" onClick={onCancelar} disabled={salvando} className="inline-flex min-h-9 cursor-pointer items-center rounded-lg border border-brand-green/35 px-3 py-2 text-sm font-medium text-foreground transition-colors hover:border-brand-green/65 hover:bg-brand-green/10 focus-visible:outline-2 focus-visible:outline-brand-neon disabled:cursor-not-allowed disabled:opacity-50">Cancelar</button> :
+        <Link href={inicial ? `/contratos/${encodeURIComponent(inicial.id)}` : '/contratos'} className="inline-flex min-h-9 cursor-pointer items-center rounded-lg border border-brand-green/35 px-3 py-2 text-sm font-medium text-foreground transition-colors hover:border-brand-green/65 hover:bg-brand-green/10 focus-visible:outline-2 focus-visible:outline-brand-neon">Cancelar</Link>}
+      <button type="submit" disabled={salvando} className="inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border border-brand-green/60 bg-brand-green px-3 py-2 text-sm font-semibold text-on-brand-green transition-[filter,transform,box-shadow] hover:brightness-110 hover:shadow-[0_0_0_2px_rgba(95,211,74,0.16)] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-brand-neon disabled:cursor-not-allowed disabled:opacity-50">
+        {salvando ? 'Salvando...' : inicial ? 'Salvar alterações' : 'Cadastrar contrato'}
+      </button>
     </div>
   </form>;
 }

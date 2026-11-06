@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional, IsString, MaxLength, Matches, IsInt, Min, Max } from 'class-validator';
+import { IsEnum, IsOptional, IsString, MaxLength, Matches, IsInt, Min, Max, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CategoriaDocumento } from '../categoria-documento.js';
 
@@ -8,9 +8,21 @@ export class CriarDocumentoDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(300)
+  @MaxLength(140)
   @Matches(/\S/, { message: 'Descrição não pode conter somente espaços' })
   descricao?: string;
+}
+
+export class EditarDocumentoDto {
+  @IsOptional()
+  @IsEnum(CategoriaDocumento)
+  categoria?: CategoriaDocumento;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(140)
+  @Matches(/\S/, { message: 'Descrição não pode conter somente espaços' })
+  descricao?: string | null;
 }
 
 export class ListarDocumentosDto {
@@ -24,4 +36,8 @@ export class ListarDocumentosDto {
   @IsOptional()
   @IsEnum(CategoriaDocumento)
   categoria?: CategoriaDocumento;
+
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  arquivados?: 'true' | 'false';
 }

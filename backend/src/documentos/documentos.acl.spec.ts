@@ -23,9 +23,22 @@ describe('TEC08-02: contratos raiz e IDOR (ACL sem HTTP/DB real)', () => {
     expect(await resolvedor.resolver(docScope, { contratoId: contratoB, documentoId: '../path' })).toBeNull();
   });
 
+  it('responsável interno recebe somente leitura no contrato atribuído, sem vínculo de edição', async () => {
+    const vinculos = { findOneBy: jest.fn(async () => null) };
+    const contrato = { findOne: jest.fn(async ({ where }: { where: { id: string; responsavelInternoId?: string } }) =>
+      where.id === contratoA && where.responsavelInternoId === documentoId ? { id: contratoA } : null) };
+    const politica = new PoliticaAcessoService(vinculos as never, contrato as never);
+    const gestor = { id: documentoId, supertokensUserId: 'st', email: 'qa@example.test', perfil: PerfilUsuario.GESTOR };
+    const leitura = { acao: 'documentos:listar' as const, escopoOperacional: { tipo: 'contrato' as const, parametro: 'contratoId' } };
+    const escrita = { acao: 'documentos:anexar' as const, escopoOperacional: { tipo: 'contrato' as const, parametro: 'contratoId' } };
+    expect(await politica.permitido(gestor, leitura, contratoA)).toBe(true);
+    expect(await politica.permitido(gestor, leitura, contratoB)).toBe(false);
+    expect(await politica.permitido(gestor, escrita, contratoA)).toBe(false);
+  });
+
   it('leitura autorizada por vínculo, escrita somente para gestor com poder de edição', async () => {
     const vinculos = { findOneBy: jest.fn(async () => ({ podeEditar: false })) };
-    const politica = new PoliticaAcessoService(vinculos as never, { findOne: async () => ({ arquivadoEm: null }) } as never);
+    const politica = new PoliticaAcessoService(vinculos as never, { findOne: async (q: { where: { responsavelInternoId?: string } }) => q.where.responsavelInternoId ? null : ({ arquivadoEm: null }) } as never);
     const usuario = { id: documentoId, supertokensUserId: 'st-id', email: 'gestor@example.com', perfil: PerfilUsuario.GESTOR };
     const leitura = { acao: 'documentos:listar' as const, escopoOperacional: { tipo: 'contrato' as const, parametro: 'contratoId' } };
     const escrita = { acao: 'documentos:anexar' as const, escopoOperacional: { tipo: 'contrato' as const, parametro: 'contratoId' } };

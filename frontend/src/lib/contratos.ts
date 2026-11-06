@@ -20,13 +20,21 @@ export type Contrato = {
   fiscalGestor: string | null;
   modoCalculo: ModoCalculo;
   observacoes: string | null;
+  ordemEtapasBloqueada?: boolean;
   arquivadoEm?: string | null;
+  reabertoEm?: string | null;
   arquivadoPor?: string | null;
 };
-export type DadosContrato = Omit<Contrato, 'id' | 'codigoPublico' | 'arquivadoEm' | 'arquivadoPor'>;
+export type DadosContrato = Omit<Contrato, 'id' | 'codigoPublico' | 'ordemEtapasBloqueada' | 'arquivadoEm' | 'arquivadoPor' | 'reabertoEm'>;
 /** Formato apenas de leitura: o servidor gera e mantém esse valor. */
 export function rotuloCodigoPublico(codigo: string): string { return `#${codigo}`; }
-export type AcessoContrato = { podeEditar: boolean };
+export type PermissoesContrato = Record<
+  'criarEtapas' | 'editarEtapas' | 'reordenarEtapas' | 'bloquearOrdemEtapas' | 'arquivarEtapas' | 'reativarEtapas' | 'reabrirEtapas' | 'excluirEtapasArquivadas' |
+  'criarEntregaveis' | 'editarEntregaveis' | 'arquivarEntregaveis' | 'reativarEntregaveis' | 'reabrirEntregaveis' | 'excluirEntregaveisArquivados' |
+  'criarEvidencias' | 'editarEvidencias' | 'arquivarEvidencias' | 'reativarEvidencias' | 'reabrirEvidencias' | 'excluirEvidenciasArquivadas' |
+  'alterarObrigatoriedade' | 'enviarComprovantes' | 'verificarComprovantes' |
+  'editarContrato' | 'reabrirContrato' | 'anexarDocumentos' | 'editarDocumentos' | 'arquivarDocumentos' | 'reativarDocumentos' | 'excluirDocumentosArquivados' | 'administrarDocumentoPrincipal', boolean>;
+export type AcessoContrato = { podeEditar: boolean; permissoes?: PermissoesContrato };
 export const STATUS: Record<StatusContrato, string> = {
   PLANEJAMENTO: 'Planejamento', EM_EXECUCAO: 'Em execução', EM_ENCERRAMENTO: 'Em encerramento',
   CONCLUIDO: 'Concluído', SUSPENSO: 'Suspenso', CANCELADO: 'Cancelado',
@@ -65,7 +73,11 @@ export const buscarContrato = (id: string) => requisitar<Contrato>(`/contratos/$
 export const consultarAcessoContrato = (id: string) => requisitar<AcessoContrato>(`/contratos/${encodeURIComponent(id)}/acesso`);
 export const criarContrato = (dados: DadosContrato) => requisitar<Contrato>('/contratos', { method: 'POST', body: JSON.stringify(dados) });
 export const arquivarContrato = (id: string) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/arquivar`, { method: 'PATCH' });
+export const alterarBloqueioOrdemEtapas = (id: string, bloqueada: boolean) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/ordem-etapas`, { method: 'PATCH', body: JSON.stringify({ bloqueada }) });
+export const reabrirContrato = (id: string) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/reabrir`, { method: 'PATCH' });
 export const reativarContrato = (id: string) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/reativar`, { method: 'PATCH' });
+
+export const excluirContratoArquivado = (id: string) => requisitar<{ excluido: true; arquivosPendentes: number }>(`/contratos/${encodeURIComponent(id)}`, { method: 'DELETE' });
 export const editarContrato = (id: string, dados: Partial<DadosContrato>) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(dados) });
 
 /** A consulta de usuários ativos é administrativa, nunca liberada a não-ADMIN. */

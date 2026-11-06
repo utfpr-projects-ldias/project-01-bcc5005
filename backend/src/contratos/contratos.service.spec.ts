@@ -64,7 +64,7 @@ function contratoBase(
     fiscalGestor: null,
     modoCalculo: SIMPLES,
     observacoes: null,
-    arquivadoEm: null, arquivadoPor: null,
+    arquivadoEm: null, arquivadoPor: null, ordemEtapasBloqueada: false,
     ...alteracoes,
   };
 }
@@ -105,6 +105,7 @@ function montarCenario() {
 
   const manager = {
     getRepository: jest.fn(() => repositorio),
+    query: jest.fn(async () => [{ numero: 428 }]),
   } as unknown as EntityManager;
 
   const auditoria = {
@@ -156,9 +157,10 @@ describe('Escopo de carteira de contratos (RF-40)', () => {
     const c = montarCenario();
     const getMany = jest.fn<() => Promise<Contrato[]>>().mockResolvedValue([]);
     const builder = {
-      innerJoin: jest.fn(), andWhere: jest.fn(), orderBy: jest.fn(), addOrderBy: jest.fn(), getMany,
+      leftJoin: jest.fn(), where: jest.fn(), andWhere: jest.fn(), orderBy: jest.fn(), addOrderBy: jest.fn(), getMany,
     };
-    builder.innerJoin.mockReturnValue(builder);
+    builder.leftJoin.mockReturnValue(builder);
+    builder.where.mockReturnValue(builder);
     builder.andWhere.mockReturnValue(builder);
     builder.orderBy.mockReturnValue(builder);
     builder.addOrderBy.mockReturnValue(builder);
@@ -166,8 +168,10 @@ describe('Escopo de carteira de contratos (RF-40)', () => {
     const gestor = { ...ator, perfil: 'GESTOR' } as UsuarioAutenticado;
     expect(await c.service.listar(gestor)).toEqual([]);
     expect(c.repositorio.find).not.toHaveBeenCalled();
-    expect(builder.innerJoin).toHaveBeenCalledWith('permissoes_contrato', 'p',
+    expect(builder.leftJoin).toHaveBeenCalledWith('permissoes_contrato', 'p',
       expect.stringContaining('p.usuario_id = :usuarioId'), { usuarioId: gestor.id });
+    expect(builder.where).toHaveBeenCalledWith(
+      expect.stringContaining('c.responsavelInternoId = :usuarioId'), { usuarioId: gestor.id });
   });
 });
 
@@ -530,16 +534,13 @@ describe('Código público de contratos', () => {
     expect(c.eventos[0].dadosPosteriores).toMatchObject({ codigoPublico: salvo.codigoPublico });
   });
 
-  it('repete TODA a transação em uma colisão real do índice específico', async () => {
+  it('reserva o próximo número pelo PostgreSQL e não reutiliza códigos em colisões', async () => {
     const c = montarCenario();
-    const erro = erroPostgres('23505');
-    Object.assign(erro.driverError, { constraint: 'uq_contratos_codigo_publico' });
-    c.repositorio.save.mockRejectedValueOnce(erro);
+    Object.assign(c.manager, { query: jest.fn(async () => [{ numero: 429 }]) });
     const salvo = await c.service.criar(dtoCriacao(), ator);
-    expect(salvo.codigoPublico).toMatch(/^[0-9]{5}$/);
-    expect(c.auditoria.executarComAuditoria).toHaveBeenCalledTimes(2);
-    expect(c.repositorio.save).toHaveBeenCalledTimes(2);
-    expect(c.eventos).toHaveLength(1);
+    expect(salvo.codigoPublico).toBe('00429');
+    expect(c.auditoria.executarComAuditoria).toHaveBeenCalledTimes(1);
+    expect(c.repositorio.save).toHaveBeenCalledTimes(1);
   });
 
   it('não repete colisões de outras restrições de unicidade', async () => {
@@ -559,13 +560,10 @@ describe('Código público de contratos', () => {
 });
 
 
-test('código público: esgotamento real não cria contrato e devolve 409', async () => {
+test('código público: esgotamento da sequência não cria contrato e devolve 409', async () => {
   const c = montarCenario();
-  const erro = erroPostgres('23505');
-  Object.assign(erro.driverError, { constraint: 'uq_contratos_codigo_publico' });
-  for (let i = 0; i < 24; i++) c.repositorio.save.mockRejectedValueOnce(erro);
-  Object.assign(c.manager, { query: jest.fn(async () => []) });
+  Object.assign(c.manager, { query: jest.fn(async () => [{ numero: 100000 }]) });
   await expect(c.service.criar(dtoCriacao(), ator)).rejects.toBeInstanceOf(ConflictException);
-  expect(c.repositorio.save).toHaveBeenCalledTimes(24);
+  expect(c.repositorio.save).not.toHaveBeenCalled();
   expect(c.eventos).toHaveLength(0);
 });

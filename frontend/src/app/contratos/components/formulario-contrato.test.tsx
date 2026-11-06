@@ -12,7 +12,7 @@ test('cadastro usa campos reais, nenhum PDF fictício nem save desabilitado', ()
   const { container } = render(<FormularioContrato responsaveis={[]} onSalvar={jest.fn()} />);
   expect(screen.getByRole('button', { name: 'Cadastrar contrato' })).toBeEnabled();
   expect(screen.getByLabelText('Número do contrato *')).toBeInTheDocument();
-  expect(screen.getByLabelText('Responsável interno (usuário ativo)')).toBeInTheDocument();
+  expect(screen.getByLabelText('Responsável pelo contrato (opcional)')).toBeInTheDocument();
   // O cadastro persiste o contrato antes do upload; o arquivo não faz parte deste POST.
   expect(container.querySelector('input[type="file"]')).toBeNull();
   expect(screen.getByRole('note')).toHaveTextContent(/O contrato será salvo primeiro/i);
@@ -57,8 +57,8 @@ test('limites de caracteres e mensagens explicativas de modo de cálculo', () =>
   fireEvent.change(screen.getByLabelText('Modo de cálculo físico *'), { target: { value: 'PONDERADO' } });
   expect(screen.getByText(/pesos válidos deverão somar 100%/)).toBeInTheDocument();
   fireEvent.click(screen.getByText(/Informações complementares/));
-  expect(screen.getByLabelText('Descrição')).toHaveAttribute('maxLength', '3000');
-  expect(screen.getByLabelText('Observações')).toHaveAttribute('maxLength', '2000');
+  expect(screen.getByLabelText('Descrição')).toHaveAttribute('maxLength', '1500');
+  expect(screen.getByLabelText('Observações')).toHaveAttribute('maxLength', '1000');
 });
 
 test('edicao nao reutiliza silenciosamente termino antigo em duracao ambigua', async () => {
@@ -80,7 +80,7 @@ test('responsável fora da lista aparece como Não atribuído sem expor ID nem a
   const salvar = jest.fn().mockResolvedValue(undefined);
   const idAnterior = '22222222-2222-4222-8222-222222222222';
   render(<FormularioContrato inicial={{ ...inicial, responsavelInternoId: idAnterior }} responsaveis={[]} onSalvar={salvar} />);
-  const seletor = screen.getByLabelText('Responsável interno (usuário ativo)') as HTMLSelectElement;
+  const seletor = screen.getByLabelText('Responsável pelo contrato (opcional)') as HTMLSelectElement;
   expect(seletor).toHaveValue('');
   expect(seletor).toHaveTextContent('Não atribuído');
   expect(seletor).not.toHaveTextContent(/identificador reservado/i);
@@ -93,7 +93,7 @@ test('responsável fora da lista aparece como Não atribuído sem expor ID nem a
 test('seleção explícita de Não atribuído remove vínculo anterior não selecionável', async () => {
   const salvar = jest.fn().mockResolvedValue(undefined);
   render(<FormularioContrato inicial={{ ...inicial, responsavelInternoId: '22222222-2222-4222-8222-222222222222' }} responsaveis={[]} onSalvar={salvar} />);
-  const seletor = screen.getByLabelText('Responsável interno (usuário ativo)');
+  const seletor = screen.getByLabelText('Responsável pelo contrato (opcional)');
   // A seleção nativa já mostra a opção neutra; change explícito sinaliza
   // intenção de remover a atribuição, sem depender de valor reservado.
   fireEvent.change(seletor, { target: { value: '' } });
@@ -107,7 +107,7 @@ test('responsável ativo presente na lista segue identificado pelo nome, sem fal
   const id = '22222222-2222-4222-8222-222222222222';
   const responsavel = { id, nome: 'Gestor Exemplo', email: 'gestor@example.com', perfil: 'GESTOR' as const, ativo: true, criadoEm: '2026-11-01T00:00:00.000Z' };
   render(<FormularioContrato inicial={{ ...inicial, responsavelInternoId: id }} responsaveis={[responsavel]} onSalvar={jest.fn()} />);
-  const seletor = screen.getByLabelText('Responsável interno (usuário ativo)');
+  const seletor = screen.getByLabelText('Responsável pelo contrato (opcional)');
   expect(seletor).toHaveValue(id);
   expect(seletor).toHaveTextContent('Gestor Exemplo');
   expect(seletor).not.toHaveTextContent(/identificador reservado/i);

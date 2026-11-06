@@ -19,3 +19,11 @@ test('confirmação não perigosa usa texto contrastante sobre verde', () => {
   expect(screen.getByRole('button', { name: 'Continuar' })).toHaveClass('bg-brand-green', 'text-on-brand-green');
   unmount();
 });
+
+
+test('verificação apresenta cancelar vermelho e confirmar verde, com dimensões consistentes', () => {
+  render(<ConfirmacaoSimples titulo="Verificar?" descricao="Analisou o arquivo?" confirmar="Confirmar" cancelarVermelho
+    onCancelar={jest.fn()} onConfirmar={jest.fn()} />);
+  expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveClass('bg-red-600', 'whitespace-nowrap', 'shrink-0');
+  expect(screen.getByRole('button', { name: 'Confirmar' })).toHaveClass('bg-brand-green', 'shrink-0');
+});

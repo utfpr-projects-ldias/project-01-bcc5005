@@ -12,7 +12,9 @@ export type AcaoLegada =
   | 'contratos:visualizar'
   | 'contratos:editar'
   | 'contratos:arquivar'
-  | 'contratos:reativar';
+  | 'contratos:reativar'
+  | 'contratos:reabrir'
+  | 'contratos:excluir';
 
 export type AcaoProtegida = AcaoLegada | AcaoOperacional;
 

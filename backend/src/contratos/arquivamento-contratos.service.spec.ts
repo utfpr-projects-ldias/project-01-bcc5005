@@ -2,7 +2,6 @@ import { jest } from '@jest/globals';
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { ContratosService } from './contratos.service.js';
 import { Contrato } from './contrato.entity.js';
-import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
 import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
 

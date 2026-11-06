@@ -99,7 +99,15 @@ export class Contrato {
   @Column({ name: 'observacoes', type: 'text', nullable: true })
   observacoes!: string | null;
 
+  /** Trava de reordenação é estado global do contrato, não preferência de sessão. */
+  @Column({ name: 'ordem_etapas_bloqueada', type: 'boolean', default: false })
+  ordemEtapasBloqueada!: boolean;
+
   /** Arquivamento lógico; NULL significa ativo, sem alterar o status operacional. */
+  /** Reabertura documental explícita, independente do status operacional. */
+  @Column({ name: 'reaberto_em', type: 'timestamptz', nullable: true })
+  reabertoEm!: Date | null;
+
   @Column({ name: 'arquivado_em', type: 'timestamptz', nullable: true })
   arquivadoEm!: Date | null;
 

@@ -4,12 +4,12 @@ import { listarDocumentos, enviarDocumento, type CategoriaDocumento, type Filtro
 
 export const CHAVES_DOCUMENTOS = {
   contrato: (id: string) => ['documentos', 'contrato', id] as const,
-  lista: (id: string, categoria: FiltroCategoriaDocumento, pagina: number) =>
-    ['documentos', 'contrato', id, 'lista', categoria || 'TODOS', pagina] as const,
+  lista: (id: string, categoria: FiltroCategoriaDocumento, pagina: number, arquivados = false) =>
+    ['documentos', 'contrato', id, 'lista', categoria || 'TODOS', pagina, arquivados ? 'ARQUIVADOS' : 'ATIVOS'] as const,
 };
-export function useDocumentos(contratoId: string, categoria: FiltroCategoriaDocumento, pagina: number, habilitada = true) {
-  return useConsulta(CHAVES_DOCUMENTOS.lista(contratoId, categoria, pagina),
-    (signal) => listarDocumentos(contratoId, categoria, pagina, signal),
+export function useDocumentos(contratoId: string, categoria: FiltroCategoriaDocumento, pagina: number, habilitada = true, arquivados = false) {
+  return useConsulta(CHAVES_DOCUMENTOS.lista(contratoId, categoria, pagina, arquivados),
+    (signal) => listarDocumentos(contratoId, categoria, pagina, signal, arquivados),
     { habilitada: habilitada && !!contratoId, validadeMs: 10_000 });
 }
 export function useEnviarDocumento(contratoId: string) {

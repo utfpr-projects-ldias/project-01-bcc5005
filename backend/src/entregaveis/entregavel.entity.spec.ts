@@ -59,7 +59,7 @@ describe('HU07-01 — entidades e contrato de planejamento', () => {
     expect(metadata.tables.find(item => item.target === EvidenciaEsperada)?.name).toBe('evidencias_esperadas');
     expect(coluna(EvidenciaEsperada, 'entregavelId')?.options)
       .toMatchObject({ name: 'entregavel_id', type: 'uuid' });
-    expect(coluna(EvidenciaEsperada, 'obrigatoria')?.options).toMatchObject({ type: 'boolean', default: false });
+    expect(coluna(EvidenciaEsperada, 'obrigatoria')?.options).toMatchObject({ type: 'boolean', default: true });
     expect(metadata.relations.find(item => item.target === EvidenciaEsperada && item.propertyName === 'entregavel')?.options)
       .toMatchObject({ nullable: false, onDelete: 'RESTRICT' });
     const props = metadata.columns.filter(c => c.target === EvidenciaEsperada).map(c => c.propertyName);

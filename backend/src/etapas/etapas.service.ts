@@ -4,6 +4,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, QueryFailedError, type EntityManager, type Repository } from 'typeorm';
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
+import { documentacaoVerificada } from '../entregaveis/conclusao-documental.js';
+import { ordemAposArquivamento } from './ordem-apos-arquivamento.js';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
 import { Contrato } from '../contratos/contrato.entity.js';
@@ -57,7 +59,7 @@ function verificarDados(etapa: Pick<Etapa, 'nome' | 'codigo' | 'inicioPrevisto' 
 
 function snapshot(etapa: Etapa): Record<string, unknown> {
   return {
-    contratoId: etapa.contratoId, codigo: etapa.codigo, nome: etapa.nome,
+    contratoId: etapa.contratoId, codigoPublico: etapa.codigoPublico, codigo: etapa.codigo, nome: etapa.nome,
     descricao: etapa.descricao, sequencia: etapa.sequencia,
     inicioPrevisto: etapa.inicioPrevisto, terminoPrevisto: etapa.terminoPrevisto,
     status: etapa.status, observacoes: etapa.observacoes,
@@ -108,6 +110,9 @@ export class EtapasService {
       .where('c.id = :id', { id })
       .getOne();
     if (!contrato) throw new NotFoundException('Contrato não encontrado');
+    if (contrato.arquivadoEm || contrato.status === 'CONCLUIDO' ||
+      (contrato.reabertoEm === null && await documentacaoVerificada(manager, id)))
+      throw new ConflictException('Reative ou reabra o contrato antes de modificar etapas');
     return contrato;
   }
 
@@ -159,6 +164,10 @@ export class EtapasService {
         const repo = manager.getRepository(Etapa);
         const etapa = await repo.findOneBy({ contratoId, id: etapaId });
         if (!etapa) throw new NotFoundException('Etapa não encontrada');
+        if (etapa.arquivadoEm) throw new ConflictException('Reative a etapa antes de editar');
+        if (etapa.status === StatusEtapa.CONCLUIDA ||
+          (etapa.reabertoEm === null && await documentacaoVerificada(manager, contratoId, etapaId)))
+          throw new ConflictException('Etapa concluída: reabra antes de editar');
         const anterior = snapshot(etapa);
         const datasAnteriores = { inicioPrevisto: etapa.inicioPrevisto, terminoPrevisto: etapa.terminoPrevisto };
         const statusAnterior = etapa.status;
@@ -167,7 +176,10 @@ export class EtapasService {
         if (dto.descricao !== undefined) etapa.descricao = dto.descricao;
         if (dto.inicioPrevisto !== undefined) etapa.inicioPrevisto = dto.inicioPrevisto;
         if (dto.terminoPrevisto !== undefined) etapa.terminoPrevisto = dto.terminoPrevisto;
-        if (dto.status !== undefined) etapa.status = dto.status;
+        if (dto.status !== undefined) {
+          etapa.status = dto.status;
+          if (dto.status === StatusEtapa.CONCLUIDA) etapa.reabertoEm = null;
+        }
         if (dto.observacoes !== undefined) etapa.observacoes = dto.observacoes;
         verificarDados(etapa);
         const salva = await repo.save(etapa);
@@ -193,10 +205,79 @@ export class EtapasService {
     } catch (error: unknown) { return traduzirErro(error); }
   }
 
+  async reabrir(contratoId: string, etapaId: string, ator: UsuarioAutenticado): Promise<RespostaEtapa> {
+    return this.dataSource.transaction(async manager => {
+      const contrato = await this.bloquearContrato(manager, contratoId);
+      if (contrato.arquivadoEm || contrato.status === 'CONCLUIDO') throw new ConflictException('Reabra o contrato antes de modificar etapas');
+      const repo = manager.getRepository(Etapa);
+      const etapa = await repo.findOneBy({ id: etapaId, contratoId });
+      if (!etapa) throw new NotFoundException('Etapa não encontrada');
+      if (etapa.arquivadoEm) throw new ConflictException('Reative a etapa arquivada primeiro');
+      if (etapa.reabertoEm) throw new ConflictException('Etapa já foi reaberta');
+      const operacional = etapa.status === StatusEtapa.CONCLUIDA;
+      if (!operacional && !await documentacaoVerificada(manager, contratoId, etapaId))
+        throw new ConflictException('Etapa ainda não tem comprovação concluída');
+      const anterior = etapa.status;
+      if (operacional) etapa.status = StatusEtapa.EM_ANDAMENTO;
+      etapa.reabertoEm = new Date();
+      await repo.save(etapa);
+      await this.auditoria.registrarNaTransacao(manager, ator, {
+        acao: AcaoAuditoria.ETAPA_REABERTA, entidadeTipo: 'ETAPA', entidadeId: etapaId,
+        dadosAnteriores: { status: anterior, reabertoEm: null },
+        dadosPosteriores: { status: etapa.status, reabertoEm: etapa.reabertoEm },
+      });
+      return resposta(etapa, contrato);
+    });
+  }
+
+  async alterarArquivamento(contratoId: string, etapaId: string, arquivar: boolean, ator: UsuarioAutenticado): Promise<RespostaEtapa> {
+    return this.dataSource.transaction(async (manager) => {
+      const contrato = await this.bloquearContrato(manager, contratoId);
+      const repo = manager.getRepository(Etapa);
+      const etapa = await repo.findOneBy({ id: etapaId, contratoId });
+      if (!etapa) throw new NotFoundException('Etapa não encontrada');
+      if (Boolean(etapa.arquivadoEm) === arquivar) throw new ConflictException('Etapa já está neste estado de arquivamento');
+      const anterior = { arquivadoEm: etapa.arquivadoEm, sequencia: etapa.sequencia };
+      if (arquivar && (etapa.status === StatusEtapa.CONCLUIDA ||
+        (etapa.reabertoEm === null && await documentacaoVerificada(manager, contratoId, etapaId))))
+        throw new ConflictException('Etapa concluída: reabra antes de arquivar');
+      etapa.arquivadoEm = arquivar ? new Date() : null;
+      etapa.arquivadoPor = arquivar ? ator.id : null;
+      await repo.save(etapa);
+      // Serialize all position changes under the contract lock. The archived stage
+      // leaves the active ordering; a restored stage is appended to the active end.
+      // Archived rows occupy positions after the active rows (same UNIQUE index).
+      await manager.query('SET CONSTRAINTS "uq_etapas_contrato_sequencia" DEFERRED');
+      const todas = await repo.find({ where: { contratoId }, order: { sequencia: 'ASC', id: 'ASC' } });
+      const novaOrdem = ordemAposArquivamento(todas, etapa, arquivar);
+      for (const [indice, registro] of novaOrdem.entries()) {
+        const sequenciaNova = indice + 1;
+        if (registro.sequencia === sequenciaNova) continue;
+        const sequenciaAntiga = registro.sequencia;
+        await repo.update({ id: registro.id, contratoId }, { sequencia: sequenciaNova });
+        registro.sequencia = sequenciaNova;
+        await this.auditoria.registrarNaTransacao(manager, ator, {
+          acao: AcaoAuditoria.ETAPA_REORDENADA,
+          entidadeTipo: 'ETAPA', entidadeId: registro.id,
+          dadosAnteriores: { sequencia: sequenciaAntiga },
+          dadosPosteriores: { sequencia: sequenciaNova },
+        });
+      }
+      await this.auditoria.registrarNaTransacao(manager, ator, {
+        acao: arquivar ? AcaoAuditoria.ETAPA_ARQUIVADA : AcaoAuditoria.ETAPA_REATIVADA,
+        entidadeTipo: 'ETAPA', entidadeId: etapaId,
+        dadosAnteriores: anterior,
+        dadosPosteriores: { arquivadoEm: etapa.arquivadoEm, sequencia: etapa.sequencia },
+      });
+      return resposta(etapa, contrato);
+    });
+  }
+
   async reordenar(contratoId: string, dto: ReordenarEtapasDto, ator: UsuarioAutenticado): Promise<RespostaEtapa[]> {
     try {
       return await this.dataSource.transaction(async (manager) => {
         const contrato = await this.bloquearContrato(manager, contratoId);
+        if (contrato.ordemEtapasBloqueada) throw new ConflictException('Ordem das etapas bloqueada para este contrato.');
         const repo = manager.getRepository(Etapa);
         const atuais = await repo.find({ where: { contratoId }, order: { sequencia: 'ASC', id: 'ASC' } });
         const idsAtuais = atuais.map((etapa) => etapa.id);

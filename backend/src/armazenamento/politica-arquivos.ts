@@ -16,6 +16,8 @@ export const POLITICA_PROVISORIA: PoliticaArquivos = Object.freeze({
 
 const TIPOS: Readonly<Record<string, string>> = Object.freeze({
   '.pdf': 'application/pdf',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
@@ -86,6 +88,11 @@ export function validarArquivo(
 
 function assinaturaCorresponde(mime: string, dados: Buffer): boolean {
   switch (mime) {
+    case 'application/msword':
+      return dados.length >= 512 && dados.subarray(0, 8).equals(Buffer.from('d0cf11e0a1b11ae1', 'hex'));
+    case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+      return dados.length >= 64 && dados.subarray(0, 4).equals(Buffer.from('504b0304', 'hex')) &&
+        dados.includes(Buffer.from('[Content_Types].xml')) && dados.includes(Buffer.from('word/document.xml'));
     case 'application/pdf':
       return dados.length >= 12 && dados.subarray(0, 5).toString('ascii') === '%PDF-' &&
         dados.subarray(Math.max(0, dados.length - 1024)).includes(Buffer.from('%%EOF'));

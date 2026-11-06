@@ -1,10 +1,11 @@
+import { normalizarNomeArquivo } from '../armazenamento/nome-arquivo.js';
 import { createHash } from 'node:crypto';
 import {
   BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException,
   OnModuleInit, PayloadTooLargeException, ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, QueryFailedError, Repository } from 'typeorm';
+import { DataSource, IsNull, Not, QueryFailedError, Repository } from 'typeorm';
 import { ARMAZENAMENTO_ARQUIVOS, type ArmazenamentoArquivos } from '../armazenamento/contrato-armazenamento.js';
 import { ArmazenamentoIndisponivelError } from '../armazenamento/armazenamento-local.js';
 import { ArquivoInvalidoError, LimiteArmazenamentoError } from '../armazenamento/politica-arquivos.js';
@@ -13,8 +14,11 @@ import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import { ResolverEscopoContratoService } from '../autorizacao/resolver-escopo-contrato.service.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
 import { CategoriaDocumento } from './categoria-documento.js';
+import { Contrato } from '../contratos/contrato.entity.js';
+import { PermissaoContrato } from '../autorizacao/permissao-contrato.entity.js';
+import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
 import { DocumentoContratual } from './documento-contratual.entity.js';
-import type { CriarDocumentoDto } from './dto/documentos.dto.js';
+import type { CriarDocumentoDto, EditarDocumentoDto } from './dto/documentos.dto.js';
 
 export interface ArquivoRecebido {
   originalname: string;
@@ -36,6 +40,7 @@ function publico(documento: DocumentoContratual) {
     autorId: documento.autorId,
     autorNome: documento.autor?.nome ?? null,
     criadoEm: documento.criadoEm,
+    arquivadoEm: documento.arquivadoEm ?? null,
   };
 }
 
@@ -66,9 +71,9 @@ export class DocumentosService implements OnModuleInit {
     });
   }
 
-  async listar(contratoId: string, categoria?: CategoriaDocumento, pagina = 1) {
+  async listar(contratoId: string, categoria?: CategoriaDocumento, pagina = 1, arquivados = false) {
     const [documentos, total] = await this.documentos.findAndCount({
-      where: { contratoId, ...(categoria ? { categoria } : {}) },
+      where: { contratoId, ...(categoria ? { categoria } : {}), arquivadoEm: arquivados ? Not(IsNull()) : IsNull() },
       relations: { autor: true },
       order: { criadoEm: 'DESC', id: 'DESC' },
       take: 20,
@@ -83,17 +88,121 @@ export class DocumentosService implements OnModuleInit {
     return publico(documento);
   }
 
+  /** Documento principal é peça formal: não permite mutação nem reclassificação após o envio. */
+  private async podeAdministrarPrincipal(contratoId: string, ator: UsuarioAutenticado): Promise<boolean> {
+    if (ator.perfil === PerfilUsuario.ADMINISTRADOR) return true;
+    const vinculo = await this.dataSource.getRepository(PermissaoContrato).findOneBy({ contratoId, usuarioId: ator.id });
+    return Boolean(vinculo?.permissoesDetalhadas?.administrarDocumentoPrincipal);
+  }
+
+  /** Apenas metadados de anexos administrativos não principais. O blob nunca é sobrescrito. */
+  async editar(contratoId: string, id: string, dto: EditarDocumentoDto, ator: UsuarioAutenticado) {
+    return this.dataSource.transaction(async manager => {
+      const repo = manager.getRepository(DocumentoContratual);
+      const documento = await repo.findOne({ where: { contratoId, id }, relations: { autor: true } });
+      if (!documento) throw new NotFoundException('Documento não encontrado');
+      if (documento.arquivadoEm) throw new ConflictException('Documento arquivado não pode ser editado');
+      if (documento.categoria === CategoriaDocumento.CONTRATO_PRINCIPAL || dto.categoria === CategoriaDocumento.CONTRATO_PRINCIPAL)
+        throw new ConflictException('Documento principal é imutável: arquive e anexe nova versão mediante autorização');
+      if (dto.categoria === undefined && dto.descricao === undefined) throw new BadRequestException('Nenhuma alteração informada');
+      const antes = { categoria: documento.categoria, descricao: documento.descricao };
+      if (dto.categoria !== undefined) documento.categoria = dto.categoria;
+      if (dto.descricao !== undefined) documento.descricao = dto.descricao?.trim() || null;
+      if (antes.categoria === documento.categoria && antes.descricao === documento.descricao) return publico(documento);
+      await repo.save(documento);
+      await this.auditoria.registrarNaTransacao(manager, ator, {
+        acao: AcaoAuditoria.DOCUMENTO_METADADOS_ALTERADOS,
+        entidadeTipo: 'DOCUMENTO', entidadeId: id, dadosAnteriores: antes,
+        dadosPosteriores: { categoria: documento.categoria, descricao: documento.descricao },
+      });
+      return publico(documento);
+    });
+  }
+
+  async arquivar(contratoId: string, id: string, ator: UsuarioAutenticado) {
+    return this.dataSource.transaction(async manager => {
+      const repo = manager.getRepository(DocumentoContratual);
+      const documento = await repo.findOne({ where: { contratoId, id }, relations: { autor: true } });
+      if (!documento) throw new NotFoundException('Documento não encontrado');
+      if (documento.arquivadoEm) throw new ConflictException('Documento já está arquivado');
+      if (documento.categoria === CategoriaDocumento.CONTRATO_PRINCIPAL && !await this.podeAdministrarPrincipal(contratoId, ator))
+        throw new ConflictException('Arquivamento do documento principal exige autorização específica');
+      documento.arquivadoEm = new Date();
+      await repo.save(documento);
+      await this.auditoria.registrarNaTransacao(manager, ator, {
+        acao: AcaoAuditoria.DOCUMENTO_ARQUIVADO,
+        entidadeTipo: 'DOCUMENTO', entidadeId: id,
+        dadosPosteriores: { arquivadoEm: documento.arquivadoEm.toISOString(), nomeOriginal: documento.nomeOriginal },
+      });
+      return publico(documento);
+    });
+  }
+
+  /** Arquivado conserva o arquivo consultável. Reativação não altera bytes nem versões. */
+  async reativar(contratoId: string, id: string, ator: UsuarioAutenticado) {
+    return this.dataSource.transaction(async manager => {
+      const repo = manager.getRepository(DocumentoContratual);
+      const documento = await repo.findOne({ where: { contratoId, id }, relations: { autor: true }, lock: { mode: 'pessimistic_write' } });
+      if (!documento) throw new NotFoundException('Documento não encontrado');
+      if (!documento.arquivadoEm) throw new ConflictException('Documento já está ativo');
+      if (documento.categoria === CategoriaDocumento.CONTRATO_PRINCIPAL) {
+        if (!await this.podeAdministrarPrincipal(contratoId, ator))
+          throw new ConflictException('Reativação do documento principal exige autorização específica');
+        if (await repo.count({ where: { contratoId, categoria: CategoriaDocumento.CONTRATO_PRINCIPAL, arquivadoEm: IsNull() } }) > 0)
+          throw new ConflictException('Já existe documento principal ativo neste contrato');
+      }
+      const anterior = documento.arquivadoEm.toISOString();
+      documento.arquivadoEm = null;
+      await repo.save(documento);
+      await this.auditoria.registrarNaTransacao(manager, ator, {
+        acao: AcaoAuditoria.DOCUMENTO_REATIVADO, entidadeTipo: 'DOCUMENTO', entidadeId: id,
+        dadosAnteriores: { arquivadoEm: anterior }, dadosPosteriores: { arquivadoEm: null },
+      });
+      return publico(documento);
+    });
+  }
+
+  /** Exclusão de dados de teste: SOMENTE arquivados, com permissão granular no guard.
+   * A chave opaca é validada pelo adaptador; arquivo físico é removido após commit.
+   * O evento conserva o fato da exclusão, sem dados privados do arquivo. */
+  async excluirArquivado(contratoId: string, id: string, ator: UsuarioAutenticado) {
+    const resultado = await this.dataSource.transaction(async manager => {
+      const repo = manager.getRepository(DocumentoContratual);
+      const documento = await repo.createQueryBuilder('d')
+        .addSelect('d.storageKey')
+        .where('d.id = :id AND d.contratoId = :contratoId', { id, contratoId })
+        .setLock('pessimistic_write').getOne();
+      if (!documento) throw new NotFoundException('Documento não encontrado');
+      if (!documento.arquivadoEm) throw new ConflictException('Arquive o documento antes de excluí-lo');
+      if (documento.categoria === CategoriaDocumento.CONTRATO_PRINCIPAL && !await this.podeAdministrarPrincipal(contratoId, ator))
+        throw new ConflictException('Exclusão de documento principal exige autorização específica');
+      const chave = documento.storageKey;
+      const anterior = { id, categoria: documento.categoria, arquivadoEm: documento.arquivadoEm.toISOString() };
+      await repo.remove(documento);
+      await this.auditoria.registrarNaTransacao(manager, ator, {
+        acao: AcaoAuditoria.DOCUMENTO_EXCLUIDO, entidadeTipo: 'DOCUMENTO', entidadeId: id,
+        dadosAnteriores: anterior, dadosPosteriores: { excluido: true },
+      });
+      return { id, chave };
+    });
+    try { await this.armazenamento.removerPersistido(resultado.chave); }
+    catch { this.logger.error('Documento removido do banco, mas limpeza física requer reconciliação'); }
+    return { id: resultado.id };
+  }
+
   async anexar(contratoId: string, dto: CriarDocumentoDto, arquivo: ArquivoRecebido | undefined, ator: UsuarioAutenticado) {
     if (!arquivo || !Buffer.isBuffer(arquivo.buffer) || arquivo.size !== arquivo.buffer.length) {
       throw new BadRequestException('Arquivo obrigatório ou inválido');
     }
+    if (dto.categoria === CategoriaDocumento.CONTRATO_PRINCIPAL && !await this.podeAdministrarPrincipal(contratoId, ator))
+      throw new ConflictException('Anexação do documento principal exige autorização específica');
     if (dto.categoria === CategoriaDocumento.CONTRATO_PRINCIPAL && arquivo.mimetype !== 'application/pdf') {
       throw new BadRequestException('Documento principal deve ser um arquivo PDF');
     }
     let pendente: Awaited<ReturnType<ArmazenamentoArquivos['salvar']>>;
     try {
       pendente = await this.armazenamento.salvar({
-        nomeOriginal: arquivo.originalname,
+        nomeOriginal: normalizarNomeArquivo(arquivo.originalname),
         mimeDeclarado: arquivo.mimetype,
         conteudo: arquivo.buffer,
       });
@@ -104,7 +213,16 @@ export class DocumentosService implements OnModuleInit {
     let documento: DocumentoContratual;
     try {
       documento = await this.dataSource.transaction(async (manager) => {
+        // Serializar uploads concorrentes pelo contrato. O limite inclui arquivados.
+        const contrato = await manager.getRepository(Contrato).createQueryBuilder('contrato')
+          .where('contrato.id = :contratoId', { contratoId }).setLock('pessimistic_write').getOne();
+        if (!contrato) throw new NotFoundException('Contrato não encontrado');
         const repositorio = manager.getRepository(DocumentoContratual);
+        if (dto.categoria === CategoriaDocumento.CONTRATO_PRINCIPAL &&
+          await repositorio.count({ where: { contratoId, categoria: CategoriaDocumento.CONTRATO_PRINCIPAL, arquivadoEm: IsNull() } }) > 0)
+          throw new ConflictException('Já existe documento principal ativo neste contrato; arquive-o antes de anexar outro');
+        if (await repositorio.count({ where: { contratoId } }) >= 20)
+          throw new ConflictException('Limite de 20 documentos por contrato atingido, incluindo arquivados');
         const novo = repositorio.create({
           contratoId,
           autorId: ator.id,
@@ -139,6 +257,7 @@ export class DocumentosService implements OnModuleInit {
         this.logger.error('Compensação de blob após falha SQL requer reconciliação manual');
         throw new ServiceUnavailableException('Falha documental; armazenamento requer reconciliação');
       }
+      if (erro instanceof ConflictException || erro instanceof NotFoundException) throw erro;
       if (erro instanceof QueryFailedError) {
         const codigo = (erro.driverError as { code?: string }).code;
         if (codigo === '23503' || codigo === '23505') {

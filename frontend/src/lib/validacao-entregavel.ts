@@ -86,7 +86,7 @@ export function validarEntregavel(r: RascunhoEntregavel): { sucesso: true; dados
   if (r.evidenciasEsperadas.length > 10) erros.evidenciasEsperadas = 'Máximo de 10 itens.';
   r.evidenciasEsperadas.forEach((e, indice) => {
     if (!e.tipoEvidencia.trim() || e.tipoEvidencia.length > 100) erros[`evidencias.${indice}.tipoEvidencia`] = 'Informe o tipo da evidência (até 100 caracteres).';
-    if (e.descricao && (!e.descricao.trim() || e.descricao.length > 3000)) erros[`evidencias.${indice}.descricao`] = 'Descrição inválida (até 3000 caracteres).';
+    if (e.descricao && (!e.descricao.trim() || e.descricao.length > (e.id ? 3000 : 130))) erros[`evidencias.${indice}.descricao`] = 'Orientações inválidas (até 130 caracteres).';
   });
   if (Object.keys(erros).length) return { sucesso: false, erros };
   return { sucesso: true, dados: {

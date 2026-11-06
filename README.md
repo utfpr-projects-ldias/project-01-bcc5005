@@ -52,10 +52,6 @@ O último comando solicita e confirma a senha no próprio terminal. Ele é execu
 
 Acesse **http://localhost:3000/login**. A API NestJS fica em `http://localhost:3001`.
 
-## TEC08-01 — Storage privado (base técnica, sem upload nesta sub-issue)
-
-O Compose mantém blobs num volume nomeado `arquivos_contratuais_data`, montado **somente no backend** em `/var/lib/contratos-arquivos`, separado do PostgreSQL. Os limites de 16 MiB por arquivo e 1 GiB total são **provisórios** e não representam decisão do cliente (PQ-11). O adaptador/contrato encontra-se em `backend/src/armazenamento/`. Não existem endpoints nem documentos persistidos no SQL até TEC08-02. Consulte [`backend/docs/TEC08-01-STORAGE-PRIVADO.md`](backend/docs/TEC08-01-STORAGE-PRIVADO.md) para contrato de integração, testes não destrutivos e backup/restore. Nunca execute `docker compose down -v` em bases que queira preservar.
-
 ## Uso diário
 
 **Iniciar:**
@@ -119,3 +115,16 @@ docker compose exec frontend npm test
 ```
 
 **Estado atual:** a autenticação e o bootstrap do Administrador já foram implementados na TEC07-01; a autorização detalhada e o bloqueio dos endpoints públicos de cadastro pertencem às TEC07-02 e TEC07-04. **Não exponha o ambiente de desenvolvimento publicamente como se essas proteções já estivessem concluídas.**
+
+
+## Notificações no frontend (toast)
+
+As mensagens transitórias de sucesso/erro das operações de contrato, etapas,
+entregáveis, documentos e evidências são exibidas em *toasts* React, sem alterar
+a altura dos formulários. O projeto utiliza `ToastNotificacoes` em
+`frontend/src/app/components/toast-notificacoes.tsx`, montado no
+`frontend/src/app/layout.tsx`, com as funções `toastSucesso`, `toastErro` e
+`toastAviso`. Não foi adicionada dependência npm para essa funcionalidade.
+
+Validações de campos e erros que exigem ação continuada podem permanecer
+visíveis no formulário, inclusive para acessibilidade.

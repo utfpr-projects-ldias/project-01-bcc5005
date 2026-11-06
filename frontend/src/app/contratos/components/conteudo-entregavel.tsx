@@ -1,23 +1,203 @@
 'use client';
-import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { dataPlanejada, ROTULOS_PERIODICIDADE, ROTULOS_TIPO, type Entregavel } from '@/lib/entregaveis';
-import { resumoComprovacao } from '@/lib/indicadores-planejamento';
+import { PainelComprovacaoEvidencia } from './painel-comprovacao-evidencia';
+import { listarEvidenciasArquivadas, alterarArquivoEvidencia, criarEvidenciaEsperada, enviarComprovante, consultarEvidencia, reabrirEvidencia, excluirEvidenciaArquivada, CLASSE_STATUS, ROTULO_STATUS, categoriaVisivelEvidencia, type StatusComprovante, aceitarArquivoEvidencia, arquivoCompativelEvidencia } from '@/lib/comprovantes';
+import { ModalEtapa } from './modal-etapa';
+import { ConfirmacaoSimples } from '@/app/components/confirmacao-simples';
+import { HistoricoEntregavel } from './historico-entregavel';
+import { IconeEvidencia } from './icone-evidencia';
+import { nomeArquivoLegivel } from '@/lib/nome-arquivo';
+import { rotuloCodigoPublico } from '@/lib/codigos-publicos';
+import { toastSucesso, toastAviso } from '@/app/components/toast-notificacoes';
 
 type Campo = [nome: string, valor: string | null | undefined];
 function Quadro({ titulo, campos }: { titulo: string; campos: Campo[] }) {
-  return <section className="min-w-0 space-y-3 rounded-2xl border border-brand-green/25 bg-brand-darkgreen/10 p-4 md:p-6">
+  return <section className="min-w-0 space-y-2 rounded-xl border border-brand-green/20 bg-brand-darkgreen/5 p-3 sm:p-4">
     <h2 className="text-lg font-semibold text-brand-neon">{titulo}</h2>
-    <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-      {campos.map(([nome, valor]) => <div key={nome} className="min-w-0"><dt className="text-xs text-foreground/60">{nome}</dt>
-        <dd className="mt-1 whitespace-pre-wrap break-words">{valor?.trim() || 'Não informado'}</dd></div>)}
+    <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm lg:grid-cols-3">
+      {campos.map(([nome, valor]) => <div key={nome} className={`min-w-0 ${nome === 'Critério operacional' ? 'col-span-full' : ''}`}><dt className="text-xs text-foreground/60">{nome}</dt>
+        <dd className="mt-0.5 whitespace-pre-wrap break-words text-sm">{valor?.trim() || 'Não informado'}</dd></div>)}
     </dl>
   </section>;
 }
-export function ConteudoEntregavel({ item, onEditarChecklist }: {
-  item: Entregavel; onEditarChecklist?: () => void;
+export function ConteudoEntregavel({ item, podeEditarEsperada = false, podeCriarEvidencia,
+  podeArquivarEvidencia, podeReativarEvidencia = false, podeReabrirEvidencia = false, podeExcluirEvidenciaArquivada = false, podeAlterarObrigatoriedade = false, podeEnviarComprovantes = true, podeVerHistorico = false, bloqueadoPorPai = false, aoAtualizarEsperada,
+  registrarVoltaEvidencia, registrarVoltaEdicao }: {
+  item: Entregavel; podeEditarEsperada?: boolean;
+  podeCriarEvidencia?: boolean; podeArquivarEvidencia?: boolean; podeReativarEvidencia?: boolean; podeReabrirEvidencia?: boolean; podeExcluirEvidenciaArquivada?: boolean; podeAlterarObrigatoriedade?: boolean;
+  podeEnviarComprovantes?: boolean; podeVerHistorico?: boolean; bloqueadoPorPai?: boolean;
+  aoAtualizarEsperada?: () => void;
+  registrarVoltaEvidencia?: (voltar: (() => void) | null) => void;
+  registrarVoltaEdicao?: (voltar: (() => void) | null) => void;
 }) {
   const [evidenciaId, setEvidenciaId] = useState<string | null>(null);
-  const selecionada = item.evidenciasEsperadas.find(e => e.id === evidenciaId);
+  const [editarEvidenciaAberta, setEditarEvidenciaAberta] = useState(false);
+  const [edicaoAberta, setEdicaoAberta] = useState(false);
+  const voltarEdicaoRef = useRef<(() => void) | null>(null);
+  function registrarEditor(voltar: (() => void) | null) {
+    voltarEdicaoRef.current = voltar; setEdicaoAberta(Boolean(voltar)); registrarVoltaEdicao?.(voltar);
+  }
+  const [versaoEstado, setVersaoEstado] = useState(0);
+  const [ocultasLocais, setOcultasLocais] = useState<string[]>([]);
+  const evidenciasAtivas = item.evidenciasEsperadas.filter(e => !ocultasLocais.includes(e.id));
+  const [historicoExpandido, setHistoricoExpandido] = useState(false);
+  const chaveEvidencias = `${item.contratoId}:${item.id}:${item.evidenciasEsperadas.map(e => e.id).join(',')}:${versaoEstado}`;
+  const [consultaStatus, setConsultaStatus] = useState<{ chave: string; status: Record<string, { status: StatusComprovante; arquivo: string | null; reabertoEm?: string | null }> }>({ chave: '', status: {} });
+  const statusInicialCarregado = item.evidenciasEsperadas.length === 0 ||
+    consultaStatus.chave.startsWith(`${item.contratoId}:${item.id}:`);
+  const estadoEvidencias = statusInicialCarregado ? consultaStatus.status : {}; // sem cartão provisório na aba errada
+  const [focoRetornoEvidencia, setFocoRetornoEvidencia] = useState<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    let ativo = true;
+    // Máximo de dez registros por entregável. Uma consulta sem sucesso não vira
+    // falsamente 'aguardando envio'; o status fica indisponível.
+    const ids = item.evidenciasEsperadas.map(e => e.id);
+    if (!ids.length) return;
+    void Promise.allSettled(ids.map(id => consultarEvidencia(item.contratoId, item.id, id)))
+      .then(resultados => { if (!ativo) return;
+        const mapa: Record<string, { status: StatusComprovante; arquivo: string | null; reabertoEm?: string | null }> = {};
+        resultados.forEach((resultado, indice) => {
+          if (resultado.status === 'fulfilled' && resultado.value.id === ids[indice] &&
+            resultado.value.contratoId === item.contratoId && resultado.value.entregavelId === item.id)
+            mapa[ids[indice]] = { status: resultado.value.status, arquivo: resultado.value.versoes[0]?.nomeOriginal ?? null, reabertoEm: resultado.value.reabertoEm };
+        });
+        setConsultaStatus({ chave: chaveEvidencias, status: mapa });
+      });
+    return () => { ativo = false; };
+  }, [chaveEvidencias, item.contratoId, item.id]);
+  const atualizarEstadoEvidencias = () => setVersaoEstado(numero => numero + 1);
+  const [confirmarReabertura, setConfirmarReabertura] = useState<string | null>(null);
+  const [confirmarArquivamento, setConfirmarArquivamento] = useState<string | null>(null);
+  const [arquivandoItem, setArquivandoItem] = useState(false);
+  async function executarReaberturaEvidencia() {
+    const id = confirmarReabertura;
+    if (!id || arquivandoItem || bloqueadoPorPai || !podeReabrirEvidencia) return;
+    setArquivandoItem(true); setErroArquivo('');
+    try {
+      await reabrirEvidencia(item.contratoId, item.id, id);
+      setConfirmarReabertura(null);
+      toastSucesso('Evidência reaberta para verificação.');
+      atualizarEstadoEvidencias(); aoAtualizarEsperada?.();
+    } catch (erro) { setErroArquivo(erro instanceof Error ? erro.message : 'Não foi possível reabrir a evidência.'); }
+    finally { setArquivandoItem(false); }
+  }
+  async function arquivarEvidenciaDireta() {
+    const id = confirmarArquivamento;
+    if (!id || arquivandoItem) return;
+    setArquivandoItem(true); setErroArquivo('');
+    try {
+      await alterarArquivoEvidencia(item.contratoId, item.id, id, 'arquivar');
+      setConfirmarArquivamento(null);
+      setOcultasLocais(atuais => [...new Set([...atuais, id])]);
+      // A lista local muda imediatamente; o refresh não esconde/recria o modal.
+      if (evidenciaId === id) setEvidenciaId(null);
+      toastAviso('Evidência arquivada.');
+      atualizarEstadoEvidencias(); aoAtualizarEsperada?.();
+      void listarEvidenciasArquivadas(item.contratoId, item.id).then(setArquivadas).catch(() => {});
+    } catch (e) { setErroArquivo(e instanceof Error ? e.message : 'Não foi possível arquivar a evidência.'); }
+    finally { setArquivandoItem(false); }
+  }
+  const [abaChecklist, setAbaChecklist] = useState<'ativas' | 'concluidas' | 'arquivadas'>('ativas');
+  const abrirArquivo = abaChecklist === 'arquivadas';
+  const [arquivadas, setArquivadas] = useState<Array<{ id: string; codigoPublico?: number; tipoEvidencia: string; obrigatoria: boolean; arquivadoEm: string }>>([]);
+  const selecionada = (abrirArquivo ? arquivadas.find(e => e.id === evidenciaId) : undefined) ?? item.evidenciasEsperadas.find(e => e.id === evidenciaId) ?? arquivadas.find(e => e.id === evidenciaId);
+  const [criandoEvidencia, setCriandoEvidencia] = useState(false);
+  const [novoTipo, setNovoTipo] = useState('');
+  const [novaDescricao, setNovaDescricao] = useState('');
+  const [novaObrigatoria, setNovaObrigatoria] = useState(true);
+  const [novoArquivo, setNovoArquivo] = useState<File | null>(null);
+  const [novaEvidenciaCriadaId, setNovaEvidenciaCriadaId] = useState<string | null>(null);
+  const [erroCadastro, setErroCadastro] = useState('');
+  const [salvandoNova, setSalvandoNova] = useState(false);
+  const historicoCadastro = useRef<string | null>(null);
+  const sequenciaCadastro = useRef(0);
+  function fecharCadastro(forcar = false) {
+    if (salvandoNova && !forcar) return;
+    setCriandoEvidencia(false);
+    setNovoArquivo(null); setNovoTipo(''); setNovaDescricao(''); setNovaObrigatoria(true);
+    setNovaEvidenciaCriadaId(null); setErroCadastro('');
+    registrarVoltaEvidencia?.(null);
+    const marcador = historicoCadastro.current;
+    historicoCadastro.current = null;
+    if (marcador && window.history.state?.__cadastroEvidencia === marcador) window.history.back();
+  }
+  function abrirCadastro() {
+    if (criandoEvidencia) { fecharCadastro(); return; }
+    const marcador = `cadastro-evidencia:${item.id}:${++sequenciaCadastro.current}`;
+    const anterior = window.history.state;
+    window.history.pushState({ ...(anterior && typeof anterior === 'object' ? anterior : {}), __cadastroEvidencia: marcador }, '', window.location.href);
+    historicoCadastro.current = marcador;
+    setErroCadastro(''); setNovaEvidenciaCriadaId(null); setCriandoEvidencia(true);
+    registrarVoltaEvidencia?.(fecharCadastro);
+  }
+  useEffect(() => {
+    function aoVoltarCadastro() {
+      const marcador = historicoCadastro.current;
+      if (!marcador || window.history.state?.__cadastroEvidencia === marcador) return;
+      historicoCadastro.current = null;
+      setCriandoEvidencia(false);
+      registrarVoltaEvidencia?.(null);
+    }
+    window.addEventListener('popstate', aoVoltarCadastro);
+    return () => window.removeEventListener('popstate', aoVoltarCadastro);
+  }, [registrarVoltaEvidencia]);
+  async function adicionarEvidencia(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (salvandoNova) return;
+    if (novoArquivo && !arquivoCompativelEvidencia(novoTipo, novoArquivo)) { setErroCadastro('O arquivo não corresponde ao tipo Foto ou Relatório selecionado.'); return; }
+    if (!novaEvidenciaCriadaId && novoTipo.trim().length > 60) { setErroCadastro('O título deve ter no máximo 60 caracteres.'); return; }
+    setErroCadastro(''); setSalvandoNova(true);
+    let id = novaEvidenciaCriadaId;
+    try {
+      if (!id) {
+        const criada = await criarEvidenciaEsperada(item.contratoId, item.id, {
+          tipoEvidencia: novoTipo.trim(), descricao: novaDescricao.trim() || null,
+          obrigatoria: podeAlterarObrigatoriedade ? novaObrigatoria : true,
+        });
+        id = criada.id;
+        setNovaEvidenciaCriadaId(id);
+        // O cadastro já foi confirmado no banco; uma falha no upload não deve duplicá-lo.
+        aoAtualizarEsperada?.();
+      }
+      if (novoArquivo && podeEnviarComprovantes) {
+        await enviarComprovante(item.contratoId, item.id, id, novoArquivo, '');
+      }
+      setSalvandoNova(false); fecharCadastro(true); setNovoTipo(''); setNovaDescricao(''); setNovaObrigatoria(true);
+      setNovoArquivo(null); setNovaEvidenciaCriadaId(null);
+      atualizarEstadoEvidencias(); aoAtualizarEsperada?.();
+    } catch (erro) {
+      setErroCadastro(`${id ? 'O cadastro foi salvo. ' : ''}${erro instanceof Error ? erro.message : 'Não foi possível adicionar a evidência.'} ${id ? 'Se houve falha no arquivo, tente novamente sem cadastrar outro item.' : ''}`);
+    } finally { setSalvandoNova(false); }
+  }
+  const [erroArquivo, setErroArquivo] = useState('');
+  const [ocupadoArquivo, setOcupadoArquivo] = useState(false);
+  const [confirmarReativacao, setConfirmarReativacao] = useState<string | null>(null);
+  const [confirmarExclusao, setConfirmarExclusao] = useState<string | null>(null);
+  async function alternarArquivo() {
+    if (abrirArquivo) { setEvidenciaId(null); setAbaChecklist('ativas'); return; }
+    setErroArquivo('');
+    try { const lista = await listarEvidenciasArquivadas(item.contratoId, item.id); setEvidenciaId(null); setArquivadas(lista); setAbaChecklist('arquivadas'); }
+    catch (e) { setErroArquivo(e instanceof Error ? e.message : 'Não foi possível consultar evidências arquivadas.'); }
+  }
+  async function reativar() {
+    const id = confirmarReativacao;
+    if (!id || ocupadoArquivo || !podeReativarEvidencia || bloqueadoPorPai) return;
+    setOcupadoArquivo(true); setErroArquivo('');
+    try {
+      await alterarArquivoEvidencia(item.contratoId, item.id, id, 'reativar');
+      // O item volta às ativas, mas permanece nesta aba de arquivadas.
+      // Nenhum detalhe é aberto automaticamente após a atualização.
+      setEvidenciaId(null);
+      setConfirmarReativacao(null);
+      setArquivadas(anterior => anterior.filter(e => e.id !== id));
+      setOcultasLocais(atuais => atuais.filter(valor => valor !== id));
+      toastSucesso('Evidência reativada.');
+      atualizarEstadoEvidencias(); aoAtualizarEsperada?.();
+    } catch (e) { setErroArquivo(e instanceof Error ? e.message : 'Falha na reativação.'); }
+    finally { setOcupadoArquivo(false); }
+  }
   // O painel de detalhe tem rolagem própria. Substituir sua árvore por um detalhe
   // pequeno reduz o scrollHeight e faz o navegador voltar o scrollTop para zero.
   // Capturamos a posição ANTES dessa troca e restauramos no commit do React,
@@ -35,25 +215,33 @@ export function ConteudoEntregavel({ item, onEditarChecklist }: {
       if (!marcador || window.history.state?.__modalEvidencia === marcador) return;
       historicoEvidencia.current = null;
       restaurarAoVoltar.current = true;
+      registrarVoltaEvidencia?.(null);
+      setEditarEvidenciaAberta(false);
       setEvidenciaId(null);
     };
     window.addEventListener('popstate', voltarHistorico);
     return () => window.removeEventListener('popstate', voltarHistorico);
-  }, []);
-  function abrirEvidencia(evento: MouseEvent<HTMLButtonElement>, id: string) {
+  }, [registrarVoltaEvidencia]);
+  function abrirEvidencia(evento: MouseEvent<HTMLButtonElement>, id: string, editar = false) {
+    if (evidenciaId) return; // Evita duplo clique duplicar o histórico e gerar duas camadas.
     const area = evento.currentTarget.closest<HTMLElement>('.overflow-y-auto');
     origem.current = { area, topo: area?.scrollTop ?? 0, esquerda: area?.scrollLeft ?? 0,
       paginaY: window.scrollY, paginaX: window.scrollX, botao: evento.currentTarget, evidenciaId: id };
     restaurarAoVoltar.current = false;
+    setFocoRetornoEvidencia(evento.currentTarget);
+    setEditarEvidenciaAberta(editar);
     const marcador = `evidencia:${item.id}:${id}:${++sequenciaEvidencia.current}`;
     const estado = window.history.state;
     window.history.pushState({ ...(estado && typeof estado === 'object' ? estado : {}), __modalEvidencia: marcador }, '', window.location.href);
     historicoEvidencia.current = marcador;
+    registrarVoltaEvidencia?.(voltarAoEntregavel);
     setEvidenciaId(id);
   }
   function voltarAoEntregavel() {
     restaurarAoVoltar.current = true;
+    registrarVoltaEvidencia?.(null);
     setEvidenciaId(null);
+    setEditarEvidenciaAberta(false);
     const marcador = historicoEvidencia.current;
     historicoEvidencia.current = null;
     if (marcador && window.history.state?.__modalEvidencia === marcador) window.history.back();
@@ -71,8 +259,8 @@ export function ConteudoEntregavel({ item, onEditarChecklist }: {
       // Compatibilidade com a página completa (sem painel modal externo).
       window.scrollTo({ left: anterior.paginaX, top: anterior.paginaY, behavior: 'instant' });
     }
-    // O botão original foi desmontado enquanto o detalhe curto aparecia.
-    // Na volta o React cria um NOVO elemento: localizar pelo identificador estável,
+    // O botão original geralmente permanece montado sob a camada aninhada.
+    // Localizamos pelo identificador estável para restaurar o foco,
     // dentro do mesmo painel, antes de restaurar o foco sem deslocar a rolagem.
     const raiz = anterior.area?.isConnected ? anterior.area : document;
     const botaoAtual = Array.from(raiz.querySelectorAll<HTMLButtonElement>('[data-evidencia-esperada-id]'))
@@ -93,71 +281,210 @@ export function ConteudoEntregavel({ item, onEditarChecklist }: {
     ] as Campo[] : []),
     ['Peso operacional', item.peso === null ? null : `${item.peso}%`],
     ['Observações', item.observacoes],
+    ...(item.criterioConclusao?.trim() ? [['Critério operacional', item.criterioConclusao]] as Campo[] : []),
   ];
-  if (selecionada) return <section aria-label="Detalhe da evidência esperada" className="space-y-4"
-    onKeyDown={(evento) => { if (evento.key === 'Escape') { evento.preventDefault(); evento.stopPropagation(); voltarAoEntregavel(); } }}>
-    <button type="button" onClick={voltarAoEntregavel}
-      className="rounded-lg border border-brand-green/45 px-3 py-2 text-sm hover:bg-brand-green/15 focus-visible:outline-2 focus-visible:outline-brand-neon">
-      ← Voltar ao entregável
-    </button>
-    <h2 className="break-words text-xl font-semibold text-brand-neon">{selecionada.tipoEvidencia}</h2>
-    <p className="text-sm text-foreground/70">{selecionada.obrigatoria ? 'Evidência obrigatória' : 'Evidência opcional'} no planejamento deste entregável.</p>
-    {selecionada.descricao && <p className="whitespace-pre-wrap break-words text-sm">{selecionada.descricao}</p>}
-    <div className="rounded-lg border border-amber-500/35 p-3 text-sm" role="note">
-      Este item é uma exigência planejada. O envio de comprovantes e a confirmação de entrega ainda não estão disponíveis neste módulo. Nenhum arquivo foi marcado como recebido.
-    </div>
-  </section>;
-  return <div className="min-w-0 space-y-5">
-    <header className="min-w-0 space-y-2">
-      <p className="text-xs uppercase tracking-wide text-foreground/65">Entregável planejado · {ROTULOS_TIPO[item.tipo]}</p>
-      <h1 className="break-words text-2xl font-bold text-brand-neon">{item.nome}</h1>
-      {item.descricao && <p className="whitespace-pre-wrap break-words text-sm text-foreground/75">{item.descricao}</p>}
-    </header>
+  return <><div className="min-w-0 space-y-3">
+    {item.descricao && <p className="whitespace-pre-wrap break-words text-xs text-foreground/75">{item.descricao}</p>}
     <Quadro titulo="Identificação e planejamento" campos={campos} />
-    <section className="space-y-2 rounded-2xl border border-brand-green/25 bg-brand-darkgreen/10 p-4 md:p-6">
-      <h2 className="text-lg font-semibold text-brand-neon">Critério de conclusão</h2>
-      <p className="whitespace-pre-wrap break-words text-sm">{item.criterioConclusao?.trim() || 'Critério não informado no planejamento.'}</p>
-      <p className="text-xs text-foreground/65">O acompanhamento da execução ainda não está disponível. Nenhum progresso é calculado automaticamente nesta tela.</p>
-    </section>
-    <section className="space-y-3 rounded-2xl border border-brand-green/25 bg-brand-darkgreen/10 p-4 md:p-6">
+    <section className="min-h-[min(34dvh,300px)] space-y-3 rounded-xl border border-brand-green/20 bg-brand-darkgreen/5 p-3 sm:p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold text-brand-neon">Evidências esperadas</h2>
-        {onEditarChecklist && <button type="button" onClick={onEditarChecklist}
-          className="rounded-lg border border-brand-green/40 px-3 py-2 text-xs font-semibold hover:bg-brand-green/10 focus-visible:outline-2 focus-visible:outline-brand-neon">
-          Editar checklist
+        <div role="tablist" aria-label="Consultar evidências" className="inline-flex items-center gap-1 rounded-xl border border-brand-green/20 p-1">
+          <button type="button" role="tab" aria-selected={abaChecklist === 'ativas'} onClick={() => setAbaChecklist('ativas')}
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${abaChecklist === 'ativas' ? 'bg-brand-green/20 text-brand-neon' : 'text-foreground/65 hover:text-foreground'}`}>Evidências</button>
+          <button type="button" role="tab" aria-selected={abaChecklist === 'concluidas'}
+            aria-label="Evidências concluídas" onClick={() => setAbaChecklist('concluidas')}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${abaChecklist === 'concluidas' ? 'bg-violet-500/20 text-violet-200' : 'text-foreground/65 hover:bg-violet-500/10'}`}>
+            ◉ Concluídas
+          </button>
+          {(podeArquivarEvidencia ?? podeEditarEsperada) && <button type="button" role="tab" aria-selected={abrirArquivo}
+            aria-label="Evidências arquivadas" title="Evidências arquivadas" disabled={criandoEvidencia} onClick={() => void alternarArquivo()}
+            className={`inline-flex h-8 w-9 items-center justify-center rounded-lg transition-colors ${abrirArquivo ? 'bg-amber-500/20 text-amber-200' : 'text-amber-300/80 hover:bg-amber-500/10'}`}>
+            <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v12h14V8M9 13h6"/></svg>
+          </button>}
+        </div>
+        {abaChecklist === 'ativas' && (podeCriarEvidencia ?? podeEditarEsperada) && <button type="button" aria-expanded={criandoEvidencia} disabled={item.evidenciasEsperadas.length >= 10 && !criandoEvidencia}
+          onClick={abrirCadastro}
+          className="rounded-lg bg-brand-green px-3 py-2 text-xs font-semibold text-on-brand-green hover:brightness-110">
+          {criandoEvidencia ? 'Cancelar cadastro' : item.evidenciasEsperadas.length >= 10 ? 'Limite de evidências' : 'Nova evidência'}
         </button>}
       </div>
-      <p className="text-sm text-foreground/70">{item.evidenciasEsperadas.length} prevista(s) · {item.evidenciasEsperadas.filter(e => e.obrigatoria).length} obrigatória(s). O recebimento ainda não é acompanhado.</p>
-      {item.evidenciasEsperadas.length === 0 ? <p className="text-sm">Nenhuma evidência esperada configurada.</p> :
+      {!abrirArquivo && <>{(() => {
+        const previstas = evidenciasAtivas;
+        const verificadas = previstas.filter(e => estadoEvidencias[e.id]?.status === 'VERIFICADA').length;
+        return <><p className="text-xs text-foreground/65">{statusInicialCarregado ? verificadas : '…'}/{previstas.length} evidências esperadas</p>
+          <div className="flex h-1.5 max-w-64 gap-0.5 overflow-hidden rounded-full" role="img"
+            aria-label={statusInicialCarregado ? `${verificadas} de ${previstas.length} evidências previstas verificadas` : 'Consultando comprovação das evidências'}>
+            {Array.from({ length: previstas.length }, (_, index) => <span key={index}
+              className={`min-w-0 flex-1 rounded-sm ${index < verificadas ? 'bg-violet-500' : 'bg-violet-500/20'}`} />)}
+          </div></>;
+      })()}
+      {criandoEvidencia && createPortal(<ModalEtapa titulo="Nova evidência esperada" contexto="Checklist documental" ocupado={salvandoNova}
+        camada="evidencia" compacto textoFechar="Fechar ×" rotuloFechar="Fechar cadastro de evidência" onFechar={() => fecharCadastro()}>
+        <form aria-label="Cadastrar evidência esperada" onSubmit={e => void adicionarEvidencia(e)}
+        className="space-y-3 p-1 text-sm">
+
+        <div className="space-y-1">
+          <label htmlFor={`tipo-novo-${item.id}`} className="block">Tipo de evidência</label>
+          <select id={`tipo-novo-${item.id}`} required value={novoTipo} onChange={e => { setNovoTipo(e.target.value); setNovoArquivo(null); }}
+            className="block w-full rounded-lg border border-brand-green/40 bg-background p-2 text-foreground focus-visible:outline-2 focus-visible:outline-brand-neon">
+            <option value="">Selecione o tipo</option>
+            <option value="Foto">Foto</option>
+            <option value="Relatório">Relatório</option>
+          </select>
+        </div>
+        <label className="block space-y-1">Orientações (opcional)
+          <textarea value={novaDescricao} maxLength={130} onChange={e => setNovaDescricao(e.target.value)}
+            className="block min-h-20 w-full rounded-lg border border-brand-green/40 bg-background p-2" /></label>
+        {podeEnviarComprovantes && <div className="space-y-2">
+          <label htmlFor={`arquivo-inicial-${item.id}`} className="block font-medium">Comprovante inicial (opcional)</label>
+          <input id={`arquivo-inicial-${item.id}`} type="file" accept={aceitarArquivoEvidencia(novoTipo)}
+            className="sr-only" onChange={evento => setNovoArquivo(evento.target.files?.[0] ?? null)} />
+          <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-lg border border-brand-green/25 p-2">
+            <label htmlFor={`arquivo-inicial-${item.id}`} className="cursor-pointer rounded-lg border border-brand-green/40 px-3 py-2 text-sm font-medium hover:bg-brand-green/10">Selecionar arquivo</label>
+            <span className="min-w-0 flex-1 break-all text-xs text-foreground/70" aria-live="polite">{novoArquivo?.name ?? 'Nenhum arquivo selecionado'}</span>
+          </div>
+        </div>}
+        {podeAlterarObrigatoriedade ? <label className="flex items-center gap-2"><input type="checkbox" checked={novaObrigatoria}
+          onChange={e => setNovaObrigatoria(e.target.checked)} /> Obrigatória</label> :
+          <p className="text-xs text-foreground/65">Obrigatória por padrão. Somente usuários autorizados podem alterar essa condição.</p>}
+        {erroCadastro && <p role="alert" className="text-error-text">{erroCadastro}</p>}
+        <button type="submit" disabled={salvandoNova || (!novoTipo.trim() && !novaEvidenciaCriadaId)}
+          className="rounded-lg bg-brand-green px-4 py-2 font-semibold text-on-brand-green disabled:opacity-50">
+          {salvandoNova ? 'Salvando...' : novaEvidenciaCriadaId ? 'Reenviar comprovante' : novoArquivo ? 'Cadastrar e anexar' : 'Cadastrar evidência'}</button>
+        </form>
+      </ModalEtapa>, document.body)}
+      {!statusInicialCarregado && evidenciasAtivas.length > 0 ? <p role="status" className="min-h-14 text-sm text-foreground/60">Consultando evidências...</p> : evidenciasAtivas.length === 0 || (abaChecklist === 'concluidas' && !evidenciasAtivas.some(e => estadoEvidencias[e.id]?.status === 'VERIFICADA')) ||
+        (abaChecklist === 'ativas' && evidenciasAtivas.every(e => estadoEvidencias[e.id]?.status === 'VERIFICADA')) ?
+          <p className="text-sm text-foreground/65">{abaChecklist === 'concluidas' ? 'Nenhuma evidência verificada.' : 'Nenhuma evidência pendente.'}</p> :
         <div className="space-y-4">{([true, false] as const).map(obrigatoria => {
-          const grupo = item.evidenciasEsperadas.filter(e => e.obrigatoria === obrigatoria);
+          const grupo = evidenciasAtivas.filter(e => e.obrigatoria === obrigatoria &&
+            (abaChecklist === 'concluidas' ? estadoEvidencias[e.id]?.status === 'VERIFICADA' : estadoEvidencias[e.id]?.status !== 'VERIFICADA'));
           if (!grupo.length) return null;
           return <div key={String(obrigatoria)} className="space-y-2">
-            <h3 className={`text-sm font-semibold ${obrigatoria ? 'text-amber-300' : 'text-foreground/70'}`}>
+            <h3 className="text-sm font-semibold text-foreground">
               {obrigatoria ? `Obrigatórias (${grupo.length})` : `Opcionais (${grupo.length})`}
             </h3>
             <ul aria-label={obrigatoria ? 'Evidências obrigatórias' : 'Evidências opcionais'} className="space-y-2">
-              {grupo.map(e => <li key={e.id} className={`flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-lg border p-3 ${obrigatoria ? 'border-amber-500/40' : 'border-brand-green/20'}`}>
-                <div className="min-w-0"><p className="break-words font-medium text-brand-neon">{e.tipoEvidencia}</p>
-                  <span className="text-xs text-foreground/60">{obrigatoria ? 'Obrigatória' : 'Opcional'}</span></div>
-                <button type="button" onClick={(evento) => abrirEvidencia(evento, e.id)}
-                  data-evidencia-esperada-id={e.id}
+              {grupo.map(e => <li key={e.id} className={`group relative min-w-0 rounded-xl border transition-[opacity,border-color,background-color] duration-200 ${estadoEvidencias[e.id]?.status === 'VERIFICADA' ? 'border-violet-500/60 bg-violet-500/[0.06] opacity-90 hover:border-violet-400 hover:bg-violet-500/[0.12] hover:opacity-100 focus-within:border-violet-400 focus-within:opacity-100' : 'border-brand-green/25 bg-background/65 hover:bg-brand-green/5 hover:border-brand-green/50 focus-within:border-brand-neon'}`}>
+                <button type="button" data-evidencia-esperada-id={e.id} onClick={evento => abrirEvidencia(evento, e.id)}
                   aria-label={`Ver detalhes da evidência esperada ${e.tipoEvidencia}`}
-                  className="shrink-0 rounded-lg border border-brand-green/35 px-3 py-1.5 text-xs font-semibold hover:bg-brand-green/10 focus-visible:outline-2 focus-visible:outline-brand-neon">
-                  Ver detalhes
-                </button>
+                  className={`absolute inset-0 z-[1] rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 ${estadoEvidencias[e.id]?.status === 'VERIFICADA' ? 'focus-visible:outline-violet-400' : 'focus-visible:outline-brand-neon'}`} />
+                <div className="pointer-events-none relative flex min-w-0 flex-wrap items-center gap-3 px-3 py-2.5 pb-14 pr-3 sm:pb-2.5 sm:pr-24">
+                  {estadoEvidencias[e.id]?.status === 'VERIFICADA' ? <span aria-label="Evidência com comprovação documental verificada" title="Verificada"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-violet-400/65 bg-violet-500/20 text-violet-200">
+                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="h-5 w-5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m5 12 4 4L19 6" />
+                    </svg>
+                  </span> : <IconeEvidencia nome={estadoEvidencias[e.id]?.arquivo} tipo={e.tipoEvidencia} />}
+                  <div className="min-w-0 flex-1 text-left">
+                    <span className={`block break-words text-sm font-semibold underline underline-offset-4 ${estadoEvidencias[e.id]?.status === 'VERIFICADA'
+                      ? 'text-white decoration-violet-400/55 group-hover:decoration-violet-300'
+                      : 'text-brand-neon decoration-brand-green/35 group-hover:decoration-brand-neon'}`}>
+                      {estadoEvidencias[e.id]?.arquivo ? nomeArquivoLegivel(estadoEvidencias[e.id].arquivo) : e.tipoEvidencia}
+                    </span>
+                    {(estadoEvidencias[e.id]?.arquivo || e.descricao) && <span className="mt-0.5 block truncate text-xs text-foreground/60">
+                      {estadoEvidencias[e.id]?.arquivo ? (categoriaVisivelEvidencia(e.tipoEvidencia, estadoEvidencias[e.id].arquivo) ?? e.tipoEvidencia) : e.descricao}
+                    </span>}
+                  </div>
+                  <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 pl-11 sm:w-auto sm:pl-0">
+                    <span className={`rounded-full border px-2 py-1 text-[11px] ${estadoEvidencias[e.id]?.status === 'VERIFICADA' ? 'border-violet-400/45 bg-violet-500/15 text-violet-100' : estadoEvidencias[e.id] ? CLASSE_STATUS[estadoEvidencias[e.id].status] : 'border-foreground/20 text-foreground/60'}`}
+                      aria-label={`Status da evidência ${e.tipoEvidencia}`}>
+                      {estadoEvidencias[e.id] ? ROTULO_STATUS[estadoEvidencias[e.id].status] : 'Status indisponível'}
+                    </span>
+                    {estadoEvidencias[e.id]?.reabertoEm && estadoEvidencias[e.id]?.status !== 'VERIFICADA' &&
+                      <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[11px] text-emerald-200">Reaberta</span>}
+
+                  </div>
+                </div>
+                {(podeArquivarEvidencia || podeReabrirEvidencia || (podeEditarEsperada && !bloqueadoPorPai)) && <div className="pointer-events-auto absolute bottom-2 right-2 top-auto z-[2] flex justify-end gap-1.5 rounded-lg p-1 sm:bottom-auto sm:top-2 sm:bg-background/85">
+                  {podeReabrirEvidencia && estadoEvidencias[e.id]?.status === 'VERIFICADA' && !bloqueadoPorPai && <button type="button" title={`Reabrir evidência ${e.tipoEvidencia}`} aria-label={`Reabrir evidência ${e.tipoEvidencia}`} disabled={arquivandoItem} onClick={() => setConfirmarReabertura(e.id)} className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/20"><span aria-hidden="true" className="text-base">⟳</span> Reabrir</button>}
+                  {podeArquivarEvidencia && estadoEvidencias[e.id]?.status !== 'VERIFICADA' && <button type="button" title={`Arquivar evidência ${e.tipoEvidencia}`} aria-label={`Arquivar evidência ${e.tipoEvidencia}`}
+                    disabled={arquivandoItem || ocupadoArquivo || bloqueadoPorPai} onClick={() => setConfirmarArquivamento(e.id)}
+                    className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border disabled:cursor-not-allowed ${bloqueadoPorPai ? 'border-slate-500/35 bg-slate-500/10 text-slate-500' : 'border-amber-500/40 text-amber-200 hover:bg-amber-500/15'} disabled:opacity-70`}>
+                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v12h14V8M9 13h6"/></svg>
+                  </button>}
+                  {podeEditarEsperada && !bloqueadoPorPai && estadoEvidencias[e.id]?.status !== 'VERIFICADA' && <button type="button" title={`Editar evidência ${e.tipoEvidencia}`} aria-label={`Editar evidência ${e.tipoEvidencia}`}
+                    onClick={evento => abrirEvidencia(evento, e.id, true)}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-brand-green/40 text-brand-neon hover:bg-brand-green/15">
+                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><path d="m15 5 4 4M4 20l4.5-1 11-11a2 2 0 0 0-3-3l-11 11L4 20Z"/></svg>
+                  </button>}
+                </div>}
               </li>)}</ul>
           </div>;
-        })}</div>}
+        })}</div>}</>}
+      {erroArquivo && <p role="alert" className="text-sm text-error-text">{erroArquivo}</p>}
+      {abrirArquivo && <div role="tabpanel" aria-label="Evidências arquivadas" className="min-h-36 space-y-2">
+        {arquivadas.length === 0 ? <p className="text-sm text-foreground/70">Nenhuma evidência arquivada.</p> :
+          <ul className="space-y-2">{arquivadas.map(e => <li key={e.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/50 bg-[#261d0d] p-3 text-sm text-white">
+            <button type="button" data-evidencia-esperada-id={e.id} onClick={ev => abrirEvidencia(ev, e.id)} className="min-w-0 flex-1 text-left focus-visible:outline-2 focus-visible:outline-amber-300 hover:underline">
+              <span className="block font-mono text-xs text-white/60">{rotuloCodigoPublico(e.codigoPublico)} · {e.obrigatoria ? 'Obrigatória' : 'Opcional'}</span>
+              {e.tipoEvidencia}
+            </button>
+            <div className="flex flex-wrap gap-2">
+              {podeReativarEvidencia && <button type="button" disabled={ocupadoArquivo || bloqueadoPorPai} onClick={() => setConfirmarReativacao(e.id)} className="rounded-lg border border-amber-400/50 px-3 py-1.5 text-white hover:bg-amber-500/15 disabled:opacity-50">Reativar</button>}
+              {podeExcluirEvidenciaArquivada && !bloqueadoPorPai && <button type="button" aria-label={`Excluir evidência arquivada ${e.tipoEvidencia}`} disabled={ocupadoArquivo} onClick={() => setConfirmarExclusao(e.id)} className="inline-flex items-center gap-1.5 rounded-lg border border-red-400/60 bg-red-600/10 px-3 py-1.5 text-red-100 hover:bg-red-600/20 disabled:opacity-50"><svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 10v7M14 10v7" /></svg>Excluir</button>}
+            </div>
+          </li>)}</ul>}
+      </div>}
     </section>
-    <section aria-label="Situação da comprovação" className="space-y-2 rounded-2xl border border-brand-green/25 p-4 md:p-6">
-      <h2 className="text-base font-semibold text-brand-neon">Situação da comprovação</h2>
-      <p className="text-sm">{resumoComprovacao(item)}</p>
-      <p className="text-xs text-foreground/65">Arquivos comprovantes recebidos: quantidade indisponível. Não confundir o checklist esperado com documentos enviados.</p>
+    {podeVerHistorico && <details onToggle={evento => setHistoricoExpandido(evento.currentTarget.open)} className="rounded-xl border border-brand-green/20 px-3 py-2">
+      <summary className="cursor-pointer text-sm font-semibold text-brand-neon">Rastreabilidade do entregável</summary>
+      {historicoExpandido && <HistoricoEntregavel contratoId={item.contratoId} entregavelId={item.id} versao={versaoEstado} />}
+    </details>}
+  </div>
+  {selecionada && createPortal(<ModalEtapa titulo={selecionada.tipoEvidencia} codigoPublico={selecionada.codigoPublico} contexto={`Evidência esperada · ${selecionada.obrigatoria ? 'Obrigatória' : 'Opcional'}`}
+    camada="evidencia" concluido={estadoEvidencias[selecionada.id]?.status === 'VERIFICADA'} ocupado={false} focoRetorno={focoRetornoEvidencia}
+    textoFechar="Fechar ×" somenteIconeFechar bloqueadoPorSubmodal={edicaoAberta}
+    rotuloFechar="Fechar evidência"
+    onFechar={() => edicaoAberta ? voltarEdicaoRef.current?.() : voltarAoEntregavel()}>
+    <section aria-label="Detalhe da evidência esperada" className="min-w-0 space-y-4">
+      <PainelComprovacaoEvidencia contratoId={item.contratoId} entregavelId={item.id}
+        esperadaId={selecionada.id} podeEditar={podeEditarEsperada && editarEvidenciaAberta && !selecionada.arquivadoEm}
+        podeArquivar={!bloqueadoPorPai && (podeArquivarEvidencia ?? podeEditarEsperada) && !selecionada.arquivadoEm} ocultarArquivamento
+        podeAlterarObrigatoriedade={podeAlterarObrigatoriedade && editarEvidenciaAberta}
+        podeEnviar={podeEnviarComprovantes && editarEvidenciaAberta && !selecionada.arquivadoEm}
+        somenteLeitura={!editarEvidenciaAberta}
+        registrarVoltaEdicao={registrarEditor} cancelamentoNoCabecalho
+        onComprovanteAlterado={() => { atualizarEstadoEvidencias(); aoAtualizarEsperada?.(); }}
+        onArquivada={() => { voltarAoEntregavel(); atualizarEstadoEvidencias(); aoAtualizarEsperada?.(); }}
+        onPlanejamentoAlterado={() => { atualizarEstadoEvidencias(); aoAtualizarEsperada?.(); }} />
     </section>
-    <section className="space-y-2 rounded-2xl border border-dashed border-brand-green/25 p-4 md:p-6">
-      <h2 className="text-base font-semibold">Próximas integrações</h2>
-      <p className="text-sm text-foreground/70">O registro de ocorrências, atividades e evidências ainda não está disponível nesta tela.</p>
-    </section>
-  </div>;
+  </ModalEtapa>, document.body)}
+  {confirmarExclusao && createPortal(<div className="relative z-[160]" onKeyDown={e => e.stopPropagation()}>
+    <ConfirmacaoSimples titulo="Excluir evidência arquivada?" perigoso ocupado={ocupadoArquivo}
+      descricao="Excluir definitivamente esta evidência de teste, todos os comprovantes e todos os arquivos enviados? Não é possível desfazer."
+      confirmar="Excluir definitivamente" onCancelar={() => setConfirmarExclusao(null)} onConfirmar={() => void (async () => {
+        const id = confirmarExclusao;
+        if (!id || ocupadoArquivo || !podeExcluirEvidenciaArquivada) return;
+        setOcupadoArquivo(true); setErroArquivo('');
+        try {
+          await excluirEvidenciaArquivada(item.contratoId, item.id, id);
+          setArquivadas(lista => lista.filter(e => e.id !== id));
+          if (evidenciaId === id) setEvidenciaId(null);
+          setConfirmarExclusao(null);
+          toastSucesso('Evidência excluída com sucesso.');
+          atualizarEstadoEvidencias(); aoAtualizarEsperada?.();
+        } catch (e) { setErroArquivo(e instanceof Error ? e.message : 'Falha ao excluir evidência.'); setConfirmarExclusao(null); }
+        finally { setOcupadoArquivo(false); }
+      })()} />
+  </div>, document.body)}
+  {confirmarReativacao && createPortal(<div className="relative z-[160]">
+    <ConfirmacaoSimples titulo="Desarquivar evidência?"
+      descricao="A evidência voltará ao checklist ativo deste entregável. A alteração será registrada na rastreabilidade e nenhum detalhe será aberto automaticamente."
+      confirmar="Confirmar desarquivamento" ocupado={ocupadoArquivo}
+      onCancelar={() => setConfirmarReativacao(null)} onConfirmar={() => void reativar()} />
+  </div>, document.body)}
+  {confirmarReabertura && createPortal(<div className="relative z-[160]">
+    <ConfirmacaoSimples titulo="Reabrir evidência verificada?"
+      descricao="A evidência voltará a Pendente de verificação. O comprovante existente e o histórico serão preservados."
+      confirmar="Reabrir evidência" ocupado={arquivandoItem}
+      onCancelar={() => setConfirmarReabertura(null)} onConfirmar={() => void executarReaberturaEvidencia()} />
+  </div>, document.body)}
+  {confirmarArquivamento && createPortal(<div className="relative z-[160]">
+    <ConfirmacaoSimples titulo="Arquivar evidência?"
+      descricao={`Esta evidência sairá do planejamento ativo, mas os comprovantes e o histórico continuarão preservados. Deseja arquivar “${item.evidenciasEsperadas.find(e => e.id === confirmarArquivamento)?.tipoEvidencia ?? 'esta evidência'}”?`}
+      confirmar="Confirmar arquivamento" perigoso ocupado={arquivandoItem}
+      onCancelar={() => setConfirmarArquivamento(null)} onConfirmar={() => void arquivarEvidenciaDireta()} />
+  </div>, document.body)}
+  </>;
 }

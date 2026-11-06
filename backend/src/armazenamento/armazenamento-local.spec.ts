@@ -93,6 +93,22 @@ describe('TEC08-01: storage real no filesystem privado', () => {
     if (falha?.status === 'rejected') expect(falha.reason).toBeInstanceOf(LimiteArmazenamentoError);
   });
 
+  it('aceita assinatura de documento Word legado e DOCX, mas recusa ZIP renomeado', () => {
+    const limites = { maxArquivoBytes: 1024, maxTotalBytes: 1024 };
+    const ole = Buffer.concat([Buffer.from('d0cf11e0a1b11ae1', 'hex'), Buffer.alloc(504)]);
+    const doc = validarArquivo('relatorio.doc', 'application/msword', ole, limites);
+    expect(doc.mimeEfetivo).toBe('application/msword');
+    const docxSimulado = Buffer.concat([Buffer.from('504b0304', 'hex'), Buffer.alloc(32),
+      Buffer.from('[Content_Types].xml'), Buffer.from('word/document.xml')]);
+    expect(validarArquivo('relatorio.docx',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      docxSimulado, limites).mimeEfetivo)
+      .toBe('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    expect(() => validarArquivo('falso.docx',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      Buffer.from('PK\x03\x04arquivo.zip qualquer'), limites)).toThrow(ArquivoInvalidoError);
+  });
+
   it('não lê arquivo inexistente e não usa diretório público/relativo', async () => {
     await expect(storage.ler('a'.repeat(32))).rejects.toBeInstanceOf(ArmazenamentoIndisponivelError);
     expect(() => new ArmazenamentoLocal('frontend/public')).toThrow();

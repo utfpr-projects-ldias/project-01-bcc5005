@@ -28,6 +28,14 @@ test("B3 mantém navegação de Contratos e administração restrita ao ADMIN", 
   const entrada = await screen.findByRole("link", { name: "Funcionários" });
   expect(entrada).toHaveAttribute("href", "/admin/usuarios");
   expect(entrada).toHaveAttribute("aria-current", "page");
-  expect(entrada).toHaveClass("bg-brand-green", "text-on-brand-green");
+  expect(entrada).toHaveClass("bg-brand-green/20", "text-brand-neon");
   expect(screen.getByRole("link", { name: "Minha conta" })).toHaveAttribute("href", "/usuario");
+});
+
+
+test('menu lateral mantém nomes acessíveis quando visualmente compacto', async () => {
+  perfil.mockResolvedValue({ id: 'u', nome: 'Administrador', email: 'admin@example.com', perfil: 'ADMINISTRADOR', ativo: true });
+  renderComConsultas(<MenuLateral />);
+  expect(screen.getByRole('complementary', { name: 'Navegação principal' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Contratos' })).toHaveAttribute('title', 'Contratos');
 });

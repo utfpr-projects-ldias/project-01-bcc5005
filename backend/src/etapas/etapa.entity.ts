@@ -55,6 +55,19 @@ export class Etapa {
   })
   contrato!: Contrato;
 
+  @Column({ name: 'codigo_publico', type: 'integer', unique: true })
+  codigoPublico!: number;
+
+  /** Reabertura documental explícita, independente do status operacional. */
+  @Column({ name: 'reaberto_em', type: 'timestamptz', nullable: true })
+  reabertoEm!: Date | null;
+
+  @Column({ name: 'arquivado_em', type: 'timestamptz', nullable: true })
+  arquivadoEm!: Date | null;
+
+  @Column({ name: 'arquivado_por', type: 'uuid', nullable: true })
+  arquivadoPor!: string | null;
+
   @Column({ type: 'varchar', length: 50, nullable: true })
   codigo!: string | null;
 

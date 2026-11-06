@@ -5,8 +5,8 @@ import type { DadosContrato } from './contratos';
  * não limites estipulados pelo PRD; podem ser refinados com o cliente. */
 export const LIMITES_CONTRATO = {
   numeroContrato: 100, processoAdministrativo: 100, orgaoContratante: 255,
-  unidadeResponsavel: 255, objeto: 500, descricao: 3000,
-  fiscalGestor: 255, observacoes: 2000,
+  unidadeResponsavel: 255, objeto: 500, descricao: 1500,
+  fiscalGestor: 255, observacoes: 1000,
 } as const;
 
 function dataCivilValida(valor: string): boolean {

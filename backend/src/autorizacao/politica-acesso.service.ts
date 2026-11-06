@@ -7,6 +7,7 @@ import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
 import { PermissaoContrato } from './permissao-contrato.entity.js';
 import type { Politica } from './politica.decorator.js';
 import { politicaOperacional, uuidValido } from './politicas-operacionais.js';
+import { ACAO_PERMISSAO, permissoesEfetivas } from './permissoes-granulares.js';
 import type { UsuarioAutenticado } from './usuario-autenticado.js';
 
 @Injectable()
@@ -17,13 +18,23 @@ export class PoliticaAcessoService {
     @InjectRepository(Contrato) private readonly contratos: Repository<Contrato>,
   ) {}
 
+  /** A indicação como responsável concede SOMENTE leitura, enquanto durar a atribuição.
+   * Nunca cria um vínculo de escrita persistente e não contorna ACL granular. */
+  private async responsavelPodeLer(contratoId: string, usuarioId: string): Promise<boolean> {
+    const contrato = await this.contratos.findOne({
+      where: { id: contratoId, responsavelInternoId: usuarioId },
+      select: { id: true },
+    });
+    return Boolean(contrato);
+  }
+
   private async disponivelParaOperacao(contratoId: string): Promise<boolean> {
     // TypeORM mantém manager em Repository reais. Em produção a consulta é sempre
     // feita ao banco, não a parâmetros da requisição ou filtros de frontend.
     const encontrado = await this.contratos.findOne({
-      where: { id: contratoId }, select: { id: true, arquivadoEm: true },
+      where: { id: contratoId }, select: { id: true, arquivadoEm: true, status: true },
     });
-    return Boolean(encontrado && !encontrado.arquivadoEm);
+    return Boolean(encontrado && !encontrado.arquivadoEm && encontrado.status !== 'CONCLUIDO');
   }
 
   async permitido(usuario: UsuarioAutenticado, politica: Politica, contratoId?: string): Promise<boolean> {
@@ -38,11 +49,15 @@ export class PoliticaAcessoService {
       if (operacao.classe !== 'leitura' && !await this.disponivelParaOperacao(contratoId)) return false;
       if (admin) return true;
       if (usuario.perfil !== PerfilUsuario.GESTOR && usuario.perfil !== PerfilUsuario.COLABORADOR) return false;
-      // PQ-04 pendente: Colaborador jamais recebe edição de planejamento implicitamente.
-      if (operacao.classe === 'planejamento' && usuario.perfil !== PerfilUsuario.GESTOR) return false;
       const vinculo = await this.vinculos.findOneBy({ usuarioId: usuario.id, contratoId });
-      if (!vinculo) return false;
-      return operacao.classe !== 'planejamento' || Boolean(vinculo.podeEditar);
+      if (!vinculo) return operacao.classe === 'leitura' && await this.responsavelPodeLer(contratoId, usuario.id);
+      const granular = ACAO_PERMISSAO[politica.acao];
+      if (granular) {
+        const efetivas = permissoesEfetivas(usuario.perfil, vinculo.podeEditar, vinculo.permissoesDetalhadas);
+        return efetivas[granular];
+      }
+      // PQ-04: ações de planejamento sem delegação específica continuam restritas.
+      return operacao.classe !== 'planejamento' || (usuario.perfil === PerfilUsuario.GESTOR && Boolean(vinculo.podeEditar));
     }
 
     switch (politica.acao) {
@@ -53,9 +68,16 @@ export class PoliticaAcessoService {
         return admin; // PQ-03: gestor criar contrato permanece pendente
       case 'contratos:arquivar':
       case 'contratos:reativar':
+      case 'contratos:excluir':
         return admin && uuidValido(contratoId);
       case 'contratos:listar':
         return true; // listagem permanece filtrada no SQL do módulo Contratos
+      case 'contratos:reabrir': {
+        if (!uuidValido(contratoId)) return false;
+        if (admin) return true;
+        const vinculo = await this.vinculos.findOneBy({ usuarioId: usuario.id, contratoId });
+        return Boolean(vinculo && permissoesEfetivas(usuario.perfil, vinculo.podeEditar, vinculo.permissoesDetalhadas).reabrirContrato);
+      }
       case 'contratos:visualizar':
       case 'contratos:editar': {
         if (!uuidValido(contratoId)) return false;
@@ -63,8 +85,9 @@ export class PoliticaAcessoService {
         if (admin) return true;
         if (politica.acao === 'contratos:editar' && usuario.perfil !== PerfilUsuario.GESTOR) return false;
         const vinculo = await this.vinculos.findOneBy({ usuarioId: usuario.id, contratoId });
-        if (!vinculo) return false;
-        return politica.acao === 'contratos:visualizar' || vinculo.podeEditar;
+        if (!vinculo) return politica.acao === 'contratos:visualizar' && await this.responsavelPodeLer(contratoId, usuario.id);
+        return politica.acao === 'contratos:visualizar' || (usuario.perfil === PerfilUsuario.GESTOR &&
+          permissoesEfetivas(usuario.perfil, vinculo.podeEditar, vinculo.permissoesDetalhadas).editarContrato);
       }
       default:
         return false;

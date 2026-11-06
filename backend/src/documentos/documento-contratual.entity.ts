@@ -47,6 +47,9 @@ export class DocumentoContratual {
   @Column({ name: 'storage_key', type: 'varchar', length: 32, unique: true, select: false })
   storageKey!: string;
 
+  @Column({ name: 'arquivado_em', type: 'timestamptz', nullable: true })
+  arquivadoEm!: Date | null;
+
   @CreateDateColumn({ name: 'criado_em', type: 'timestamptz' })
   criadoEm!: Date;
 }

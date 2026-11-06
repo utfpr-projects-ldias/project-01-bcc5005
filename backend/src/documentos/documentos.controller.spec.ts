@@ -12,6 +12,8 @@ describe('TEC08-02: política HTTP e entrega segura', () => {
     const prototipo = DocumentosController.prototype;
     for (const [metodo, acao, tipo] of [
       ['listar', 'documentos:listar', 'contrato'],
+      ['editar', 'documentos:editar', 'recurso'],
+      ['arquivar', 'documentos:arquivar', 'recurso'],
       ['anexar', 'documentos:anexar', 'contrato'],
       ['baixar', 'documentos:baixar', 'recurso'],
       ['detalhar', 'documentos:visualizar', 'recurso'],

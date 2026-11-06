@@ -10,13 +10,13 @@ import { editarEntregavel } from '@/lib/entregaveis';
 import type { DadosPlanejamentoEntregavel } from '@/lib/validacao-entregavel';
 import { useDetalheEntregavel } from '@/hooks/use-entregaveis';
 import { ConteudoEntregavel } from '@/app/contratos/components/conteudo-entregavel';
+import { toastSucesso } from '@/app/components/toast-notificacoes';
 
 
 export default function DetalheEntregavelPage() {
   const { id: contratoId, entregavelId } = useParams<{ id: string; entregavelId: string }>();
   const [editando, setEditando] = useState(false);
   const [salvando, setSalvando] = useState(false);
-  const [sucesso, setSucesso] = useState('');
   const perfil = useMeuPerfil();
   const habilitado = Boolean(perfil.dados?.ativo && !perfil.erro);
   const consulta = useDetalheEntregavel(contratoId, entregavelId, habilitado);
@@ -25,7 +25,7 @@ export default function DetalheEntregavelPage() {
     ['ADMINISTRADOR', 'GESTOR'].includes(perfil.dados?.perfil ?? '');
   async function salvar(dados: DadosPlanejamentoEntregavel) {
     await editarEntregavel(contratoId, entregavelId, dados);
-    setEditando(false); setSucesso('Planejamento atualizado com sucesso.');
+    setEditando(false); toastSucesso('Planejamento atualizado.');
     // Revalidar também a lista ao retornar ao contrato, sem confiar em cache antigo.
     void consulta.atualizar().catch(() => {});
   }
@@ -39,9 +39,10 @@ export default function DetalheEntregavelPage() {
     {Boolean(erro) && <Aviso erro>{erro instanceof Error ? erro.message : 'Falha na consulta do entregável.'}</Aviso>}
     {!perfil.carregando && !erro && !habilitado && <Aviso erro>Conta sem autorização para consultar entregáveis.</Aviso>}
     {!perfil.carregando && habilitado && !consulta.carregando && !erro && !item && <Aviso erro>Entregável não encontrado neste contrato.</Aviso>}
-    {sucesso && <p role="status" className="rounded-lg border border-brand-green/40 p-3 text-sm text-brand-neon">{sucesso}</p>}
+    {item && <h2 className="break-words text-lg font-semibold text-brand-neon">{item.nome}</h2>}
+
     {item && podeEditar && <div className="flex justify-end"><button type="button" disabled={salvando} aria-expanded={editando}
-      aria-controls="edicao-entregavel" onClick={() => { setEditando((anterior) => !anterior); setSucesso(''); }}
+      aria-controls="edicao-entregavel" onClick={() => { setEditando((anterior) => !anterior); }}
       className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-on-brand-green hover:brightness-110 focus-visible:outline-2 focus-visible:outline-brand-neon disabled:opacity-50">
       {editando ? 'Fechar edição' : 'Editar entregável'}
 
@@ -50,6 +51,7 @@ export default function DetalheEntregavelPage() {
       <FormularioEntregavel key={item.id} contratoId={contratoId} etapaId={item.etapaId} inicial={item} onSalvar={salvar}
         onCancelar={() => setEditando(false)} onSalvandoMudou={setSalvando} />
     </div>}
-    {item && !editando && <ConteudoEntregavel item={item} />}
+    {item && !editando && <ConteudoEntregavel item={item} podeEditarEsperada={podeEditar} podeVerHistorico={podeEditar}
+      aoAtualizarEsperada={() => { void consulta.atualizar().catch(() => {}); }} />}
   </AreaContratos>;
 }

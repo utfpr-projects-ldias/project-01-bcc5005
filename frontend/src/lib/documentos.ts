@@ -21,6 +21,7 @@ export type DocumentoContratual = {
   autorId: string;
   autorNome: string | null;
   criadoEm: string;
+  arquivadoEm?: string | null;
 };
 export type PaginaDocumentos = {
   itens: DocumentoContratual[];
@@ -51,7 +52,7 @@ const MENSAGENS: Record<number, string> = {
   401: 'Sua sessão expirou. Entre novamente para continuar.',
   403: 'Você não tem permissão para esta operação neste contrato.',
   404: 'Documento ou contrato não encontrado, ou acesso não autorizado.',
-  409: 'O contrato ou documento mudou durante a operação. Atualize e tente novamente.',
+  409: 'O contrato ou documento mudou ou o limite de 20 arquivos (incluindo arquivados) foi atingido. Atualize e tente novamente.',
   413: 'Arquivo acima do limite permitido ou capacidade de armazenamento excedida.',
   503: 'Arquivo ou serviço temporariamente indisponível. Tente novamente mais tarde.',
 };
@@ -74,9 +75,10 @@ async function requisitar(caminho: string, init?: RequestInit): Promise<Response
   return resposta;
 }
 
-export async function listarDocumentos(contratoId: string, categoria: FiltroCategoriaDocumento, pagina: number, signal?: AbortSignal): Promise<PaginaDocumentos> {
+export async function listarDocumentos(contratoId: string, categoria: FiltroCategoriaDocumento, pagina: number, signal?: AbortSignal, arquivados = false): Promise<PaginaDocumentos> {
   const parametros = new URLSearchParams({ pagina: String(pagina) });
   if (categoria) parametros.set('categoria', categoria);
+  if (arquivados) parametros.set('arquivados', 'true');
   const resposta = await requisitar(`${base(contratoId)}?${parametros}`, { signal });
   return resposta.json() as Promise<PaginaDocumentos>;
 }
@@ -105,8 +107,8 @@ export function validarSelecaoDocumento(arquivo: File | null, categoria: Categor
 export async function enviarDocumento(contratoId: string, categoria: CategoriaDocumento, arquivo: File, descricao: string): Promise<DocumentoContratual> {
   const erro = validarSelecaoDocumento(arquivo, categoria);
   if (erro) throw new ErroDocumento(400, erro);
-  if (descricao.length > 300 || (descricao.length > 0 && !descricao.trim())) {
-    throw new ErroDocumento(400, 'A descrição deve ter até 300 caracteres e não pode conter somente espaços.');
+  if (descricao.length > 140 || (descricao.length > 0 && !descricao.trim())) {
+    throw new ErroDocumento(400, 'A descrição deve ter até 140 caracteres e não pode conter somente espaços.');
   }
   const dados = new FormData();
   dados.append('categoria', categoria);
@@ -114,6 +116,33 @@ export async function enviarDocumento(contratoId: string, categoria: CategoriaDo
   dados.append('arquivo', arquivo);
   // Nunca definir Content-Type manualmente: o browser gera boundary multipart.
   const resposta = await requisitar(base(contratoId), { method: 'POST', body: dados });
+  return resposta.json() as Promise<DocumentoContratual>;
+}
+
+/** Arquivamento lógico: não apaga blob nem metadados da auditoria. */
+export async function arquivarDocumento(contratoId: string, id: string): Promise<DocumentoContratual> {
+  const resposta = await requisitar(`${base(contratoId)}/${encodeURIComponent(id)}/arquivar`, { method: 'PATCH' });
+  return resposta.json() as Promise<DocumentoContratual>;
+}
+
+/** Um documento arquivado pode voltar à categoria ativa; principal exige autorização especial. */
+export async function reativarDocumento(contratoId: string, id: string): Promise<DocumentoContratual> {
+  const resposta = await requisitar(`${base(contratoId)}/${encodeURIComponent(id)}/reativar`, { method: 'PATCH' });
+  return resposta.json() as Promise<DocumentoContratual>;
+}
+
+/** Exclusão física e lógica irreversível: somente documento arquivado. */
+export async function excluirDocumentoArquivado(contratoId: string, id: string): Promise<{ id: string }> {
+  const resposta = await requisitar(`${base(contratoId)}/${encodeURIComponent(id)}/excluir`, { method: 'POST' });
+  return resposta.json() as Promise<{ id: string }>;
+}
+
+/** Correção de categoria/descrição. Arquivo incorreto deve ser arquivado e reenviado. */
+export async function editarDocumento(contratoId: string, id: string, dados: { categoria: CategoriaDocumento; descricao: string }): Promise<DocumentoContratual> {
+  const resposta = await requisitar(`${base(contratoId)}/${encodeURIComponent(id)}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ categoria: dados.categoria, descricao: dados.descricao.trim() || null }),
+  });
   return resposta.json() as Promise<DocumentoContratual>;
 }
 

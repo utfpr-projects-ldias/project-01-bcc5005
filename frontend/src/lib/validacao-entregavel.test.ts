@@ -89,3 +89,15 @@ test('checklist permite 10 evidências e rejeita a décima primeira', () => {
   expect(resposta.sucesso).toBe(false);
   if (!resposta.sucesso) expect(resposta.erros.evidenciasEsperadas).toContain('10');
 });
+
+
+test('novas orientações do checklist têm no máximo 130 caracteres; preserva histórico legado', () => {
+  const r = modelo('UNICO');
+  r.evidenciasEsperadas = [{ chave: 'novo', tipoEvidencia: 'Foto', descricao: 'x'.repeat(131), obrigatoria: true }];
+  expect(validarEntregavel(r).sucesso).toBe(false);
+  r.evidenciasEsperadas[0].descricao = 'x'.repeat(130);
+  expect(validarEntregavel(r).sucesso).toBe(true);
+  r.evidenciasEsperadas[0].id = 'uuid-legado';
+  r.evidenciasEsperadas[0].descricao = 'x'.repeat(200);
+  expect(validarEntregavel(r).sucesso).toBe(true);
+});

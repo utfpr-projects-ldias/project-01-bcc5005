@@ -8,11 +8,12 @@ import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
 import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
 import { CategoriaDocumento } from './categoria-documento.js';
 import { DocumentoContratual } from './documento-contratual.entity.js';
+import { Contrato } from '../contratos/contrato.entity.js';
 import { DocumentosService } from './documentos.service.js';
 
 const contratoId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const documentoId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
-const ator: UsuarioAutenticado = { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', supertokensUserId: 'st-abc', email: 'gestor@example.com', perfil: PerfilUsuario.GESTOR };
+const ator: UsuarioAutenticado = { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', supertokensUserId: 'st-abc', email: 'gestor@example.com', perfil: PerfilUsuario.ADMINISTRADOR };
 const conteudo = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF');
 const sha256 = createHash('sha256').update(conteudo).digest('hex');
 const metadata = {
@@ -23,7 +24,7 @@ const metadata = {
 } as DocumentoContratual;
 
 function ambiente() {
-  const repoSalvo = { create: jest.fn((arg: Partial<DocumentoContratual>) => ({ id: documentoId, criadoEm: metadata.criadoEm, ...arg } as DocumentoContratual)), save: jest.fn(async (arg: DocumentoContratual) => arg), findOne: jest.fn(async () => ({ contratoId })) };
+  const repoSalvo = { create: jest.fn((arg: Partial<DocumentoContratual>) => ({ id: documentoId, criadoEm: metadata.criadoEm, ...arg } as DocumentoContratual)), save: jest.fn(async (arg: DocumentoContratual) => arg), findOne: jest.fn(async () => ({ ...metadata, autor: { nome: 'Pessoa de teste' } })), count: jest.fn(async () => 0) };
   const qb = { leftJoinAndSelect: jest.fn().mockReturnThis(), addSelect: jest.fn().mockReturnThis(), where: jest.fn().mockReturnThis(), getOne: jest.fn(async () => metadata as DocumentoContratual | null) };
   const repo = {
     findAndCount: jest.fn(async () => [[metadata], 1] as [DocumentoContratual[], number]),
@@ -31,7 +32,9 @@ function ambiente() {
     findOne: jest.fn(async () => metadata),
     createQueryBuilder: jest.fn(() => qb),
   };
-  const manager = { getRepository: jest.fn(() => repoSalvo) };
+  const contratoQb = { where: jest.fn().mockReturnThis(), setLock: jest.fn().mockReturnThis(), getOne: jest.fn(async () => ({ id: contratoId })) };
+  const manager = { getRepository: jest.fn((entidade?: unknown) => entidade === Contrato
+    ? { createQueryBuilder: jest.fn(() => contratoQb) } : repoSalvo) };
   const dataSource = { transaction: jest.fn(async (fn: (manager: { getRepository: typeof manager.getRepository }) => Promise<DocumentoContratual>) => fn(manager)) };
   const auditoria = { registrarResolvedorContexto: jest.fn((_tipo: string, _fn: (manager: typeof manager, id: string) => Promise<string | null>) => undefined), registrarNaTransacao: jest.fn(async () => undefined) };
   const escopos = { registrarAdaptador: jest.fn((_recurso: string, _fn: (id: string) => Promise<string | null>) => undefined) };
@@ -43,7 +46,7 @@ function ambiente() {
     removerOrfao: jest.fn(async () => undefined),
   };
   const service = new DocumentosService(repo as never, dataSource as never, auditoria as never, escopos as never, storage);
-  return { repo, repoSalvo, qb, dataSource, auditoria, escopos, storage, manager, service };
+  return { repo, repoSalvo, qb, contratoQb, dataSource, auditoria, escopos, storage, manager, service };
 }
 
 const arquivo = { buffer: conteudo, size: conteudo.length, originalname: 'contrato.pdf', mimetype: 'application/pdf' };
@@ -116,6 +119,35 @@ describe('TEC08-02: documentos privados (serviço)', () => {
     await expect(e.service.anexar(contratoId, dto, arquivo, ator)).rejects.toBeInstanceOf(PayloadTooLargeException);
   });
 
+  it('limita a 20 documentos, contando os arquivados, sob bloqueio do contrato', async () => {
+    const e = ambiente();
+    e.repoSalvo.count.mockResolvedValueOnce(20);
+    await expect(e.service.anexar(contratoId, dto, arquivo, ator)).rejects.toBeInstanceOf(ConflictException);
+    expect(e.contratoQb.setLock).toHaveBeenCalledWith('pessimistic_write');
+    expect(e.storage.removerOrfao).toHaveBeenCalledTimes(1);
+    expect(e.repoSalvo.save).not.toHaveBeenCalled();
+  });
+
+  it('edita apenas metadados e registra auditoria; conteúdo do blob permanece intocado', async () => {
+    const e = ambiente();
+    e.repoSalvo.findOne.mockResolvedValueOnce({ ...metadata, categoria: CategoriaDocumento.ANEXO, autor: { nome: 'Pessoa de teste' } } as never);
+    const r = await e.service.editar(contratoId, documentoId, { descricao: 'Nova descrição' }, ator);
+    expect(r.descricao).toBe('Nova descrição');
+    expect(e.auditoria.registrarNaTransacao).toHaveBeenCalledWith(e.manager, ator,
+      expect.objectContaining({ acao: AcaoAuditoria.DOCUMENTO_METADADOS_ALTERADOS, entidadeId: documentoId }));
+    expect(e.storage.salvar).not.toHaveBeenCalled();
+    expect(e.storage.removerOrfao).not.toHaveBeenCalled();
+  });
+
+  it('arquiva logicamente sem remover o arquivo físico e audita a operação', async () => {
+    const e = ambiente();
+    const r = await e.service.arquivar(contratoId, documentoId, ator);
+    expect(r.arquivadoEm).toBeInstanceOf(Date);
+    expect(e.auditoria.registrarNaTransacao).toHaveBeenCalledWith(e.manager, ator,
+      expect.objectContaining({ acao: AcaoAuditoria.DOCUMENTO_ARQUIVADO, entidadeId: documentoId }));
+    expect(e.storage.removerOrfao).not.toHaveBeenCalled();
+  });
+
   it('retorna metadados filtrados, sem storageKey, inclusive no detalhe', async () => {
     const e = ambiente();
     const lista = await e.service.listar(contratoId, CategoriaDocumento.CONTRATO_PRINCIPAL);
@@ -144,4 +176,31 @@ describe('TEC08-02: documentos privados (serviço)', () => {
     // A consulta real restringe id E contratoId, independente do filtro aplicado no guard.
     expect(e.qb.where).toHaveBeenCalledWith(expect.stringContaining('documento.contratoId'), { id: documentoId, contratoId });
   });
+
+  it('impede alterar metadados do documento principal e reclassificar anexo como principal', async () => {
+    const e = ambiente();
+    await expect(e.service.editar(contratoId, documentoId, { descricao: 'Não pode' }, ator))
+      .rejects.toBeInstanceOf(ConflictException);
+    e.repoSalvo.findOne.mockResolvedValueOnce({ ...metadata, categoria: CategoriaDocumento.ANEXO, autor: { nome: 'Pessoa de teste' } } as never);
+    await expect(e.service.editar(contratoId, documentoId, { categoria: CategoriaDocumento.CONTRATO_PRINCIPAL }, ator))
+      .rejects.toBeInstanceOf(ConflictException);
+    expect(e.repoSalvo.save).not.toHaveBeenCalled();
+  });
+
+  it('impede dois documentos principais ativos e mantém o blob anterior', async () => {
+    const e = ambiente();
+    e.repoSalvo.count.mockResolvedValueOnce(1);
+    await expect(e.service.anexar(contratoId, dto, arquivo, ator)).rejects.toBeInstanceOf(ConflictException);
+    expect(e.repoSalvo.save).not.toHaveBeenCalled();
+    expect(e.storage.removerOrfao).toHaveBeenCalledTimes(1);
+  });
+
+  it('GESTOR sem delegação específica não pode anexar principal', async () => {
+    const e = ambiente();
+    e.dataSource.getRepository = jest.fn(() => ({ findOneBy: jest.fn(async () => ({ permissoesDetalhadas: {} })) })) as never;
+    await expect(e.service.anexar(contratoId, dto, arquivo,
+      { ...ator, perfil: PerfilUsuario.GESTOR })).rejects.toBeInstanceOf(ConflictException);
+    expect(e.storage.salvar).not.toHaveBeenCalled();
+  });
+
 });

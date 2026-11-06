@@ -7,6 +7,9 @@ export const STATUS_ETAPA: Record<StatusEtapa, string> = {
 export type Etapa = {
   id: string;
   contratoId: string;
+  codigoPublico?: number;
+  arquivadoEm?: string | null;
+  reabertoEm?: string | null;
   codigo: string | null;
   nome: string;
   descricao: string | null;
@@ -62,6 +65,13 @@ export const criarEtapa = (contratoId: string, dados: DadosEtapa) => requisitar<
 });
 export const editarEtapa = (contratoId: string, etapaId: string, dados: DadosEtapa) => requisitar<Etapa>(
   `${caminho(contratoId)}/${encodeURIComponent(etapaId)}`, { method: 'PATCH', body: JSON.stringify(dados) },
+);
+export const reabrirEtapa = (c: string, e: string) => requisitar<Etapa>(`${caminho(c)}/${encodeURIComponent(e)}/reabrir`, { method: 'PATCH' });
+export const alterarArquivamentoEtapa = (c: string, e: string, a: 'arquivar' | 'reativar') => requisitar<Etapa>(
+  `${caminho(c)}/${encodeURIComponent(e)}/${a}`, { method: 'PATCH' },
+);
+export const excluirEtapaArquivada = (c: string, e: string) => requisitar<{id: string; excluido: boolean; limpezaPendente?: number}>(
+  `${caminho(c)}/${encodeURIComponent(e)}/excluir`, { method: 'POST' },
 );
 export const reordenarEtapas = (contratoId: string, idsOrdemAtual: string[], idsOrdemNova: string[]) => requisitar<Etapa[]>(
   `${caminho(contratoId)}/reordenar`, {

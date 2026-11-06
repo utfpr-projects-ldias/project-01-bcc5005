@@ -7,12 +7,13 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { QueryFailedError, type EntityManager, type Repository } from 'typeorm';
-import { randomInt } from 'node:crypto';
 
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
+import { documentacaoVerificada } from '../entregaveis/conclusao-documental.js';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
 import { PermissaoContrato } from '../autorizacao/permissao-contrato.entity.js';
+import { permissoesEfetivas } from '../autorizacao/permissoes-granulares.js';
 import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
 import { Usuario } from '../usuarios/usuario.entity.js';
 import { Contrato } from './contrato.entity.js';
@@ -23,21 +24,8 @@ import type { CriarContratoDto } from './dto/criar-contrato.dto.js';
 const PG_CHECK_VIOLATION = '23514';
 const PG_UNIQUE_VIOLATION = '23505';
 const PG_FK_VIOLATION = '23503';
+// Restricao unica criada pela migration 1793800000000-CodigoPublicoContratos.
 const CONSTRAINT_CODIGO_PUBLICO = 'uq_contratos_codigo_publico';
-const TENTATIVAS_ALEATORIAS = 24;
-const TENTATIVAS_RESERVA = 12;
-
-/** Apenas a colisão da coluna pública pode ser repetida; outros 23505 continuam 409. */
-function colisaoCodigoPublico(error: unknown): boolean {
-  if (!(error instanceof QueryFailedError)) return false;
-  const driver = error.driverError as { code?: string; constraint?: string };
-  return driver.code === PG_UNIQUE_VIOLATION && driver.constraint === CONSTRAINT_CODIGO_PUBLICO;
-}
-
-export function gerarCodigoPublico(): string {
-  return randomInt(0, 100_000).toString().padStart(5, '0');
-}
-
 /**
  * Regras de negócio da API de contratos — HU05-02.
  *
@@ -65,91 +53,70 @@ export class ContratosService {
   ): Promise<Contrato> {
     this.validarVigencia(dto.inicioVigencia, dto.terminoVigencia);
 
-    // Cada colisão provoca rollback da transação inteira (inclusive auditoria).
-    // Repetir um INSERT dentro da mesma transação PG abortada não funcionaria.
-    for (let tentativa = 0; tentativa < TENTATIVAS_ALEATORIAS + TENTATIVAS_RESERVA; tentativa++) {
-      try {
-        return await this.auditoria.executarComAuditoria(ator, async (manager) => {
-          const repo = manager.getRepository(Contrato);
-          await this.validarResponsavel(manager, dto.responsavelInternoId);
-          let codigoPublico = gerarCodigoPublico();
-          if (tentativa >= TENTATIVAS_ALEATORIAS) {
-            // Em uma base quase cheia, escolher aleatoriamente dentre as vagas.
-            // A constraint UNIQUE continua sendo a autoridade sob concorrência.
-            const disponiveis = await manager.query(`
-              SELECT lpad(g.n::text, 5, '0') AS codigo
-              FROM generate_series(0, 99999) AS g(n)
-              WHERE NOT EXISTS (
-                SELECT 1 FROM contratos c WHERE c.codigo_publico = lpad(g.n::text, 5, '0')
-              )
-              ORDER BY random() LIMIT 1
-            `) as { codigo: string }[];
-            if (!disponiveis.length) {
-              throw new ConflictException('Todos os 100.000 códigos de contrato já foram utilizados.');
-            }
-            codigoPublico = disponiveis[0].codigo;
-          }
-          const contrato = repo.create({
-            codigoPublico,
-            numeroContrato: dto.numeroContrato.trim(),
-            processoAdministrativo: dto.processoAdministrativo ?? null,
-            orgaoContratante: dto.orgaoContratante.trim(),
-            unidadeResponsavel: dto.unidadeResponsavel ?? null,
-            objeto: dto.objeto.trim(),
-            descricao: dto.descricao ?? null,
-            dataAssinatura: dto.dataAssinatura ?? null,
-            inicioVigencia: dto.inicioVigencia,
-            terminoVigencia: dto.terminoVigencia,
-            status: dto.status,
-            responsavelInternoId: dto.responsavelInternoId ?? null,
-            fiscalGestor: dto.fiscalGestor ?? null,
-            modoCalculo: dto.modoCalculo,
-            observacoes: dto.observacoes ?? null,
-          });
-          // Não traduzimos apenas a colisão específica: o loop externo trata-a.
-          const salvo = await salvarContrato(repo, contrato, false);
-
-          return {
-            resultado: salvo,
-            evento: {
-              acao: AcaoAuditoria.CONTRATO_CRIADO,
-              entidadeTipo: 'CONTRATO',
-              entidadeId: salvo.id,
-              dadosAnteriores: null,
-              dadosPosteriores: serializarContrato(salvo),
-            },
-          };
-        });
-      } catch (error) {
-        if (!colisaoCodigoPublico(error)) throw error;
+    return this.auditoria.executarComAuditoria(ator, async manager => {
+      const repo = manager.getRepository(Contrato);
+      await this.validarResponsavel(manager, dto.responsavelInternoId);
+      // A sequência PG é atômica entre processos, não depende do relógio nem de
+      // números aleatórios. Preserve códigos históricos; não reutilize lacunas.
+      const numeros = await manager.query("SELECT nextval('seq_contratos_codigo_publico')::integer AS numero") as Array<{numero: number|string}>;
+      const numero = Number(numeros[0]?.numero);
+      if (!Number.isSafeInteger(numero) || numero < 0 || numero > 99999) {
+        throw new ConflictException('Limite de códigos públicos de contrato atingido');
       }
-    }
-    // Pode ocorrer com concorrência extrema; não afirmar esgotamento sem conferi-lo.
-    throw new ConflictException('Não foi possível reservar um código disponível. Tente novamente.');
+      const contrato = repo.create({
+        codigoPublico: String(numero).padStart(5, '0'),
+        numeroContrato: dto.numeroContrato.trim(),
+        processoAdministrativo: dto.processoAdministrativo ?? null,
+        orgaoContratante: dto.orgaoContratante.trim(),
+        unidadeResponsavel: dto.unidadeResponsavel ?? null,
+        objeto: dto.objeto.trim(),
+        descricao: dto.descricao ?? null,
+        dataAssinatura: dto.dataAssinatura ?? null,
+        inicioVigencia: dto.inicioVigencia,
+        terminoVigencia: dto.terminoVigencia,
+        status: dto.status,
+        responsavelInternoId: dto.responsavelInternoId ?? null,
+        fiscalGestor: dto.fiscalGestor ?? null,
+        modoCalculo: dto.modoCalculo,
+        observacoes: dto.observacoes ?? null,
+      });
+      const salvo = await salvarContrato(repo, contrato, false);
+      return { resultado: salvo, evento: {
+        acao: AcaoAuditoria.CONTRATO_CRIADO, entidadeTipo: 'CONTRATO',
+        entidadeId: salvo.id, dadosAnteriores: null, dadosPosteriores: serializarContrato(salvo),
+      }};
+    });
   }
 
   async listar(ator: UsuarioAutenticado): Promise<Contrato[]> {
     if (ator.perfil === PerfilUsuario.ADMINISTRADOR) {
       return this.contratos.find({ order: { inicioVigencia: 'DESC', numeroContrato: 'ASC' } });
     }
-    // RF-40/RB-20: vínculo explícito e vínculo APENAS do usuário da sessão.
-    // INNER JOIN evita que o cliente consiga consultar carteira alheia por parâmetros.
+    // Vínculo explícito OU atribuição ativa como responsável (somente leitura).
+    // A seleção é escopada ao usuário autenticado; nunca aceitar ID pela query.
     return this.contratos.createQueryBuilder('c')
-      .innerJoin('permissoes_contrato', 'p', 'p.contrato_id = c.id AND p.usuario_id = :usuarioId', { usuarioId: ator.id })
+      .leftJoin('permissoes_contrato', 'p', 'p.contrato_id = c.id AND p.usuario_id = :usuarioId', { usuarioId: ator.id })
+      .where('(p.usuario_id IS NOT NULL OR c.responsavelInternoId = :usuarioId)', { usuarioId: ator.id })
       .andWhere('c.arquivado_em IS NULL')
       .orderBy('c.inicioVigencia', 'DESC')
       .addOrderBy('c.numeroContrato', 'ASC')
       .getMany();
   }
 
-  async consultarAcesso(id: string, ator: UsuarioAutenticado): Promise<{ podeEditar: boolean }> {
+  async consultarAcesso(id: string, ator: UsuarioAutenticado) {
     // Mesmo estando sob guard: não confirmar ID inexistente.
     await this.detalhar(id);
-    if (ator.perfil === PerfilUsuario.ADMINISTRADOR) return { podeEditar: true };
-    if (ator.perfil !== PerfilUsuario.GESTOR) return { podeEditar: false };
+    if (ator.perfil === PerfilUsuario.ADMINISTRADOR) return {
+      podeEditar: true, permissoes: permissoesEfetivas(ator.perfil, true, null),
+    };
     const vinculo = await this.contratos.manager.getRepository(PermissaoContrato)
       .findOneBy({ usuarioId: ator.id, contratoId: id });
-    return { podeEditar: Boolean(vinculo?.podeEditar) };
+    const podeEditar = ator.perfil === PerfilUsuario.GESTOR && Boolean(vinculo?.podeEditar);
+    // Sem vínculo, a responsabilidade administrativa NÃO concede mutações.
+    const permissoes = vinculo
+      ? permissoesEfetivas(ator.perfil, podeEditar, vinculo.permissoesDetalhadas)
+      : permissoesEfetivas('COLABORADOR', false, { enviarComprovantes: false, verificarComprovantes: false });
+    return { podeEditar, permissoes };
   }
 
   async detalhar(id: string): Promise<Contrato> {
@@ -167,6 +134,9 @@ export class ContratosService {
       const repo = manager.getRepository(Contrato);
       const contrato = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!contrato) throw new NotFoundException('Contrato não encontrado');
+      if (arquivar && (contrato.status === 'CONCLUIDO' ||
+        (contrato.reabertoEm === null && await documentacaoVerificada(manager, id))))
+        throw new ConflictException('Contrato concluído: reabra antes de arquivar.');
       if (Boolean(contrato.arquivadoEm) === arquivar) {
         throw new ConflictException(arquivar ? 'Contrato já está arquivado' : 'Contrato não está arquivado');
       }
@@ -183,6 +153,57 @@ export class ContratosService {
     });
   }
 
+  /** Reabertura OPERACIONAL explícita, auditada, sem alterar comprovações. */
+  async reabrir(id: string, ator: UsuarioAutenticado): Promise<Contrato> {
+    return this.auditoria.executarComAuditoria(ator, async manager => {
+      const repo = manager.getRepository(Contrato);
+      const contrato = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
+      if (!contrato) throw new NotFoundException('Contrato não encontrado');
+      if (contrato.arquivadoEm) throw new ConflictException('Reative o contrato arquivado antes de reabri-lo');
+      if (contrato.reabertoEm) throw new ConflictException('Contrato já foi reaberto');
+      const concluidoOperacional = contrato.status === 'CONCLUIDO';
+      if (!concluidoOperacional && !await documentacaoVerificada(manager, id))
+        throw new ConflictException('Contrato ainda não possui comprovação concluída para reabrir');
+      const anterior = contrato.status;
+      if (concluidoOperacional) contrato.status = 'PLANEJAMENTO' as Contrato['status'];
+      contrato.reabertoEm = new Date();
+      const salvo = await repo.save(contrato);
+      return { resultado: salvo, evento: {
+        acao: AcaoAuditoria.CONTRATO_REABERTO, entidadeTipo: 'CONTRATO' as const,
+        entidadeId: id, dadosAnteriores: { status: anterior, reabertoEm: null },
+        dadosPosteriores: { status: salvo.status, reabertoEm: salvo.reabertoEm },
+      } };
+    });
+  }
+
+  /** Admin ou delegação explícita; guard valida antes desta chamada.
+   * A trava é mantida no contrato com auditoria na mesma transação.
+   * O mesmo lock de linha é usado pelo serviço de reordenação. */
+  async alterarBloqueioOrdem(id: string, bloqueada: boolean, ator: UsuarioAutenticado): Promise<Contrato> {
+    return this.auditoria.executarComAuditoria(ator, async (manager) => {
+      const repo = manager.getRepository(Contrato);
+      const contrato = await repo.createQueryBuilder('c')
+        .setLock('pessimistic_write').where('c.id = :id', { id }).getOne();
+      if (!contrato) throw new NotFoundException('Contrato não encontrado');
+      if (contrato.arquivadoEm) throw new ConflictException('Contrato arquivado não pode ter sua ordem alterada.');
+      if (ator.perfil !== PerfilUsuario.ADMINISTRADOR) {
+        const vinculo = await manager.getRepository(PermissaoContrato).findOneBy({ usuarioId: ator.id, contratoId: id });
+        if (!vinculo || !permissoesEfetivas(ator.perfil, vinculo.podeEditar, vinculo.permissoesDetalhadas).bloquearOrdemEtapas) {
+          throw new ForbiddenException('Sem permissão para bloquear ou liberar a ordem deste contrato.');
+        }
+      }
+      const anterior = Boolean(contrato.ordemEtapasBloqueada);
+      contrato.ordemEtapasBloqueada = bloqueada;
+      const salvo = await repo.save(contrato);
+      return { resultado: salvo, evento: {
+        acao: AcaoAuditoria.CONTRATO_ORDEM_ETAPAS_ALTERADA,
+        entidadeTipo: 'CONTRATO' as const, entidadeId: id,
+        dadosAnteriores: { ordemEtapasBloqueada: anterior },
+        dadosPosteriores: { ordemEtapasBloqueada: bloqueada },
+      } };
+    });
+  }
+
   async atualizar(
     id: string,
     dto: AtualizarContratoDto,
@@ -193,6 +214,9 @@ export class ContratosService {
       const existente = await repo.findOneBy({ id });
       if (!existente) throw new NotFoundException('Contrato não encontrado');
       if (existente.arquivadoEm) throw new ConflictException('Contrato arquivado. Reative antes de editar.');
+      if (existente.status === 'CONCLUIDO' ||
+        (existente.reabertoEm === null && await documentacaoVerificada(manager, id)))
+        throw new ConflictException('Contrato concluído: reabra antes de editar.');
       if (dto.responsavelInternoId !== undefined) {
         if (ator.perfil !== PerfilUsuario.ADMINISTRADOR && dto.responsavelInternoId !== existente.responsavelInternoId) {
           throw new ForbiddenException('Somente Administrador pode alterar o responsável interno');
@@ -213,6 +237,7 @@ export class ContratosService {
 
       const antes = serializarContrato(existente);
       aplicarAtualizacao(existente, dto);
+      if (dto.status === 'CONCLUIDO') existente.reabertoEm = null;
       existente.inicioVigencia = inicioVigencia;
       existente.terminoVigencia = terminoVigencia;
 
@@ -374,6 +399,7 @@ function serializarContrato(contrato: Contrato): Record<string, unknown> {
     fiscalGestor: contrato.fiscalGestor,
     modoCalculo: contrato.modoCalculo,
     observacoes: contrato.observacoes,
+    ordemEtapasBloqueada: contrato.ordemEtapasBloqueada,
   };
 }
 

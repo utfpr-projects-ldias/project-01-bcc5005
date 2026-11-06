@@ -1,12 +1,13 @@
 "use client";
+import { toastSucesso, toastAviso } from '@/app/components/toast-notificacoes';
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { IndicadorCarregamento } from "@/app/components/indicador-carregamento";
-import { useAtualizacaoVisivel } from "@/hooks/use-atualizacao-visivel";
 import { LinkVoltar } from "@/app/components/link-voltar";
 import { ConfirmacaoSimples } from "@/app/components/confirmacao-simples";
 import { ModalIdentificacaoContrato } from "./modal-identificacao-contrato";
+import { EditorPermissoesContrato } from "./editor-permissoes-contrato";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import {
@@ -15,7 +16,8 @@ import {
   listarPermissoesFuncionario, concederPermissaoFuncionario, revogarPermissaoFuncionario,
   ErroApi, type PerfilFuncionario, type AtualizarFuncionario,
   type MeuPerfil, type UsuarioPublico, type PaginaUsuarios,
-  type ContratoResumo, type PermissaoFuncionario,
+  type ContratoResumo, type PermissaoFuncionario, type OperacaoPermissao, type NivelAcessoVinculo,
+  permissoesPadraoVinculo, vinculoTemEdicao, resumirAcessoVinculo,
 } from "@/lib/admin-usuarios";
 import { useRepositorioConsultas } from '@/app/components/provedor-consultas';
 import { chaveTexto } from '@/lib/repositorio-consultas';
@@ -42,9 +44,9 @@ const inicial = { nome: "", email: "", perfil: "COLABORADOR" as PerfilFuncionari
 
 type Campo = "nome" | "email" | "perfil" | "senhaInicial" | "confirmarSenha";
 type Erros = Partial<Record<Campo, string>>;
-const botao = "rounded-lg border border-brand-green/40 px-3 py-2 text-sm hover:bg-brand-green/10 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-brand-green";
+const botao = "inline-flex min-h-9 w-fit cursor-pointer items-center justify-center rounded-lg border border-brand-green/40 px-3 py-1.5 text-sm font-medium text-foreground transition-all duration-150 hover:border-brand-green/70 hover:bg-brand-green/10 hover:brightness-110 active:translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-neon disabled:cursor-not-allowed disabled:opacity-50";
 const campo = "w-full min-w-0 rounded-lg border border-brand-green/30 bg-background px-3 py-2 text-foreground focus-visible:outline-2 focus-visible:outline-brand-green";
-const acao = "rounded-lg bg-brand-green px-4 py-2.5 font-semibold text-on-brand-green disabled:opacity-50";
+const acao = "inline-flex min-h-9 w-fit cursor-pointer items-center justify-center gap-2 rounded-lg border border-brand-green/40 bg-brand-green px-3 py-1.5 text-sm font-semibold text-on-brand-green shadow-sm transition-all duration-150 hover:brightness-110 hover:shadow-md active:translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-neon disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none";
 
 function erroLegivel(erro: unknown): string {
   return erro instanceof ErroApi ? erro.message : "Não foi possível comunicar com o servidor. Tente novamente.";
@@ -78,14 +80,11 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
   const [quantidades, setQuantidades] = useState({ ativos: 0, arquivados: 0 });
   const [erroLista, setErroLista] = useState("");
   const [atualizando, setAtualizando] = useState(false);
-  const atualizacaoVisivel = useAtualizacaoVisivel();
   const [mudandoConsulta, setMudandoConsulta] = useState(false);
-  const [avisoAtualizacao, setAvisoAtualizacao] = useState("");
   const [editando, setEditando] = useState<UsuarioPublico | null>(null);
   const [form, setForm] = useState({ ...inicial });
   const [edicao, setEdicao] = useState({ nome: "", perfil: "GESTOR" as PerfilFuncionario, ativo: true });
   const [erros, setErros] = useState<Erros>({});
-  const [mensagem, setMensagem] = useState("");
   const [erroFormulario, setErroFormulario] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [emailNovo, setEmailNovo] = useState("");
@@ -94,13 +93,13 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
   const [contratos, setContratos] = useState<ContratoResumo[]>([]);
   const [permissoes, setPermissoes] = useState<PermissaoFuncionario[]>([]);
   const [contratoId, setContratoId] = useState("");
-  const [podeEditar, setPodeEditar] = useState(false);
   const [erroPermissoes, setErroPermissoes] = useState("");
   const [atualizandoVinculo, setAtualizandoVinculo] = useState("");
   const [identificacaoAberta, setIdentificacaoAberta] = useState<{ contrato: ContratoResumo; gatilho: HTMLButtonElement } | null>(null);
   const fecharIdentificacao = useCallback(() => setIdentificacaoAberta(null), []);
   const [confirmacao, setConfirmacao] = useState<
-    { tipo: "conta"; usuario: UsuarioPublico } | { tipo: "permissao"; contratoId: string; email: string } | null
+    { tipo: "conta"; usuario: UsuarioPublico } | { tipo: "permissao"; contratoId: string; email: string } |
+    { tipo: "nivel"; vinculo: PermissaoFuncionario; nivel: NivelAcessoVinculo } | null
   >(null);
 
   const cuidarSessao = useCallback((erro: unknown) => {
@@ -115,7 +114,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
     const requisicao = ++ultimaLista.current;
     const ativa = a === "ativos";
     const [paginaDados, ativos, arquivados] = await Promise.all([
-      cache.buscar(chaveTexto(CHAVES_FUNCIONARIOS.lista(ativa, p, termo)), () => consultarUsuariosPaginados({ ativo: ativa, pagina: p, busca: termo })),
+      cache.buscar(chaveTexto(CHAVES_FUNCIONARIOS.lista(ativa, p, termo)), () => consultarUsuariosPaginados({ ativo: ativa, pagina: p, busca: termo }), { forcar: true }),
       cache.buscar(chaveTexto(CHAVES_FUNCIONARIOS.totais(true)), async () => (await consultarUsuariosPaginados({ ativo: true, pagina: 1, limite: 1 })).total, { validadeMs: 10_000 }),
       cache.buscar(chaveTexto(CHAVES_FUNCIONARIOS.totais(false)), async () => (await consultarUsuariosPaginados({ ativo: false, pagina: 1, limite: 1 })).total, { validadeMs: 10_000 }),
     ]);
@@ -171,8 +170,8 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
   }, [carregarLista, cuidarSessao, vista, idEdicao, cache]);
 
   async function recarregar(a = aba, p = pagina, q = filtro) {
-    setAtualizando(true); setErroLista(""); setAvisoAtualizacao("");
-    try { await carregarLista(a, p, q); setAvisoAtualizacao("Lista atualizada."); }
+    setAtualizando(true); setErroLista("");
+    try { await carregarLista(a, p, q);  }
     catch (e) { if (!cuidarSessao(e)) setErroLista(`${erroLegivel(e)} A lista pode estar desatualizada.`); }
     finally { setAtualizando(false); setMudandoConsulta(false); }
   }
@@ -189,7 +188,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
 
   async function cadastrar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault(); if (enviando) return;
-    setErroFormulario(""); setMensagem("");
+    setErroFormulario("");
     const valido = cadastroSchema.safeParse({
       ...form, nome: form.nome.trim().replace(/\s+/g, " "), email: form.email.trim().toLowerCase(),
     });
@@ -205,7 +204,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
         senhaInicial: valido.data.senhaInicial,
       });
       invalidarListas();
-      setForm({ ...inicial }); setMensagem(`Funcionário ${criado.email} cadastrado com sucesso.`);
+      setForm({ ...inicial }); toastSucesso(`Funcionário ${criado.email} cadastrado.`);
       router.replace("/admin/usuarios");
     } catch (e) { if (!cuidarSessao(e)) setErroFormulario(erroLegivel(e)); }
     finally { setEnviando(false); }
@@ -224,7 +223,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
       if (editando.perfil !== edicao.perfil) dados.perfil = edicao.perfil;
       if (editando.ativo !== edicao.ativo) dados.ativo = edicao.ativo;
     }
-    if (!Object.keys(dados).length) { setErroFormulario(""); setMensagem("Nenhuma alteração pendente."); return; }
+    if (!Object.keys(dados).length) { setErroFormulario(""); toastAviso("Nenhuma alteração pendente."); return; }
     setEnviando(true); setErroFormulario("");
     try {
       const atualizado = await atualizarFuncionario(editando.id, dados);
@@ -234,7 +233,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
       }
       invalidarListas();
       cache.gravar(chaveTexto(CHAVES_FUNCIONARIOS.detalhe(atualizado.id)), atualizado);
-      setMensagem(`Dados de ${atualizado.email} atualizados.`);
+      toastSucesso(`Dados de ${atualizado.email} atualizados.`);
       setEditando(atualizado);
       setEdicao({ nome: atualizado.nome ?? "", perfil: atualizado.perfil === "ADMINISTRADOR" ? "GESTOR" : atualizado.perfil, ativo: atualizado.ativo });
     } catch (e) { if (!cuidarSessao(e)) setErroFormulario(erroLegivel(e)); }
@@ -246,7 +245,8 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
     setAtualizando(true); setErroLista("");
     try {
       await atualizarFuncionario(u.id, { ativo: !u.ativo });
-      setMensagem(`Conta ${u.email} ${u.ativo ? "arquivada" : "reativada"}.`);
+      if (u.ativo) toastAviso(`Conta de ${u.email} arquivada.`);
+      else toastSucesso(`Conta de ${u.email} reativada.`);
 
       invalidarListas();
       await carregarLista(aba, 1, filtro); setPagina(1);
@@ -263,7 +263,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
       invalidarListas();
       cache.gravar(chaveTexto(CHAVES_FUNCIONARIOS.detalhe(atualizado.id)), atualizado);
       if (atualizado.id === minhaConta?.id) cache.invalidar(CHAVE_PERFIL);
-      setEditando(atualizado); setMensagem("E-mail atualizado no sistema e no SuperTokens.");
+      setEditando(atualizado); toastSucesso("E-mail atualizado.");
     } catch (e) { if (!cuidarSessao(e)) setErroFormulario(erroLegivel(e)); }
     finally { setEnviando(false); }
   }
@@ -277,7 +277,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
     try {
       await redefinirSenhaFuncionario(editando.id, validacao.data);
       setSenhaNova(""); setSenhaConfirmada("");
-      setMensagem("Nova senha definida. Informe-a ao funcionário por canal seguro.");
+      toastSucesso("Nova senha definida. Informe-a ao funcionário por canal seguro.");
     } catch (e) { if (!cuidarSessao(e)) setErroFormulario(erroLegivel(e)); }
     finally { setEnviando(false); }
   }
@@ -291,25 +291,49 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
     setEnviando(true); setErroPermissoes("");
     try {
       await concederPermissaoFuncionario(editando.id, {
-        contratoId: contratoSelecionado, podeEditar: editando.perfil === "GESTOR" && podeEditar,
+        contratoId: contratoSelecionado,
+        podeEditar: false,
+        permissoesDetalhadas: permissoesPadraoVinculo(
+          editando.perfil === 'COLABORADOR' ? 'COLABORADOR' : 'GESTOR', 'leitura'),
       });
       invalidarPermissoes(editando.id);
       setPermissoes(await cache.buscar(chaveTexto(CHAVES_FUNCIONARIOS.permissoes(editando.id)), () => listarPermissoesFuncionario(editando.id), { forcar: true }));
-      setContratoId(""); setPodeEditar(false);
-      setMensagem("Contrato vinculado ao funcionário.");
+      setContratoId('');
+      toastSucesso("Contrato vinculado ao funcionário.");
     } catch (e) { if (!cuidarSessao(e)) setErroPermissoes(erroLegivel(e)); }
     finally { setEnviando(false); }
   }
-  async function alternarPermissao(vinculo: PermissaoFuncionario) {
-    if (!editando || enviando || atualizandoVinculo || editando.perfil !== "GESTOR") return;
+  async function salvarPermissoesDetalhadas(vinculo: PermissaoFuncionario,
+    permissoesDetalhadas: Record<OperacaoPermissao, boolean>) {
+    if (!editando || atualizandoVinculo) return;
+    setErroPermissoes(''); setAtualizandoVinculo(vinculo.contratoId);
+    try {
+      await concederPermissaoFuncionario(editando.id, {
+        contratoId: vinculo.contratoId, podeEditar: vinculo.podeEditar, permissoesDetalhadas,
+      });
+      invalidarPermissoes(editando.id);
+      setPermissoes(await cache.buscar(chaveTexto(CHAVES_FUNCIONARIOS.permissoes(editando.id)),
+        () => listarPermissoesFuncionario(editando.id), { forcar: true }));
+      toastSucesso('Permissões específicas atualizadas.');
+    } catch (erro) { setErroPermissoes(erroLegivel(erro)); throw erro; }
+    finally { setAtualizandoVinculo(''); }
+  }
+
+  async function alternarPermissao(vinculo: PermissaoFuncionario, nivel: NivelAcessoVinculo) {
+    if (!editando || enviando || atualizandoVinculo) return;
     setAtualizandoVinculo(vinculo.contratoId); setErroPermissoes("");
     try {
-      await concederPermissaoFuncionario(editando.id, { contratoId: vinculo.contratoId, podeEditar: !vinculo.podeEditar });
+      await concederPermissaoFuncionario(editando.id, {
+        contratoId: vinculo.contratoId,
+        podeEditar: editando.perfil === 'GESTOR' && nivel === 'edicao',
+        permissoesDetalhadas: permissoesPadraoVinculo(
+          editando.perfil === 'COLABORADOR' ? 'COLABORADOR' : 'GESTOR', nivel),
+      });
       invalidarPermissoes(editando.id);
       setPermissoes(await cache.buscar(chaveTexto(CHAVES_FUNCIONARIOS.permissoes(editando.id)), () => listarPermissoesFuncionario(editando.id), { forcar: true }));
-      setMensagem("Nível de acesso atualizado.");
+      toastSucesso(nivel === 'leitura' ? 'Acesso alterado para somente leitura.' : 'Edição permitida neste contrato.');
     } catch (erro) { if (!cuidarSessao(erro)) setErroPermissoes(erroLegivel(erro)); }
-    finally { setAtualizandoVinculo(""); }
+    finally { setAtualizandoVinculo(""); setConfirmacao(null); }
   }
   async function revogar(contrato: string) {
     if (!editando || enviando) return;
@@ -318,7 +342,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
       await revogarPermissaoFuncionario(editando.id, contrato);
       invalidarPermissoes(editando.id);
       setPermissoes((atual) => atual.filter((p) => p.contratoId !== contrato));
-      setMensagem("Permissão revogada.");
+      toastSucesso("Permissão revogada.");
       setConfirmacao(null);
     } catch (e) { setConfirmacao(null); if (!cuidarSessao(e)) setErroPermissoes(erroLegivel(e)); }
     finally { setEnviando(false); }
@@ -343,47 +367,46 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
     <section className="min-w-0 space-y-6">
       <div className="min-w-0 space-y-6">
         <div className="space-y-3">
-          <LinkVoltar href={vista === "lista" ? "/dashboard" : "/admin/usuarios"}>
-            {vista === "lista" ? "Voltar ao painel" : "Voltar aos funcionários"}
-          </LinkVoltar>
-          <p className="max-w-3xl text-sm text-foreground/70">{vista === "lista"
-            ? "Encontre funcionários, consulte seus perfis e administre contas arquivadas."
-            : vista === "cadastro"
-              ? "Crie uma conta interna. O acesso a contratos pode ser atribuído após o cadastro."
-              : "Atualize os dados da conta ou abra uma seção adicional para alterar credenciais e contratos."}</p>
+          {vista !== 'lista' && <LinkVoltar href="/admin/usuarios">Voltar aos funcionários</LinkVoltar>}
+          {vista !== 'lista' && <p className="max-w-3xl text-sm text-foreground/70">{vista === 'cadastro'
+              ? 'Crie uma conta interna. O acesso a contratos pode ser atribuído após o cadastro.'
+              : 'Atualize os dados da conta ou abra uma seção adicional para alterar credenciais e contratos.'}</p>}
         </div>
-        {mensagem && <p role="status" className="rounded-lg border border-brand-green/30 px-4 py-2 text-brand-neon">{mensagem}</p>}
         <div className="flex flex-col gap-5">
-          {vista === "lista" && <section className="min-w-0 rounded-2xl border border-brand-green/20 p-4 md:p-6" aria-labelledby="titulo-lista">
+          {vista === "lista" && <section className="min-w-0 rounded-2xl border border-brand-green/20 bg-brand-darkgreen/5 p-4 md:p-5" aria-labelledby="titulo-lista">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 id="titulo-lista" className="text-lg font-semibold">Funcionários</h2>
-              <div className="flex flex-wrap gap-2">
-                <button type="button" className={botao + " inline-flex min-w-36 items-center justify-center transition-colors disabled:cursor-wait"} onClick={() => void atualizacaoVisivel.executar(() => recarregar()).catch(() => {})} disabled={atualizando || atualizacaoVisivel.ocupado} aria-busy={atualizando || atualizacaoVisivel.ocupado}>{atualizando || atualizacaoVisivel.ocupado ? <IndicadorCarregamento compacto texto="Atualizando..." /> : "Atualizar lista"}</button>
-                <Link href="/admin/usuarios/novo" className={acao}>Cadastrar funcionário</Link>
+              <div className="flex flex-wrap items-center gap-3">
+                <h2 id="titulo-lista" className="text-base font-semibold">Funcionários</h2>
+                <div className="inline-flex items-center gap-1 rounded-lg border border-brand-green/25 p-1" role="group" aria-label="Situação dos funcionários">
+                  <button type="button" onClick={() => trocarAba('ativos')} disabled={atualizando} aria-pressed={aba === 'ativos'}
+                    className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${aba === 'ativos' ? 'bg-brand-green text-on-brand-green' : 'text-foreground/70 hover:bg-brand-green/10 hover:text-foreground'}`}>Ativos <span className="tabular-nums">({quantidades.ativos})</span></button>
+                  <button type="button" onClick={() => trocarAba('arquivados')} disabled={atualizando} aria-pressed={aba === 'arquivados'}
+                    className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${aba === 'arquivados' ? 'bg-brand-green text-on-brand-green' : 'text-foreground/70 hover:bg-brand-green/10 hover:text-foreground'}`}>Arquivados <span className="tabular-nums">({quantidades.arquivados})</span></button>
+                </div>
               </div>
+              <Link href="/admin/usuarios/novo" className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg bg-brand-green px-3 text-xs font-semibold text-on-brand-green transition hover:brightness-110 focus-visible:outline-2 focus-visible:outline-brand-neon">
+                <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6m-3-3h6"/></svg>
+                Cadastrar funcionário
+              </Link>
             </div>
-            <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Situação dos funcionários">
-              <button type="button" onClick={() => trocarAba("ativos")} disabled={atualizando} aria-pressed={aba === "ativos"} className={botao + (aba === "ativos" ? " border-brand-green bg-brand-green/10" : "")}>Ativos ({quantidades.ativos})</button>
-              <button type="button" onClick={() => trocarAba("arquivados")} disabled={atualizando} aria-pressed={aba === "arquivados"} className={botao + (aba === "arquivados" ? " border-brand-green bg-brand-green/10" : "")}>Arquivados ({quantidades.arquivados})</button>
-            </div>
-            <form className="mt-4 flex flex-wrap gap-2" onSubmit={pesquisar} role="search">
+            <form className="mt-4 flex max-w-3xl flex-wrap gap-2" onSubmit={pesquisar} role="search">
               <label htmlFor="buscar-funcionario" className="sr-only">Buscar funcionário por nome ou e-mail</label>
               <input id="buscar-funcionario" className={campo + " min-w-[12rem] flex-1"} value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar nome ou e-mail" maxLength={160} />
               <button type="submit" disabled={atualizando} className={botao}>Buscar</button>
               <button type="button" disabled={atualizando} className={botao} onClick={() => { setBusca(""); setFiltro(""); setPagina(1); void recarregar(aba, 1, ""); }}>Limpar</button>
             </form>
             {erroLista && <p role="alert" className="mt-3 text-sm text-error-text">{erroLista}</p>}
-            <p role="status" className="mt-2 min-h-4 text-xs text-foreground/65">{avisoAtualizacao}</p>
             <p className="mt-3 text-xs text-foreground/65">{listaVisivel.total} resultados · Página {lista.pagina} de {listaVisivel.totalPaginas}</p>
             {listaVisivel.itens.length === 0 ? <p className="mt-5 text-sm text-foreground/70">Nenhum funcionário nesta consulta.</p> : (
-              <ul className="mt-3 space-y-3">
+              <ul className="mt-3 space-y-2">
                 {listaVisivel.itens.map((u) => (
-                  <li key={u.id} className="min-w-0 rounded-xl border border-brand-green/20 p-3">
+                  <li key={u.id} className="min-w-0 rounded-xl border border-brand-green/20 bg-background/50 p-3 transition-colors hover:border-brand-green/45 hover:bg-brand-green/5">
                     <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-semibold break-words">{u.nome || "Nome não informado"}</p>
+                      <div className="flex min-w-0 flex-1 items-start gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-brand-green/25 bg-brand-green/10 text-sm font-bold text-brand-neon" aria-hidden="true">{u.nome?.trim()?.[0]?.toUpperCase() || '?'}</div>
+                        <div className="min-w-0"><p className="font-semibold break-words">{u.nome || "Nome não informado"}</p>
                         <p className="text-sm text-foreground/70 break-all">{u.email}</p>
-                        <p className="mt-1 text-xs text-foreground/65">{nomePerfil(u.perfil)} · {u.ativo ? "Ativo" : "Arquivado"} · {dataBR(u.criadoEm)}</p>
+                        <p className="mt-0.5 text-xs text-foreground/65">{nomePerfil(u.perfil)} · {u.ativo ? "Ativo" : "Arquivado"} · {dataBR(u.criadoEm)}</p></div>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {(u.perfil !== "ADMINISTRADOR" || u.id === minhaConta?.id) && <Link className={botao} href={`/admin/usuarios/${encodeURIComponent(u.id)}/editar`} aria-label={`Editar ${u.email}`}>Editar</Link>}
@@ -456,31 +479,46 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                     <details className="group rounded-xl border border-brand-green/20 p-4" data-testid="acessos-contratuais">
                       <summary className="cursor-pointer font-semibold focus-visible:outline-2 focus-visible:outline-brand-green">Acesso aos contratos <span className="ml-2 text-xs font-normal text-foreground/60">{permissoes.length} vínculo(s)</span></summary>
                       <div className="mt-4 space-y-4">
-                        <p className="text-sm text-foreground/70">Cada funcionário pode ter acesso a vários contratos. Gestores podem receber edição; colaboradores, apenas leitura. Estes vínculos não alteram o responsável interno do contrato.</p>
+                        <p className="text-sm text-foreground/70">Vincule um contrato para consulta. Depois, habilite a edição ou ajuste permissões específicas no cartão do vínculo. Ser responsável pelo cadastro não concede acesso automaticamente.</p>
                         {erroPermissoes && <p role="alert" className="text-sm text-error-text">{erroPermissoes}</p>}
                         <section aria-label="Contratos vinculados">
                           <h4 className="text-sm font-semibold">Contratos com acesso ({permissoes.length})</h4>
                           <ul className="mt-2 space-y-2 text-sm">
                             {permissoes.map((v) => {
                               const contrato = contratos.find((c) => c.id === v.contratoId);
-                              return <li key={v.contratoId} className="@container min-w-0 rounded-lg border border-brand-green/20 p-3">
-                                <div className="flex min-w-0 flex-col gap-3 @xl:flex-row @xl:items-center @xl:justify-between">
-                                  <div className="min-w-0 flex-1 space-y-1">
+                              // Administradores não recebem vínculos como funcionários. A normalização
+                              // também impede que o tipo administrativo alcance funções de perfil comum.
+                              const perfilVinculo: PerfilFuncionario = editando.perfil === 'ADMINISTRADOR' ? 'GESTOR' : editando.perfil;
+                              return <li key={v.contratoId} className="@container min-w-0 rounded-xl border border-brand-green/20 bg-brand-darkgreen/5 p-3 sm:p-4">
+                                <div className="min-w-0 space-y-3">
+                                  <div className="min-w-0">
                                     {contrato ? <>
-                                      <button type="button" className="block rounded text-left text-xs text-foreground/70 underline underline-offset-4 hover:text-foreground focus-visible:outline-2 focus-visible:outline-brand-green" onClick={(evento) => setIdentificacaoAberta({ contrato, gatilho: evento.currentTarget })}>Ver identificação completa</button>
-                                      <p title={contrato.numeroContrato} className="truncate font-medium">{contrato.numeroContrato}</p>
-                                      <p className="text-xs text-foreground/60">Código #{contrato.codigoPublico}</p>
-                                    </> : <p className="break-all font-medium">Contrato {v.contratoId}</p>}
-                                    <p className="text-xs text-foreground/75" data-testid={`permissao-contrato-${v.contratoId}`}>
-                                      <span className="font-medium">Permissão:</span>{' '}
-                                      {editando.perfil === "GESTOR" && v.podeEditar
-                                        ? "Leitura e edição de etapas e entregáveis; permite anexar documentos"
-                                        : "Somente leitura e visualização"}
+                                      <button type="button" title={contrato.numeroContrato} aria-label={`Ver identificação completa do contrato ${contrato.numeroContrato}`}
+                                        className="block max-w-full truncate rounded text-left text-sm font-semibold text-brand-neon underline decoration-brand-green/40 underline-offset-4 hover:decoration-brand-neon focus-visible:outline-2 focus-visible:outline-brand-green"
+                                        onClick={(evento) => setIdentificacaoAberta({ contrato, gatilho: evento.currentTarget })}>
+                                        {contrato.numeroContrato}</button>
+                                      <p className="mt-1 text-xs text-foreground/60">Código #{contrato.codigoPublico}</p>
+                                    </> : <p className="break-all font-semibold text-brand-neon">Contrato {v.contratoId}</p>}
+                                    <p className="mt-1 text-xs text-foreground/70" data-testid={`permissao-contrato-${v.contratoId}`}>
+                                      {resumirAcessoVinculo(perfilVinculo, v)}
                                     </p>
                                   </div>
-                                  <div className="flex min-w-0 flex-wrap gap-2 @xl:shrink-0">
-                                    {editando.perfil === "GESTOR" && <button type="button" className={botao} disabled={enviando || !!atualizandoVinculo || !editando.ativo} onClick={() => void alternarPermissao(v)}>{atualizandoVinculo === v.contratoId ? <IndicadorCarregamento compacto texto="Atualizando..." /> : v.podeEditar ? "Remover edição" : "Permitir edição"}</button>}
-                                    <button type="button" className={botao} disabled={enviando || !!atualizandoVinculo} onClick={() => setConfirmacao({ tipo: "permissao", contratoId: v.contratoId, email: editando.email })}>Revogar acesso</button>
+                                  <div className="flex flex-wrap items-center gap-2 border-t border-brand-green/15 pt-3">
+                                    {editando.perfil !== "ADMINISTRADOR" && <EditorPermissoesContrato key={v.contratoId} vinculo={v}
+                                      perfil={editando.perfil} salvando={!!atualizandoVinculo || enviando}
+                                      onSalvar={permissoes => salvarPermissoesDetalhadas(v, permissoes)} />}
+                                    <div className="ml-auto flex flex-wrap items-center gap-2">
+                                      <button type="button" className={botao} disabled={enviando || !!atualizandoVinculo || !editando.ativo}
+                                        onClick={() => {
+                                          if (vinculoTemEdicao(perfilVinculo, v))
+                                            setConfirmacao({ tipo: 'nivel', vinculo: v, nivel: 'leitura' });
+                                          else setConfirmacao({ tipo: 'nivel', vinculo: v, nivel: 'edicao' });
+                                        }}>
+                                        {atualizandoVinculo === v.contratoId ? <IndicadorCarregamento compacto texto="Atualizando..." />
+                                          : vinculoTemEdicao(perfilVinculo, v) ? 'Remover edição' : 'Permitir edição'}
+                                      </button>
+                                      <button type="button" className={botao} disabled={enviando || !!atualizandoVinculo} onClick={() => setConfirmacao({ tipo: "permissao", contratoId: v.contratoId, email: editando.email })}>Revogar acesso</button>
+                                    </div>
                                   </div>
                                 </div>
                               </li>;
@@ -491,13 +529,23 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                         <section className="border-t border-brand-green/20 pt-4" aria-label="Conceder novo acesso">
                           <h4 className="text-sm font-semibold">Adicionar acesso</h4>
                           {contratosLivres.length === 0 ? <p className="mt-2 text-sm text-foreground/60">Não há outros contratos disponíveis para vincular. Crie um contrato ou revise os vínculos acima.</p> :
-                            <form onSubmit={(e) => void salvarPermissao(e)} className="mt-3 min-w-0 space-y-3">
-                              <label htmlFor="contrato-permissao" className="block text-sm">Selecionar contrato ainda não vinculado</label>
-                              <select id="contrato-permissao" className={`${campo} max-w-[26rem] truncate text-sm`} value={contratoSelecionado} onChange={(e) => setContratoId(e.target.value)}>
-                                {contratosLivres.map((c) => <option value={c.id} key={c.id} title={c.numeroContrato}>#{c.codigoPublico} · {abreviarIdentificacao(c.numeroContrato, 35)}</option>)}
-                              </select>
-                              {editando.perfil === "GESTOR" && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={podeEditar} onChange={(e) => setPodeEditar(e.target.checked)} />Permitir também edição</label>}
-                              <button type="submit" disabled={enviando || !contratoSelecionado || !editando.ativo} className={acao}>{enviando ? <IndicadorCarregamento compacto texto="Vinculando..." /> : "Adicionar vínculo"}</button>
+                            <form onSubmit={(e) => void salvarPermissao(e)} className="mt-4 min-w-0 space-y-5">
+                              <div className="min-w-0 space-y-2">
+                                <label htmlFor="contrato-permissao" className="block text-sm font-medium">Selecionar contrato ainda não vinculado</label>
+                                <select id="contrato-permissao" className={`${campo} block max-w-full truncate text-sm`} value={contratoSelecionado} onChange={(e) => setContratoId(e.target.value)}>
+                                  {contratosLivres.map((c) => <option value={c.id} key={c.id} title={c.numeroContrato}>#{c.codigoPublico} · {abreviarIdentificacao(c.numeroContrato, 35)}</option>)}
+                                </select>
+                              </div>
+                              <p className="text-xs leading-relaxed text-foreground/65">
+                                O vínculo será criado com <strong>somente leitura</strong>. Depois, no cartão acima,
+                                você poderá permitir edição e personalizar as operações em “Ver permissões completas”.
+                              </p>
+                              <div className="flex justify-end border-t border-brand-green/20 pt-4">
+                                <button type="submit" disabled={enviando || !contratoSelecionado || !editando.ativo}
+                                  className={acao}>
+                                  {enviando ? <IndicadorCarregamento compacto texto="Vinculando..." /> : "Adicionar vínculo"}
+                                </button>
+                              </div>
                             </form>}
                         </section>
                       </div>
@@ -534,16 +582,24 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
       </div>
       {identificacaoAberta && <ModalIdentificacaoContrato contrato={identificacaoAberta.contrato} focoRetorno={identificacaoAberta.gatilho} onFechar={fecharIdentificacao} />}
       {confirmacao && <ConfirmacaoSimples
-        titulo={confirmacao.tipo === "conta" ? (confirmacao.usuario.ativo ? "Arquivar funcionário?" : "Reativar funcionário?") : "Revogar permissão?"}
+        titulo={confirmacao.tipo === "conta" ? (confirmacao.usuario.ativo ? "Arquivar funcionário?" : "Reativar funcionário?")
+          : confirmacao.tipo === "nivel" ? (confirmacao.nivel === "leitura" ? "Voltar para somente leitura?" : "Permitir edição neste contrato?")
+          : "Revogar permissão?"}
         descricao={confirmacao.tipo === "conta"
           ? `A conta ${confirmacao.usuario.email} será ${confirmacao.usuario.ativo ? "inativada e movida para Arquivados" : "reativada"}. O histórico será preservado.`
-          : `Remover o acesso de ${confirmacao.email} ao contrato selecionado? O histórico será preservado.`}
-        confirmar={confirmacao.tipo === "conta" ? (confirmacao.usuario.ativo ? "Arquivar" : "Reativar") : "Revogar"}
+          : confirmacao.tipo === "nivel"
+            ? (confirmacao.nivel === 'leitura'
+                ? 'O funcionário poderá apenas consultar o contrato, as etapas, os entregáveis, as evidências e os documentos. As permissões personalizadas atuais serão desativadas. Você poderá concedê-las novamente depois.'
+                : 'O funcionário poderá criar e editar etapas, entregáveis e evidências, organizar etapas, enviar comprovantes e arquivar itens. Reativar ou excluir definitivamente continuará exigindo uma permissão específica. Esta alteração substitui as permissões personalizadas atuais.')
+            : `Remover o acesso de ${confirmacao.email} ao contrato selecionado? O histórico será preservado.`}
+        confirmar={confirmacao.tipo === "conta" ? (confirmacao.usuario.ativo ? "Arquivar" : "Reativar")
+          : confirmacao.tipo === "nivel" ? (confirmacao.nivel === 'leitura' ? 'Manter somente leitura' : 'Permitir edição') : "Revogar"}
         perigoso={confirmacao.tipo === "permissao" || (confirmacao.tipo === "conta" && confirmacao.usuario.ativo)}
-        ocupado={enviando || atualizando}
+        ocupado={enviando || atualizando || !!atualizandoVinculo}
         onCancelar={() => setConfirmacao(null)}
         onConfirmar={() => {
           if (confirmacao.tipo === "conta") void trocarEstado(confirmacao.usuario);
+          else if (confirmacao.tipo === "nivel") void alternarPermissao(confirmacao.vinculo, confirmacao.nivel);
           else void revogar(confirmacao.contratoId);
         }}
       />}

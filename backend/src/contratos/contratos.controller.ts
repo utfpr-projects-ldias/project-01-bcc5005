@@ -1,13 +1,16 @@
 import {
-  Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Req,
+  Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Req,
   UsePipes, ValidationPipe,
 } from '@nestjs/common';
 
 import { ExigirPolitica } from '../autorizacao/politica.decorator.js';
+import { ExigirPoliticaOperacional } from '../autorizacao/politica.decorator.js';
 import type { RequisicaoAutorizada } from '../autorizacao/usuario-autenticado.js';
 import { ContratosService } from './contratos.service.js';
+import { ExclusaoContratoService } from './exclusao-contrato.service.js';
 import { AtualizarContratoDto } from './dto/atualizar-contrato.dto.js';
 import { CriarContratoDto } from './dto/criar-contrato.dto.js';
+import { BloquearOrdemEtapasDto } from './dto/bloquear-ordem-etapas.dto.js';
 
 /**
  * API protegida de contratos — HU05-02.
@@ -22,12 +25,12 @@ import { CriarContratoDto } from './dto/criar-contrato.dto.js';
  *  4. `visualizar`/`editar` exigem `id` **da rota** (nunca body/query). Negar
  *     vira 404, para não confirmar existência de contrato alheio (RF-02).
  *
- * Não há DELETE: arquivos e registros são preservados. Arquivamento lógico
- * tem rotas ADMIN auditadas e não altera o status operacional.
+ * Exclusão definitiva somente em contratos previamente arquivados, exclusiva do ADMIN.
+ * Arquivamento lógico preserva histórico e não altera o status operacional.
  */
 @Controller('contratos')
 export class ContratosController {
-  constructor(private readonly contratos: ContratosService) {}
+  constructor(private readonly contratos: ContratosService, private readonly exclusao: ExclusaoContratoService) {}
 
   @Get()
   @ExigirPolitica('contratos:listar')
@@ -65,10 +68,29 @@ export class ContratosController {
   ) {
     return this.contratos.atualizar(id, dto, req.usuarioDominio!);
   }
+  @Patch(':id/ordem-etapas')
+  @ExigirPoliticaOperacional('etapas:bloquear-ordem', { tipo: 'contrato', parametro: 'id' })
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
+  alterarBloqueioOrdem(@Param('id') id: string, @Body() dto: BloquearOrdemEtapasDto, @Req() req: RequisicaoAutorizada) {
+    return this.contratos.alterarBloqueioOrdem(id, dto.bloqueada, req.usuarioDominio!);
+  }
+
+  @Patch(':id/reabrir')
+  @ExigirPolitica('contratos:reabrir', 'id')
+  reabrir(@Param('id') id: string, @Req() req: RequisicaoAutorizada) {
+    return this.contratos.reabrir(id, req.usuarioDominio!);
+  }
+
   @Patch(':id/arquivar')
   @ExigirPolitica('contratos:arquivar', 'id')
   arquivar(@Param('id') id: string, @Req() req: RequisicaoAutorizada) {
     return this.contratos.alterarArquivamento(id, true, req.usuarioDominio!);
+  }
+
+  @Delete(':id')
+  @ExigirPolitica('contratos:excluir', 'id')
+  excluir(@Param('id') id: string, @Req() req: RequisicaoAutorizada) {
+    return this.exclusao.excluir(id, req.usuarioDominio!);
   }
 
   @Patch(':id/reativar')

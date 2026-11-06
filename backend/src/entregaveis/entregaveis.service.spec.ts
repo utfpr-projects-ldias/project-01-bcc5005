@@ -84,7 +84,7 @@ describe('HU07-02 — validações de planejamento independentes da execução',
 
 describe('HU07-02 — contratos de autorização', () => {
   it('rotas detalhar/editar/checklist exigem recurso persistido e contrato pai', () => {
-    for (const metodo of ['detalhar', 'editar', 'atualizarChecklist'] as const) {
+    for (const metodo of ['detalhar', 'historico', 'editar', 'atualizarChecklist'] as const) {
       const politica = Reflect.getMetadata(CHAVE_POLITICA, EntregaveisController.prototype[metodo]) as {
         acao: string; escopoOperacional: { tipo: string; recurso: string; parametroContratoPai: string };
       };
@@ -133,6 +133,7 @@ describe('HU07-02 — serviço integra escopo, auditoria e transações', () => 
     findOneBy: jest.fn(async () => ({ contratoId: contrato })),
     create: jest.fn((value: unknown) => Object.assign(new Entregavel(), value)),
     save: jest.fn(async (value: unknown) => Object.assign(value as object, { id })),
+    count: jest.fn(async () => 0),
   };
   const auditoria = { registrarResolvedorContexto: jest.fn(), registrarNaTransacao: jest.fn(async () => undefined) };
   const escopos = { registrarAdaptador: jest.fn() };
@@ -168,7 +169,87 @@ describe('HU07-02 — serviço integra escopo, auditoria e transações', () => 
       entidadeTipo: 'ENTREGAVEL', entidadeId: id,
     }));
   });
+  it('bloqueia criação acima de 100 entregáveis, incluindo arquivados', async () => {
+    repositorio.count.mockResolvedValueOnce(100);
+    const dto = { etapaId: etapa, nome: 'Entrega excedente', tipo: TipoEntregavel.UNICO } as CriarEntregavelDto;
+    await expect(service.criar(contrato, dto, ator)).rejects.toThrow('Limite de 100 entregáveis');
+    expect(repositorio.count).toHaveBeenCalledWith({ where: { contratoId: contrato } });
+    expect(repositorio.save).not.toHaveBeenCalled();
+  });
   it('edição sem campos é rejeitada', async () => {
     await expect(service.editar(contrato, id, {}, ator)).rejects.toThrow(BadRequestException);
+  });
+});
+
+
+describe('Rastreabilidade do entregável: escopo raiz por contrato', () => {
+  it('não consulta eventos se o entregável não pertence ao contrato da URL', async () => {
+    const repo = { findOne: jest.fn(async () => null) };
+    const db = { getRepository: jest.fn() };
+    const service = new EntregaveisService(repo as never, {} as never, db as never, {} as never, {} as never);
+    await expect(service.historico(contrato, id, ator)).rejects.toThrow('Entregável não encontrado neste contrato');
+    expect(repo.findOne).toHaveBeenCalledWith({ where: { id, contratoId: contrato }, select: { id: true } });
+    expect(db.getRepository).not.toHaveBeenCalled();
+  });
+  it('não concede histórico de auditoria a leitor apenas vinculado, sem autorização específica', async () => {
+    const repo = { findOne: jest.fn(async () => ({ id })) };
+    const vinculos = { findOneBy: jest.fn(async () => null) };
+    const eventos = { find: jest.fn() };
+    const db = { getRepository: (tipo: { name: string }) => tipo.name === 'PermissaoContrato' ? vinculos : eventos };
+    const service = new EntregaveisService(repo as never, {} as never, db as never, {} as never, {} as never);
+    await expect(service.historico(contrato, id, { ...ator, perfil: PerfilUsuario.COLABORADOR }))
+      .rejects.toThrow('Sem permissão para consultar a trilha');
+    expect(eventos.find).not.toHaveBeenCalled();
+  });
+  it('consulta apenas eventos da entidade autorizada e não retorna JSON de auditoria', async () => {
+    const evento = {
+      id: 'evento-qa', acao: 'ENTREGAVEL_CRIADO', registradoEm: new Date('2026-11-04T12:00:00Z'),
+      atorSupertokensUserId: 'st-qa', dadosAnteriores: null, dadosPosteriores: { nome: 'QA' },
+    };
+    const repo = { findOne: jest.fn(async () => ({ id })) };
+    const eventosRepo = { find: jest.fn(async () => [evento]) };
+    const usuarioRepo = { find: jest.fn(async () => [{ supertokensUserId: 'st-qa', nome: 'Fiscal QA', email: 'fiscal@example.org' }]) };
+    const db = { getRepository: (tipo: { name: string }) => tipo.name === 'EventoAuditoria' ? eventosRepo : usuarioRepo };
+    const service = new EntregaveisService(repo as never, {} as never, db as never, {} as never, {} as never);
+    const resultado = await service.historico(contrato, id, ator);
+    expect(eventosRepo.find).toHaveBeenCalledWith(expect.objectContaining({
+      where: { contratoId: contrato, entidadeTipo: 'ENTREGAVEL', entidadeId: id }, take: 100,
+    }));
+    expect(resultado).toHaveLength(1);
+    expect(resultado[0]).toEqual(expect.objectContaining({ descricao: 'Entregável cadastrado', ator: {
+      nome: 'Fiscal QA', email: 'fiscal@example.org',
+    } }));
+    expect(resultado[0]).not.toHaveProperty('dadosPosteriores');
+  });
+});
+
+describe('Rastreabilidade contextual: nomes da época do evento', () => {
+  it('mostra antes/depois de evidência renomeada e nome de comprovante mesmo sem versão física disponível', async () => {
+    const eventos = [
+      { id: 'mudanca-qa', acao: 'ENTREGAVEL_EVIDENCIA_ESPERADA_CONFIGURADA',
+        registradoEm: new Date('2026-11-06T01:01:00Z'), atorSupertokensUserId: 'st-qa',
+        dadosAnteriores: { itemId: 'ev-qa', tipoEvidencia: 'Relatório original' },
+        dadosPosteriores: { itemId: 'ev-qa', tipoEvidencia: 'Relatório atualizado', operacao: 'EDITAR_ITEM' } },
+      { id: 'upload-qa', acao: 'ENTREGAVEL_COMPROVANTE_ENVIADO',
+        registradoEm: new Date('2026-11-06T01:00:00Z'), atorSupertokensUserId: 'st-qa',
+        dadosAnteriores: null,
+        dadosPosteriores: { evidenciaEsperadaId: 'ev-qa', comprovanteId: 'anexo-qa', nomeOriginal: 'versao-2026.pdf' } },
+    ];
+    const repo = { findOne: jest.fn(async () => ({ id })) };
+    const db = { getRepository: (tipo: { name: string }) => {
+      if (tipo.name === 'EventoAuditoria') return { find: async () => eventos };
+      if (tipo.name === 'Usuario') return { find: async () => [{ supertokensUserId: 'st-qa', nome: 'QA', email: 'qa@example.invalid' }] };
+      if (tipo.name === 'EvidenciaEsperada') return { find: async () => [{ id: 'ev-qa', tipoEvidencia: 'Relatório atualizado' }] };
+      if (tipo.name === 'ComprovanteEvidencia') return { find: async () => [] };
+      throw new Error(`Repositório não esperado: ${tipo.name}`);
+    } };
+    const service = new EntregaveisService(repo as never, {} as never, db as never, {} as never, {} as never);
+    const resultado = await service.historico(contrato, id, ator);
+    expect(resultado[0]).toEqual(expect.objectContaining({
+      evidenciaNome: 'Relatório atualizado', nomeAnterior: 'Relatório original',
+      nomeAtual: 'Relatório atualizado', objetoRenomeado: 'Evidência',
+    }));
+    expect(resultado[1]).toEqual(expect.objectContaining({ nomeArquivo: 'versao-2026.pdf' }));
+    expect(resultado[0]).not.toHaveProperty('dadosAnteriores');
   });
 });

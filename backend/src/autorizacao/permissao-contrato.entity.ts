@@ -1,5 +1,6 @@
 import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Unique } from 'typeorm';
 import { Usuario } from '../usuarios/usuario.entity.js';
+import type { PermissoesGranulares } from './permissoes-granulares.js';
 import { Contrato } from '../contratos/contrato.entity.js';
 
 /** Vínculo expresso; nunca inferir acesso porque há sessão. */
@@ -22,6 +23,9 @@ export class PermissaoContrato {
 
   @Column({ name: 'pode_editar', type: 'boolean', default: false })
   podeEditar!: boolean;
+
+  @Column({ name: 'permissoes_detalhadas', type: 'jsonb', nullable: true })
+  permissoesDetalhadas!: PermissoesGranulares | null;
 
   @ManyToOne(() => Usuario, { onDelete: 'RESTRICT', nullable: false })
   @JoinColumn({ name: 'usuario_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_permissoes_contrato_usuario' })

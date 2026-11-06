@@ -159,6 +159,19 @@ export class ArmazenamentoLocal implements ArmazenamentoArquivos {
     this.pendentes.delete(referencia.chave);
   }
 
+  async removerPersistido(chave: string): Promise<void> {
+    // Método interno. O domínio autoriza; o adaptador valida a chave e nunca
+    // aceita caminhos do usuário. ENOENT torna a limpeza idempotente.
+    await this.exclusivo(async () => {
+      const destino = this.caminho(chave);
+      try {
+        await unlink(destino);
+      } catch (erro) {
+        if ((erro as NodeJS.ErrnoException).code !== 'ENOENT') throw erro;
+      }
+    });
+  }
+
   async removerOrfao(referencia: ReferenciaCompensacao): Promise<void> {
     await this.exclusivo(async () => {
       this.autenticar(referencia);

@@ -7,13 +7,16 @@ import type { RequisicaoAutorizada } from '../autorizacao/usuario-autenticado.js
 import { PerfilUsuario } from './perfil-usuario.enum.js';
 
 it('as rotas usam somente a identidade do guard; não recebem ID de outro usuário', async () => {
+  const alterarNome = jest.fn<(...args: unknown[]) => Promise<{ id: string; nome: string }>>().mockResolvedValue({ id: 'proprio', nome: 'Nome Atualizado' });
   const alterarEmail = jest.fn<(...args: unknown[]) => Promise<{ id: string; email: string }>>().mockResolvedValue({ id: 'proprio', email: 'novo@qa.org' });
   const alterarSenha = jest.fn<(...args: unknown[]) => Promise<void>>().mockResolvedValue(undefined);
-  const c = new MinhaContaController({ alterarEmail, alterarSenha } as unknown as MinhaContaService);
+  const c = new MinhaContaController({ alterarNome, alterarEmail, alterarSenha } as unknown as MinhaContaService);
   const ator = { id: 'proprio', perfil: PerfilUsuario.ADMINISTRADOR, email: 'admin@qa.org', supertokensUserId: 'st-admin' };
   const req = { usuarioDominio: ator } as unknown as RequisicaoAutorizada;
+  await c.alterarMeuNome({ nome: 'Nome Atualizado' }, req);
   await c.alterarMeuEmail({ email: 'novo@qa.org', senhaAtual: 'senha' }, req);
   await c.alterarMinhaSenha({ senhaAtual: 'antiga', novaSenha: 'nova' }, req);
+  expect(alterarNome).toHaveBeenCalledWith('Nome Atualizado', ator);
   expect(alterarEmail).toHaveBeenCalledWith('novo@qa.org', 'senha', ator);
   expect(alterarSenha).toHaveBeenCalledWith('antiga', 'nova', ator);
   const politica = Reflect.getMetadata(CHAVE_POLITICA, MinhaContaController);
