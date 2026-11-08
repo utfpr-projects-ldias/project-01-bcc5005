@@ -1,10 +1,19 @@
 jest.mock('@/hooks/use-entregaveis', () => ({
-  useEntregaveis: () => ({ dados: [], carregando: false, erro: undefined, atualizar: jest.fn().mockResolvedValue([]) }),
+  useEntregaveis: jest.fn(),
+  useResumoDocumentalContrato: jest.fn(),
 }));
+import { useEntregaveis, useResumoDocumentalContrato } from '@/hooks/use-entregaveis';
+import type { Entregavel } from '@/lib/entregaveis';
+const entregaveisHook = useEntregaveis as jest.Mock;
+const documentalHook = useResumoDocumentalContrato as jest.Mock;
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { PainelEtapas } from './painel-etapas';
 import { useEtapas, useMutacoesEtapas } from '@/hooks/use-etapas';
-import { ErroEtapa, type Etapa } from '@/lib/etapas';
+import { ErroEtapa, alterarArquivamentoEtapa, type Etapa } from '@/lib/etapas';
+import { alterarBloqueioOrdemEtapas } from '@/lib/contratos';
+jest.mock('@/lib/contratos', () => ({ ...jest.requireActual('@/lib/contratos'), alterarBloqueioOrdemEtapas: jest.fn() }));
+jest.mock('@/lib/etapas', () => ({ ...jest.requireActual('@/lib/etapas'), alterarArquivamentoEtapa: jest.fn() }));
+const alterarTrava = alterarBloqueioOrdemEtapas as jest.Mock;
 
 jest.mock('@/hooks/use-etapas', () => ({ useEtapas: jest.fn(), useMutacoesEtapas: jest.fn() }));
 const consultar = useEtapas as jest.Mock;
@@ -13,6 +22,11 @@ const atualizar = jest.fn();
 const criar = jest.fn();
 const editar = jest.fn();
 const reordenar = jest.fn();
+function liberarOrdenacao() {
+  // Regra global: novo contrato e contrato migrado iniciam com ordem liberada.
+  expect(screen.getByRole('button', { name: 'Descer etapa Planejamento' })).toBeEnabled();
+}
+
 const contrato = '11111111-1111-4111-8111-111111111111';
 // jsdom não implementa toda a navegação same-document: simular a transição do
 // histórico de forma explícita, mantendo testes determinísticos e sem rede real.
@@ -49,12 +63,83 @@ const estado = (dados: Etapa[] | undefined = duas, outros = {}) => ({
 });
 beforeEach(() => {
   jest.clearAllMocks();
+  entregaveisHook.mockReturnValue({ dados: [], carregando: false, erro: undefined, atualizar: jest.fn().mockResolvedValue([]) });
+  documentalHook.mockReturnValue({ dados: {}, carregando: false, erro: undefined, atualizar: jest.fn().mockResolvedValue({}) });
   consultar.mockReturnValue(estado());
   mutacoesHook.mockReturnValue({ criar, editar, reordenar });
   atualizar.mockResolvedValue(duas);
   criar.mockResolvedValue({ ...base, id: 'nova' });
   editar.mockResolvedValue(base);
   reordenar.mockResolvedValue([...duas].reverse());
+  alterarTrava.mockResolvedValue({ id: contrato, ordemEtapasBloqueada: true });
+});
+
+
+describe('TEC08-03 — etapa reaberta após conclusão', () => {
+  const comprovado: Entregavel = {
+    id: 'entregavel-verificado', contratoId: contrato, etapaId: base.id, nome: 'Relatório verificado', codigo: null,
+    descricao: null, tipo: 'UNICO', responsavelId: null, inicioPrevisto: null, terminoPrevisto: null,
+    quantidadePrevista: null, quantidadeRealizada: null, unidadeMedida: null, periodicidade: null,
+    configuracaoPeriodicidade: null, peso: null, criterioConclusao: null, percentualExecucao: null,
+    statusExecucao: 'CONCLUIDO', situacaoComprovacao: 'COMPROVADO', observacoes: null,
+    reabertoEm: null, arquivadoEm: null,
+    evidenciasEsperadas: [{ id: 'evidencia-verificada', tipoEvidencia: 'Relatório', descricao: null, obrigatoria: true, reabertoEm: null }],
+  };
+  test('oferece Fechar novamente no cabeçalho se todos os filhos ativos permanecem completos', () => {
+    consultar.mockReturnValue(estado([{ ...base, status: 'PLANEJADA', reabertoEm: '2026-11-08T08:00:00.000Z' }]));
+    entregaveisHook.mockReturnValue({ dados: [comprovado], carregando: false, erro: undefined, atualizar: jest.fn() });
+    documentalHook.mockReturnValue({ dados: { [comprovado.id]: { obrigatorias: 1, verificadas: 1, total: 1, verificadasTotal: 1 } }, carregando: false, erro: undefined, atualizar: jest.fn() });
+    render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes da etapa 1: Planejamento' }));
+    const modal = screen.getByRole('dialog', { name: /Planejamento/ });
+    const cabecalho = modal.querySelector('header');
+    expect(cabecalho).not.toBeNull();
+    expect(within(cabecalho as HTMLElement).getByRole('button', { name: 'Fechar novamente' })).toBeEnabled();
+    expect(within(modal).getAllByRole('button', { name: 'Fechar novamente' })).toHaveLength(1);
+    fireEvent.click(within(cabecalho as HTMLElement).getByRole('button', { name: 'Fechar novamente' }));
+    expect(screen.getByRole('dialog', { name: 'Fechar novamente?' })).toBeInTheDocument();
+  });
+  test('oculta Fechar novamente quando um novo entregável incompleto passa a integrar a etapa', () => {
+    consultar.mockReturnValue(estado([{ ...base, status: 'PLANEJADA', reabertoEm: '2026-11-08T08:00:00.000Z' }]));
+    entregaveisHook.mockReturnValue({ dados: [comprovado, { ...comprovado, id: 'entregavel-novo', nome: 'Pendência nova', statusExecucao: 'NAO_INICIADO' }], carregando: false, erro: undefined, atualizar: jest.fn() });
+    documentalHook.mockReturnValue({ dados: { [comprovado.id]: { obrigatorias: 1, verificadas: 1, total: 1, verificadasTotal: 1 } }, carregando: false, erro: undefined, atualizar: jest.fn() });
+    render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes da etapa 1: Planejamento' }));
+    expect(within(screen.getByRole('dialog', { name: /Planejamento/ })).queryByRole('button', { name: 'Fechar novamente' })).not.toBeInTheDocument();
+  });
+  test('arquivar uma evidência opcional preserva o fechamento se a comprovação ativa permanece completa', () => {
+    consultar.mockReturnValue(estado([{ ...base, status: 'PLANEJADA', reabertoEm: '2026-11-08T08:00:00.000Z' }]));
+    const comOpcionalArquivada: Entregavel = { ...comprovado, evidenciasEsperadas: [
+      ...comprovado.evidenciasEsperadas,
+      { id: 'opcional-arquivada', tipoEvidencia: 'Fotografia', descricao: null, obrigatoria: false, arquivadoEm: '2026-11-08T08:05:00.000Z', reabertoEm: null },
+    ] };
+    entregaveisHook.mockReturnValue({ dados: [comOpcionalArquivada], carregando: false, erro: undefined, atualizar: jest.fn() });
+    documentalHook.mockReturnValue({ dados: { [comprovado.id]: { obrigatorias: 1, verificadas: 1, total: 1, verificadasTotal: 1 } }, carregando: false, erro: undefined, atualizar: jest.fn() });
+    render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes da etapa 1: Planejamento' }));
+    const modal = screen.getByRole('dialog', { name: /Planejamento/ });
+    expect(within(modal.querySelector('header') as HTMLElement).getByRole('button', { name: 'Fechar novamente' })).toBeEnabled();
+  });
+  test('nova evidência ativa sem verificação remove Fechar novamente', () => {
+    consultar.mockReturnValue(estado([{ ...base, status: 'PLANEJADA', reabertoEm: '2026-11-08T08:00:00.000Z' }]));
+    const comEvidenciaPendente: Entregavel = { ...comprovado, evidenciasEsperadas: [
+      ...comprovado.evidenciasEsperadas,
+      { id: 'evidencia-pendente', tipoEvidencia: 'Fotografia', descricao: null, obrigatoria: false, arquivadoEm: null, reabertoEm: null },
+    ] };
+    entregaveisHook.mockReturnValue({ dados: [comEvidenciaPendente], carregando: false, erro: undefined, atualizar: jest.fn() });
+    documentalHook.mockReturnValue({ dados: { [comprovado.id]: { obrigatorias: 1, verificadas: 1, total: 2, verificadasTotal: 1 } }, carregando: false, erro: undefined, atualizar: jest.fn() });
+    render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes da etapa 1: Planejamento' }));
+    expect(within(screen.getByRole('dialog', { name: /Planejamento/ })).queryByRole('button', { name: 'Fechar novamente' })).not.toBeInTheDocument();
+  });
+  test('não oferece conclusão manual quando falta permissão de concluirEtapas', () => {
+    consultar.mockReturnValue(estado([{ ...base, status: 'PLANEJADA', reabertoEm: '2026-11-08T08:00:00.000Z' }]));
+    entregaveisHook.mockReturnValue({ dados: [comprovado], carregando: false, erro: undefined, atualizar: jest.fn() });
+    documentalHook.mockReturnValue({ dados: { [comprovado.id]: { obrigatorias: 1, verificadas: 1, total: 1, verificadasTotal: 1 } }, carregando: false, erro: undefined, atualizar: jest.fn() });
+    render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar={false} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes da etapa 1: Planejamento' }));
+    expect(within(screen.getByRole('dialog', { name: /Planejamento/ })).queryByRole('button', { name: 'Fechar novamente' })).not.toBeInTheDocument();
+  });
 });
 
 describe('HU06-03 — painel no contrato', () => {
@@ -63,9 +148,13 @@ describe('HU06-03 — painel no contrato', () => {
     const lista = screen.getByRole('list', { name: 'Etapas em ordem de execução' });
     expect(within(lista).getAllByRole('listitem')[0]).toHaveTextContent('Planejamento');
     expect(within(lista).getAllByRole('listitem')[1]).toHaveTextContent('Entrega');
-    expect(within(within(lista).getAllByRole('listitem')[0]).getByText('10/10/2026')).toBeInTheDocument();
-    expect(screen.getByText('Descrição da etapa')).toBeInTheDocument();
+    expect(within(within(lista).getAllByRole('listitem')[0]).getByText(/10\/10\/2026/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Abrir detalhes da etapa 1: Planejamento/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Abrir detalhes da etapa 2: Entrega/ }));
     expect(screen.getByText(/datas previstas desta etapa estão fora/)).toHaveAttribute('role', 'note');
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar às etapas' }));
+    fireEvent.click(screen.getByRole('button', { name: /Abrir detalhes da etapa 1: Planejamento/ }));
+    expect(screen.getByText('Descrição da etapa')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Subir etapa Planejamento/ })).toBeDisabled();
   });
   test('Colaborador vê a lista, mas não vê controles de planejamento', () => {
@@ -87,7 +176,8 @@ describe('HU06-03 — painel no contrato', () => {
     consultar.mockReturnValue(estado(duas, { atualizando: true }));
     render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
     expect(screen.getByText('Planejamento')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Atualizando...' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Abrir detalhes da etapa 1: Planejamento/ })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Atualizar etapas' })).not.toBeInTheDocument();
   });
   test('formulário valida nome e data antes do POST e preserva dados após falha HTTP', async () => {
     criar.mockRejectedValueOnce(new ErroEtapa(400, 'Confira os campos informados e tente novamente.'));
@@ -119,6 +209,7 @@ describe('HU06-03 — painel no contrato', () => {
   test('reordena com ordem original e ordem nova; após falha reverte a lista', async () => {
     reordenar.mockRejectedValueOnce(new ErroEtapa(500, 'Falha simulada'));
     render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
+    liberarOrdenacao();
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Descer etapa Planejamento' })); });
     expect(reordenar).toHaveBeenCalledWith(['etapa-1', 'etapa-2'], ['etapa-2', 'etapa-1']);
     const lista = screen.getByRole('list', { name: 'Etapas em ordem de execução' });
@@ -128,6 +219,7 @@ describe('HU06-03 — painel no contrato', () => {
   test('409 exige atualizar a lista; erro 403 impede reutilizar dados em tela', async () => {
     reordenar.mockRejectedValueOnce(new ErroEtapa(409, 'Ordem desatualizada'));
     const view = render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
+    liberarOrdenacao();
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Descer etapa Planejamento' })); });
     await waitFor(() => expect(atualizar).toHaveBeenCalledTimes(1));
     reordenar.mockRejectedValueOnce(new ErroEtapa(403, 'Acesso revogado'));
@@ -164,10 +256,10 @@ test('criação e edição abrem modal e fecham sem navegação nem salvamento',
   fireEvent.click(screen.getByRole('button', { name: 'Voltar sem salvar' }));
 
   fireEvent.click(screen.getByRole('button', { name: 'Editar etapa Planejamento' }));
-  const editando = screen.getByRole('button', { name: 'Editando etapa Planejamento' });
+  const editando = screen.getByRole('button', { name: 'Editar etapa Planejamento' });
   expect(editando).toBeEnabled();
   expect(editando).toHaveAttribute('aria-expanded', 'true');
-  expect(editando.querySelector('svg')).toBeNull();
+  expect(editando.querySelector('svg')).not.toBeNull();
   expect(screen.getByRole('dialog', { name: /Editar etapa · Planejamento/ })).toBeInTheDocument();
   expect(document.getElementById('formulario-etapa-etapa-1')).toBeInTheDocument();
   fireEvent.click(editando);
@@ -183,12 +275,12 @@ test('durante salvamento, não permite recolher ou trocar de formulário', async
   render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
   fireEvent.click(screen.getByRole('button', { name: 'Editar etapa Planejamento' }));
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Salvar etapa' })); });
-  expect(screen.getByRole('button', { name: 'Editando etapa Planejamento' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Editar etapa Planejamento' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Nova etapa' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Voltar sem salvar' })).toBeDisabled();
-  expect(screen.getByRole('button', { name: 'Atualizar etapas' })).toBeDisabled();
+  expect(screen.queryByRole('button', { name: 'Atualizar etapas' })).not.toBeInTheDocument();
   await act(async () => { concluir(base); });
-  await waitFor(() => expect(screen.queryByRole('button', { name: 'Editando etapa Planejamento' })).not.toBeInTheDocument());
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: /Editar etapa · Planejamento/ })).not.toBeInTheDocument());
   expect(screen.getByRole('button', { name: 'Editar etapa Planejamento' })).toBeEnabled();
 });
 
@@ -202,8 +294,50 @@ test('modal de etapa fecha por Esc e preserva o foco no botão que abriu', () =>
   expect(acao).toHaveFocus();
 });
 
+test('funcionário com apenas reordenarEtapas move quando liberado, mas não vê controle global', () => {
+  render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar={false}
+    permissoes={{ reordenarEtapas: true, bloquearOrdemEtapas: false } as never} />);
+  expect(screen.queryByRole('button', { name: 'Bloquear ordem das etapas' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Nova etapa' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Descer etapa Planejamento' })).toBeEnabled();
+});
+
+test('funcionário com reordenarEtapas não supera trava global', () => {
+  render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar={false}
+    ordemEtapasBloqueada permissoes={{ reordenarEtapas: true, bloquearOrdemEtapas: false } as never} />);
+  expect(screen.queryByRole('button', { name: 'Desbloquear ordem das etapas' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Descer etapa Planejamento' })).toBeDisabled();
+  expect(reordenar).not.toHaveBeenCalled();
+});
+
+test('funcionário sem reordenarEtapas não vê cadeado nem ações de movimentação', () => {
+  render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar={false}
+    permissoes={{ reordenarEtapas: false, bloquearOrdemEtapas: false } as never} />);
+  expect(screen.queryByRole('button', { name: 'Bloquear ordem das etapas' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /Descer etapa/ })).not.toBeInTheDocument();
+});
+
+test('trava persiste por contrato e só ADMIN ou delegação explícita pode alternar', async () => {
+  const atualizarContrato = jest.fn().mockResolvedValue(undefined);
+  const view = render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar
+    permissoes={{ reordenarEtapas: true, bloquearOrdemEtapas: true } as never}
+    onOrdemAlterada={atualizarContrato} ordemEtapasBloqueada={false} />);
+  expect(screen.getByRole('button', { name: 'Descer etapa Planejamento' })).toBeEnabled();
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Bloquear ordem das etapas' })); });
+  expect(alterarTrava).toHaveBeenCalledWith(contrato, true);
+  expect(atualizarContrato).toHaveBeenCalledTimes(1);
+  view.rerender(<PainelEtapas contratoId={contrato} habilitado podeGerenciar
+    permissoes={{ reordenarEtapas: true, bloquearOrdemEtapas: true } as never}
+    onOrdemAlterada={atualizarContrato} ordemEtapasBloqueada />);
+  expect(screen.getByRole('button', { name: 'Desbloquear ordem das etapas' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: 'Descer etapa Planejamento' })).toBeDisabled();
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Desbloquear ordem das etapas' })); });
+  expect(alterarTrava).toHaveBeenCalledWith(contrato, false);
+});
+
 test('Subir/Descer têm retorno visual em hover e respeitam limites da sequência', () => {
   render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
+    liberarOrdenacao();
   const primeiro = screen.getByRole('button', { name: 'Subir etapa Planejamento' });
   const ultimo = screen.getByRole('button', { name: 'Descer etapa Entrega' });
   expect(primeiro).toBeDisabled();
@@ -271,6 +405,7 @@ test('HU06/HU07: Subir/Descer aplica FLIP aos dois cartões e anima a troca de p
   Object.defineProperty(HTMLElement.prototype, 'animate', { configurable: true, value: animar });
   try {
     render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
+    liberarOrdenacao();
     fireEvent.click(screen.getByRole('button', { name: 'Descer etapa Planejamento' }));
     const itens = within(screen.getByRole('list', { name: 'Etapas em ordem de execução' })).getAllByRole('listitem');
     expect(itens[0]).toHaveTextContent('Entrega');
@@ -319,6 +454,7 @@ test('HU07: preferência de movimento reduzido desliga animação FLIP sem imped
   });
   try {
     render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
+    liberarOrdenacao();
     fireEvent.click(screen.getByRole('button', { name: 'Descer etapa Planejamento' }));
     const itens = within(screen.getByRole('list', { name: 'Etapas em ordem de execução' })).getAllByRole('listitem');
     expect(itens[0]).toHaveTextContent('Entrega');
@@ -330,4 +466,97 @@ test('HU07: preferência de movimento reduzido desliga animação FLIP sem imped
     if (anteriorAnimacao) Object.defineProperty(HTMLElement.prototype, 'animate', anteriorAnimacao);
     else Reflect.deleteProperty(HTMLElement.prototype, 'animate');
   }
+});
+
+test('card de etapa mostra numeração ordinal e abre detalhe; voltar não fecha contrato', () => {
+  render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
+  const acao = screen.getByRole('button', { name: 'Abrir detalhes da etapa 1: Planejamento' });
+  expect(screen.getByLabelText('Posição 1')).toBeInTheDocument();
+  acao.focus(); fireEvent.click(acao);
+  const modal = screen.getByRole('dialog', { name: /1 · Planejamento/ });
+  expect(modal).toBeInTheDocument();
+  expect(screen.getByText('Descrição da etapa')).toBeInTheDocument();
+  fireEvent.keyDown(modal, { key: 'Escape' });
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(acao).toHaveFocus();
+});
+
+test('card possui botão de editar; detalhe da etapa não duplica ações no cabeçalho', () => {
+  render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
+  fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes da etapa 1: Planejamento' }));
+  expect(screen.getByRole('dialog', { name: /1 · Planejamento/ })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Editar etapa' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Voltar às etapas' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Editar etapa Planejamento' }));
+  expect(screen.getByRole('dialog', { name: /Editar etapa · Planejamento/ })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Fechar edição da etapa' }));
+});
+
+
+test('abas: Etapas mantém concluídas em ordem e arquivadas aparecem somente em Arquivadas', () => {
+  const arquivada = { ...base, id: 'etapa-arch', nome: 'Planejamento encerrado', sequencia: 3, arquivadoEm: '2026-11-05T00:00:00Z' };
+  consultar.mockReturnValue(estado([...duas, arquivada]));
+  render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
+  const todas = within(screen.getByRole('list', { name: 'Etapas em ordem de execução' })).getAllByRole('listitem');
+  expect(todas).toHaveLength(2);
+  expect(todas[0]).toHaveTextContent('Planejamento');
+  expect(todas[1]).toHaveTextContent('Entrega');
+  fireEvent.click(screen.getByRole('tab', { name: 'Etapas arquivadas' }));
+  const arquivo = within(screen.getByRole('list', { name: 'Etapas arquivadas' })).getAllByRole('listitem');
+  expect(arquivo).toHaveLength(1);
+  expect(arquivo[0]).toHaveTextContent('Planejamento encerrado');
+  fireEvent.click(screen.getByRole('tab', { name: 'Etapas do contrato' }));
+  expect(screen.getByRole('list', { name: 'Etapas em ordem de execução' })).toBeInTheDocument();
+});
+
+test('arquivar etapa exige confirmação, com cancelamento sem mutação', async () => {
+  (alterarArquivamentoEtapa as jest.Mock).mockResolvedValue({ ...base, arquivadoEm: '2026-11-05T00:00:00Z' });
+  render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar permissoes={{ arquivarEtapas: true } as never} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Arquivar etapa Planejamento' }));
+  const caixa = screen.getByRole('dialog', { name: 'Arquivar etapa?' });
+  expect(alterarArquivamentoEtapa).not.toHaveBeenCalled();
+  fireEvent.click(within(caixa).getByRole('button', { name: 'Cancelar' }));
+  expect(alterarArquivamentoEtapa).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Arquivar etapa Planejamento' }));
+  fireEvent.click(within(screen.getByRole('dialog', { name: 'Arquivar etapa?' })).getByRole('button', { name: 'Confirmar arquivamento' }));
+  await waitFor(() => expect(alterarArquivamentoEtapa).toHaveBeenCalledWith(contrato, base.id, 'arquivar', undefined));
+});
+
+
+test('cadeado e Nova etapa são exclusivos da aba de etapas, sem remover concluídas da ordem', () => {
+  render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
+  expect(screen.getByRole('button', { name: 'Nova etapa' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab', { name: /Concluídas/ }));
+  expect(screen.queryByRole('button', { name: 'Nova etapa' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab', { name: 'Etapas arquivadas' }));
+  expect(screen.queryByRole('button', { name: 'Nova etapa' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab', { name: 'Etapas do contrato' }));
+  expect(screen.getByRole('button', { name: 'Nova etapa' })).toBeInTheDocument();
+});
+
+
+test('contrato pendente de conclusão não apresenta Nova etapa nem edição operacional', () => {
+  render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar contratoPendenteConclusao />);
+  expect(screen.queryByRole('button', { name: 'Nova etapa' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Editar etapa Planejamento' })).not.toBeInTheDocument();
+  expect(screen.getByRole('list', { name: 'Etapas em ordem de execução' })).toBeInTheDocument();
+});
+
+test('etapa encerrada usa situação cinza, mas aparece na aba de finalizadas sem contar execução', () => {
+  consultar.mockReturnValue(estado([{ ...base, status: 'ENCERRADA' }]));
+  render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
+  expect(screen.getByText('Encerrada')).toBeInTheDocument();
+  expect(document.querySelector('[data-etapa-estado="encerrada"]')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab', { name: /Concluídas/ }));
+  expect(screen.getByText('Planejamento')).toBeInTheDocument();
+});
+
+
+test('contrato arquivado preserva título, selo e roxo próprios da etapa concluída', () => {
+  consultar.mockReturnValue(estado([{ ...base, status: 'CONCLUIDA' }]));
+  render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar contratoArquivado />);
+  const li = document.querySelector('[data-etapa-estado="concluida"]');
+  expect(li).toBeInTheDocument();
+  expect(within(li as HTMLElement).getByText('Concluída')).toBeInTheDocument();
+  expect(within(li as HTMLElement).queryByText('Contrato arquivado')).not.toBeInTheDocument();
 });

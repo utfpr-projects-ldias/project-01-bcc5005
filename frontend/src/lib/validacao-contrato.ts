@@ -5,8 +5,8 @@ import type { DadosContrato } from './contratos';
  * não limites estipulados pelo PRD; podem ser refinados com o cliente. */
 export const LIMITES_CONTRATO = {
   numeroContrato: 100, processoAdministrativo: 100, orgaoContratante: 255,
-  unidadeResponsavel: 255, objeto: 500, descricao: 3000,
-  fiscalGestor: 255, observacoes: 2000,
+  unidadeResponsavel: 255, objeto: 500, descricao: 1500,
+  fiscalGestor: 255, observacoes: 1000,
 } as const;
 
 function dataCivilValida(valor: string): boolean {
@@ -35,7 +35,7 @@ export const contratoSchema = z.object({
   dataAssinatura: dataObrigatoria.nullable(),
   inicioVigencia: dataObrigatoria,
   terminoVigencia: dataObrigatoria,
-  status: z.enum(['PLANEJAMENTO', 'EM_EXECUCAO', 'EM_ENCERRAMENTO', 'CONCLUIDO', 'SUSPENSO', 'CANCELADO']),
+  status: z.enum(['PLANEJAMENTO', 'EM_EXECUCAO', 'EM_ENCERRAMENTO', 'CONCLUIDO', 'ENCERRADO', 'SUSPENSO', 'CANCELADO']),
   responsavelInternoId: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i, 'Selecione um responsável interno válido.').nullable(),
   fiscalGestor: textoOpcional('Fiscal/gestor público', LIMITES_CONTRATO.fiscalGestor),
   modoCalculo: z.enum(['SIMPLES', 'PONDERADO']),

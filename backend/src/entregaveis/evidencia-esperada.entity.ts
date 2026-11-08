@@ -20,12 +20,25 @@ export class EvidenciaEsperada {
   @JoinColumn({ name: 'entregavel_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_evidencias_esperadas_entregavel' })
   entregavel!: Entregavel;
 
+  @Column({ name: 'codigo_publico', type: 'integer', unique: true })
+  codigoPublico!: number;
+
   @Column({ name: 'tipo_evidencia', type: 'varchar', length: 100 })
   tipoEvidencia!: string;
 
   @Column({ type: 'text', nullable: true })
   descricao!: string | null;
 
-  @Column({ type: 'boolean', default: false })
+  @Column({ type: 'boolean', default: true })
   obrigatoria!: boolean;
+
+  /** Reabertura documental explícita, independente do status operacional. */
+  @Column({ name: 'reaberto_em', type: 'timestamptz', nullable: true })
+  reabertoEm!: Date | null;
+
+  @Column({ name: 'arquivado_em', type: 'timestamptz', nullable: true })
+  arquivadoEm!: Date | null;
+
+  @Column({ name: 'arquivado_por', type: 'uuid', nullable: true })
+  arquivadoPor!: string | null;
 }

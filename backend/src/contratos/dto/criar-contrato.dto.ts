@@ -50,7 +50,7 @@ export class CriarContratoDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(3000)
+  @MaxLength(1500)
   descricao?: string | null;
 
   @IsOptional()
@@ -83,6 +83,6 @@ export class CriarContratoDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(2000)
+  @MaxLength(1000)
   observacoes?: string | null;
 }

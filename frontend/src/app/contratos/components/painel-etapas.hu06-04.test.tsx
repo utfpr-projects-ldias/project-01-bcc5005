@@ -1,8 +1,10 @@
 jest.mock('@/hooks/use-entregaveis', () => ({
   useEntregaveis: () => ({ dados: [], carregando: false, erro: undefined, atualizar: jest.fn().mockResolvedValue([]) }),
+  useResumoDocumentalContrato: () => ({ dados: {}, carregando: false, erro: undefined, atualizar: jest.fn().mockResolvedValue({}) }),
 }));
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { PainelEtapas } from './painel-etapas';
+import { ToastNotificacoes } from '@/app/components/toast-notificacoes';
 import { useEtapas, useMutacoesEtapas } from '@/hooks/use-etapas';
 import { ErroEtapa, type Etapa } from '@/lib/etapas';
 
@@ -14,6 +16,11 @@ const atualizar = jest.fn();
 const criar = jest.fn();
 const editar = jest.fn();
 const reordenar = jest.fn();
+function liberarOrdenacao() {
+  // Regra global: novo contrato e contrato migrado iniciam com ordem liberada.
+  expect(screen.getByRole('button', { name: 'Descer etapa Planejamento' })).toBeEnabled();
+}
+
 const contratoId = '11111111-1111-4111-8111-111111111111';
 const registros: Etapa[] = [
   {
@@ -66,7 +73,7 @@ describe('HU06-04 — estados e acessibilidade do painel (React com mocks)', () 
     render(<PainelEtapas contratoId={contratoId} habilitado podeGerenciar />);
     expect(screen.getByRole('alert')).toHaveTextContent('Não foi possível consultar as etapas');
     expect(screen.queryByRole('list')).not.toBeInTheDocument();
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Atualizar etapas' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' })); });
     expect(atualizar).toHaveBeenCalledTimes(1);
   });
 
@@ -83,7 +90,8 @@ describe('HU06-04 — estados e acessibilidade do painel (React com mocks)', () 
   });
 
   it('expõe botões nativos e nomes acessíveis, mantém aviso de vigência separado do status', async () => {
-    render(<PainelEtapas contratoId={contratoId} habilitado podeGerenciar />);
+    render(<><ToastNotificacoes /><PainelEtapas contratoId={contratoId} habilitado podeGerenciar /></>);
+    liberarOrdenacao();
     const botoes = [
       screen.getByRole('button', { name: 'Descer etapa Planejamento' }),
       screen.getByRole('button', { name: 'Subir etapa Execução' }),
@@ -95,7 +103,9 @@ describe('HU06-04 — estados e acessibilidade do painel (React com mocks)', () 
     }
     expect(screen.getByRole('button', { name: 'Subir etapa Planejamento' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Descer etapa Execução' })).toBeDisabled();
-    expect(screen.getByRole('note')).toHaveTextContent('nenhuma data foi alterada automaticamente');
+    fireEvent.click(screen.getByRole('button', { name: /Abrir detalhes da etapa 2: Execução/ }));
+    expect(screen.getByRole('note')).toHaveTextContent('Nenhuma data foi alterada automaticamente');
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar às etapas' }));
     expect(screen.getByText('Em andamento')).toBeInTheDocument();
     botoes[0].focus();
     expect(botoes[0]).toHaveFocus();
@@ -111,6 +121,7 @@ describe('HU06-04 — estados e acessibilidade do painel (React com mocks)', () 
     reordenar.mockRejectedValueOnce(new ErroEtapa(409, 'Ordem desatualizada'));
     reordenar.mockRejectedValueOnce(new ErroEtapa(500, 'Falha na persistência'));
     render(<PainelEtapas contratoId={contratoId} habilitado podeGerenciar />);
+    liberarOrdenacao();
     const descer = screen.getByRole('button', { name: 'Descer etapa Planejamento' });
     await act(async () => { fireEvent.click(descer); });
     await waitFor(() => expect(atualizar).toHaveBeenCalledTimes(1));

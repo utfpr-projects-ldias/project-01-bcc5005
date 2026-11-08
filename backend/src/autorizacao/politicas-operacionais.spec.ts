@@ -3,7 +3,7 @@ import { POLITICAS_OPERACIONAIS, politicaOperacional, uuidValido } from './polit
 describe('catálogo fechado de ações operacionais', () => {
   it('convenção recurso:verbo e escopos explícitos para todas as ações', () => {
     for (const [acao, politica] of Object.entries(POLITICAS_OPERACIONAIS)) {
-      expect(acao).toMatch(/^[a-z]+:[a-z]+$/);
+      expect(acao).toMatch(/^[a-z]+:[a-z]+(?:-[a-z]+)*$/);
       expect(['contrato', 'recurso']).toContain(politica.escopo);
       expect(['leitura', 'operacional', 'planejamento']).toContain(politica.classe);
       expect(politicaOperacional(acao)).toEqual(politica);

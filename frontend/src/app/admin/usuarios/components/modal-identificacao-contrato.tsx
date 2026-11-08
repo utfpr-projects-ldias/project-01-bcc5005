@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import type { ContratoResumo } from "@/lib/admin-usuarios";
 import { ajustarRestauracaoHistorico } from "@/lib/historico-modal-scroll";
+import { bloquearRolagemDocumento } from "@/lib/bloqueio-rolagem-modal";
 
 /** Consulta, sem alterar permissões, dados contratuais ou URL. */
 export function ModalIdentificacaoContrato({ contrato, focoRetorno, onFechar }: {
@@ -18,7 +19,7 @@ export function ModalIdentificacaoContrato({ contrato, focoRetorno, onFechar }: 
 
   useEffect(() => {
     const focoAnterior = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const overflowAnterior = document.body.style.overflow;
+    const liberarRolagem = bloquearRolagemDocumento();
     const restauracaoAnterior = window.history.scrollRestoration;
     const posicaoAnterior = { x: window.scrollX, y: window.scrollY };
     const estadoAnterior = window.history.state;
@@ -26,7 +27,6 @@ export function ModalIdentificacaoContrato({ contrato, focoRetorno, onFechar }: 
     const id = `identificacao:${tituloId}:${Date.now()}`;
 
     marcador.current = id;
-    document.body.style.overflow = "hidden";
     ajustarRestauracaoHistorico("manual");
     // Entrada transitória sem mudança de URL; conserva o estado interno do Next App Router.
     window.history.pushState({ ...estadoPreservado, __modalIdentificacaoContrato: id }, "", window.location.href);
@@ -41,7 +41,7 @@ export function ModalIdentificacaoContrato({ contrato, focoRetorno, onFechar }: 
     window.addEventListener("popstate", voltar);
     return () => {
       window.removeEventListener("popstate", voltar);
-      document.body.style.overflow = overflowAnterior;
+      liberarRolagem();
       ajustarRestauracaoHistorico(restauracaoAnterior);
       const alvo = focoRetorno?.isConnected ? focoRetorno : focoAnterior;
       if (alvo?.isConnected) alvo.focus({ preventScroll: true });

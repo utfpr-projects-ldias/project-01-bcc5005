@@ -46,3 +46,597 @@ body {
 }
 
 /* Formulários abrem sem animação de escala/translação para evitar piscadas e deslocamentos visuais. */
+
+/* Toast leve; não move modais nem o documento. */
+@keyframes tec08-toast-entrada {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes tec08-toast-progresso {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+.toast-entrada { animation: tec08-toast-entrada 180ms cubic-bezier(.2,.7,.2,1) both; }
+.toast-progresso { transform-origin: left; animation-name: tec08-toast-progresso; animation-timing-function: linear; animation-fill-mode: forwards; }
+@media (prefers-reduced-motion: reduce) {
+  .toast-entrada, .toast-progresso { animation: none !important; }
+}
+
+/* Superfícies realmente interativas: a indicação do ponteiro acompanha o teclado. */
+a[href], button:not(:disabled), summary, [role="button"]:not([aria-disabled="true"]) { cursor: pointer; }
+button:disabled, [aria-disabled="true"] { cursor: not-allowed; }
+
+/* TEC08 — Indicação de comprovação DOCUMENTAL completa nos contratos.
+   Atributo calculado com os mesmos indicadores 1/1, 3/3 do resumo; não altera
+   o status operacional do contrato nem a aba de Contratos concluídos.
+   Cards arquivados preservam a sinalização âmbar e suas ações. */
+.contrato-card-documental[data-situacao="pendentes"]:has([data-documental-completo="true"]),
+.contrato-card-documental[data-situacao="concluidos"]:has([data-documental-completo="true"]) {
+  border-color: rgb(167 139 250 / 0.65);
+  background-color: rgb(167 139 250 / 0.065);
+}
+.contrato-card-documental[data-situacao="pendentes"]:has([data-documental-completo="true"]):hover,
+.contrato-card-documental[data-situacao="concluidos"]:has([data-documental-completo="true"]):hover {
+  border-color: rgb(196 181 253 / 0.85);
+}
+.contrato-card-documental[data-situacao="pendentes"]:has([data-documental-completo="true"]) .contrato-card-titulo,
+.contrato-card-documental[data-situacao="concluidos"]:has([data-documental-completo="true"]) .contrato-card-titulo,
+.contrato-detalhe-documental[data-tec08-estado="concluido"]:has([data-documental-completo="true"]) .contrato-detalhe-titulo {
+  color: #c4b5fd;
+}
+
+/* TEC08: aparência consistente de estados derivados nos modais encadeados.
+   Apenas controles visuais; bloqueios funcionais são verificados também na API. */
+
+/* Dentro de um pai arquivado o âmbar prevalece sobre a comprovação roxa,
+   inclusive em cartões de evidência ainda verificada. Não altera o status armazenado. */
+
+/* Arquivamento tem prioridade sobre o verde inclusive em CTA/contexto do modal.
+   É somente aparência: o bloqueio real permanece na API. */
+
+/* A página de um contrato arquivado herda o estado âmbar nos elementos de
+   navegação e contexto, sem fazer itens arquivados parecerem editáveis. */
+.contrato-detalhe-documental[data-arquivado="true"] .text-brand-neon,
+.contrato-detalhe-documental[data-arquivado="true"] [class*="text-brand-neon/"] {
+  color: #fcd34d;
+}
+.contrato-detalhe-documental[data-arquivado="true"] .bg-brand-green { background-color: #92400e; }
+.contrato-detalhe-documental[data-arquivado="true"] .text-on-brand-green { color: #fff; }
+.contrato-detalhe-documental[data-arquivado="true"] [class*="border-brand-green/"] { border-color: rgb(245 158 11 / 0.38); }
+
+/* Em contrato arquivado nenhuma CTA desabilitada permanece verde/brilhante. */
+.contrato-detalhe-documental[data-arquivado="true"] button:disabled[class*="bg-brand-green"] {
+  background-color: rgb(71 85 105 / .18) !important;
+  border-color: rgb(100 116 139 / .38) !important;
+  color: #94a3b8 !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+.contrato-detalhe-documental[data-arquivado="true"] .bg-brand-green\/20,
+.contrato-detalhe-documental[data-arquivado="true"] .bg-brand-green\/15 {
+  background-color: rgb(146 64 14 / .20);
+}
+/* Evita saltos horizontais durante o bloqueio de rolagem em modais. */
+html { scrollbar-gutter: stable; }
+
+
+/* TEC08 — Tema do ESTADO DO CONTRATO, somente dentro de seus detalhes.
+ * As barras/indicadores preservam o significado dos dados e os modais
+ * criados em portal usam seu próprio estado, não o estado do contrato pai. */
+.contrato-detalhe-documental[data-tec08-estado="concluido"] {
+  --contrato-cor-rgb: 167 139 250;
+  --contrato-cor-solida: #6d28d9;
+  --contrato-texto: #c4b5fd;
+}
+.contrato-detalhe-documental[data-tec08-estado="revisao"] {
+  --contrato-cor-rgb: 13 148 136;
+  --contrato-cor-solida: #0f766e;
+  --contrato-texto: #99f6e4;
+}
+.contrato-detalhe-documental[data-tec08-estado="arquivado"] {
+  --contrato-cor-rgb: 245 158 11;
+  --contrato-cor-solida: #92400e;
+  --contrato-texto: #fde68a;
+}
+/* Evita que a regra documental antiga pinte um contrato reaberto de roxo. */
+.contrato-detalhe-documental[data-tec08-estado="revisao"]:has([data-documental-completo="true"]) .contrato-detalhe-titulo {
+  color: var(--contrato-texto);
+}
+/* Neutraliza também os resíduos de verde de painéis e ações, sem tocar na
+   barra lateral (identidade da aplicação) nem nos modais em portal. */
+
+/* TEC08 — Aparência sem preenchimento colorido dos cartões de negócio.
+ * Estado é indicado pela BORDA, selo e indicadores, não por um fundo tingido.
+ * A regra tem precedência sobre a decoração documental legada com :has(). */
+.contrato-card-documental,
+.contrato-card-documental:hover,
+.contrato-card-documental[data-situacao="pendentes"]:has([data-documental-completo="true"]),
+.contrato-card-documental[data-situacao="pendentes"]:has([data-documental-completo="true"]):hover,
+.contrato-card-documental[data-situacao="concluidos"]:has([data-documental-completo="true"]):hover {
+  background-color: var(--bg-primary);
+}
+.contrato-card-documental[data-situacao="revisao"]:has([data-documental-completo="true"]) {
+  border-color: rgb(13 148 136 / .58);
+}
+.contrato-card-documental[data-situacao="revisao"]:has([data-documental-completo="true"]) .contrato-card-titulo {
+  color: #99f6e4;
+}
+.contrato-card-documental[data-situacao="arquivados"]:has([data-documental-completo="true"]) .contrato-card-titulo {
+  color: #fff;
+}
+
+/* A janela em portal usa a cor da SUA entidade, independentemente do pai.
+ * Evita que uma etapa concluída dentro de contrato em revisão fique verde.
+ * Não interfere nas cores dos botões globais fora da janela. */
+/* Seleção de aba normal ("Entregáveis"/"Evidências") também usa o estado
+ * da janela; selos Concluídas e Arquivados mantêm suas semânticas próprias. */
+
+/* TEC08 — abas: hover e foco NUNCA pintam outra situação de negócio.
+   Apenas a aba selecionada recebe o contexto do pai (ou o âmbar de Arquivados). */
+[role="tablist"] button[role="tab"]:not([aria-selected="true"]):hover,
+[role="tablist"] button[role="tab"]:not([aria-selected="true"]):focus-visible,
+[role="tablist"] button[aria-selected="false"]:hover,
+[role="tablist"] button[aria-selected="false"]:focus-visible {
+  background-color: rgb(100 116 139 / .16) !important;
+  color: var(--text-primary) !important;
+  outline-color: #94a3b8;
+}
+/* Confirmações estão dentro do contexto colorido do contrato. Sua ação positiva
+   precisa continuar legível até quando .contrato-detalhe-documental muda o tema. */
+button[data-tec08-confirmar]:not(:disabled):not(.bg-red-600) {
+  background-color: #5fd34a !important;
+  border-color: #5fd34a !important;
+  color: #050607 !important;
+}
+button[data-tec08-confirmar]:not(:disabled):not(.bg-red-600):hover {
+  background-color: #83e66f !important;
+}
+button[data-tec08-confirmar]:disabled {
+  background-color: #334155 !important;
+  color: #cbd5e1 !important;
+  border-color: #475569 !important;
+}
+/* Todos os controles de escrita desabilitados em pendência ou arquivamento
+   ficam cinza e sem brilho; leitura e download continuam possíveis. */
+.contrato-detalhe-documental button:disabled:not([role="tab"]),
+[data-tec08-modal] button:disabled:not([role="tab"]) {
+  box-shadow: none !important;
+  cursor: not-allowed;
+}
+
+/* Mesmo quando o pai está concluído ou pendente, controles indisponíveis
+   permanecem visíveis e cinza; o servidor segue validando as operações. */
+[data-tec08-modal] button:disabled:not([role="tab"]),
+.contrato-detalhe-documental button:disabled:not([role="tab"]) {
+  border-color: rgb(100 116 139 / .35) !important;
+  background-color: rgb(51 65 85 / .15) !important;
+  color: #94a3b8 !important;
+  opacity: .72;
+}
+
+/* TEC08-03 — Botões de ação legíveis em modais de revisão, sem herdar texto preto.
+ * A cor do texto tem prioridade, mas controles neutros e disabled preservam semântica. */
+[data-tec08-modal] button:disabled:not([role="tab"]),
+.contrato-detalhe-documental button:disabled:not([role="tab"]) {
+  color: #94a3b8 !important;
+  background-color: rgb(51 65 85 / .18) !important;
+  border-color: rgb(100 116 139 / .38) !important;
+  box-shadow: none !important;
+}
+
+
+/* TEC08-03 — Decisões não herdam acidentalmente o tema da entidade pai.
+ * Verde aprova, vermelho devolve à revisão e roxo encerra ajustes/reabertura.
+ * Prioridade maior que os seletores genéricos de estado, inclusive em hover. */
+.contrato-detalhe-documental button[data-tec08-decisao="aprovar"]:not(:disabled) {
+  background-color: #166534 !important;
+  border-color: #16a34a !important;
+  color: #ffffff !important;
+}
+.contrato-detalhe-documental button[data-tec08-decisao="aprovar"]:not(:disabled):hover {
+  background-color: #15803d !important;
+}
+.contrato-detalhe-documental button[data-tec08-decisao="rejeitar"]:not(:disabled) {
+  background-color: #b91c1c !important;
+  border-color: #ef4444 !important;
+  color: #ffffff !important;
+}
+.contrato-detalhe-documental button[data-tec08-decisao="rejeitar"]:not(:disabled):hover {
+  background-color: #991b1b !important;
+}
+.contrato-detalhe-documental button[data-tec08-decisao="fechamento"]:not(:disabled) {
+  background-color: #6d28d9 !important;
+  border-color: #a78bfa !important;
+  color: #ffffff !important;
+}
+.contrato-detalhe-documental button[data-tec08-decisao="fechamento"]:not(:disabled):hover {
+  background-color: #7c3aed !important;
+}
+button[data-tec08-confirmar][data-tec08-acao-roxa]:not(:disabled) {
+  background-color: #6d28d9 !important;
+  border-color: #a78bfa !important;
+  color: #ffffff !important;
+}
+button[data-tec08-confirmar][data-tec08-acao-aprovar]:not(:disabled) {
+  background-color: #166534 !important;
+  border-color: #16a34a !important;
+  color: #ffffff !important;
+}
+
+/* Contrato ativo completo documentalmente continua com identidade ATIVA;
+ * progresso roxo não converte todo o planejamento em contrato concluído. */
+.contrato-detalhe-documental[data-tec08-estado="normal"]:has([data-documental-completo="true"]) .contrato-detalhe-titulo {
+  color: var(--accent-neon);
+}
+
+/* Cancelamento administrativo: vermelho independente de Arquivado/Concluído. */
+.contrato-detalhe-documental[data-tec08-estado="cancelado"] { --contrato-cor-rgb: 239 68 68; --contrato-cor-solida: #991b1b; --contrato-texto: #fca5a5; }
+.contrato-card-documental[data-situacao="cancelados"] { border-color: rgb(239 68 68 / .55); background-color: var(--background); }
+
+/* Suspenso = amarelo; não se confunde com Arquivado (âmbar).
+ * Abas normais permanecem neutras, sem herdar a cor administrativa. */
+.contrato-detalhe-documental[data-tec08-estado="suspenso"] {
+  --contrato-cor-rgb: 250 204 21;
+  --contrato-cor-solida: #facc15;
+  --contrato-texto: #fef9c3;
+}
+
+/* TEC08: abas mantêm uma única linha e expõem navegação horizontal em telas estreitas. */
+.tec08-abas-rolagem { min-width: 0; max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain;
+  scrollbar-width: none; scroll-behavior: smooth; }
+.tec08-abas-rolagem::-webkit-scrollbar { display: none; }
+.tec08-abas-rolagem > [role="tablist"] { width: max-content; min-width: max-content; max-width: none;
+  flex-wrap: nowrap; white-space: nowrap; }
+.tec08-abas-rolagem > [role="tablist"] > [role="tab"] { flex-shrink: 0; white-space: nowrap; }
+@media (max-width: 639px) { .tec08-abas-rolagem { padding-bottom: 3px; } }
+
+/* Suspensão destaca amarelo de forma diferente do âmbar do arquivamento,
+   mesmo quando os indicadores de um contrato estão documentalmente completos. */
+.contrato-card-documental[data-situacao="suspensos"],
+.contrato-card-documental[data-situacao="suspensos"]:has([data-documental-completo="true"]) {
+  border-color: rgb(253 224 71 / .78); background-color: var(--bg-primary);
+}
+.contrato-card-documental[data-situacao="suspensos"] .contrato-card-titulo,
+.contrato-card-documental[data-situacao="suspensos"]:has([data-documental-completo="true"]) .contrato-card-titulo {
+  color: #fde047;
+}
+
+/* Identidade de contrato suspenso prevalece sobre comprovação roxa,
+   inclusive em abas de etapas/entregáveis e modais encadeados. */
+/* Prioridade sem ambiguidade para confirmação verde/roxa e cancelamento vermelho. */
+button[data-tec08-confirmar][data-tec08-acao-roxa]:not(:disabled):hover {background-color:#7c3aed!important; border-color:#c4b5fd!important; color:#fff!important;}
+button[data-tec08-confirmar][data-tec08-acao-aprovar]:not(:disabled):hover {background-color:#15803d!important; border-color:#22c55e!important; color:#fff!important;}
+
+/* TEC08-03 · Revisão de acessibilidade do tema claro (08/11/2026).
+   O modo escuro não herda estas regras. Cores de estado são semânticas:
+   suspenso = amarelo escuro; arquivado = âmbar; revisão = verde-azulado;
+   concluído = roxo; cancelado = vermelho. Botões de decisão conservam
+   seus fundos/contrastes próprios definidos acima. */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg-primary: #f7faf6;
+    --bg-secondary: #e8f1e7;
+    --text-primary: #17251c;
+    --accent-neon: #166534;
+    --accent-green: #5fd34a;
+    --text-error: #991b1b;
+    --ui-arquivado: #854d0e;
+    --ui-suspenso: #713f12;
+    --ui-concluido: #5b21b6;
+    --ui-revisao: #0f766e;
+    --ui-cancelado: #b91c1c;
+  }
+  html { color-scheme: light; }
+  body { background: var(--bg-primary); }
+  :where(input, select, textarea) { color-scheme: light; }
+  :where(input, select, textarea):not(:disabled) { caret-color: #166534; }
+  :where(input, select, textarea):focus-visible {
+    outline-color: #166534;
+    outline-offset: 2px;
+  }
+  /* Divisórias leves ainda visíveis no fundo claro, sem pintar cartões. */
+  :where(section, article, aside, [role="dialog"])[class*="border-brand-green/10"],
+  :where(section, article, aside, [role="dialog"])[class*="border-brand-green/15"],
+  :where(section, article, aside, [role="dialog"])[class*="border-brand-green/20"] {
+    border-color: rgb(22 101 52 / .25);
+  }
+  [role="dialog"] { box-shadow: 0 16px 60px rgb(15 23 42 / .23); }
+  [data-tec08-modal][class*="bg-black/"] { background-color: rgb(15 23 42 / .14); }
+  /* Textos auxiliares que ficavam esmaecidos demais com 55%-65%. */
+  :is(p, span, dt, dd, small, label)[class~="text-foreground/55"],
+  :is(p, span, dt, dd, small, label)[class~="text-foreground/60"],
+  :is(p, span, dt, dd, small, label)[class~="text-foreground/65"] {
+    color: #42534a;
+  }
+  :where(button, a, input, select, textarea):focus-visible {
+    outline-width: 2px;
+    outline-offset: 2px;
+  }
+  :where(button, a)[aria-disabled="true"], button:disabled { filter: none; }
+
+  /* Links de contratos arquivados não são fundos escuros. Textos brancos
+     impediam a leitura de número, órgão e código no tema claro. */
+  .contrato-card-documental[data-arquivado="true"],
+  .contrato-card-documental[data-arquivado="true"][class~="text-white"],
+  .contrato-card-documental[data-arquivado="true"] [class~="text-white"],
+  .contrato-card-documental[data-arquivado="true"] [class~="text-white/75"] {
+    color: var(--text-primary);
+  }
+  .contrato-card-documental[data-situacao="arquivados"] .contrato-card-titulo,
+  .contrato-card-documental[data-situacao="arquivados"]:has([data-documental-completo="true"]) .contrato-card-titulo,
+  .contrato-detalhe-documental[data-tec08-estado="arquivado"] .contrato-detalhe-titulo {
+    color: var(--ui-arquivado);
+  }
+  .contrato-card-documental[data-situacao="suspensos"] .contrato-card-titulo,
+  .contrato-card-documental[data-situacao="suspensos"]:has([data-documental-completo="true"]) .contrato-card-titulo,
+  .contrato-detalhe-documental[data-tec08-estado="suspenso"] .contrato-detalhe-titulo {
+    color: var(--ui-suspenso);
+  }
+  .contrato-card-documental[data-situacao="concluidos"] .contrato-card-titulo,
+  .contrato-card-documental[data-situacao="pendentes"] .contrato-card-titulo,
+  .contrato-detalhe-documental[data-tec08-estado="concluido"] .contrato-detalhe-titulo {
+    color: var(--ui-concluido);
+  }
+  .contrato-card-documental[data-situacao="revisao"] .contrato-card-titulo,
+  .contrato-card-documental[data-situacao="revisao"]:has([data-documental-completo="true"]) .contrato-card-titulo,
+  .contrato-detalhe-documental[data-tec08-estado="revisao"] .contrato-detalhe-titulo {
+    color: var(--ui-revisao);
+  }
+  .contrato-card-documental[data-situacao="cancelados"] .contrato-card-titulo,
+  .contrato-detalhe-documental[data-tec08-estado="cancelado"] .contrato-detalhe-titulo {
+    color: var(--ui-cancelado);
+  }
+  .contrato-card-documental[data-situacao="encerrados"] .contrato-card-titulo {
+    color: #334155;
+  }
+
+  /* Selos e títulos de situação usam tinta escura sobre superfícies claras.
+     Excluem os botões (cujas combinações bg/text são intencionais). */
+  :is(span, h1, h2, h3, h4, p, summary, label)[class~="text-amber-100"],
+  :is(span, h1, h2, h3, h4, p, summary, label)[class~="text-amber-200"],
+  :is(span, h1, h2, h3, h4, p, summary, label)[class~="text-amber-300"] { color: var(--ui-arquivado); }
+  :is(span, h1, h2, h3, h4, p, summary, label)[class~="text-yellow-100"],
+  :is(span, h1, h2, h3, h4, p, summary, label)[class~="text-yellow-200"],
+  :is(span, h1, h2, h3, h4, p, summary, label)[class~="text-yellow-300"] { color: var(--ui-suspenso); }
+  :is(span, h1, h2, h3, h4, p, summary, label)[class~="text-violet-100"],
+  :is(span, h1, h2, h3, h4, p, summary, label)[class~="text-violet-200"],
+  :is(span, h1, h2, h3, h4, p, summary, label)[class~="text-violet-300"] { color: var(--ui-concluido); }
+  :is(span, h1, h2, h3, h4, p, summary, label)[class~="text-teal-100"],
+  :is(span, h1, h2, h3, h4, p, summary, label)[class~="text-teal-200"] { color: var(--ui-revisao); }
+  :is(span, h1, h2, h3, h4, p, summary, label)[class~="text-red-100"],
+  :is(span, h1, h2, h3, h4, p, summary, label)[class~="text-red-200"],
+  :is(span, h1, h2, h3, h4, p, summary, label)[class~="text-red-300"] { color: var(--ui-cancelado); }
+  :is(span, h1, h2, h3, h4, p, summary, label)[class~="text-slate-200"] { color: #334155; }
+  /* Um título em span com bg intenso mantém texto branco. */
+  :is(span, p)[class*="bg-red-700"][class*="text-red-"],
+  :is(span, p)[class*="bg-violet-700"][class*="text-violet-"] { color: white; }
+
+  /* A cor da entidade prevalece somente no contexto semântico, não em ações. */
+  .contrato-detalhe-documental[data-tec08-estado="suspenso"] {
+    --contrato-cor-solida: #854d0e;
+    --contrato-texto: var(--ui-suspenso);
+  }
+  .contrato-detalhe-documental[data-tec08-estado="arquivado"] {
+    --contrato-cor-solida: #92400e;
+    --contrato-texto: var(--ui-arquivado);
+  }
+  .contrato-detalhe-documental[data-tec08-estado="concluido"] {
+    --contrato-texto: var(--ui-concluido);
+  }
+  .contrato-detalhe-documental[data-tec08-estado="revisao"] {
+    --contrato-texto: var(--ui-revisao);
+  }
+  .contrato-detalhe-documental[data-tec08-estado="cancelado"] {
+    --contrato-texto: var(--ui-cancelado);
+  }
+  /* Botões de navegação inativos mantêm hover perceptível no claro. */
+  [role="tablist"] button[role="tab"]:not([aria-selected="true"]):hover {
+    background-color: rgb(22 101 52 / .11) !important;
+    color: #17251c !important;
+  }
+}
+
+/* TEC08-03 — AÇÃO X ESTADO: decisão/acento do card não deve recolorir botões CTA.
+ * O fundo da ação deve ser opaco e o texto deve ter contraste em ambos os temas. */
+.contrato-detalhe-documental button.bg-brand-green:not(:disabled):not([role="tab"]),
+.contrato-detalhe-documental a.bg-brand-green:not([role="tab"]) {
+  background-color: #166534 !important;
+  color: #ffffff !important;
+  border-color: #15803d !important;
+}
+.contrato-detalhe-documental button.bg-brand-green:not(:disabled):not([role="tab"]):hover,
+.contrato-detalhe-documental a.bg-brand-green:not([role="tab"]):hover {
+  background-color: #15803d !important;
+  color: #ffffff !important;
+}
+/* Não repetir texto preto sobre a superfície verde-escura do botão Anexar. */
+.contrato-detalhe-documental [data-tec08-acao="anexar-documento"] {
+  background-color: #166534 !important;
+  color: white !important;
+  border: 1px solid #15803d;
+}
+.contrato-detalhe-documental [data-tec08-acao="anexar-documento"]:not(:disabled):hover {
+  background-color: #15803d !important;
+}
+/* Foco explícito até em seletores de estado com CSS específico. */
+.contrato-detalhe-documental :is(button,a,[role="tab"]):focus-visible {
+  outline: 2px solid var(--accent-neon);
+  outline-offset: 3px;
+}
+@media (prefers-color-scheme: light) {
+  .contrato-detalhe-documental [data-tec08-acao="anexar-documento"] {
+    background-color: #166534 !important; color: #fff !important;
+  }
+  .contrato-detalhe-documental button:disabled:not([role="tab"]) {
+    color: #475569 !important; background-color: #e2e8f0 !important; opacity: 1;
+  }
+}
+
+/* Paleta por estado no tema claro sem atravessar o conteúdo dos botões.
+ * A camada de estado colore somente o título identificador, não o texto das ações. */
+@media (prefers-color-scheme: light) {
+  .contrato-detalhe-documental[data-tec08-estado="suspenso"] .contrato-detalhe-titulo { color: #713f12; }
+  .contrato-detalhe-documental[data-tec08-estado="arquivado"] .contrato-detalhe-titulo { color: #854d0e; }
+  .contrato-detalhe-documental[data-tec08-estado="revisao"] .contrato-detalhe-titulo { color: #0f766e; }
+  .contrato-detalhe-documental[data-tec08-estado="concluido"] .contrato-detalhe-titulo { color: #5b21b6; }
+  .contrato-detalhe-documental[data-tec08-estado="encerrado"] .contrato-detalhe-titulo { color: #334155; }
+}
+
+/* TEC08-03 — PALETA ISOLADA POR ENTIDADE (08/11/2026).
+ * O status do contrato só alcança as abas do CONTRATO. Modais de etapas,
+ * entregáveis e evidências usam exclusivamente seus próprios data-tec08-estado.
+ * A identidade de uma evidência verificada não altera a do entregável ainda aberto.
+ */
+.contrato-detalhe-documental {
+  --tec08-status-bg: #166534;
+  --tec08-status-fg: #fff;
+  --tec08-status-border: #22c55e;
+}
+.contrato-detalhe-documental[data-tec08-estado="revisao"] {
+  --tec08-status-bg: #0f766e; --tec08-status-fg: #fff; --tec08-status-border: #14b8a6;
+}
+.contrato-detalhe-documental[data-tec08-estado="concluido"] {
+  --tec08-status-bg: #6d28d9; --tec08-status-fg: #fff; --tec08-status-border: #a78bfa;
+}
+.contrato-detalhe-documental[data-tec08-estado="suspenso"] {
+  --tec08-status-bg: #854d0e; --tec08-status-fg: #fff; --tec08-status-border: #eab308;
+}
+.contrato-detalhe-documental[data-tec08-estado="arquivado"] {
+  --tec08-status-bg: #92400e; --tec08-status-fg: #fff; --tec08-status-border: #d97706;
+}
+.contrato-detalhe-documental[data-tec08-estado="cancelado"] {
+  --tec08-status-bg: #991b1b; --tec08-status-fg: #fff; --tec08-status-border: #ef4444;
+}
+.contrato-detalhe-documental[data-tec08-estado="encerrado"] {
+  --tec08-status-bg: #334155; --tec08-status-fg: #fff; --tec08-status-border: #64748b;
+}
+.contrato-detalhe-documental [data-tec08-abas-contrato] > [role="tab"][aria-selected="true"] {
+  background-color: var(--tec08-status-bg) !important;
+  color: var(--tec08-status-fg) !important;
+  border-color: var(--tec08-status-border) !important;
+}
+/* Um modal tem sua própria paleta. O bloco não usa a classe de estado do contrato. */
+[data-tec08-modal] > [data-tec08-entidade="modal"] {
+  --tec08-entidade-bg: #166534;
+  --tec08-entidade-texto: #a6ff1a;
+  --tec08-entidade-borda: #22c55e;
+}
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="revisao"] {
+  --tec08-entidade-bg: #0f766e; --tec08-entidade-texto: #99f6e4; --tec08-entidade-borda: #14b8a6;
+}
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="concluido"] {
+  --tec08-entidade-bg: #6d28d9; --tec08-entidade-texto: #c4b5fd; --tec08-entidade-borda: #a78bfa;
+}
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="arquivado"] {
+  --tec08-entidade-bg: #92400e; --tec08-entidade-texto: #fde68a; --tec08-entidade-borda: #d97706;
+}
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="suspenso"] {
+  --tec08-entidade-bg: #854d0e; --tec08-entidade-texto: #fde047; --tec08-entidade-borda: #eab308;
+}
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="encerrado"] {
+  --tec08-entidade-bg: #334155; --tec08-entidade-texto: #cbd5e1; --tec08-entidade-borda: #64748b;
+}
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="cancelado"] {
+  --tec08-entidade-bg: #991b1b; --tec08-entidade-texto: #fca5a5; --tec08-entidade-borda: #ef4444;
+}
+[data-tec08-modal] > [data-tec08-entidade="modal"] > header h2 {
+  color: var(--tec08-entidade-texto);
+}
+[data-tec08-modal] > [data-tec08-entidade="modal"] > [data-tec08-corpo-modal] [role="tab"][aria-selected="true"] {
+  background-color: var(--tec08-entidade-bg) !important;
+  border-color: var(--tec08-entidade-borda) !important;
+  color: #fff !important;
+}
+/* Botões de ação não devem receber a cor do objeto. */
+.contrato-detalhe-documental button[data-tec08-decisao],
+.contrato-detalhe-documental button[data-tec08-acao="anexar-documento"] {
+  color: white !important;
+}
+.contrato-detalhe-documental button[data-tec08-acao="anexar-documento"]:not(:disabled) {
+  background: #166534 !important; border-color: #15803d !important;
+}
+.contrato-detalhe-documental button[data-tec08-acao="anexar-documento"]:not(:disabled):hover {
+  background: #15803d !important;
+}
+/* Barra de progresso incompleto segue o contexto da etapa, não roxo de conclusão. */
+[data-entregavel-estado="revisao"] .tec08-progresso-comprovacao {
+  background-color: #0f766e !important;
+}
+@media (prefers-color-scheme: light) {
+  [data-tec08-modal] > [data-tec08-entidade="modal"] { --tec08-entidade-texto: #166534; }
+  [data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="revisao"] { --tec08-entidade-texto: #0f766e; }
+  [data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="concluido"] { --tec08-entidade-texto: #5b21b6; }
+  [data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="arquivado"] { --tec08-entidade-texto: #854d0e; }
+  [data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="suspenso"] { --tec08-entidade-texto: #713f12; }
+  [data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="encerrado"] { --tec08-entidade-texto: #334155; }
+  [data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="cancelado"] { --tec08-entidade-texto: #991b1b; }
+  .contrato-detalhe-documental[data-tec08-estado="suspenso"] [data-tec08-abas-contrato] > [role="tab"][aria-selected="true"] {
+    background: #713f12 !important; color: #fff !important;
+  }
+  .contrato-detalhe-documental[data-tec08-estado="suspenso"] .contrato-detalhe-titulo { color: #713f12 !important; }
+}
+
+
+/* TEC08-03 — identidade visual CONTEXTUAL do modal, independente do contrato pai.
+   Cor do estado só alcança títulos, rastreabilidade, abas selecionadas e
+   navegação neutra. Botões de ações de negócio mantêm suas próprias cores. */
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="concluido"]
+  :is(h3, h4, h5, h6, button[aria-label^="Rastreabilidade"], section[aria-label^="Rastreabilidade"] > button) {
+  color: var(--tec08-entidade-texto) !important;
+}
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="concluido"]
+  :is(section[aria-label^="Rastreabilidade"], section[aria-label^="Rastreabilidade"] > button) {
+  border-color: rgb(167 139 250 / .48) !important;
+}
+/* Voltar e Fechar: controles neutros, não ações verdes de cadastro. */
+[data-tec08-modal] > [data-tec08-entidade="modal"] > header button[title^="Voltar"],
+[data-tec08-modal] > [data-tec08-entidade="modal"] > header button[title^="Fechar"] {
+  border-color: rgb(148 163 184 / .45) !important;
+  color: var(--foreground) !important;
+}
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="concluido"] > header {
+  border-color: rgb(167 139 250 / .42) !important;
+}
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="concluido"]
+  [class*="text-brand-neon"]:not(button):not([role="tab"]) {
+  color: var(--tec08-entidade-texto) !important;
+}
+/* Borda do card da etapa responde ao status da própria etapa. */
+[data-etapa-estado="concluida"] { border-color: rgb(167 139 250 / .70) !important; }
+
+/* TEC08-03 — Ações e contexto da fase final. Não sobrescrever cores dos filhos. */
+.contrato-detalhe-documental[data-tec08-estado="concluido"] #painel-etapas > section > div:first-child button:disabled {
+  background-color: rgb(71 85 105 / .12);
+  border-color: rgb(100 116 139 / .35);
+  color: #94a3b8;
+}
+
+/* Encerramento administrativo da etapa: cinza, independente do pai. */
+[data-etapa-estado="encerrada"] { border-color: rgb(100 116 139 / .72) !important; }
+[data-etapa-estado="encerrada"] .text-brand-neon,
+[data-etapa-estado="encerrada"] [class*="text-brand-neon/"] { color: #94a3b8 !important; }
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="encerrado"] { --tec08-entidade-texto: #94a3b8; }
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="encerrado"] > header { border-color: rgb(100 116 139 / .40); }
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="encerrado"] > header h2 { color: #cbd5e1 !important; }
+@media (prefers-color-scheme: light) {
+  [data-etapa-estado="encerrada"] .text-brand-neon,
+  [data-etapa-estado="encerrada"] [class*="text-brand-neon/"] { color: #475569 !important; }
+  [data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="encerrado"] > header h2 { color: #334155 !important; }
+}
+
+/* TEC08-03 — bordas internas respeitam o status próprio do modal, sem afetar CTAs. */
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="concluido"]
+  :is(dl, details, section)[class*="border-brand-green/"] { border-color: rgb(167 139 250 / .40) !important; }
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="encerrado"]
+  :is(dl, details, section)[class*="border-brand-green/"] { border-color: rgb(100 116 139 / .45) !important; }
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="encerrado"]
+  :is(h3, h4, summary)[class*="text-brand-neon"] { color: #cbd5e1 !important; }
+@media (prefers-color-scheme: light) {
+  [data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="encerrado"]
+    :is(h3, h4, summary)[class*="text-brand-neon"] { color: #334155 !important; }
+}
+/* Não colorir controles neutros apenas por causa do estado do objeto. */
+[data-tec08-modal] > [data-tec08-entidade="modal"] > header button[aria-label^="Voltar"],
+[data-tec08-modal] > [data-tec08-entidade="modal"] > header button[aria-label^="Fechar"] {
+  border-color: rgb(148 163 184 / .5) !important; color: var(--foreground) !important;
+}

@@ -12,9 +12,15 @@ const usuario = (perfil: PerfilUsuario): UsuarioAutenticado => ({
 });
 const busca = jest.fn<() => Promise<PermissaoContrato | null>>();
 const repositorio = { findOneBy: busca } as unknown as Repository<PermissaoContrato>;
-const politica = new PoliticaAcessoService(repositorio);
+let responsavelAtivo = false;
+const politica = new PoliticaAcessoService(repositorio, {
+  findOne: async (consulta: { where: { responsavelInternoId?: string } }) =>
+    consulta.where.responsavelInternoId
+      ? (responsavelAtivo ? { id: CONTRATO_ID, responsavelInternoId: 'usuario-1' } : null)
+      : { id: CONTRATO_ID, arquivadoEm: null },
+} as never);
 
-beforeEach(() => busca.mockReset());
+beforeEach(() => { busca.mockReset(); responsavelAtivo = false; });
 
 describe('políticas por perfil e escopo', () => {
   it('administrador gerencia usuários, cria e lista contratos', async () => {
@@ -45,9 +51,17 @@ describe('políticas por perfil e escopo', () => {
     expect(busca).toHaveBeenCalledWith({ usuarioId: 'usuario-1', contratoId: CONTRATO_ID });
   });
 
-  it('colaborador nunca edita contrato, mesmo com vínculo marcado como editável', async () => {
+  it('colaborador não herda edição do vínculo legado, mesmo com podeEditar=true', async () => {
+    busca.mockResolvedValue({ podeEditar: true, permissoesDetalhadas: null } as PermissaoContrato);
     expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR), { acao: 'contratos:editar' }, CONTRATO_ID)).toBe(false);
-    expect(busca).not.toHaveBeenCalled();
+    expect(busca).toHaveBeenCalledWith({ usuarioId: 'usuario-1', contratoId: CONTRATO_ID });
+  });
+
+  it('colaborador só edita se receber permissão granular explícita para este contrato', async () => {
+    busca.mockResolvedValueOnce({ podeEditar: false, permissoesDetalhadas: { editarContrato: true } } as PermissaoContrato)
+      .mockResolvedValueOnce({ podeEditar: true, permissoesDetalhadas: { editarContrato: false } } as PermissaoContrato);
+    expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR), { acao: 'contratos:editar' }, CONTRATO_ID)).toBe(true);
+    expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR), { acao: 'contratos:editar' }, CONTRATO_ID)).toBe(false);
   });
 
   it('gestor edita somente contrato com vínculo explicitamente editável', async () => {
@@ -104,4 +118,82 @@ describe('TEC07-AJUSTES-02-02 — matriz PRD RF-39/40', () => {
     expect(await politica.permitido(usuario(PerfilUsuario.ADMINISTRADOR), { acao: 'etapas:editar', escopoOperacional: { tipo: 'recurso', recurso: 'documento', parametro: 'id' } }, CONTRATO_ID)).toBe(false);
     expect(await politica.permitido(usuario(PerfilUsuario.ADMINISTRADOR), { acao: 'etapas:editar', escopoOperacional: etapaReal }, 'forjado')).toBe(false);
   });
+});
+
+describe('trava global de reordenação — permissões distintas', () => {
+  const escopo = { tipo: 'contrato', parametro: 'id' } as const;
+  it('ADMIN pode alterar cadeado; GESTOR com somente reordenarEtapas não pode', async () => {
+    expect(await politica.permitido(usuario(PerfilUsuario.ADMINISTRADOR), {
+      acao: 'etapas:bloquear-ordem', escopoOperacional: escopo,
+    }, CONTRATO_ID)).toBe(true);
+    busca.mockResolvedValue({ podeEditar: true, permissoesDetalhadas: {
+      reordenarEtapas: true, bloquearOrdemEtapas: false,
+    } } as PermissaoContrato);
+    expect(await politica.permitido(usuario(PerfilUsuario.GESTOR), {
+      acao: 'etapas:reordenar', escopoOperacional: escopo,
+    }, CONTRATO_ID)).toBe(true);
+    expect(await politica.permitido(usuario(PerfilUsuario.GESTOR), {
+      acao: 'etapas:bloquear-ordem', escopoOperacional: escopo,
+    }, CONTRATO_ID)).toBe(false);
+  });
+  it('delegação explícita libera bloqueio sem exigir edição geral', async () => {
+    busca.mockResolvedValue({ podeEditar: false, permissoesDetalhadas: { bloquearOrdemEtapas: true } } as PermissaoContrato);
+    expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR), {
+      acao: 'etapas:bloquear-ordem', escopoOperacional: escopo,
+    }, CONTRATO_ID)).toBe(true);
+    expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR), {
+      acao: 'etapas:reordenar', escopoOperacional: escopo,
+    }, CONTRATO_ID)).toBe(false);
+  });
+});
+
+describe('delegação explícita por contrato', () => {
+  const escopoEntregavel = { tipo: 'recurso', recurso: 'entregavel', parametro: 'entregavelId' } as const;
+  it('COLABORADOR com delegação pode editar uma evidência mas não arquivá-la', async () => {
+    busca.mockResolvedValue({ podeEditar: false, permissoesDetalhadas: {
+      editarEvidencias: true, arquivarEvidencias: false,
+    } } as PermissaoContrato);
+    expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR), {
+      acao: 'evidencias:editaresperada', escopoOperacional: escopoEntregavel,
+    }, CONTRATO_ID)).toBe(true);
+    expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR), {
+      acao: 'evidencias:arquivaresperada', escopoOperacional: escopoEntregavel,
+    }, CONTRATO_ID)).toBe(false);
+  });
+  it('revogação específica impede Gestor com edição geral de arquivar', async () => {
+    busca.mockResolvedValue({ podeEditar: true, permissoesDetalhadas: {
+      arquivarEvidencias: false,
+    } } as PermissaoContrato);
+    expect(await politica.permitido(usuario(PerfilUsuario.GESTOR), {
+      acao: 'evidencias:arquivaresperada', escopoOperacional: escopoEntregavel,
+    }, CONTRATO_ID)).toBe(false);
+  });
+});
+
+
+describe('Atribuição de responsável concede leitura, não mutações', () => {
+  const escopo = { tipo: 'contrato', parametro: 'contratoId' } as const;
+  it('responsável sem vínculo vê o contrato e as etapas enquanto atribuído', async () => {
+    responsavelAtivo = true;
+    busca.mockResolvedValue(null);
+    expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR),
+      { acao: 'contratos:visualizar' }, CONTRATO_ID)).toBe(true);
+    expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR),
+      { acao: 'etapas:listar', escopoOperacional: escopo }, CONTRATO_ID)).toBe(true);
+    expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR),
+      { acao: 'documentos:anexar', escopoOperacional: escopo }, CONTRATO_ID)).toBe(false);
+    expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR),
+      { acao: 'evidencias:anexar', escopoOperacional: escopo }, CONTRATO_ID)).toBe(false);
+    responsavelAtivo = false;
+    expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR),
+      { acao: 'contratos:visualizar' }, CONTRATO_ID)).toBe(false);
+  });
+});
+
+
+test('exclusão definitiva de contratos é exclusiva do ADMIN e exige UUID válido', async () => {
+  expect(await politica.permitido(usuario(PerfilUsuario.ADMINISTRADOR), { acao: 'contratos:excluir' }, CONTRATO_ID)).toBe(true);
+  expect(await politica.permitido(usuario(PerfilUsuario.GESTOR), { acao: 'contratos:excluir' }, CONTRATO_ID)).toBe(false);
+  expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR), { acao: 'contratos:excluir' }, CONTRATO_ID)).toBe(false);
+  expect(await politica.permitido(usuario(PerfilUsuario.ADMINISTRADOR), { acao: 'contratos:excluir' }, 'id-errado')).toBe(false);
 });

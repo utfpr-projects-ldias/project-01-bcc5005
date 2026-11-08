@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import MinhaContaPage from './page';
-import { alterarMeuEmail, alterarMinhaSenha } from '@/lib/admin-usuarios';
+import { alterarMeuEmail, alterarMeuNome, alterarMinhaSenha } from '@/lib/admin-usuarios';
 
 const invalidar = jest.fn();
 const limpar = jest.fn();
@@ -13,12 +13,13 @@ jest.mock('@/hooks/use-meu-perfil', () => ({
 }));
 jest.mock('@/app/components/provedor-consultas', () => ({ useRepositorioConsultas: () => ({ invalidar, limpar }) }));
 jest.mock('@/lib/admin-usuarios', () => ({
-  alterarMeuEmail: jest.fn(), alterarMinhaSenha: jest.fn(),
+  alterarMeuEmail: jest.fn(), alterarMeuNome: jest.fn(), alterarMinhaSenha: jest.fn(),
   ErroApi: class ErroApi extends Error { constructor(public status: number, msg: string) { super(msg); } },
 }));
 
 beforeEach(() => {
   jest.clearAllMocks(); perfil = perfilAdmin;
+  (alterarMeuNome as jest.Mock).mockResolvedValue({ ...perfilAdmin, nome: 'Administrador Atualizado' });
   (alterarMeuEmail as jest.Mock).mockResolvedValue({ ...perfilAdmin, email: 'novo@qa.org' });
   (alterarMinhaSenha as jest.Mock).mockResolvedValue(undefined);
 });
@@ -37,8 +38,10 @@ test('formulários exibidos somente para Administrador, com senha atual exigida'
 test('Gestor não recebe edição de credenciais do admin', () => {
   perfil = { ...perfilAdmin, perfil: 'GESTOR' };
   render(<MinhaContaPage />);
-  expect(screen.getByRole('alert')).toHaveTextContent('somente ao Administrador');
-  expect(screen.queryByRole('form')).not.toBeInTheDocument();
+  expect(screen.getByText(/exclusivas do Administrador/)).toBeInTheDocument();
+  expect(screen.getByRole('form', { name: 'Alterar meu nome' })).toBeInTheDocument();
+  expect(screen.queryByRole('form', { name: 'Alterar meu e-mail' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('form', { name: 'Alterar minha senha' })).not.toBeInTheDocument();
   expect(screen.queryByRole('link', { name: 'Voltar a Funcionários' })).not.toBeInTheDocument();
 });
 
@@ -74,4 +77,35 @@ test('após alterar a própria senha revoga o cache local e usa o roteador Next 
   await waitFor(() => expect(limpar).toHaveBeenCalledTimes(1));
   expect(mockReplace).toHaveBeenCalledWith('/login');
   expect(limpar.mock.invocationCallOrder[0]).toBeLessThan(mockReplace.mock.invocationCallOrder[0]);
+});
+
+
+test('Minha conta mostra nome, email e perfil que não aparecem no cabeçalho', () => {
+  render(<MinhaContaPage />);
+  const conta = screen.getByRole('region', { name: 'Dados da conta' });
+  expect(conta).toHaveTextContent('Admin QA');
+  expect(conta).toHaveTextContent('admin@qa.org');
+  expect(conta).toHaveTextContent('Administrador');
+});
+
+
+test('o próprio usuário ativo pode alterar nome sem modificar e-mail ou senha', async () => {
+  perfil = { ...perfilAdmin, perfil: 'GESTOR' };
+  render(<MinhaContaPage />);
+  const formulario = screen.getByRole('form', { name: 'Alterar meu nome' });
+  fireEvent.change(within(formulario).getByLabelText('Nome completo'), { target: { value: '  Maria   Oliveira  ' } });
+  fireEvent.submit(formulario);
+  await waitFor(() => expect(alterarMeuNome).toHaveBeenCalledWith('Maria Oliveira'));
+  expect(invalidar).toHaveBeenCalledWith(['identidade', 'me']);
+  expect(alterarMeuEmail).not.toHaveBeenCalled();
+  expect(alterarMinhaSenha).not.toHaveBeenCalled();
+});
+
+test('nome inválido não dispara escrita na API', () => {
+  render(<MinhaContaPage />);
+  const formulario = screen.getByRole('form', { name: 'Alterar meu nome' });
+  fireEvent.change(within(formulario).getByLabelText('Nome completo'), { target: { value: 'Unico' } });
+  fireEvent.submit(formulario);
+  expect(screen.getByRole('alert')).toHaveTextContent('nome e sobrenome');
+  expect(alterarMeuNome).not.toHaveBeenCalled();
 });

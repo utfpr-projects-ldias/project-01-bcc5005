@@ -8,6 +8,7 @@ import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import { IdentidadesFuncionariosService } from './identidades-funcionarios.service.js';
 import { PerfilUsuario } from './perfil-usuario.enum.js';
 import { Usuario } from './usuario.entity.js';
+import { normalizarNomeCompleto } from './nome-completo.js';
 
 @Injectable()
 export class MinhaContaService {
@@ -19,6 +20,27 @@ export class MinhaContaService {
     private readonly dataSource: DataSource,
     private readonly auditoria: AuditoriaService,
   ) {}
+
+  /** Atualização do próprio nome não altera perfil, e-mail nem identidades externas. */
+  async alterarNome(nomeInformado: string, ator: UsuarioAutenticado) {
+    const nome = normalizarNomeCompleto(nomeInformado);
+    return this.dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(Usuario);
+      const atual = await repo.findOne({ where: { id: ator.id }, lock: { mode: 'pessimistic_write' } });
+      if (!atual?.ativo || atual.supertokensUserId !== ator.supertokensUserId || atual.perfil !== ator.perfil)
+        throw new ForbiddenException('Conta própria indisponível');
+      if (atual.nome !== nome) {
+        const nomeAnterior = atual.nome ?? null;
+        atual.nome = nome;
+        await repo.save(atual);
+        await this.auditoria.registrarNaTransacao(manager, ator, {
+          acao: AcaoAuditoria.USUARIO_ATUALIZADO, entidadeTipo: 'USUARIO', entidadeId: atual.id,
+          dadosAnteriores: { nome: nomeAnterior }, dadosPosteriores: { nome },
+        });
+      }
+      return { id: atual.id, nome: atual.nome, email: atual.email, perfil: atual.perfil, ativo: atual.ativo };
+    });
+  }
 
   private async autorValido(ator: UsuarioAutenticado): Promise<Usuario> {
     if (ator?.perfil !== PerfilUsuario.ADMINISTRADOR) {

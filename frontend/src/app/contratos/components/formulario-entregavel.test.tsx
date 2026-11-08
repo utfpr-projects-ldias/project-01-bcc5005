@@ -40,17 +40,16 @@ test('checklist sem upload permite múltiplos itens e obrigatoriedade', async ()
   montar();
   fireEvent.change(screen.getByLabelText('Nome *'), { target: { value: 'Etapa técnica' } });
   fireEvent.click(screen.getByRole('button', { name: /Adicionar evidência esperada/ }));
-  fireEvent.change(screen.getByLabelText('Tipo de evidência *'), { target: { value: 'Relatório fotográfico' } });
-  fireEvent.click(screen.getByRole('checkbox', { name: 'Obrigatória' }));
+  fireEvent.change(screen.getByLabelText('Tipo de evidência *'), { target: { value: 'Relatório' } });
+  expect(screen.getByRole('checkbox', { name: 'Obrigatória' })).toBeChecked();
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Cadastrar entregável' })); });
-  expect(gravar).toHaveBeenCalledWith(expect.objectContaining({ evidenciasEsperadas: [expect.objectContaining({ tipoEvidencia: 'Relatório fotográfico', obrigatoria: true })] }));
+  expect(gravar).toHaveBeenCalledWith(expect.objectContaining({ evidenciasEsperadas: [expect.objectContaining({ tipoEvidencia: 'Relatório', obrigatoria: true })] }));
 });
-test('edição protege mudança de periodicidade e preserva IDs do checklist', async () => {
+test('edição preserva IDs do checklist sem impor aceite genérico de replanejamento', async () => {
   montar(item);
   fireEvent.change(screen.getByLabelText('Periodicidade fixa *'), { target: { value: 'ANUAL' } });
-  expect(screen.getByText(/Atenção ao replanejamento/)).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Salvar alterações' })).toBeDisabled();
-  fireEvent.click(screen.getByRole('checkbox', { name: /Confirmo que compreendi/ }));
+  expect(screen.queryByText(/Atenção ao replanejamento/)).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Salvar alterações' })).toBeEnabled();
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' })); });
   expect(gravar).toHaveBeenCalledWith(expect.objectContaining({ periodicidade: 'ANUAL', evidenciasEsperadas: [expect.objectContaining({ id: 'ev1' })] }));
 });
@@ -60,7 +59,7 @@ test('erro HTTP preserva campos; clique duplo só dispara uma mutação', async 
   montar();
   fireEvent.change(screen.getByLabelText('Nome *'), { target: { value: 'Serviço planejado' } });
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Cadastrar entregável' })); });
-  expect(screen.getByRole('button', { name: /Salvando entregável/ })).toBeDisabled();
+  expect(screen.getByRole('button', { name: /Salvando\.\.\./ })).toBeDisabled();
   expect(gravar).toHaveBeenCalledTimes(1);
   await act(async () => { concluir(); });
   await waitFor(() => expect(screen.getByRole('button', { name: 'Cadastrar entregável' })).toBeEnabled());
@@ -73,7 +72,7 @@ test('limite 10 impede adicionar mais itens, sem apagar o checklist anterior', (
   for (let n = 0; n < 10; n++) fireEvent.click(adicionar);
   expect(screen.getAllByRole('button', { name: /Remover evidência esperada/ })).toHaveLength(10);
   expect(adicionar).toBeDisabled();
-  expect(screen.getByText(/máximo de 10/)).toBeInTheDocument();
+  expect(screen.getByText(/Evidências esperadas 10\/10/)).toBeInTheDocument();
 });
 
 test('responsável é único, opcional e escolhido somente pelo e-mail sem expor UUID', async () => {
@@ -93,6 +92,12 @@ test('responsável é único, opcional e escolhido somente pelo e-mail sem expor
   expect(gravar).toHaveBeenCalledWith(expect.objectContaining({ responsavelId: usuario.id }));
   fireEvent.click(screen.getByRole('button', { name: 'Remover atribuição' }));
   expect(screen.getByRole('combobox', { name: 'Buscar responsável por e-mail' })).toBeInTheDocument();
+});
+
+test('explica a atribuição do responsável sem termos administrativos nem prometer acesso automático', () => {
+  montar();
+  expect(screen.getByText('Escolha a pessoa que acompanhará esta entrega. O acesso ao contrato é configurado separadamente.')).toBeInTheDocument();
+  expect(screen.queryByText(/inclusive Administrador/)).not.toBeInTheDocument();
 });
 
 test('e-mail apenas digitado, sem opção selecionada, não cria vínculo automaticamente', async () => {
@@ -141,4 +146,42 @@ test('responsável cadastral pode ser Administrador ativo, sem incluí-lo em Fun
   fireEvent.click(opcao);
   expect(screen.getByText('Admin de QA')).toBeInTheDocument();
   expect(screen.queryByText(usuario.id)).not.toBeInTheDocument();
+});
+
+
+test('edição de entregável não repete o checklist; arquivar é ação separada à esquerda', () => {
+  const item = {
+    id: 'item-qa', contratoId: 'contrato-qa', etapaId: 'etapa-qa', nome: 'Visita técnica', codigo: null,
+    tipo: 'UNICO' as const, descricao: null, responsavelId: null, responsavel: null,
+    inicioPrevisto: null, terminoPrevisto: null, quantidadePrevista: null, quantidadeRealizada: null,
+    unidadeMedida: null, periodicidade: null, configuracaoPeriodicidade: null, peso: null,
+    criterioConclusao: null, statusExecucao: null, percentualExecucao: null,
+    situacaoComprovacao: null, observacoes: null,
+    evidenciasEsperadas: [{ id: 'evidencia-qa', tipoEvidencia: 'Relatório', descricao: null, obrigatoria: true }],
+  };
+  const onArquivar = jest.fn();
+  render(<FormularioEntregavel etapaId="etapa-qa" contratoId="contrato-qa" inicial={item}
+    onSalvar={jest.fn()} onCancelar={jest.fn()} onArquivar={onArquivar} />);
+  expect(screen.queryByRole('region', { name: 'Evidências do entregável' })).not.toBeInTheDocument();
+  expect(screen.queryByText('Relatório')).not.toBeInTheDocument();
+  const acoes = screen.getByRole('group', { name: 'Ações de edição do entregável' });
+  fireEvent.click(within(acoes).getByRole('button', { name: 'Arquivar entregável' }));
+  expect(onArquivar).toHaveBeenCalledTimes(1);
+  expect(within(acoes).getByRole('button', { name: 'Salvar alterações' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Remover evidência esperada 1' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Adicionar evidência esperada' })).not.toBeInTheDocument();
+});
+
+
+test('opção explícita de entrega no mesmo dia sincroniza as datas sem presumir término', () => {
+  render(<FormularioEntregavel etapaId="etapa-1" onSalvar={gravar} onCancelar={cancelar} />);
+  const inicio = screen.getByLabelText('Início previsto') as HTMLInputElement;
+  const fim = screen.getByLabelText('Término previsto') as HTMLInputElement;
+  fireEvent.change(inicio, { target: { value: '2026-11-12' } });
+  expect(fim.value).toBe('');
+  fireEvent.click(screen.getByRole('checkbox', { name: /Mesma data do início/ }));
+  expect(screen.queryByLabelText('Término previsto')).not.toBeInTheDocument();
+  fireEvent.change(inicio, { target: { value: '2026-11-13' } });
+  fireEvent.click(screen.getByRole('checkbox', { name: /Mesma data do início/ }));
+  expect(screen.getByLabelText('Término previsto')).toHaveValue('');
 });

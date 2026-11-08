@@ -1,8 +1,9 @@
 import { renderComConsultas } from '@/test-utils';
-import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import AdministracaoUsuariosPage from "./page";
 import CadastrarFuncionarioPage from "./novo/page";
 import { PainelAdministracao } from "./components/painel-administracao";
+import { ToastNotificacoes } from "@/app/components/toast-notificacoes";
 import {
   atualizarFuncionario, cadastrarFuncionario, consultarMeuPerfil, consultarUsuariosPaginados,
   buscarFuncionarioPorId, alterarEmailFuncionario, redefinirSenhaFuncionario,
@@ -48,14 +49,14 @@ beforeEach(() => {
   }));
 });
 
-test("listagem exibe ação de cadastro ao lado de atualizar, sem formulário", async () => {
+test("listagem exibe ação de cadastro sem botão manual de atualizar", async () => {
   renderComConsultas(<AdministracaoUsuariosPage />);
   const lista = await screen.findByRole("region", { name: "Funcionários" });
   expect(within(lista).getByText("gestor@exemplo.com")).toBeInTheDocument();
   expect(paginados).toHaveBeenCalled();
   const cadastrar = within(lista).getByRole("link", { name: "Cadastrar funcionário" });
   expect(cadastrar).toHaveAttribute("href", "/admin/usuarios/novo");
-  expect(cadastrar.parentElement).toContainElement(within(lista).getByRole("button", { name: "Atualizar lista" }));
+  expect(within(lista).queryByRole("button", { name: "Atualizar lista" })).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Senha inicial")).not.toBeInTheDocument();
 });
 
@@ -151,7 +152,7 @@ test("edição de conta legada sem nome vincula o aviso ARIA visível", async ()
 
 test("edição salva o PATCH e permanece na página para gerenciar credenciais", async () => {
   atualizar.mockResolvedValue({ ...gestor, perfil: "COLABORADOR", ativo: false });
-  renderComConsultas(<PainelAdministracao vista="edicao" idEdicao="b" />);
+  renderComConsultas(<><ToastNotificacoes /><PainelAdministracao vista="edicao" idEdicao="b" /></>);
   await screen.findByLabelText("Perfil de acesso");
   fireEvent.change(screen.getByLabelText("Perfil de acesso"), { target: { value: "COLABORADOR" } });
   fireEvent.click(screen.getByRole("button", { name: "Salvar dados da conta" }));
@@ -191,6 +192,26 @@ test("edição mantém retorno para lista e ações próprias sem recriar a nave
   expect(screen.queryByRole("navigation", { name: "Navegação móvel" })).not.toBeInTheDocument();
   expect(screen.getByRole("link", { name: /Voltar aos funcionários/ })).toHaveAttribute("href", "/admin/usuarios");
   expect(screen.getByRole("button", { name: "Salvar dados da conta" })).toBeInTheDocument();
+});
+
+test('botões administrativos são compactos, interativos e com realce no hover', async () => {
+  contratos.mockResolvedValue([{ id: 'ct-ui', codigoPublico: '00001', numeroContrato: 'Contrato de UI',
+    orgaoContratante: 'UTFPR', status: 'PLANEJAMENTO' }]);
+  renderComConsultas(<PainelAdministracao vista="edicao" idEdicao="b" />);
+  await screen.findByRole('heading', { name: /Conta de Gestor de Teste/ });
+  const salvar = screen.getByRole('button', { name: 'Salvar dados da conta' });
+  expect(salvar).toHaveClass('cursor-pointer', 'min-h-9', 'hover:bg-brand-green/90', 'focus-visible:outline-2');
+  expect(salvar).not.toHaveClass('min-h-11', 'min-w-44', 'px-5');
+  fireEvent.click(screen.getByText('Alterar e-mail', { exact: false, selector: 'summary' }));
+  const alterarEmail = screen.getByRole('button', { name: 'Confirmar mudança de e-mail' });
+  expect(alterarEmail).toHaveClass('hover:bg-brand-green/90', 'cursor-pointer');
+  fireEvent.click(screen.getByText('Redefinir senha', { exact: false, selector: 'summary' }));
+  const alterarSenha = screen.getByRole('button', { name: 'Confirmar redefinição de senha' });
+  expect(alterarSenha).toHaveClass('min-h-9', 'cursor-pointer');
+  fireEvent.click(screen.getByText('Acesso aos contratos', { exact: false, selector: 'summary' }));
+  const vincular = screen.getByRole('button', { name: 'Adicionar vínculo' });
+  expect(vincular).toHaveClass('min-h-9', 'cursor-pointer', 'hover:bg-brand-green/90');
+  expect(vincular).not.toHaveClass('min-h-11', 'min-w-44', 'px-5');
 });
 
 test("arquivamento ainda exige confirmação visual simples", async () => {
@@ -235,9 +256,77 @@ test("vários vínculos existentes aparecem e não podem ser adicionados duas ve
   acessos.mockResolvedValueOnce([{ contratoId: "ct1", podeEditar: true }, { contratoId: "ct2", podeEditar: false }])
     .mockResolvedValueOnce([{ contratoId: "ct1", podeEditar: true }, { contratoId: "ct2", podeEditar: false }, { contratoId: "ct3", podeEditar: false }]);
   fireEvent.click(screen.getByRole("button", { name: "Adicionar vínculo" }));
-  await waitFor(() => expect(conceder).toHaveBeenCalledWith("b", { contratoId: "ct3", podeEditar: false }));
+  await waitFor(() => expect(conceder).toHaveBeenCalledWith("b", expect.objectContaining({
+    contratoId: "ct3", podeEditar: false,
+    permissoesDetalhadas: expect.objectContaining({ criarEtapas: false, enviarComprovantes: false, arquivarEtapas: false, excluirEtapasArquivadas: false }),
+  })));
 });
 
+
+test("novo vínculo começa em somente leitura; depois, permitir edição ativa arquivamento e ordenação", async () => {
+  contratos.mockResolvedValue([{ id: 'novo', codigoPublico: '00001', numeroContrato: 'A', orgaoContratante: 'UTFPR', status: 'PLANEJAMENTO' }]);
+  // O mock acompanha o estado persistido: não depende de quantas consultas o React fez.
+  let vinculos: Awaited<ReturnType<typeof listarPermissoesFuncionario>> = [];
+  acessos.mockImplementation(async () => vinculos);
+  conceder.mockImplementation(async (_usuario, dados) => {
+    vinculos = [dados];
+    return dados;
+  });
+  renderComConsultas(<PainelAdministracao vista="edicao" idEdicao="b" />);
+  await screen.findByRole('heading', { name: /Conta de Gestor de Teste/ });
+  fireEvent.click(screen.getByText('Acesso aos contratos', { exact: false, selector: 'summary' }));
+  expect(screen.queryByRole('radio', { name: /Edição delegada/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Adicionar vínculo' }));
+  await waitFor(() => expect(conceder).toHaveBeenCalledWith('b', expect.objectContaining({
+    contratoId: 'novo', podeEditar: false,
+    permissoesDetalhadas: expect.objectContaining({ criarEtapas: false, arquivarEtapas: false, reativarEtapas: false,
+      excluirEtapasArquivadas: false }),
+  })));
+  const editar = await screen.findByRole('button', { name: 'Permitir edição' });
+  fireEvent.click(editar);
+  const confirmarEdicao = screen.getByRole('dialog', { name: 'Permitir edição neste contrato?' });
+  expect(within(confirmarEdicao).getByText(/criar e editar etapas/)).toBeInTheDocument();
+  expect(conceder).toHaveBeenCalledTimes(1); // Antes de confirmar, apenas o vínculo de leitura.
+  fireEvent.click(within(confirmarEdicao).getByRole('button', { name: 'Permitir edição' }));
+  await waitFor(() => expect(conceder).toHaveBeenCalledWith('b', expect.objectContaining({
+    contratoId: 'novo', podeEditar: true,
+    permissoesDetalhadas: expect.objectContaining({ criarEtapas: true, reordenarEtapas: true,
+      arquivarEntregaveis: true, arquivarEtapas: true, reativarEntregaveis: false,
+      reativarEtapas: false, excluirEntregaveisArquivados: false }),
+  })));
+});
+
+test("troca de nível exige confirmação antes de sobrescrever permissões existentes", async () => {
+  contratos.mockResolvedValue([{ id: 'acesso', codigoPublico: '00001', numeroContrato: 'A', orgaoContratante: 'UTFPR', status: 'PLANEJAMENTO' }]);
+  acessos.mockResolvedValue([{ contratoId: 'acesso', podeEditar: true, permissoesDetalhadas: { criarEtapas: true, excluirEtapasArquivadas: true } }]);
+  renderComConsultas(<PainelAdministracao vista="edicao" idEdicao="b" />);
+  await screen.findByRole('heading', { name: /Conta de Gestor de Teste/ });
+  fireEvent.click(screen.getByText('Acesso aos contratos', { exact: false, selector: 'summary' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Remover edição' }));
+  expect(conceder).not.toHaveBeenCalled();
+  const confirmacaoLeitura = screen.getByRole('dialog', { name: 'Voltar para somente leitura?' });
+  expect(within(confirmacaoLeitura).getByText(/apenas consultar o contrato, as etapas/)).toBeInTheDocument();
+  fireEvent.click(within(confirmacaoLeitura).getByRole('button', { name: 'Cancelar' }));
+  expect(conceder).not.toHaveBeenCalled();
+});
+
+test('cartão identifica permissões personalizadas sem confundi-las com edição padrão', async () => {
+  contratos.mockResolvedValue([{ id: 'custom', codigoPublico: '00021', numeroContrato: 'Contrato personalizado',
+    orgaoContratante: 'UTFPR', status: 'PLANEJAMENTO' }]);
+  acessos.mockResolvedValue([{ contratoId: 'custom', podeEditar: true,
+    permissoesDetalhadas: { criarEtapas: true, reordenarEtapas: false, arquivarEntregaveis: true } }]);
+  renderComConsultas(<PainelAdministracao vista="edicao" idEdicao="b" />);
+  await screen.findByRole('heading', { name: /Conta de Gestor de Teste/ });
+  fireEvent.click(screen.getByText('Acesso aos contratos', { exact: false, selector: 'summary' }));
+  const regiao = screen.getByRole('region', { name: 'Contratos vinculados' });
+  expect(within(regiao).getByTestId('permissao-contrato-custom'))
+    .toHaveTextContent('Pode editar · permissões personalizadas ativas');
+  fireEvent.click(within(regiao).getByRole('button', { name: 'Remover edição' }));
+  const dialogo = screen.getByRole('dialog', { name: 'Voltar para somente leitura?' });
+  expect(within(dialogo).getByText(/permissões personalizadas atuais serão desativadas/)).toBeInTheDocument();
+  fireEvent.click(within(dialogo).getByRole('button', { name: 'Cancelar' }));
+  expect(conceder).not.toHaveBeenCalled();
+});
 
 test("administração não duplica cabeçalho de rota nem identificação de sessão", async () => {
   const { container } = renderComConsultas(<PainelAdministracao vista="edicao" idEdicao="b" />);
@@ -249,25 +338,13 @@ test("administração não duplica cabeçalho de rota nem identificação de ses
   expect(screen.getByRole("link", { name: "Voltar aos funcionários" })).toHaveAttribute("href", "/admin/usuarios");
 });
 
-test("atualizar funcionários mostra spinner dentro do botão mantendo lista visível", async () => {
-  let concluir!: (valor: { itens: typeof gestor[]; pagina: number; limite: number; total: number; totalPaginas: number }) => void;
+test("alternar situação recarrega a lista sem botão Atualizar", async () => {
   renderComConsultas(<AdministracaoUsuariosPage />);
   await screen.findByText("gestor@exemplo.com");
-  paginados.mockImplementation((opcoes) => {
-    if (opcoes.limite === 1) return Promise.resolve({ itens: [], pagina: 1, limite: 1, total: 2, totalPaginas: 1 });
-    return new Promise((resolver) => { concluir = resolver; });
-  });
-  fireEvent.click(screen.getByRole("button", { name: "Atualizar lista" }));
-  expect(screen.getByRole("button", { name: "Atualizando..." })).toBeDisabled();
-  expect(screen.getByRole("button", { name: "Atualizando..." }).querySelector(".animate-spin")).not.toBeNull();
-  expect(screen.getByText("gestor@exemplo.com")).toBeInTheDocument();
-  // O repositorio inicia a consulta numa microtask: aguardar o fetch real,
-  // em vez de tentar resolver uma Promise que ainda nao foi criada.
-  await waitFor(() => expect(concluir).toEqual(expect.any(Function)));
-  await act(async () => { concluir({ itens: [gestor], pagina: 1, limite: 20, total: 1, totalPaginas: 1 }); });
-  await waitFor(() => expect(screen.getByRole("button", { name: "Atualizar lista" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: /Arquivados/ }));
+  await waitFor(() => expect(paginados).toHaveBeenCalledWith(expect.objectContaining({ ativo: false, pagina: 1 })));
+  expect(screen.queryByRole("button", { name: "Atualizar lista" })).not.toBeInTheDocument();
 });
-
 
 test("acessos exibem resumo curto mesmo em telas largas, sem perder identificação completa", async () => {
   const numero = "9".repeat(140);
@@ -289,15 +366,28 @@ test("acessos exibem resumo curto mesmo em telas largas, sem perder identificaç
   expect(titulo).toHaveTextContent(numero); // Nome completo no DOM; ellipsis depende do espaço real.
   expect(cartao).not.toHaveTextContent(orgao); // Órgão somente no modal de identificação.
   expect(within(lista).getByText("Código #84354")).toBeInTheDocument();
-  expect(within(lista).queryByText("Somente leitura")).not.toBeInTheDocument();
-  const expandir = within(lista).getByRole("button", { name: "Ver identificação completa" });
+  expect(within(lista).getByTestId("permissao-contrato-contrato-longo")).toHaveTextContent("Vínculo anterior · revise as permissões");
+  const expandir = within(lista).getByRole("button", { name: `Ver identificação completa do contrato ${numero}` });
   expect(expandir).toHaveClass("underline");
-  expect(expandir.compareDocumentPosition(titulo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(expandir).toBe(titulo); // Título sublinhado aciona o modal, sem frase redundante.
   const corpoCartao = cartao?.firstElementChild;
-  expect(corpoCartao).toHaveClass("@xl:flex-row");
+  expect(corpoCartao).toHaveClass("space-y-3");
   expect(corpoCartao?.lastElementChild).toHaveClass("flex-wrap");
   expect(within(lista).getByRole("button", { name: "Remover edição" })).toBeInTheDocument();
   expect(within(lista).getByRole("button", { name: "Revogar acesso" })).toBeInTheDocument();
+  const controlePermissoes = within(lista).getByRole("button", { name: "Ver permissões completas" });
+  fireEvent.click(controlePermissoes);
+  const permissoesModal = screen.getByRole("dialog", { name: "Permissões do contrato" });
+  // O modal agora distribui permissões por nível e grupo; não exibe todas de uma vez.
+  expect(within(permissoesModal).queryByRole("checkbox", { name: "Criar etapas" })).not.toBeInTheDocument();
+  fireEvent.click(within(permissoesModal).getByRole("tab", { name: "Etapas" }));
+  expect(within(permissoesModal).getByRole("checkbox", { name: "Criar etapas" })).toBeInTheDocument();
+  const estadoAntesPermissoes = window.history.state;
+  const voltarPermissoes = jest.spyOn(window.history, 'back').mockImplementation(() => window.history.replaceState({}, '', window.location.href));
+  fireEvent.click(within(permissoesModal).getByRole("button", { name: "Fechar permissões" }));
+  expect(screen.queryByRole("dialog", { name: "Permissões do contrato" })).not.toBeInTheDocument();
+  voltarPermissoes.mockRestore();
+  window.history.replaceState(estadoAntesPermissoes, '', window.location.href);
   const urlOriginal = window.location.href;
   const estadoAnterior = window.history.state;
   const voltar = jest.spyOn(window.history, "back").mockImplementation(() => {
@@ -316,7 +406,7 @@ test("acessos exibem resumo curto mesmo em telas largas, sem perder identificaç
   expect(voltar).toHaveBeenCalledTimes(1);
   voltar.mockRestore();
   const seletor = screen.getByLabelText("Selecionar contrato ainda não vinculado") as HTMLSelectElement;
-  expect(seletor).toHaveClass("max-w-[26rem]", "truncate");
+  expect(seletor).toHaveClass("max-w-full", "truncate");
   const opcoes = within(seletor).getAllByRole("option");
   expect(opcoes).toHaveLength(1);
   expect(opcoes[0]).toHaveValue("contrato-livre");
@@ -325,4 +415,39 @@ test("acessos exibem resumo curto mesmo em telas largas, sem perder identificaç
   expect(Array.from(opcoes[0].textContent ?? "").length).toBeLessThanOrEqual(44);
   expect(opcoes[0]).toHaveTextContent(/…$/);
   expect(opcoes[0].textContent).not.toContain("Organização extensa");
+});
+
+
+test("permissões vinculadas mostram leitura e edição em cada contrato do gestor", async () => {
+  contratos.mockResolvedValue([
+    { id: "edicao", codigoPublico: "00001", numeroContrato: "Contrato A", orgaoContratante: "Orgão A", status: "PLANEJAMENTO" },
+    { id: "leitura", codigoPublico: "00002", numeroContrato: "Contrato B", orgaoContratante: "Orgão B", status: "PLANEJAMENTO" },
+  ]);
+  acessos.mockResolvedValue([
+    { contratoId: "edicao", podeEditar: true },
+    { contratoId: "leitura", podeEditar: false },
+  ]);
+  renderComConsultas(<PainelAdministracao vista="edicao" idEdicao="b" />);
+  await screen.findByRole("heading", { name: /Conta de Gestor de Teste/ });
+  fireEvent.click(screen.getByText("Acesso aos contratos", { exact: false, selector: "summary" }));
+  const regiao = screen.getByRole("region", { name: "Contratos vinculados" });
+  expect(within(regiao).getByTestId("permissao-contrato-edicao"))
+    .toHaveTextContent("Vínculo anterior · revise as permissões");
+  expect(within(regiao).getByTestId("permissao-contrato-leitura"))
+    .toHaveTextContent("Vínculo anterior · revise as permissões");
+});
+
+test("colaborador mostra apenas leitura, mesmo em permissão legada inconsistente", async () => {
+  porId.mockResolvedValue({ ...gestor, perfil: "COLABORADOR" });
+  contratos.mockResolvedValue([
+    { id: "contrato-a", codigoPublico: "00003", numeroContrato: "Contrato A", orgaoContratante: "Órgão A", status: "PLANEJAMENTO" },
+  ]);
+  acessos.mockResolvedValue([{ contratoId: "contrato-a", podeEditar: true }]);
+  renderComConsultas(<PainelAdministracao vista="edicao" idEdicao="b" />);
+  await screen.findByRole("heading", { name: /Conta de Gestor de Teste/ });
+  fireEvent.click(screen.getByText("Acesso aos contratos", { exact: false, selector: "summary" }));
+  const regiao = screen.getByRole("region", { name: "Contratos vinculados" });
+  expect(within(regiao).getByTestId("permissao-contrato-contrato-a"))
+    .toHaveTextContent("Vínculo anterior · revise as permissões");
+  expect(within(regiao).getByRole("button", { name: "Permitir edição" })).toBeInTheDocument();
 });

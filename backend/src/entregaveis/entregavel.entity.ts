@@ -62,6 +62,9 @@ export class Entregavel {
   ])
   etapa!: Etapa;
 
+  @Column({ name: 'codigo_publico', type: 'integer', unique: true })
+  codigoPublico!: number;
+
   /** Código não obrigatório até decisão do cliente; não impor unicidade sem regra. */
   @Column({ type: 'varchar', length: 50, nullable: true })
   codigo!: string | null;
@@ -122,6 +125,16 @@ export class Entregavel {
 
   @Column({ name: 'situacao_comprovacao', type: 'enum', enum: SituacaoComprovacaoEntregavel, enumName: 'entregaveis_situacao_comprovacao_enum', nullable: true })
   situacaoComprovacao!: SituacaoComprovacaoEntregavel | null;
+
+  /** Reabertura documental explícita, independente do status operacional. */
+  @Column({ name: 'reaberto_em', type: 'timestamptz', nullable: true })
+  reabertoEm!: Date | null;
+
+  @Column({ name: 'arquivado_em', type: 'timestamptz', nullable: true })
+  arquivadoEm!: Date | null;
+
+  @Column({ name: 'arquivado_por', type: 'uuid', nullable: true })
+  arquivadoPor!: string | null;
 
   @Column({ type: 'text', nullable: true })
   observacoes!: string | null;

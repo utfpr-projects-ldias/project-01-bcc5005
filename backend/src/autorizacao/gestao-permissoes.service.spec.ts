@@ -66,6 +66,22 @@ describe('TEC07-AJUSTES-01: permissões por contrato', () => {
       acao: AcaoAuditoria.USUARIO_PERMISSAO_CONCEDIDA, entidadeId: pessoaId,
     }));
   });
+  it('ADMIN delega uma operação específica ao Colaborador, registra antes/depois na auditoria', async () => {
+    findOneUsuario.mockResolvedValue(Object.assign(new Usuario(), gestor, { perfil: PerfilUsuario.COLABORADOR }));
+    const resultado = await service.conceder(pessoaId, { contratoId, podeEditar: false,
+      permissoesDetalhadas: { editarEvidencias: true, alterarObrigatoriedade: false } }, ator);
+    expect(resultado).toMatchObject({ contratoId, podeEditar: false,
+      permissoesDetalhadas: { editarEvidencias: true, alterarObrigatoriedade: false } });
+    expect(auditoria).toHaveBeenCalledWith(manager, ator, expect.objectContaining({
+      acao: AcaoAuditoria.USUARIO_PERMISSAO_CONCEDIDA,
+      dadosPosteriores: expect.objectContaining({ permissoesDetalhadas: { editarEvidencias: true, alterarObrigatoriedade: false } }),
+    }));
+  });
+  it('rejeita delegação com ação desconhecida ou valor não booleano', async () => {
+    await expect(service.conceder(pessoaId, { contratoId, podeEditar: false,
+      permissoesDetalhadas: { admin: true } as never }, ator)).rejects.toBeInstanceOf(BadRequestException);
+    expect(salvar).not.toHaveBeenCalled();
+  });
   it('revoga vínculo existente com auditoria', async () => {
     const vinculo = Object.assign(new PermissaoContrato(), { usuarioId: pessoaId, contratoId, podeEditar: true });
     findOneVinculo.mockResolvedValue(vinculo); remover.mockResolvedValue(vinculo);

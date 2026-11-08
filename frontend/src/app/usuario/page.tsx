@@ -2,8 +2,9 @@
 import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMeuPerfil, CHAVE_PERFIL } from '@/hooks/use-meu-perfil';
-import { alterarMeuEmail, alterarMinhaSenha, ErroApi } from '@/lib/admin-usuarios';
+import { alterarMeuEmail, alterarMeuNome, alterarMinhaSenha, ErroApi } from '@/lib/admin-usuarios';
 import { useRepositorioConsultas } from '@/app/components/provedor-consultas';
+import { toastSucesso } from '@/app/components/toast-notificacoes';
 
 const campo = 'w-full rounded-lg border border-brand-green/40 bg-background px-3 py-2 text-foreground focus-visible:outline-2 focus-visible:outline-brand-green';
 const botao = 'rounded-lg bg-brand-green px-4 py-2 font-semibold text-on-brand-green transition hover:brightness-110 disabled:cursor-wait disabled:opacity-50';
@@ -16,24 +17,39 @@ export default function MinhaContaPage() {
   const { dados: perfil, erro, carregando } = useMeuPerfil();
   const cache = useRepositorioConsultas();
   const router = useRouter();
+  const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [senhaEmail, setSenhaEmail] = useState('');
   const [senhaAtual, setSenhaAtual] = useState('');
   const [novaSenha, setNovaSenha] = useState('');
   const [confirmar, setConfirmar] = useState('');
   const [enviando, setEnviando] = useState(false);
-  const [aviso, setAviso] = useState('');
   const [falha, setFalha] = useState('');
   const admin = perfil?.ativo && perfil.perfil === 'ADMINISTRADOR';
 
+  async function enviarNome(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault(); if (!perfil?.ativo || enviando) return;
+    const ajustado = nome.trim().replace(/\s+/g, ' ');
+    if (ajustado.length < 3 || ajustado.length > 160 || !ajustado.includes(' ')) {
+      setFalha('Informe nome e sobrenome válidos (até 160 caracteres).'); return;
+    }
+    setEnviando(true); setFalha('');
+    try {
+      await alterarMeuNome(ajustado);
+      cache.invalidar(CHAVE_PERFIL);
+      setNome('');
+      toastSucesso('Nome atualizado.');
+    } catch (err) { setFalha(mensagemErro(err)); }
+    finally { setEnviando(false); }
+  }
   async function enviarEmail(e: FormEvent<HTMLFormElement>) {
     e.preventDefault(); if (!admin || enviando) return;
-    setEnviando(true); setAviso(''); setFalha('');
+    setEnviando(true); setFalha('');
     try {
       const atualizado = await alterarMeuEmail(email.trim(), senhaEmail);
       cache.invalidar(CHAVE_PERFIL);
       setEmail(''); setSenhaEmail('');
-      setAviso(`E-mail atualizado para ${atualizado.email}. Use este endereço no próximo login.`);
+      toastSucesso(`E-mail atualizado para ${atualizado.email}. Use este endereço no próximo login.`);
     } catch (err) { setFalha(mensagemErro(err)); }
     finally { setEnviando(false); }
   }
@@ -43,11 +59,11 @@ export default function MinhaContaPage() {
     if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^a-zA-Z0-9]).{12,128}$/.test(novaSenha)) {
       setFalha('A senha deve ter de 12 a 128 caracteres, com maiúscula, minúscula, número e símbolo.'); return;
     }
-    setEnviando(true); setAviso(''); setFalha('');
+    setEnviando(true); setFalha('');
     try {
       await alterarMinhaSenha(senhaAtual, novaSenha);
       setSenhaAtual(''); setNovaSenha(''); setConfirmar('');
-      setAviso('Senha alterada. Todas as sessões foram revogadas; entre novamente com a nova senha.');
+      toastSucesso('Senha alterada. Faça login novamente.');
       // Após revogação, deixe explícito o novo login sem continuar com sessão antiga.
       cache.limpar();
       router.replace('/login');
@@ -55,14 +71,26 @@ export default function MinhaContaPage() {
     finally { setEnviando(false); }
   }
   return <section className="mx-auto max-w-3xl space-y-6 px-4 py-8 text-foreground sm:px-8">
-    <div><h1 className="text-2xl font-bold">Minha conta</h1><p className="text-sm text-foreground/70">Atualize as suas credenciais de Administrador com a senha atual.</p></div>
+    <div><h1 className="text-2xl font-bold">Minha conta</h1><p className="text-sm text-foreground/70">Consulte sua identificação e atualize seus dados pessoais.</p></div>
     {carregando && !perfil && <p role="status">Consultando conta...</p>}
     {Boolean(erro) && <p role="alert">Não foi possível consultar a conta.</p>}
-    {perfil && !admin && <p role="alert">Esta página de credenciais está disponível somente ao Administrador.</p>}
+    {perfil && <section aria-label="Dados da conta" className="rounded-xl border border-brand-green/30 bg-brand-darkgreen/5 p-4 text-sm">
+      <p className="font-semibold break-words">{perfil.nome?.trim() || 'Nome não informado'}</p>
+      <p className="mt-1 break-all text-foreground/70">{perfil.email}</p>
+      <p className="mt-1 text-brand-neon">{perfil.perfil === 'ADMINISTRADOR' ? 'Administrador' : perfil.perfil === 'GESTOR' ? 'Gestor' : 'Colaborador'}</p>
+    </section>}
+    {perfil?.ativo && <>
+      {falha && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-error-text">{falha}</p>}
+      <form onSubmit={enviarNome} aria-label="Alterar meu nome" className="space-y-3 rounded-xl border border-brand-green/25 p-4 sm:p-5">
+        <div><h2 className="font-semibold">Alterar meu nome</h2><p className="mt-1 text-xs text-foreground/60">Identificação exibida em seu perfil e no cabeçalho.</p></div>
+        <label className="block text-sm" htmlFor="conta-nome">Nome completo</label>
+        <input className={campo} id="conta-nome" value={nome} onChange={e => setNome(e.target.value)}
+          placeholder={perfil.nome ?? 'Nome e sobrenome'} maxLength={160} required autoComplete="name" />
+        <button type="submit" className={botao} disabled={enviando}>{enviando ? 'Salvando...' : 'Atualizar nome'}</button>
+      </form>
+    </>}
+    {perfil && !admin && <p className="text-xs text-foreground/60">Alterações de e-mail e senha nesta tela são exclusivas do Administrador.</p>}
     {admin && <>
-      <p className="rounded-xl border border-brand-green/30 p-4 text-sm">Conta: <strong>{perfil.nome || 'Administrador'}</strong> · {perfil.email}</p>
-      {aviso && <p role="status" className="rounded-lg border border-brand-green p-3 text-sm">{aviso}</p>}
-      {falha && <p role="alert" className="rounded-lg border border-red-500/50 p-3 text-sm text-error-text">{falha}</p>}
       <form onSubmit={enviarEmail} aria-label="Alterar meu e-mail" className="space-y-4 rounded-xl border border-brand-green/30 p-5">
         <h2 className="font-semibold">Alterar meu e-mail</h2>
         <label className="block text-sm" htmlFor="conta-email">Novo e-mail</label>

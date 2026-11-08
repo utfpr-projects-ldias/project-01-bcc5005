@@ -1,12 +1,15 @@
 /** Contrato HTTP HU06-02 — Etapas reais, sem entidades financeiras ou dados de demonstração. */
-export type StatusEtapa = 'PLANEJADA' | 'EM_ANDAMENTO' | 'CONCLUIDA';
+export type StatusEtapa = 'PLANEJADA' | 'EM_ANDAMENTO' | 'CONCLUIDA' | 'ENCERRADA';
 export const STATUS_ETAPA: Record<StatusEtapa, string> = {
-  PLANEJADA: 'Planejada', EM_ANDAMENTO: 'Em andamento', CONCLUIDA: 'Concluída',
+  PLANEJADA: 'Planejada', EM_ANDAMENTO: 'Em andamento', CONCLUIDA: 'Concluída', ENCERRADA: 'Encerrada',
 };
 
 export type Etapa = {
   id: string;
   contratoId: string;
+  codigoPublico?: number;
+  arquivadoEm?: string | null;
+  reabertoEm?: string | null;
   codigo: string | null;
   nome: string;
   descricao: string | null;
@@ -62,6 +65,17 @@ export const criarEtapa = (contratoId: string, dados: DadosEtapa) => requisitar<
 });
 export const editarEtapa = (contratoId: string, etapaId: string, dados: DadosEtapa) => requisitar<Etapa>(
   `${caminho(contratoId)}/${encodeURIComponent(etapaId)}`, { method: 'PATCH', body: JSON.stringify(dados) },
+);
+export const concluirEtapa = (c: string, e: string) => requisitar<Etapa>(`${caminho(c)}/${encodeURIComponent(e)}/concluir`, { method: 'PATCH' });
+export const consultarHistoricoEtapa = (c: string, e: string, signal?: AbortSignal) => requisitar<Array<{id: string; acao: string; descricao: string; ocorridoEm: string; entidadeTipo: string; entidadeId: string; evidenciaId?: string | null; contexto?: string; nomeArquivo?: string | null; justificativa?: string | null; ator?: {nome: string; email: string} | null}>>(`${caminho(c)}/${encodeURIComponent(e)}/historico`, { signal });
+export const reabrirEtapaEncerrada = (c: string, e: string, motivo: string) => requisitar<Etapa>(`${caminho(c)}/${encodeURIComponent(e)}/reabrir-encerrada`, { method: 'PATCH', body: JSON.stringify({ motivo }) });
+export const encerrarEtapa = (c: string, e: string, motivo: string) => requisitar<Etapa>(`${caminho(c)}/${encodeURIComponent(e)}/encerrar`, { method: 'PATCH', body: JSON.stringify({ motivo }) });
+export const reabrirEtapa = (c: string, e: string, motivo: string) => requisitar<Etapa>(`${caminho(c)}/${encodeURIComponent(e)}/reabrir`, { method: 'PATCH', body: JSON.stringify({ motivo }) });
+export const alterarArquivamentoEtapa = (c: string, e: string, a: 'arquivar' | 'reativar', motivo?: string) => requisitar<Etapa>(
+  `${caminho(c)}/${encodeURIComponent(e)}/${a}`, { method: 'PATCH', ...(a === 'reativar' ? { body: JSON.stringify({ motivo }) } : {}) },
+);
+export const excluirEtapaArquivada = (c: string, e: string) => requisitar<{id: string; excluido: boolean; limpezaPendente?: number}>(
+  `${caminho(c)}/${encodeURIComponent(e)}/excluir`, { method: 'POST' },
 );
 export const reordenarEtapas = (contratoId: string, idsOrdemAtual: string[], idsOrdemNova: string[]) => requisitar<Etapa[]>(
   `${caminho(contratoId)}/reordenar`, {

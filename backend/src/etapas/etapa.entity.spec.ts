@@ -22,7 +22,7 @@ describe('HU06-01 — modelo Etapa', () => {
   });
 
   it('usa status próprio, sem misturar estados do contrato', () => {
-    expect(Object.values(StatusEtapa)).toEqual(['PLANEJADA', 'EM_ANDAMENTO', 'CONCLUIDA']);
+    expect(Object.values(StatusEtapa)).toEqual(['PLANEJADA', 'EM_ANDAMENTO', 'CONCLUIDA', 'ENCERRADA']);
     expect(coluna('status')?.options).toMatchObject({
       type: 'enum', enumName: 'etapas_status_enum', default: StatusEtapa.PLANEJADA,
     });

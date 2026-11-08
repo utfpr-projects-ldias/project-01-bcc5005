@@ -4,6 +4,7 @@ import "./globals.css";
 import { SuperTokensInit } from "./components/supertokens-init";
 import { ProvedorConsultas } from "./components/provedor-consultas";
 import { EstruturaInterna } from "./components/estrutura-interna";
+import { ToastNotificacoes } from "./components/toast-notificacoes";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,7 +28,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <SuperTokensInit><ProvedorConsultas><EstruturaInterna>{children}</EstruturaInterna></ProvedorConsultas></SuperTokensInit>
+        <SuperTokensInit><ProvedorConsultas><EstruturaInterna>{children}</EstruturaInterna><ToastNotificacoes /></ProvedorConsultas></SuperTokensInit>
       </body>
     </html>
   );

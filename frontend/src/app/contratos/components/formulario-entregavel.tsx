@@ -1,23 +1,24 @@
 'use client';
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type Ref, type FormEvent } from 'react';
 import { ErroEntregavel, ROTULOS_PERIODICIDADE, ROTULOS_TIPO, pesquisarResponsaveisEntregavel, type ResponsavelEntregavel, type Entregavel } from '@/lib/entregaveis';
-import { DESCRICOES_TIPO, PERIODICIDADES, TIPOS, inicialEntregavel, mudouEstrutura,
+import { DESCRICOES_TIPO, PERIODICIDADES, TIPOS, inicialEntregavel,
   validarEntregavel, type DadosPlanejamentoEntregavel, type ErrosEntregavel, type RascunhoEntregavel } from '@/lib/validacao-entregavel';
 
 const estilo = 'w-full min-w-0 rounded-lg border border-brand-green/35 bg-background px-3 py-2.5 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-neon aria-invalid:border-red-500';
 function Seta() { return <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4"><path d="m4 10 4 4 8-8" /></svg>; }
-export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, onCancelar, onSalvandoMudou }: {
+export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, onCancelar, onArquivar, referenciaArquivar, onSalvandoMudou, podeAlterarObrigatoriedade = true, podeCriarEvidencias = true }: {
   contratoId?: string; etapaId: string; inicial?: Entregavel; onSalvar: (dados: DadosPlanejamentoEntregavel) => Promise<void>;
-  onCancelar: () => void; onSalvandoMudou?: (salvando: boolean) => void;
+  onCancelar: () => void; onArquivar?: () => void; referenciaArquivar?: Ref<HTMLButtonElement>; onSalvandoMudou?: (salvando: boolean) => void;
+  podeAlterarObrigatoriedade?: boolean; podeCriarEvidencias?: boolean;
 }) {
   const prefixo = useId().replace(/:/g, '');
   const proximaChave = useRef(0);
   const enviando = useRef(false);
   const [dados, setDados] = useState<RascunhoEntregavel>(() => inicialEntregavel(etapaId, inicial));
+  const [mesmoDia, setMesmoDia] = useState(() => Boolean(inicial?.inicioPrevisto && inicial.inicioPrevisto === inicial.terminoPrevisto));
   const [erros, setErros] = useState<ErrosEntregavel>({});
   const [erroGeral, setErroGeral] = useState('');
   const [salvando, setSalvando] = useState(false);
-  const [confirmado, setConfirmado] = useState(false);
   const [buscaResponsavel, setBuscaResponsavel] = useState('');
   const [responsaveis, setResponsaveis] = useState<ResponsavelEntregavel[]>([]);
   // Mantém a lista anterior estável até chegar a próxima resposta; nenhuma seleção é feita sem clique/Enter.
@@ -68,15 +69,12 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
   const emailDigitado = buscaResponsavel.trim().toLowerCase();
   const opcoesVisiveis = responsaveis.filter((u) => u.email.toLowerCase().includes(emailDigitado));
   const aguardandoBusca = listaAberta && (emailDigitado.length === 0 || emailDigitado.length >= 2) && pesquisaConcluida !== emailDigitado;
-  const estrutural = mudouEstrutura(dados, inicial);
-  const excluidos = !!inicial && inicial.evidenciasEsperadas.some((e) => !dados.evidenciasEsperadas.some((item) => item.id === e.id));
-  const exigeConfirmacao = estrutural || excluidos;
   const formId = (campo: string) => `entregavel-${prefixo}-${campo}`;
   function atualizar<K extends keyof RascunhoEntregavel>(campo: K, valor: RascunhoEntregavel[K]) {
-    setDados((prev) => ({ ...prev, [campo]: valor }));
+    setDados((prev) => ({ ...prev, [campo]: valor,
+      ...(campo === 'inicioPrevisto' && mesmoDia && typeof valor === 'string' ? { terminoPrevisto: valor } : {}) }));
     setErros((prev) => { const proximo = { ...prev }; delete proximo[campo]; return proximo; });
     setErroGeral('');
-    if (['tipo', 'periodicidade', 'inicioPrevisto', 'terminoPrevisto', 'etapaId'].includes(campo)) setConfirmado(false);
   }
   function campoErro(campo: string) {
     return { 'aria-invalid': !!erros[campo], 'aria-describedby': erros[campo] ? `${formId(campo)}-erro` : undefined };
@@ -93,9 +91,6 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
     if (enviando.current) return; // trava síncrona contra clique duplo
     const resultado = validarEntregavel(dados);
     if (!resultado.sucesso) { setErros(resultado.erros); setErroGeral('Revise os campos destacados.'); return; }
-    if (exigeConfirmacao && !confirmado) {
-      setErroGeral('Confirme que compreendeu o impacto do replanejamento ou remoção de itens.'); return;
-    }
     enviando.current = true; setSalvando(true); onSalvandoMudou?.(true); setErros({}); setErroGeral('');
     try { await onSalvar(resultado.dados); }
     catch (erro) { setErroGeral(erro instanceof ErroEntregavel ? erro.message : 'Não foi possível salvar. O formulário foi preservado.'); }
@@ -104,7 +99,7 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
   return <form noValidate aria-label={inicial ? `Editar entregável ${inicial.nome}` : 'Cadastrar entregável'} onSubmit={(e) => void enviar(e)}
     className="min-w-0 space-y-5 rounded-2xl border border-brand-green/40 bg-brand-darkgreen/10 p-4 md:p-6">
     <div><h3 className="text-lg font-semibold text-brand-neon">{inicial ? 'Editar entregável' : 'Novo entregável'}</h3>
-      <p className="mt-1 text-sm text-foreground/70">Planejamento da etapa selecionada. Evidências esperadas não são arquivos enviados.</p></div>
+      {!inicial && <p className="mt-1 text-sm text-foreground/70">Defina o entregável e suas evidências iniciais.</p>}</div>
     <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_2fr]">
       <div><label className="mb-1 block text-sm" htmlFor={formId('codigo')}>Código (opcional)</label>
         <input id={formId('codigo')} className={estilo} maxLength={50} value={dados.codigo} {...campoErro('codigo')} onChange={(e) => atualizar('codigo', e.target.value)} />{mensagem('codigo')}</div>
@@ -121,17 +116,25 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
     <div><label className="mb-1 block text-sm" htmlFor={formId('descricao')}>Descrição (opcional)</label>
       <textarea id={formId('descricao')} className={estilo} rows={3} maxLength={3000} value={dados.descricao}
         onChange={(e) => atualizar('descricao', e.target.value)} />{mensagem('descricao')}</div>
-    <div className="grid gap-4 sm:grid-cols-2">
+    <div className={`grid gap-4 ${mesmoDia ? '' : 'sm:grid-cols-2'}`}>
       <div><label className="mb-1 block text-sm" htmlFor={formId('inicioPrevisto')}>Início previsto</label>
         <input id={formId('inicioPrevisto')} type="date" className={estilo} value={dados.inicioPrevisto} {...campoErro('inicioPrevisto')}
           onChange={(e) => atualizar('inicioPrevisto', e.target.value)} />{mensagem('inicioPrevisto')}</div>
-      <div><label className="mb-1 block text-sm" htmlFor={formId('terminoPrevisto')}>Término previsto</label>
+      {!mesmoDia && <div><label className="mb-1 block text-sm" htmlFor={formId('terminoPrevisto')}>Término previsto</label>
         <input id={formId('terminoPrevisto')} type="date" className={estilo} value={dados.terminoPrevisto} {...campoErro('terminoPrevisto')}
-          onChange={(e) => atualizar('terminoPrevisto', e.target.value)} />{mensagem('terminoPrevisto')}</div>
+          onChange={(e) => atualizar('terminoPrevisto', e.target.value)} />{mensagem('terminoPrevisto')}</div>}
     </div>
+    <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground/80">
+      <input type="checkbox" checked={mesmoDia} onChange={evento => {
+        const marcado = evento.target.checked;
+        setMesmoDia(marcado);
+        atualizar('terminoPrevisto', marcado ? dados.inicioPrevisto : '');
+      }} className="h-4 w-4 accent-brand-green" />
+      Mesma data do início (entrega prevista para um único dia)
+    </label>
     <div className="space-y-2">
       <p className="block text-sm font-semibold">Responsável pelo entregável (opcional)</p>
-      <p className="text-xs text-foreground/70">Um usuário ativo (inclusive Administrador), selecionado pelo e-mail. Deixe sem atribuição se não houver responsável definido. Atribuir responsabilidade não libera acesso ao contrato.</p>
+      <p className="text-xs text-foreground/70">Escolha a pessoa que acompanhará esta entrega. O acesso ao contrato é configurado separadamente.</p>
       {responsavelEscolhido ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brand-green/45 bg-brand-green/10 px-3 py-3">
         <div className="min-w-0"><p className="text-xs font-medium text-foreground/65">Responsável atribuído</p>
           <p className="break-all font-semibold text-brand-neon">{responsavelEscolhido.email || 'Usuário cadastrado'}</p>
@@ -228,45 +231,46 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
     <div><label className="mb-1 block text-sm" htmlFor={formId('observacoes')}>Observações (opcional)</label>
       <textarea id={formId('observacoes')} className={estilo} rows={2} maxLength={3000} value={dados.observacoes}
         onChange={(e) => atualizar('observacoes', e.target.value)} />{mensagem('observacoes')}</div>
-    <fieldset className="min-w-0 space-y-3 rounded-xl border border-brand-green/25 p-3 sm:p-4">
-      <legend className="px-1 font-semibold">Evidências esperadas (máximo de 10)</legend>
-      <p className="text-sm text-foreground/70">Somente o checklist de planejamento; nenhum upload ou comprovação será criado.</p>
+    {!inicial && podeCriarEvidencias ? <fieldset className="min-w-0 space-y-3 rounded-xl border border-brand-green/25 p-3 sm:p-4">
+      <legend className="px-1 font-semibold">Evidências esperadas {dados.evidenciasEsperadas.length}/10</legend>
+      <p className="text-sm text-foreground/70">Somente o planejamento das evidências esperadas.</p>
       {dados.evidenciasEsperadas.map((item, indice) => <div key={item.chave} className="min-w-0 space-y-3 rounded-lg border border-brand-green/20 bg-background/60 p-3">
         <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-sm">Item {indice + 1}</strong>
           <button type="button" className="rounded-lg border border-red-500/40 px-3 py-1 text-xs disabled:opacity-50" disabled={salvando}
             aria-label={`Remover evidência esperada ${indice + 1}`}
-            onClick={() => { setDados((prev) => ({ ...prev, evidenciasEsperadas: prev.evidenciasEsperadas.filter((e) => e.chave !== item.chave) })); setConfirmado(false); }}>
+            onClick={() => { setDados((prev) => ({ ...prev, evidenciasEsperadas: prev.evidenciasEsperadas.filter((e) => e.chave !== item.chave) })); }}>
             Remover item</button></div>
         <div><label className="mb-1 block text-sm" htmlFor={formId(`ev-${item.chave}-tipo`)}>Tipo de evidência *</label>
-          <input id={formId(`ev-${item.chave}-tipo`)} className={estilo} maxLength={100} value={item.tipoEvidencia}
-            {...campoErro(`evidencias.${indice}.tipoEvidencia`)} onChange={(e) => trocarItem(indice, 'tipoEvidencia', e.target.value)} />
+          <select id={formId(`ev-${item.chave}-tipo`)} className={estilo} required value={item.tipoEvidencia}
+            {...campoErro(`evidencias.${indice}.tipoEvidencia`)} onChange={(e) => trocarItem(indice, 'tipoEvidencia', e.target.value)}>
+            <option value="">Selecione o tipo</option><option value="Foto">Foto</option><option value="Relatório">Relatório</option>
+          </select>
           {mensagem(`evidencias.${indice}.tipoEvidencia`)}</div>
         <div><label className="mb-1 block text-sm" htmlFor={formId(`ev-${item.chave}-descricao`)}>Descrição (opcional)</label>
-          <textarea id={formId(`ev-${item.chave}-descricao`)} className={estilo} rows={2} maxLength={3000} value={item.descricao ?? ''}
+          <textarea id={formId(`ev-${item.chave}-descricao`)} className={estilo} rows={2} maxLength={130} value={item.descricao ?? ''}
             {...campoErro(`evidencias.${indice}.descricao`)} onChange={(e) => trocarItem(indice, 'descricao', e.target.value)} />
           {mensagem(`evidencias.${indice}.descricao`)}</div>
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={item.obrigatoria}
-          onChange={(e) => trocarItem(indice, 'obrigatoria', e.target.checked)} /> Obrigatória</label>
+        {podeAlterarObrigatoriedade && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={item.obrigatoria}
+          onChange={(e) => trocarItem(indice, 'obrigatoria', e.target.checked)} /> Obrigatória</label>}
       </div>)}
       <button type="button" className="inline-flex items-center gap-2 rounded-lg border border-brand-green/50 px-3 py-2 text-sm disabled:opacity-50"
         disabled={salvando || dados.evidenciasEsperadas.length >= 10}
         onClick={() => { const chave = `novo-${++proximaChave.current}`; setDados((prev) => ({ ...prev, evidenciasEsperadas: [...prev.evidenciasEsperadas,
-          { chave, tipoEvidencia: '', descricao: '', obrigatoria: false }] })); }}>
+          { chave, tipoEvidencia: '', descricao: '', obrigatoria: true }] })); }}>
         + Adicionar evidência esperada</button>
       {mensagem('evidenciasEsperadas')}
-    </fieldset>
-    {exigeConfirmacao && <div className="space-y-2 rounded-xl border border-amber-500/50 bg-amber-500/5 p-3 text-sm">
-      <p role="note" className="font-semibold">Atenção ao replanejamento</p>
-      <p>Tipo, periodicidade, prazo ou etapa foram alterados, ou itens foram removidos do checklist. Parâmetros incompatíveis serão limpos ao salvar, mas permanecem neste formulário caso você retorne ao tipo anterior. Itens removidos serão registrados em auditoria. Se houver ocorrências vinculadas, o sistema pode impedir a alteração, sem apagá-las.</p>
-      <label className="flex items-start gap-2"><input type="checkbox" checked={confirmado} onChange={(e) => setConfirmado(e.target.checked)} /> Confirmo que compreendi essas alterações.</label>
-    </div>}
+    </fieldset> : null}
     {erroGeral && <p role="alert" className="rounded-lg border border-red-500/45 p-3 text-sm text-error-text">{erroGeral}</p>}
-    <div className="flex flex-wrap justify-end gap-2">
-      <button type="button" className="rounded-lg border border-brand-green/40 px-4 py-2 text-sm disabled:opacity-50" disabled={salvando} onClick={onCancelar}>Cancelar</button>
-      <button type="submit" disabled={salvando || (exigeConfirmacao && !confirmado)}
-        className="inline-flex items-center gap-2 rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-on-brand-green disabled:opacity-50">
-        {!salvando && <Seta />}{salvando ? 'Salvando entregável...' : inicial ? 'Salvar alterações' : 'Cadastrar entregável'}
-      </button>
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-brand-green/20 pt-4" role="group" aria-label="Ações de edição do entregável">
+      {inicial && onArquivar ? <button type="button" onClick={onArquivar} ref={referenciaArquivar} disabled={salvando}
+        className="inline-flex min-h-9 items-center rounded-lg border border-amber-500/45 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-500/10 disabled:opacity-50">Arquivar entregável</button> : <span aria-hidden="true" />}
+      <div className="ml-auto flex flex-wrap items-center gap-2">
+        <button type="button" className="rounded-lg border border-brand-green/40 px-3 py-1.5 text-xs disabled:opacity-50" disabled={salvando} onClick={onCancelar}>Cancelar</button>
+        <button type="submit" disabled={salvando}
+          className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-brand-green px-3 py-1.5 text-xs font-semibold text-on-brand-green disabled:opacity-50">
+          {!salvando && <Seta />}{salvando ? 'Salvando...' : inicial ? 'Salvar alterações' : 'Cadastrar entregável'}
+        </button>
+      </div>
     </div>
   </form>;
 }

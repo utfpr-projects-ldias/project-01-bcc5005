@@ -1,4 +1,6 @@
 import 'reflect-metadata';
+import { ArquivamentoLogicoContratos1794000000000 } from '../src/database/migrations/1794000000000-ArquivamentoLogicoContratos.js';
+
 import { randomUUID } from 'node:crypto';
 import { UnauthorizedException, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -67,6 +69,7 @@ suite('HU06-02 — API real e ordenação transacional PostgreSQL isolado', () =
         AdicionarNomeUsuarios1793300000000, FkPermissaoContrato1793400000000,
         CriarEtapas1793500000000, ContextoAuditoriaOperacional1793600000000,
         CodigoPublicoContratos1793800000000,
+        ArquivamentoLogicoContratos1794000000000,
       ],
     }).initialize();
     await db.runMigrations();
@@ -112,7 +115,7 @@ suite('HU06-02 — API real e ordenação transacional PostgreSQL isolado', () =
       buscarAtivoPorSupertokensId: (supertokensUserId: string) =>
         db.getRepository(Usuario).findOneBy({ supertokensUserId, ativo: true }),
     } as unknown as UsuariosService;
-    const acesso = new PoliticaAcessoService(db.getRepository(PermissaoContrato));
+    const acesso = new PoliticaAcessoService(db.getRepository(PermissaoContrato), db.getRepository(Contrato));
     const escopo = new ResolverEscopoContratoService(db.getRepository(Contrato), db.getRepository(Etapa));
     app = modulo.createNestApplication();
     app.useGlobalGuards(new AutorizacaoGuard(modulo.get(Reflector), sessoes, dominio, acesso, escopo));

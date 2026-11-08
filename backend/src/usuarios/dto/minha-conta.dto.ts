@@ -1,6 +1,10 @@
 import { Transform } from 'class-transformer';
 import { IsEmail, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
+export class AlterarMeuNomeDto {
+  @IsString() @MinLength(3) @MaxLength(160) nome!: string;
+}
+
 /** A senha atual é sempre obrigatória e nunca persiste no banco/auditoria. */
 export class AlterarMeuEmailDto {
   @Transform(({ value }: {value: unknown}) => typeof value === 'string' ? value.trim().toLowerCase() : value)

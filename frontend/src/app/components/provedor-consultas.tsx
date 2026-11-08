@@ -10,6 +10,8 @@ export function ProvedorConsultas({ children }: { children: ReactNode }) {
   const [repositorio] = useState(() => new RepositorioConsultas());
   return <ContextoConsultas.Provider value={repositorio}>{children}</ContextoConsultas.Provider>;
 }
+/** Leitura opcional para painéis também testados isoladamente; a aplicação sempre usa o provider. */
+export function useRepositorioConsultasOpcional() { return useContext(ContextoConsultas); }
 export function useRepositorioConsultas() {
   const repositorio = useContext(ContextoConsultas);
   if (!repositorio) throw new Error('ProvedorConsultas ausente da arvore de componentes');

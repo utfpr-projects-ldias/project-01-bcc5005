@@ -29,6 +29,13 @@ async function bootstrap() {
       ...supertokens.getAllCORSHeaders(),
     ],
     credentials: true,
+    // Permite ao frontend autorizado ler os metadados HTTP do download.
+    // Nao amplia as origens permitidas ou o acesso aos arquivos.
+    exposedHeaders: [
+      'X-Content-Type-Options',
+      'Content-Disposition',
+      'Cache-Control',
+    ],
   });
 
   app.useBodyParser('json');

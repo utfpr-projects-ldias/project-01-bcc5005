@@ -11,6 +11,7 @@ import { Usuario } from '../usuarios/usuario.entity.js';
 import { Contrato } from '../contratos/contrato.entity.js';
 import { PermissaoContrato } from './permissao-contrato.entity.js';
 import type { ConcederPermissaoDto } from './dto/conceder-permissao.dto.js';
+import { validarPermissoes } from './permissoes-granulares.js';
 
 @Injectable()
 export class GestaoPermissoesService {
@@ -31,11 +32,14 @@ export class GestaoPermissoesService {
     const itens = await this.db.getRepository(PermissaoContrato).find({
       where: { usuarioId }, order: { contratoId: 'ASC' },
     });
-    return itens.map((v) => ({ contratoId: v.contratoId, podeEditar: v.podeEditar }));
+    return itens.map((v) => ({ contratoId: v.contratoId, podeEditar: v.podeEditar, permissoesDetalhadas: v.permissoesDetalhadas ?? null }));
   }
 
   async conceder(usuarioId: string, dto: ConcederPermissaoDto, ator: UsuarioAutenticado) {
     await this.validarAdministrador(ator);
+    let detalhes;
+    try { detalhes = dto.permissoesDetalhadas === undefined ? undefined : validarPermissoes(dto.permissoesDetalhadas); }
+    catch { throw new BadRequestException('Conjunto de permissões detalhadas inválido'); }
     return this.db.transaction(async (manager) => {
       const funcionarios = manager.getRepository(Usuario);
       const alvo = await funcionarios.findOne({ where: { id: usuarioId }, lock: { mode: 'pessimistic_write' } });
@@ -52,18 +56,21 @@ export class GestaoPermissoesService {
       const anterior = await vinculos.findOne({
         where: { usuarioId, contratoId: dto.contratoId }, lock: { mode: 'pessimistic_write' },
       });
-      if (anterior?.podeEditar === dto.podeEditar) {
-        return { contratoId: dto.contratoId, podeEditar: dto.podeEditar };
+      const anteriores = anterior ? { contratoId: dto.contratoId, podeEditar: anterior.podeEditar,
+        permissoesDetalhadas: anterior.permissoesDetalhadas ?? null } : null;
+      const proximas = detalhes === undefined ? (anterior?.permissoesDetalhadas ?? null) : detalhes;
+      if (anterior?.podeEditar === dto.podeEditar && JSON.stringify(anteriores?.permissoesDetalhadas) === JSON.stringify(proximas)) {
+        return { ...anteriores };
       }
       const salvo = await vinculos.save(anterior
-        ? Object.assign(anterior, { podeEditar: dto.podeEditar })
-        : vinculos.create({ usuarioId, contratoId: dto.contratoId, podeEditar: dto.podeEditar }));
+        ? Object.assign(anterior, { podeEditar: dto.podeEditar, permissoesDetalhadas: proximas })
+        : vinculos.create({ usuarioId, contratoId: dto.contratoId, podeEditar: dto.podeEditar, permissoesDetalhadas: proximas }));
       await this.auditoria.registrarNaTransacao(manager, ator, {
         acao: AcaoAuditoria.USUARIO_PERMISSAO_CONCEDIDA, entidadeTipo: 'USUARIO', entidadeId: usuarioId,
-        dadosAnteriores: anterior ? { contratoId: dto.contratoId, podeEditar: !dto.podeEditar } : null,
-        dadosPosteriores: { contratoId: salvo.contratoId, podeEditar: salvo.podeEditar },
+        dadosAnteriores: anteriores,
+        dadosPosteriores: { contratoId: salvo.contratoId, podeEditar: salvo.podeEditar, permissoesDetalhadas: salvo.permissoesDetalhadas },
       });
-      return { contratoId: salvo.contratoId, podeEditar: salvo.podeEditar };
+      return { contratoId: salvo.contratoId, podeEditar: salvo.podeEditar, permissoesDetalhadas: salvo.permissoesDetalhadas };
     });
   }
 
@@ -78,7 +85,7 @@ export class GestaoPermissoesService {
       await vinculos.remove(vinculo);
       await this.auditoria.registrarNaTransacao(manager, ator, {
         acao: AcaoAuditoria.USUARIO_PERMISSAO_REVOGADA, entidadeTipo: 'USUARIO', entidadeId: usuarioId,
-        dadosAnteriores: { contratoId, podeEditar: vinculo.podeEditar }, dadosPosteriores: null,
+        dadosAnteriores: { contratoId, podeEditar: vinculo.podeEditar, permissoesDetalhadas: vinculo.permissoesDetalhadas ?? null }, dadosPosteriores: null,
       });
     });
   }

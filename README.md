@@ -12,46 +12,6 @@ Sistema web interno para acompanhar **contratos de prestação de serviços**, s
 | Testes e qualidade | Jest, React Testing Library, Supertest, ESLint (frontend), Oxlint (backend) |
 | Ambiente | Node.js 24 (containers Alpine), Docker Engine e Docker Compose |
 
-## Primeira execução
-
-**Pré-requisitos:** Git, Docker Engine e Docker Compose. Não é necessário instalar Node.js nem PostgreSQL no computador.
-
-Na **raiz do repositório**, prepare o arquivo de ambiente:
-
-```bash
-[ -f .env ] || cp .env.example .env
-openssl rand -hex 24
-openssl rand -hex 32
-nano .env
-```
-
-Use os dois valores gerados para preencher `POSTGRES_PASSWORD` e `SUPERTOKENS_API_KEY` no `.env`, respectivamente. **Não versione o `.env` nem substitua um arquivo já configurado.**
-
-Inicie os serviços:
-
-```bash
-sudo systemctl start docker
-docker compose config -q
-docker compose up -d --build
-docker compose ps
-```
-
-- Se falhar o build use docker compose down -v e depois o build denovo!
-
----
-
-Em um **banco novo**, aplique as migrations e crie o primeiro Administrador:
-
-```bash
-docker compose exec backend npm run migration:run
-docker compose exec backend npm run build
-docker compose exec backend npm run admin:create -- rinaldi@gmail.com
-```
-
-O último comando solicita e confirma a senha no próprio terminal. Ele é executado **uma vez por banco novo** e não recria um Administrador já existente. O comando `admin:create` faz parte da **TEC07-01** e estará disponível nas outras branches depois que essa sub-issue for integrada à `develop`.
-
-Acesse **http://localhost:3000/login**. A API NestJS fica em `http://localhost:3001`.
-
 ## Uso diário
 
 **Iniciar:**
@@ -84,6 +44,47 @@ sudo systemctl stop docker.service
 
 `docker compose down` **preserva os dados** do PostgreSQL e as contas do SuperTokens. Desligar o Docker Engine é opcional e afeta outros projetos Docker da máquina.
 
+## Primeira execução
+
+**Pré-requisitos:** Git, Docker Engine e Docker Compose. Não é necessário instalar Node.js nem PostgreSQL no computador.
+
+Na **raiz do repositório**, prepare o arquivo de ambiente:
+
+```bash
+[ -f .env ] || cp .env.example .env
+openssl rand -hex 24
+openssl rand -hex 32
+nano .env
+```
+
+Use os dois valores gerados para preencher `POSTGRES_PASSWORD` e `SUPERTOKENS_API_KEY` no `.env`, respectivamente. **Não versione o `.env` nem substitua um arquivo já configurado.**
+
+Inicie os serviços:
+
+```bash
+sudo systemctl start docker
+docker compose config -q
+docker compose up -d --build
+docker compose ps
+```
+
+- Se falhar o build, **não** execute `docker compose down -v`: isso destrói os volumes persistentes e seus dados.
+
+---
+
+Em um **banco novo**, aplique as migrations e crie o primeiro Administrador:
+
+```bash
+docker compose exec backend npm run migration:run
+docker compose exec backend npm run build
+docker compose exec backend npm run admin:create -- rinaldi@gmail.com
+```
+
+O último comando solicita e confirma a senha no próprio terminal. Ele é executado **uma vez por banco novo** e não recria um Administrador já existente. O comando `admin:create` faz parte da **TEC07-01** e estará disponível nas outras branches depois que essa sub-issue for integrada à `develop`.
+
+Acesse **http://localhost:3000/login**. A API NestJS fica em `http://localhost:3001`.
+
+
 ## Reiniciar o banco do zero — cuidado
 
 ```bash
@@ -113,5 +114,3 @@ docker compose exec backend npm run test:e2e -- --runInBand
 docker compose exec frontend npm run lint
 docker compose exec frontend npm test
 ```
-
-**Estado atual:** a autenticação e o bootstrap do Administrador já foram implementados na TEC07-01; a autorização detalhada e o bloqueio dos endpoints públicos de cadastro pertencem às TEC07-02 e TEC07-04. **Não exponha o ambiente de desenvolvimento publicamente como se essas proteções já estivessem concluídas.**
