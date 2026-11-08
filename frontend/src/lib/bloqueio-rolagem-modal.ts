@@ -9,7 +9,10 @@ export function bloquearRolagemDocumento(): () => void {
     estadoOriginal = { overflow: document.body.style.overflow, paddingRight: document.body.style.paddingRight };
     const disponivel = document.documentElement.clientWidth;
     const largura = disponivel > 0 ? Math.max(0, window.innerWidth - disponivel) : 0;
-    if (largura > 0) {
+    // scrollbar-gutter: stable já reserva o espaço no documento; compensar
+    // novamente com padding criaria a mudança lateral vista ao abrir modais.
+    const gutterEstavel = window.getComputedStyle(document.documentElement).scrollbarGutter.includes('stable');
+    if (largura > 0 && !gutterEstavel) {
       const atual = Number.parseFloat(window.getComputedStyle(document.body).paddingRight) || 0;
       document.body.style.paddingRight = `${atual + largura}px`;
     }

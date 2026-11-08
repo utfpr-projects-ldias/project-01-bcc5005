@@ -44,9 +44,9 @@ const inicial = { nome: "", email: "", perfil: "COLABORADOR" as PerfilFuncionari
 
 type Campo = "nome" | "email" | "perfil" | "senhaInicial" | "confirmarSenha";
 type Erros = Partial<Record<Campo, string>>;
-const botao = "inline-flex min-h-9 w-fit cursor-pointer items-center justify-center rounded-lg border border-brand-green/40 px-3 py-1.5 text-sm font-medium text-foreground transition-all duration-150 hover:border-brand-green/70 hover:bg-brand-green/10 hover:brightness-110 active:translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-neon disabled:cursor-not-allowed disabled:opacity-50";
+const botao = "inline-flex min-h-9 w-fit cursor-pointer items-center justify-center rounded-lg border border-brand-green/40 px-3 py-1.5 text-sm font-medium text-foreground transition-colors duration-100 hover:border-brand-green/70 hover:bg-brand-green/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-neon disabled:cursor-not-allowed disabled:opacity-50";
 const campo = "w-full min-w-0 rounded-lg border border-brand-green/30 bg-background px-3 py-2 text-foreground focus-visible:outline-2 focus-visible:outline-brand-green";
-const acao = "inline-flex min-h-9 w-fit cursor-pointer items-center justify-center gap-2 rounded-lg border border-brand-green/40 bg-brand-green px-3 py-1.5 text-sm font-semibold text-on-brand-green shadow-sm transition-all duration-150 hover:brightness-110 hover:shadow-md active:translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-neon disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none";
+const acao = "inline-flex min-h-9 w-fit cursor-pointer items-center justify-center gap-2 rounded-lg border border-brand-green/40 bg-brand-green px-3 py-1.5 text-sm font-semibold text-on-brand-green shadow-sm transition-colors duration-100 hover:bg-brand-green/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-neon disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none";
 
 function erroLegivel(erro: unknown): string {
   return erro instanceof ErroApi ? erro.message : "Não foi possível comunicar com o servidor. Tente novamente.";
@@ -357,7 +357,8 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
   if (carregando) return <main role="status" className="min-h-screen flex items-center justify-center p-6"><IndicadorCarregamento texto="Verificando acesso à administração..." /></main>;
   if (!autorizado) return (
     <main className="min-h-screen flex flex-col items-center justify-center gap-4 p-6">
-      <h1 className="text-2xl font-semibold">{vista === "edicao" && erroAcesso.includes("não encontrado") ? "Funcionário não encontrado" : "Acesso restrito"}</h1>
+      <h1 className="text-2xl font-semibold">{vista === "edicao" && erroAcesso.includes("não encontrado") ? "Funcionário não encontrado" :
+        (erroAcesso.includes("permissão") || erroAcesso.includes("negado")) ? "Acesso restrito" : "Não foi possível carregar os dados"}</h1>
       <p role="alert">{erroAcesso || "Não foi possível verificar sua autorização."}</p>
       <LinkVoltar href={vista === "lista" ? "/dashboard" : "/admin/usuarios"}>{vista === "lista" ? "Voltar ao painel" : "Voltar aos funcionários"}</LinkVoltar>
     </main>
@@ -595,6 +596,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
         confirmar={confirmacao.tipo === "conta" ? (confirmacao.usuario.ativo ? "Arquivar" : "Reativar")
           : confirmacao.tipo === "nivel" ? (confirmacao.nivel === 'leitura' ? 'Manter somente leitura' : 'Permitir edição') : "Revogar"}
         perigoso={confirmacao.tipo === "permissao" || (confirmacao.tipo === "conta" && confirmacao.usuario.ativo)}
+        cancelarVermelho={false}
         ocupado={enviando || atualizando || !!atualizandoVinculo}
         onCancelar={() => setConfirmacao(null)}
         onConfirmar={() => {

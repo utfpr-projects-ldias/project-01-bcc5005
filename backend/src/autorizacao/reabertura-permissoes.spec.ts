@@ -37,3 +37,28 @@ describe('Reabertura: autorização especial, auditada e separada de arquivament
     expect(TIPO_ENTIDADE_POR_ACAO[AcaoAuditoria.ENTREGAVEL_COMPROVANTE_REABERTO]).toBe('ENTREGAVEL');
   });
 });
+
+
+describe('Concluir: permissão específica por nível, igual para primeira conclusão e reconclusão', () => {
+  it('não confunde concluir com reabrir, editar, arquivar ou administrar', () => {
+    const gestor = permissoesEfetivas('GESTOR', true, { editarEtapas: true, editarEntregaveis: true, reabrirEtapas: true });
+    expect(gestor.concluirEtapas).toBe(false);
+    expect(gestor.concluirEntregaveis).toBe(false);
+    expect(gestor.concluirContrato).toBe(false);
+    const delegado = permissoesEfetivas('COLABORADOR', false, { concluirEtapas: true });
+    expect(delegado.concluirEtapas).toBe(true);
+    expect(delegado.concluirEntregaveis).toBe(false);
+    expect(delegado.concluirContrato).toBe(false);
+  });
+  it('as ações são distintas, sem atalhos alternativos de conclusão', () => {
+    expect(ACAO_PERMISSAO['etapas:concluir']).toBe('concluirEtapas');
+    expect(ACAO_PERMISSAO['entregaveis:concluir']).toBe('concluirEntregaveis');
+    expect(CHAVES_PERMISSOES).toContain('concluirContrato');
+    for (const chave of ['concluirEtapas', 'concluirEntregaveis', 'concluirContrato'] as const) {
+      expect(permissoesEfetivas('ADMINISTRADOR', false, null)[chave]).toBe(true);
+      expect(permissoesEfetivas('GESTOR', true, null)[chave]).toBe(false);
+    }
+    expect(politicaOperacional('etapas:concluir')?.classe).toBe('planejamento');
+    expect(politicaOperacional('entregaveis:concluir')?.classe).toBe('planejamento');
+  });
+});

@@ -10,8 +10,11 @@ LOGDIR=""
 OK=0; ERRO=0
 
 verificar_origem() {
-  if [[ "$(git branch --show-current 2>/dev/null)" != "tec-08" || "$(git rev-parse --short=12 HEAD 2>/dev/null)" != 'f89a7e1af392' ]]; then
-    echo 'BLOQUEIO: branch/HEAD diferentes do snapshot TEC08 auditado.' >&2; return 3
+  if [[ "$(git branch --show-current 2>/dev/null)" != "tec-08" ]]; then
+    echo 'BLOQUEIO: verificador QA reservado a branch tec-08.' >&2; return 3
+  fi
+  if ! git merge-base --is-ancestor '3eeed69ccb1af2b069cb38ef0563c7b45354072b' HEAD; then
+    echo 'BLOQUEIO: HEAD nao contem o commit-base auditado 3eeed69.' >&2; return 3
   fi
   if ! (cd "$ROOT" && sha256sum -c --status qa/tec08-uiux-final/HASHES.sha256); then
     echo 'BLOQUEIO: pelo menos um arquivo da implementação difere do pacote validado.' >&2; return 3
@@ -89,6 +92,8 @@ case "$MODO" in
       src/app/components/estrutura-interna.test.tsx
     passo 'Regressões dos roteiros Chromium: seleção de arquivo e retorno aos cartões' 'qa-roteiros-unitarios' \
       python3 -m unittest discover -s qa/tec08-uiux-final -p 'teste_fluxos_qa_atualizados.py' -v
+    passo 'Regressões TEC08-03: uploads, contratos e transições' 'qa-documentos-unitarios' \
+      python3 -m unittest discover -s qa/tec08-03 -p 'teste_validar_ui_real.py' -v
     passo 'Backend Jest: eventos, comprovantes e arquivamento' 'backend-jest-focal' \
       docker compose exec -T backend npm test -- --runInBand --runTestsByPath \
       src/entregaveis/evidencias-recebidas.service.spec.ts \
@@ -123,6 +128,8 @@ case "$MODO" in
       python3 -m unittest discover -s qa/tec08-uiux-final -p 'teste_fluxos_qa_atualizados.py' -v
     passo 'Pré-voo evidências / banco / contas' 'qa-evidencias-preflight' \
       bash qa/evidencias-verificacao/VALIDAR-INTEGRACAO-REAL.sh --verificar
+    passo 'Pré-voo TEC08-03: cadastro e documentos contratuais' 'qa-tec08-03-preflight' \
+      bash qa/tec08-03/VALIDAR-INTEGRACAO-REAL.sh --verificar
     passo 'Pré-voo modal de entregável' 'qa-modal-preflight' \
       "$PY" qa/tec08-modal-ux/validar_modal_real.py --verificar
     passo 'Pré-voo card/modal de evidência' 'qa-card-preflight' \
@@ -146,6 +153,8 @@ case "$MODO" in
     [[ "${3:-}" == '--visivel' ]] && PASSOS_QA+=(--visivel)
     passo 'Chromium real: evidências e autorizações' 'qa-evidencias-real' \
       bash qa/evidencias-verificacao/VALIDAR-INTEGRACAO-REAL.sh "${PASSOS_QA[@]}"
+    passo 'Chromium real: interface documental, PDF e suspensão/retomada' 'qa-documentos-real' \
+      bash qa/tec08-03/VALIDAR-INTEGRACAO-REAL.sh "${PASSOS_QA[@]}"
     passo 'Chromium real: detalhes/arquivar entregável' 'qa-modal-real' \
       "$PY" qa/tec08-modal-ux/validar_modal_real.py "${PASSOS_QA[@]}"
     passo 'Chromium real: card/evidência/auditoria' 'qa-card-real' \

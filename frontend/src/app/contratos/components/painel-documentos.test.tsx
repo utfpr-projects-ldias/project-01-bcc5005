@@ -90,7 +90,7 @@ test('filtro por categoria persiste em sessionStorage e distingue busca local', 
   await act(async () => {});
   fireEvent.change(screen.getByLabelText('Categoria'), { target: { value: 'ANEXO' } });
   expect(JSON.parse(sessionStorage.getItem('tec08-documentos-filtro:contrato-qa')!).categoria).toBe('ANEXO');
-  expect(usar).toHaveBeenCalledWith('contrato-qa', 'ANEXO', 1, true, false);
+  expect(usar).toHaveBeenCalledWith('contrato-qa', 'ANEXO', 1, true, false, 'ATIVOS');
   fireEvent.change(screen.getByLabelText('Buscar documento nesta página'), { target: { value: 'outro' } });
   expect(screen.getByText(/Nenhum nome correspondente nesta página/)).toBeInTheDocument();
 });
@@ -117,7 +117,7 @@ test('TEC08-03: restaura filtros por contrato sem atualizá-los em useEffect', a
   render(<PainelDocumentos contratoId="contrato-qa" habilitado podeAnexar={false} />);
   await waitFor(() => expect(screen.getByLabelText('Categoria')).toHaveValue('ANEXO'));
   expect(screen.getByLabelText('Buscar documento nesta página')).toHaveValue('arquivo');
-  expect(usar).toHaveBeenCalledWith('contrato-qa', 'ANEXO', 1, true, false);
+  expect(usar).toHaveBeenCalledWith('contrato-qa', 'ANEXO', 1, true, false, 'ATIVOS');
 });
 
 test('TEC08-03: pós-cadastro abre modal de PDF sem rolar a página; fechar e reabrir funciona', async () => {
@@ -277,8 +277,11 @@ test('arquivamento preserva consulta histórica e diferencia documentos ativos e
   await act(async () => {});
   expect(screen.getByText('arquivo.txt')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('tab', { name: 'Documentos arquivados' }));
-  expect(usar).toHaveBeenCalledWith('contrato-qa', '', 1, true, true);
-  expect(await screen.findByText(/Arquivado em/)).toBeInTheDocument();
+  expect(usar).toHaveBeenCalledWith('contrato-qa', '', 1, true, true, 'ARQUIVADO');
+  fireEvent.click(screen.getByRole('button', { name: `Ver detalhes de ${doc.nomeOriginal}` }));
+  const detalhe = screen.getByRole('dialog', { name: doc.nomeOriginal });
+  expect(within(detalhe).getByText('Arquivado em')).toBeInTheDocument();
+  expect(within(detalhe).getByText(/04\/11\/2026/)).toBeInTheDocument();
 });
 
 test('limite total considera documentos ativos e arquivados sem apagar histórico', async () => {
@@ -327,14 +330,11 @@ test('documento principal só pode ser gerenciado e arquivado, nunca editado', a
   usar.mockImplementation((_id, categoria) => retorno(categoria === 'CONTRATO_PRINCIPAL'
     ? { ...lista, itens: [{ ...doc, categoria: 'CONTRATO_PRINCIPAL', nomeOriginal: 'contrato.pdf' }], total: 1 } :
       { ...lista, itens: [{ ...doc, categoria: 'CONTRATO_PRINCIPAL', nomeOriginal: 'contrato.pdf' }], total: 1 }));
-  render(<PainelDocumentos contratoId="contrato-qa" habilitado podeAnexar />);
+  render(<PainelDocumentos contratoId="contrato-qa" habilitado podeAnexar podeArquivarPrincipal />);
   await act(async () => {});
   expect(screen.queryByRole('button', { name: 'Editar contrato.pdf' })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Gerenciar contrato.pdf' }));
-  const modal = screen.getByRole('dialog', { name: /Documento principal/ });
-  expect(within(modal).queryByRole('button', { name: 'Arquivar documento' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Gerenciar contrato.pdf' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Arquivar contrato.pdf' })).toBeInTheDocument();
-  expect(within(modal).queryByRole('button', { name: 'Salvar alterações' })).not.toBeInTheDocument();
 });
 
 
@@ -369,12 +369,14 @@ test('documento arquivado abre detalhe e pode ser reativado sem reaparecer na ab
   fireEvent.click(screen.getByRole('button', { name: `Reativar ${doc.nomeOriginal}` }));
   const confirmar = screen.getByRole('dialog', { name: 'Reativar documento?' });
   expect(reativarDocumento).not.toHaveBeenCalled();
+  const justificativa = 'Reativação do documento após conferência administrativa.';
+  fireEvent.change(within(confirmar).getByLabelText(/Justificativa obrigatória/), { target: { value: justificativa } });
   fireEvent.click(within(confirmar).getByRole('button', { name: 'Confirmar reativação' }));
-  await waitFor(() => expect(reativarDocumento).toHaveBeenCalledWith('contrato-qa', doc.id));
+  await waitFor(() => expect(reativarDocumento).toHaveBeenCalledWith('contrato-qa', doc.id, justificativa));
   await waitFor(() => expect(screen.queryByRole('button', { name: `Ver detalhes de ${doc.nomeOriginal}` })).not.toBeInTheDocument());
 });
 
-test('exclusão de documento arquivado requer permissão específica e confirmação', async () => {
+test('mesmo com permissão delegada, documento arquivado não pode ser excluído fisicamente', async () => {
   const archivado = { ...doc, arquivadoEm: '2026-11-05T12:00:00.000Z' };
   usar.mockImplementation((_id, categoria, _pagina, _habilitado, arquivados) =>
     retorno(categoria === 'CONTRATO_PRINCIPAL' ? vazio : arquivados ? { ...lista, itens: [archivado] } : vazio));
@@ -383,12 +385,12 @@ test('exclusão de documento arquivado requer permissão específica e confirma�
   fireEvent.click(screen.getByRole('tab', { name: 'Documentos arquivados' }));
   expect(screen.queryByRole('button', { name: `Excluir documento arquivado ${doc.nomeOriginal}` })).not.toBeInTheDocument();
   view.rerender(<PainelDocumentos contratoId="contrato-qa" habilitado podeAnexar podeExcluirDocumentosArquivados />);
-  fireEvent.click(screen.getByRole('button', { name: `Excluir documento arquivado ${doc.nomeOriginal}` }));
-  const dialog = screen.getByRole('dialog', { name: 'Excluir documento arquivado?' });
+  // A API recusa exclusão física (histórico imutável). A UI não oferece uma
+  // ação que o backend deliberadamente proíbe, mesmo com flag legada.
+  expect(screen.getByRole('button', { name: `Ver detalhes de ${doc.nomeOriginal}` })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: `Excluir documento arquivado ${doc.nomeOriginal}` })).not.toBeInTheDocument();
+  expect(screen.queryByRole('dialog', { name: 'Excluir documento arquivado?' })).not.toBeInTheDocument();
   expect(excluirDocumentoArquivado).not.toHaveBeenCalled();
-  fireEvent.click(within(dialog).getByRole('button', { name: 'Excluir definitivamente' }));
-  await waitFor(() => expect(excluirDocumentoArquivado).toHaveBeenCalledWith('contrato-qa', doc.id));
-  await waitFor(() => expect(screen.queryByRole('button', { name: `Ver detalhes de ${doc.nomeOriginal}` })).not.toBeInTheDocument());
 });
 
 
@@ -400,4 +402,14 @@ test('permissão para arquivar não concede reativação de documentos arquivado
   fireEvent.click(screen.getByRole('tab', { name: 'Documentos arquivados' }));
   expect(screen.getByRole('button', { name: `Ver detalhes de ${doc.nomeOriginal}` })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: `Reativar ${doc.nomeOriginal}` })).not.toBeInTheDocument();
+});
+
+
+test('TEC08: anexação do principal usa a permissão normal, não a especial de arquivamento', async () => {
+  render(<PainelDocumentos contratoId="contrato-qa" habilitado podeAnexar podeArquivarPrincipal={false} podeArquivarDocumentos />);
+  await act(async () => {});
+  fireEvent.click(screen.getByRole('button', { name: 'Anexar documento' }));
+  const form = screen.getByRole('form', { name: 'Anexar documento contratual' });
+  const categorias = within(form).getByLabelText('Categoria *') as HTMLSelectElement;
+  expect(Array.from(categorias.options).map(op => op.value)).toContain('CONTRATO_PRINCIPAL');
 });

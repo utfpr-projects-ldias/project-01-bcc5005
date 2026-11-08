@@ -37,6 +37,11 @@ describe('ACL documental e atualização cadastral', () => {
     const gestor = permissoesEfetivas('GESTOR', true, {});
     expect(gestor.editarDocumentos).toBe(true);
     expect(gestor.administrarDocumentoPrincipal).toBe(false);
+    expect(gestor.arquivarDocumentoPrincipal).toBe(false);
+    expect(gestor.reativarDocumentoPrincipal).toBe(false);
+    expect(gestor.excluirDocumentoPrincipal).toBe(false);
+    expect(permissoesEfetivas('GESTOR', true, { administrarDocumentoPrincipal: true }).arquivarDocumentoPrincipal).toBe(false);
+    expect(permissoesEfetivas('GESTOR', false, { arquivarDocumentoPrincipal: true }).reativarDocumentoPrincipal).toBe(false);
     const colaborador = permissoesEfetivas('COLABORADOR', false, { anexarDocumentos: true });
     expect(colaborador.anexarDocumentos).toBe(true);
     expect(colaborador.editarContrato).toBe(false);
@@ -71,5 +76,32 @@ describe('separação entre arquivar, reativar e excluir', () => {
     expect(permissoesEfetivas('GESTOR', true, null).reativarEtapas).toBe(false);
     expect(permissoesEfetivas('GESTOR', true, { reativarEtapas: true }).reativarEtapas).toBe(true);
     expect(validarPermissoes({ reativarEtapas: true, arquivarEtapas: false })).toEqual({ reativarEtapas: true, arquivarEtapas: false });
+  });
+});
+
+
+describe('cancelar um contrato não é arquivar, concluir ou reabrir conclusão', () => {
+  it('não delega cancelamento nem reversão automaticamente ao Gestor editor', () => {
+    const gestor = permissoesEfetivas('GESTOR', true, null);
+    expect(gestor.cancelarContrato).toBe(false);
+    expect(gestor.reverterCancelamentoContrato).toBe(false);
+    expect(permissoesEfetivas('GESTOR', true, { cancelarContrato: true }).reverterCancelamentoContrato).toBe(false);
+    expect(permissoesEfetivas('COLABORADOR', false, { reverterCancelamentoContrato: true }).cancelarContrato).toBe(false);
+    const admin = permissoesEfetivas('ADMINISTRADOR', false, null);
+    expect(admin.cancelarContrato).toBe(true);
+    expect(admin.reverterCancelamentoContrato).toBe(true);
+  });
+});
+
+
+describe('encerramento antecipado tem competência independente', () => {
+  it('não concede encerrarContrato automaticamente ao Gestor editor ou Colaborador', () => {
+    expect(permissoesEfetivas('GESTOR', true, {}).encerrarContrato).toBe(false);
+    expect(permissoesEfetivas('COLABORADOR', true, {}).encerrarContrato).toBe(false);
+  });
+  it('permite delegação explícita e mantém concluirContrato independente', () => {
+    const p = permissoesEfetivas('GESTOR', false, { encerrarContrato: true });
+    expect(p.encerrarContrato).toBe(true);
+    expect(p.concluirContrato).toBe(false);
   });
 });

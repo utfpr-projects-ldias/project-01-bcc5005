@@ -133,7 +133,7 @@ test('modal de entregável: evidência planejada abre detalhe sem simular arquiv
   fireEvent.click(gatilhoEvidencia);
   const modalEvidencia = screen.getByRole('dialog', { name: 'Relatório' });
   expect(modalEvidencia).toBeInTheDocument();
-  expect(modalEvidencia.parentElement).toHaveClass('bg-black/[0.025]', 'items-center');
+  expect(modalEvidencia.parentElement).toHaveClass('items-center', 'justify-center');
   // A camada superior não remove o botão do entregável nem altera sua geometria.
   expect(within(modal).getByRole('button', { name: 'Voltar ao nível anterior', hidden: true })).toBeInTheDocument();
   // A janela de consulta do entregável permanece em max-w-3xl; a evidência é menor.
@@ -226,7 +226,7 @@ test('confirmação de arquivamento usa id e atualiza a consulta após API', asy
   fireEvent.click(screen.getByRole('button', { name: `Arquivar entregável ${e.nome}` }));
   fireEvent.click(within(screen.getByRole('dialog', { name: 'Arquivar entregável?' }))
     .getByRole('button', { name: 'Confirmar arquivamento' }));
-  await waitFor(() => expect(arquivarEntregavel).toHaveBeenCalledWith(c, e.id, 'arquivar'));
+  await waitFor(() => expect(arquivarEntregavel).toHaveBeenCalledWith(c, e.id, 'arquivar', undefined));
   await waitFor(() => expect(atualizar).toHaveBeenCalled());
   expect(screen.queryByRole('dialog', { name: e.nome })).not.toBeInTheDocument();
 });
@@ -253,18 +253,20 @@ test('permissão granular cria entregável, mas não permite anexar evidências 
   expect(screen.queryByRole('group', { name: /Evidências iniciais/ })).not.toBeInTheDocument();
 });
 
-test('entregável com comprovação integral preserva texto branco e decoração roxa', () => {
+test('comprovação completa sem conclusão operacional não coloca entregável na aba Concluídos', () => {
   const comObrigatoria = { ...e, evidenciasEsperadas: [{ id: 'e-qa', tipoEvidencia: 'Foto', descricao: null, obrigatoria: true }] };
   render(<EntregaveisDaEtapa {...props} dados={[comObrigatoria]}
     documental={{ [e.id]: { obrigatorias: 1, verificadas: 1 } }} />);
-  fireEvent.click(screen.getByRole('tab', { name: 'Entregáveis verificados' }));
   const cartao = screen.getByRole('link', { name: e.nome });
-  expect(cartao).toHaveClass('opacity-85');
-  expect(cartao).toHaveClass('hover:opacity-100');
-  expect(cartao).toHaveClass('border-violet-500/65');
+  expect(cartao).toHaveClass('border-brand-green/40');
+  expect(cartao).not.toHaveClass('opacity-85');
+  fireEvent.click(screen.getByRole('tab', { name: 'Entregáveis concluídos' }));
+  expect(screen.queryByRole('link', { name: e.nome })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab', { name: /^Entregáveis$/ }));
   expect(within(cartao).getByLabelText('Entregável com comprovação documental completa')).toHaveClass('h-8');
-  expect(cartao).toHaveTextContent('Verificado');
-  expect(within(cartao).getByLabelText('Entregável com comprovação documental completa')).toBeInTheDocument();
+  expect(cartao).toHaveTextContent('Comprovação documental completa');
+  // O marcador já foi localizado acima. Uma nova consulta após o filtro pode
+  // disputar a atualização assíncrona da consulta documental e gerar falso negativo.
 });
 
 test('abas de entregáveis não movem a geometria quando arquivados estiver vazio', async () => {
@@ -334,24 +336,24 @@ test('reativar entregável arquivado exige confirmação e não troca de aba aut
   fireEvent.click(within(confirmar).getByRole('button', { name: 'Cancelar' }));
   expect(arquivarEntregavel).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'Reativar' }));
-  fireEvent.click(within(screen.getByRole('dialog', { name: 'Reativar entregável?' }))
-    .getByRole('button', { name: 'Confirmar reativação' }));
-  await waitFor(() => expect(arquivarEntregavel).toHaveBeenCalledWith(c, e.id, 'reativar'));
+  const dialogo = screen.getByRole('dialog', { name: 'Reativar entregável?' });
+  fireEvent.change(within(dialogo).getByRole('textbox', { name: /Justificativa obrigatória/ }), { target: { value: 'Reativação auditável para retomada do planejamento.' } });
+  fireEvent.click(within(dialogo).getByRole('button', { name: 'Confirmar reativação' }));
+  await waitFor(() => expect(arquivarEntregavel).toHaveBeenCalledWith(c, e.id, 'reativar', 'Reativação auditável para retomada do planejamento.'));
   expect(screen.getByRole('tab', { name: 'Entregáveis arquivados' })).toHaveAttribute('aria-selected', 'true');
   await waitFor(() => expect(screen.getByText('Nenhum entregável arquivado nesta etapa.')).toBeInTheDocument());
 });
 
 
-test('entregável verificado tem título branco e selo verde sem legenda repetida', () => {
+test('documentação verificada não faz entregável não concluído assumir status violeta', () => {
   const esperado = { ...e, codigoPublico: 6, evidenciasEsperadas: [{ id: 'eva', tipoEvidencia: 'Laudo', obrigatoria: true, descricao: null }] };
   render(<EntregaveisDaEtapa {...props} dados={[esperado]} documental={{ [e.id]: { obrigatorias: 1, verificadas: 1, total: 1, verificadasTotal: 1 } }} />);
-  fireEvent.click(screen.getByRole('tab', { name: 'Entregáveis verificados' }));
   const link = screen.getByRole('link', { name: e.nome });
   expect(link).toHaveTextContent('Relatório de instalação');
   expect(link).toHaveTextContent('#00006');
-  expect(link).toHaveTextContent('Verificado');
-  expect(link).not.toHaveTextContent('Comprovação obrigatória completa');
-  expect(within(link).getByText('Verificado')).toHaveClass('border-emerald-500/60');
+  expect(link).toHaveTextContent('Comprovação documental completa');
+  expect(link).not.toHaveTextContent('Pronto para concluir');
+  expect(link).not.toHaveClass('border-violet-500/65');
 });
 
 test('etapa arquivada impede arquivar o filho, mantém acesso de leitura', () => {
@@ -360,7 +362,7 @@ test('etapa arquivada impede arquivar o filho, mantém acesso de leitura', () =>
   const botao = screen.getByRole('button', { name: `Arquivar entregável ${e.nome}` });
   expect(botao).toBeDisabled();
   expect(botao).toHaveClass('disabled:cursor-not-allowed');
-  expect(screen.queryByRole('button', { name: `Editar entregável ${e.nome}` })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: `Editar entregável ${e.nome}` })).toBeDisabled();
   expect(screen.queryByRole('button', { name: 'Novo entregável' })).not.toBeInTheDocument();
   expect(arquivarEntregavel).not.toHaveBeenCalled();
 });
@@ -368,19 +370,28 @@ test('etapa arquivada impede arquivar o filho, mantém acesso de leitura', () =>
 test('cartão usa título com largura responsiva e mantém ações no rodapé em telas estreitas', () => {
   render(<EntregaveisDaEtapa {...props} podeArquivar podeEditar />);
   const link = screen.getByRole('link', { name: 'Relatório de instalação' });
-  expect(link).toHaveClass('pb-14', 'sm:pb-3.5', 'pr-3.5', 'sm:pr-24');
+  expect(link).toHaveClass('pb-14');
+  expect(link).not.toHaveClass('sm:pb-3.5');
   const botoes = link.parentElement?.querySelector<HTMLDivElement>('.absolute');
-  expect(botoes).toHaveClass('bottom-2', 'sm:top-3');
+  expect(botoes).toHaveClass('bottom-2');
+  expect(botoes).not.toHaveClass('sm:top-3');
   expect(within(link).getByText('Relatório de instalação')).toHaveClass('break-words');
 });
 
-test('evidência apenas opcional e verificada coloca entregável na aba de verificados e modal roxo', () => {
+test('evidência opcional verificada não promove status operacional nem modal a concluído', () => {
   const comOpcional = { ...e, evidenciasEsperadas: [{ id: 'opcional-1', tipoEvidencia: 'Foto', descricao: null, obrigatoria: false }] };
   render(<EntregaveisDaEtapa {...props} dados={[comOpcional]}
     documental={{ [e.id]: { obrigatorias: 0, verificadas: 0, total: 1, verificadasTotal: 1 } }} />);
-  fireEvent.click(screen.getByRole('tab', { name: 'Entregáveis verificados' }));
   const link = screen.getByRole('link', { name: e.nome });
-  expect(link).toHaveClass('border-violet-500/65');
+  expect(link).not.toHaveClass('border-violet-500/65');
+  expect(link).toHaveTextContent('Comprovação documental completa');
   fireEvent.click(link);
-  expect(screen.getByRole('dialog', { name: e.nome })).toHaveClass('border-violet-400/60');
+  expect(screen.getByRole('dialog', { name: e.nome })).not.toHaveClass('border-violet-500/45');
+});
+
+
+test('aba Concluídos exige status operacional persistido, independente do checklist usado como filtro', () => {
+  render(<EntregaveisDaEtapa {...props} dados={[{ ...e, statusExecucao: 'CONCLUIDO' as const }]} />);
+  fireEvent.click(screen.getByRole('tab', { name: 'Entregáveis concluídos' }));
+  expect(screen.getByRole('link', { name: e.nome })).toHaveTextContent('Concluído');
 });

@@ -1,13 +1,15 @@
 'use client';
 import { useConsulta, useRepositorioConsultas } from '@/app/components/provedor-consultas';
-import { buscarContrato, consultarAcessoContrato, criarContrato, editarContrato, listarContratos, listarResponsaveis, type DadosContrato } from '@/lib/contratos';
+import { buscarContrato, consultarAcessoContrato, criarContrato, editarContrato, listarContratos, listarResponsaveis, consultarPendentesConclusao, type DadosContrato } from '@/lib/contratos';
 import { chaveTexto } from '@/lib/repositorio-consultas';
 export const CHAVES_CONTRATO = {
   lista: ['contratos', 'lista'] as const,
+  pendentes: ['contratos', 'pendentes'] as const,
   detalhe: (id: string) => ['contratos', 'detalhe', id] as const,
   acesso: (id: string) => ['contratos', 'acesso', id] as const,
   responsaveis: ['usuarios', 'responsaveis'] as const,
 };
+export const usePendentesConclusao = (habilitada = true) => useConsulta(CHAVES_CONTRATO.pendentes, () => consultarPendentesConclusao(), { habilitada });
 export const useListaContratos = (habilitada = true) => useConsulta(CHAVES_CONTRATO.lista, () => listarContratos(), { habilitada });
 export const useContrato = (id: string, habilitada = true) => useConsulta(CHAVES_CONTRATO.detalhe(id), () => buscarContrato(id), { habilitada: habilitada && !!id });
 export const useAcessoContrato = (id: string, habilitada = true) => useConsulta(CHAVES_CONTRATO.acesso(id), () => consultarAcessoContrato(id), { habilitada: habilitada && !!id });
@@ -19,6 +21,7 @@ export function useMutacoesContrato() {
       const contrato = await criarContrato(dados);
       cache.gravar(chaveTexto(CHAVES_CONTRATO.detalhe(contrato.id)), contrato);
       cache.invalidar(['contratos', 'lista']);
+      cache.invalidar(CHAVES_CONTRATO.pendentes);
       cache.invalidar(['admin', 'contratos']);
       return contrato;
     },
@@ -26,6 +29,7 @@ export function useMutacoesContrato() {
       const contrato = await editarContrato(id, dados);
       cache.gravar(chaveTexto(CHAVES_CONTRATO.detalhe(id)), contrato);
       cache.invalidar(['contratos', 'lista']);
+      cache.invalidar(CHAVES_CONTRATO.pendentes);
       cache.invalidar(['admin', 'contratos']);
       cache.invalidar(CHAVES_CONTRATO.acesso(id));
       return contrato;

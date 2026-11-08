@@ -16,7 +16,8 @@ test("B3 libera contratos e mostra módulos indisponíveis sem linguagem interna
     renderComConsultas(<MenuMobile />);
   });
   expect(screen.getByRole("link", { name: /Contratos/ })).toHaveAttribute("href", "/contratos");
-  expect(screen.getByText(/Atividades · Indisponível/)).toBeInTheDocument();
+  expect(screen.getByLabelText('Atividades · Indisponível')).toBeInTheDocument();
+  expect(screen.getByRole('navigation', { name: 'Navegação móvel' })).toHaveClass('flex-nowrap');
   expect(screen.queryByRole("link", { name: "Funcionários" })).not.toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "Minha conta" })).not.toBeInTheDocument();
 });

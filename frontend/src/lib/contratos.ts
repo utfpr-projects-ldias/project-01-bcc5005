@@ -1,7 +1,7 @@
 /** Contrato real HU05-06: a API NestJS usa camelCase e enums de domínio. */
-import { consultarUsuariosPaginados, type UsuarioPublico } from './admin-usuarios';
+import { consultarUsuariosPaginados, type UsuarioPublico, type OperacaoPermissao } from './admin-usuarios';
 
-export type StatusContrato = 'PLANEJAMENTO' | 'EM_EXECUCAO' | 'EM_ENCERRAMENTO' | 'CONCLUIDO' | 'SUSPENSO' | 'CANCELADO';
+export type StatusContrato = 'PLANEJAMENTO' | 'EM_EXECUCAO' | 'EM_ENCERRAMENTO' | 'CONCLUIDO' | 'ENCERRADO' | 'SUSPENSO' | 'CANCELADO';
 export type ModoCalculo = 'SIMPLES' | 'PONDERADO';
 export type Contrato = {
   id: string;
@@ -24,21 +24,24 @@ export type Contrato = {
   arquivadoEm?: string | null;
   reabertoEm?: string | null;
   arquivadoPor?: string | null;
+  encerradoEm?: string | null;
+  encerradoPor?: string | null;
+  motivoEncerramento?: string | null;
 };
-export type DadosContrato = Omit<Contrato, 'id' | 'codigoPublico' | 'ordemEtapasBloqueada' | 'arquivadoEm' | 'arquivadoPor' | 'reabertoEm'>;
+export type DadosContrato = Omit<Contrato, 'id' | 'codigoPublico' | 'ordemEtapasBloqueada' | 'arquivadoEm' | 'arquivadoPor' | 'reabertoEm' | 'encerradoEm' | 'encerradoPor' | 'motivoEncerramento'> & { retomarOperacao?: boolean };
 /** Formato apenas de leitura: o servidor gera e mantém esse valor. */
 export function rotuloCodigoPublico(codigo: string): string { return `#${codigo}`; }
-export type PermissoesContrato = Record<
-  'criarEtapas' | 'editarEtapas' | 'reordenarEtapas' | 'bloquearOrdemEtapas' | 'arquivarEtapas' | 'reativarEtapas' | 'reabrirEtapas' | 'excluirEtapasArquivadas' |
-  'criarEntregaveis' | 'editarEntregaveis' | 'arquivarEntregaveis' | 'reativarEntregaveis' | 'reabrirEntregaveis' | 'excluirEntregaveisArquivados' |
-  'criarEvidencias' | 'editarEvidencias' | 'arquivarEvidencias' | 'reativarEvidencias' | 'reabrirEvidencias' | 'excluirEvidenciasArquivadas' |
-  'alterarObrigatoriedade' | 'enviarComprovantes' | 'verificarComprovantes' |
-  'editarContrato' | 'reabrirContrato' | 'anexarDocumentos' | 'editarDocumentos' | 'arquivarDocumentos' | 'reativarDocumentos' | 'excluirDocumentosArquivados' | 'administrarDocumentoPrincipal', boolean>;
+/** A mesma fonte de chaves usada no editor de permissões (evita divergência no frontend). */
+export type PermissoesContrato = Record<OperacaoPermissao, boolean>;
 export type AcessoContrato = { podeEditar: boolean; permissoes?: PermissoesContrato };
 export const STATUS: Record<StatusContrato, string> = {
   PLANEJAMENTO: 'Planejamento', EM_EXECUCAO: 'Em execução', EM_ENCERRAMENTO: 'Em encerramento',
-  CONCLUIDO: 'Concluído', SUSPENSO: 'Suspenso', CANCELADO: 'Cancelado',
+  CONCLUIDO: 'Concluído', ENCERRADO: 'Encerrado', SUSPENSO: 'Suspenso', CANCELADO: 'Cancelado',
 };
+/** Ordem única de apresentação: fluxo implementado primeiro, situações administrativas ao fim. */
+export const ORDEM_STATUS: readonly StatusContrato[] = [
+  'PLANEJAMENTO', 'EM_EXECUCAO', 'CONCLUIDO', 'ENCERRADO', 'SUSPENSO', 'CANCELADO',
+];
 export const MODOS: Record<ModoCalculo, string> = { SIMPLES: 'Simples', PONDERADO: 'Ponderado' };
 const API = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001').replace(/\/$/, '');
 
@@ -62,20 +65,59 @@ async function requisitar<T>(path: string, init?: RequestInit): Promise<T> {
       404: 'Contrato não encontrado ou não autorizado.',
       409: 'Conflito de dados. Atualize e tente novamente.',
     };
-    throw new ErroContrato(resp.status, mensagem[resp.status] ?? 'Erro no servidor. Tente novamente.');
+    // Mostrar motivos de conflito de domínio para orientar decisões como Retomar.
+    // Nunca refletir SQL, stack trace ou HTML de falha na interface.
+    let detalheConflito: string | null = null;
+    if (resp.status === 409) {
+      try {
+        const corpo: unknown = await resp.json();
+        if (corpo && typeof corpo === 'object' && 'message' in corpo) {
+          const mensagemApi = (corpo as { message?: unknown }).message;
+          if (typeof mensagemApi === 'string' && mensagemApi.length <= 200 &&
+              !/[<>\n\r]/.test(mensagemApi) && !/sql|select|insert|stack|query|database|postgres|password/i.test(mensagemApi)) {
+            detalheConflito = mensagemApi;
+          }
+        }
+      } catch { /* mantém mensagem segura de fallback */ }
+    }
+    throw new ErroContrato(resp.status, detalheConflito ?? mensagem[resp.status] ?? 'Erro no servidor. Tente novamente.');
   }
   if (resp.status === 204) return undefined as T;
   return (await resp.json()) as T;
 }
 
+export type EventoHistoricoContrato = {
+  id: string; acao: string; descricao: string; ocorridoEm: string;
+  situacaoAnterior: string | null; situacaoAtual: string | null;
+  entidadeTipo?: string; contexto?: string; nomeArquivo?: string | null; justificativa?: string | null;
+  ator?: { nome: string; email: string } | null;
+};
+export const consultarHistoricoContrato = (id: string, signal?: AbortSignal) =>
+  requisitar<EventoHistoricoContrato[]>(`/contratos/${encodeURIComponent(id)}/historico`, { signal });
+export const consultarPendentesConclusao = () => requisitar<string[]>('/contratos/pendentes-conclusao');
 export const listarContratos = () => requisitar<Contrato[]>('/contratos');
 export const buscarContrato = (id: string) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}`);
 export const consultarAcessoContrato = (id: string) => requisitar<AcessoContrato>(`/contratos/${encodeURIComponent(id)}/acesso`);
 export const criarContrato = (dados: DadosContrato) => requisitar<Contrato>('/contratos', { method: 'POST', body: JSON.stringify(dados) });
 export const arquivarContrato = (id: string) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/arquivar`, { method: 'PATCH' });
 export const alterarBloqueioOrdemEtapas = (id: string, bloqueada: boolean) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/ordem-etapas`, { method: 'PATCH', body: JSON.stringify({ bloqueada }) });
-export const reabrirContrato = (id: string) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/reabrir`, { method: 'PATCH' });
-export const reativarContrato = (id: string) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/reativar`, { method: 'PATCH' });
+export const cancelarContrato = (id: string, motivo: string) =>
+  requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/cancelar`, { method: 'PATCH', body: JSON.stringify({ motivo }) });
+export const suspenderContrato = (id: string) =>
+  requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/suspender`, { method: 'PATCH' });
+export const retomarContrato = (id: string, motivo: string) =>
+  requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/retomar`, { method: 'PATCH', body: JSON.stringify({ motivo }) });
+export const reverterCancelamentoContrato = (id: string, motivo: string) =>
+  requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/reverter-cancelamento`, { method: 'PATCH', body: JSON.stringify({ motivo }) });
+export const concluirContrato = (id: string) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/concluir`, { method: 'PATCH' });
+export const encerrarContratoAntecipadamente = (id: string, motivo: string) =>
+  requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/encerrar-antecipadamente`, {
+    method: 'PATCH', body: JSON.stringify({ motivo }),
+  });
+export const devolverContratoParaRevisao = (id: string) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/devolver-revisao`, { method: 'PATCH' });
+export const fecharRevisaoContrato = (id: string, motivo: string) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/fechar-revisao`, { method: 'PATCH', body: JSON.stringify({ motivo }) });
+export const reabrirContrato = (id: string, motivo: string) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/reabrir`, { method: 'PATCH', body: JSON.stringify({ motivo }) });
+export const reativarContrato = (id: string, motivo: string) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/reativar`, { method: 'PATCH', body: JSON.stringify({ motivo }) });
 
 export const excluirContratoArquivado = (id: string) => requisitar<{ excluido: true; arquivosPendentes: number }>(`/contratos/${encodeURIComponent(id)}`, { method: 'DELETE' });
 export const editarContrato = (id: string, dados: Partial<DadosContrato>) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(dados) });

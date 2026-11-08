@@ -50,6 +50,15 @@ export class DocumentoContratual {
   @Column({ name: 'arquivado_em', type: 'timestamptz', nullable: true })
   arquivadoEm!: Date | null;
 
+  @Column({ name: 'verificado_em', type: 'timestamptz', nullable: true })
+  verificadoEm!: Date | null;
+
+  @Column({ name: 'verificado_por', type: 'uuid', nullable: true })
+  verificadoPor!: string | null;
+
+  @Column({ name: 'reaberto_em', type: 'timestamptz', nullable: true })
+  reabertoEm!: Date | null;
+
   @CreateDateColumn({ name: 'criado_em', type: 'timestamptz' })
   criadoEm!: Date;
 }

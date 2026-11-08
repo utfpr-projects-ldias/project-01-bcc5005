@@ -12,6 +12,38 @@ Sistema web interno para acompanhar **contratos de prestação de serviços**, s
 | Testes e qualidade | Jest, React Testing Library, Supertest, ESLint (frontend), Oxlint (backend) |
 | Ambiente | Node.js 24 (containers Alpine), Docker Engine e Docker Compose |
 
+## Uso diário
+
+**Iniciar:**
+
+```bash
+sudo systemctl start docker
+docker compose up -d
+docker compose ps
+```
+
+**Acompanhar logs:**
+
+```bash
+docker compose logs -f
+```
+
+**Reconstruir imagens** após alterações de dependências ou Dockerfiles:
+
+```bash
+docker compose up -d --build
+```
+
+**Parar o projeto e, se desejado, o Docker no Linux:**
+
+```bash
+docker compose down
+sudo systemctl stop docker.socket
+sudo systemctl stop docker.service
+```
+
+`docker compose down` **preserva os dados** do PostgreSQL e as contas do SuperTokens. Desligar o Docker Engine é opcional e afeta outros projetos Docker da máquina.
+
 ## Primeira execução
 
 **Pré-requisitos:** Git, Docker Engine e Docker Compose. Não é necessário instalar Node.js nem PostgreSQL no computador.
@@ -52,37 +84,6 @@ O último comando solicita e confirma a senha no próprio terminal. Ele é execu
 
 Acesse **http://localhost:3000/login**. A API NestJS fica em `http://localhost:3001`.
 
-## Uso diário
-
-**Iniciar:**
-
-```bash
-sudo systemctl start docker
-docker compose up -d
-docker compose ps
-```
-
-**Acompanhar logs:**
-
-```bash
-docker compose logs -f
-```
-
-**Reconstruir imagens** após alterações de dependências ou Dockerfiles:
-
-```bash
-docker compose up -d --build
-```
-
-**Parar o projeto e, se desejado, o Docker no Linux:**
-
-```bash
-docker compose down
-sudo systemctl stop docker.socket
-sudo systemctl stop docker.service
-```
-
-`docker compose down` **preserva os dados** do PostgreSQL e as contas do SuperTokens. Desligar o Docker Engine é opcional e afeta outros projetos Docker da máquina.
 
 ## Reiniciar o banco do zero — cuidado
 
@@ -113,18 +114,3 @@ docker compose exec backend npm run test:e2e -- --runInBand
 docker compose exec frontend npm run lint
 docker compose exec frontend npm test
 ```
-
-**Estado atual:** a autenticação e o bootstrap do Administrador já foram implementados na TEC07-01; a autorização detalhada e o bloqueio dos endpoints públicos de cadastro pertencem às TEC07-02 e TEC07-04. **Não exponha o ambiente de desenvolvimento publicamente como se essas proteções já estivessem concluídas.**
-
-
-## Notificações no frontend (toast)
-
-As mensagens transitórias de sucesso/erro das operações de contrato, etapas,
-entregáveis, documentos e evidências são exibidas em *toasts* React, sem alterar
-a altura dos formulários. O projeto utiliza `ToastNotificacoes` em
-`frontend/src/app/components/toast-notificacoes.tsx`, montado no
-`frontend/src/app/layout.tsx`, com as funções `toastSucesso`, `toastErro` e
-`toastAviso`. Não foi adicionada dependência npm para essa funcionalidade.
-
-Validações de campos e erros que exigem ação continuada podem permanecer
-visíveis no formulário, inclusive para acessibilidade.

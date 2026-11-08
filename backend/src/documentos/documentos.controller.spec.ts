@@ -13,7 +13,13 @@ describe('TEC08-02: política HTTP e entrega segura', () => {
     for (const [metodo, acao, tipo] of [
       ['listar', 'documentos:listar', 'contrato'],
       ['editar', 'documentos:editar', 'recurso'],
-      ['arquivar', 'documentos:arquivar', 'recurso'],
+      // O guard resolve contrato raiz pela leitura; o serviço decide a permissão de
+      // ESCRITA segundo a categoria persistida (principal vs. anexo).
+      ['verificar', 'documentos:visualizar', 'recurso'],
+      ['reabrir', 'documentos:visualizar', 'recurso'],
+      ['arquivar', 'documentos:visualizar', 'recurso'],
+      ['reativar', 'documentos:visualizar', 'recurso'],
+      ['excluir', 'documentos:visualizar', 'recurso'],
       ['anexar', 'documentos:anexar', 'contrato'],
       ['baixar', 'documentos:baixar', 'recurso'],
       ['detalhar', 'documentos:visualizar', 'recurso'],
@@ -25,6 +31,19 @@ describe('TEC08-02: política HTTP e entrega segura', () => {
         expect(politica.escopoOperacional.recurso).toBe('documento');
         expect(politica.escopoOperacional.parametroContratoPai).toBe('contratoId');
       }
+    }
+  });
+
+  it('as ações de mudança de estado não confundem política de leitura com autorização efetiva', () => {
+    const prototipo = DocumentosController.prototype;
+    for (const metodo of ['verificar', 'reabrir', 'arquivar', 'reativar', 'excluir'] as const) {
+      const politica = Reflect.getMetadata(CHAVE_POLITICA, prototipo[metodo]);
+      // O segundo gate no DocumentosService diferencia principal/anexo e é coberto
+      // pelos testes de negativa do documentos.service.spec.ts.
+      expect(politica.acao).toBe('documentos:visualizar');
+      expect(politica.escopoOperacional).toMatchObject({
+        tipo: 'recurso', recurso: 'documento', parametroContratoPai: 'contratoId',
+      });
     }
   });
 

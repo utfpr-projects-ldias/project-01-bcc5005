@@ -11,6 +11,9 @@ import { ExclusaoContratoService } from './exclusao-contrato.service.js';
 import { AtualizarContratoDto } from './dto/atualizar-contrato.dto.js';
 import { CriarContratoDto } from './dto/criar-contrato.dto.js';
 import { BloquearOrdemEtapasDto } from './dto/bloquear-ordem-etapas.dto.js';
+import { EncerrarContratoDto } from './dto/encerrar-contrato.dto.js';
+import { CancelarContratoDto } from './dto/cancelar-contrato.dto.js';
+import { JustificativaDecisaoDto } from './dto/justificativa-decisao.dto.js';
 
 /**
  * API protegida de contratos — HU05-02.
@@ -46,6 +49,18 @@ export class ContratosController {
     return this.contratos.criar(dto, req.usuarioDominio!);
   }
 
+  @Get('pendentes-conclusao')
+  @ExigirPolitica('contratos:listar')
+  pendentesConclusao(@Req() req: RequisicaoAutorizada) {
+    return this.contratos.pendentesConclusao(req.usuarioDominio!);
+  }
+
+  @Get(':id/historico')
+  @ExigirPolitica('contratos:visualizar', 'id')
+  historico(@Param('id') id: string, @Req() req: RequisicaoAutorizada) {
+    return this.contratos.historico(id, req.usuarioDominio!);
+  }
+
   @Get(':id')
   @ExigirPolitica('contratos:visualizar', 'id')
   detalhar(@Param('id') id: string) {
@@ -75,10 +90,67 @@ export class ContratosController {
     return this.contratos.alterarBloqueioOrdem(id, dto.bloqueada, req.usuarioDominio!);
   }
 
+  @Patch(':id/concluir')
+  @ExigirPolitica('contratos:concluir', 'id')
+  concluir(@Param('id') id: string, @Req() req: RequisicaoAutorizada) {
+    return this.contratos.concluir(id, req.usuarioDominio!);
+  }
+
+  /** Encerramento excepcional com pendências preservadas e justificativa auditável. */
+  @Patch(':id/cancelar')
+  @ExigirPolitica('contratos:cancelar', 'id')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
+  cancelar(@Param('id') id: string, @Body() dto: CancelarContratoDto, @Req() req: RequisicaoAutorizada) {
+    return this.contratos.alterarCancelamento(id, true, req.usuarioDominio!, dto.motivo);
+  }
+
+  @Patch(':id/reverter-cancelamento')
+  @ExigirPolitica('contratos:reverter-cancelamento', 'id')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
+  reverterCancelamento(@Param('id') id: string, @Body() dto: JustificativaDecisaoDto, @Req() req: RequisicaoAutorizada) {
+    return this.contratos.alterarCancelamento(id, false, req.usuarioDominio!, dto.motivo);
+  }
+
+  /** Pausa administrativa: não muda datas, progresso, filhos nem arquivos. */
+  @Patch(':id/suspender')
+  @ExigirPolitica('contratos:suspender', 'id')
+  suspender(@Param('id') id: string, @Req() req: RequisicaoAutorizada) {
+    return this.contratos.alterarSuspensao(id, true, req.usuarioDominio!);
+  }
+
+  @Patch(':id/retomar')
+  @ExigirPolitica('contratos:retomar', 'id')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
+  retomar(@Param('id') id: string, @Body() dto: JustificativaDecisaoDto, @Req() req: RequisicaoAutorizada) {
+    return this.contratos.alterarSuspensao(id, false, req.usuarioDominio!, dto.motivo);
+  }
+
+  @Patch(':id/encerrar-antecipadamente')
+  @ExigirPolitica('contratos:encerrar', 'id')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
+  encerrarAntecipadamente(@Param('id') id: string, @Body() dto: EncerrarContratoDto, @Req() req: RequisicaoAutorizada) {
+    return this.contratos.encerrarAntecipadamente(id, dto.motivo, req.usuarioDominio!);
+  }
+
+  @Patch(':id/fechar-revisao')
+  @ExigirPolitica('contratos:editar', 'id')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
+  fecharRevisao(@Param('id') id: string, @Body() dto: JustificativaDecisaoDto, @Req() req: RequisicaoAutorizada) {
+    return this.contratos.fecharRevisao(id, req.usuarioDominio!, dto.motivo);
+  }
+
+  /** Decisão negativa de conclusão: exige o MESMO poder que aprovar. */
+  @Patch(':id/devolver-revisao')
+  @ExigirPolitica('contratos:concluir', 'id')
+  devolverRevisao(@Param('id') id: string, @Req() req: RequisicaoAutorizada) {
+    return this.contratos.devolverParaRevisao(id, req.usuarioDominio!);
+  }
+
   @Patch(':id/reabrir')
   @ExigirPolitica('contratos:reabrir', 'id')
-  reabrir(@Param('id') id: string, @Req() req: RequisicaoAutorizada) {
-    return this.contratos.reabrir(id, req.usuarioDominio!);
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
+  reabrir(@Param('id') id: string, @Body() dto: JustificativaDecisaoDto, @Req() req: RequisicaoAutorizada) {
+    return this.contratos.reabrir(id, req.usuarioDominio!, dto.motivo);
   }
 
   @Patch(':id/arquivar')
@@ -95,8 +167,9 @@ export class ContratosController {
 
   @Patch(':id/reativar')
   @ExigirPolitica('contratos:reativar', 'id')
-  reativar(@Param('id') id: string, @Req() req: RequisicaoAutorizada) {
-    return this.contratos.alterarArquivamento(id, false, req.usuarioDominio!);
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
+  reativar(@Param('id') id: string, @Body() dto: JustificativaDecisaoDto, @Req() req: RequisicaoAutorizada) {
+    return this.contratos.alterarArquivamento(id, false, req.usuarioDominio!, dto.motivo);
   }
 
 }

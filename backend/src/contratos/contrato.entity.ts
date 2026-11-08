@@ -103,6 +103,16 @@ export class Contrato {
   @Column({ name: 'ordem_etapas_bloqueada', type: 'boolean', default: false })
   ordemEtapasBloqueada!: boolean;
 
+  /** Encerramento antecipado auditado: progresso dos filhos permanece inalterado. */
+  @Column({ name: 'encerrado_em', type: 'timestamptz', nullable: true })
+  encerradoEm!: Date | null;
+
+  @Column({ name: 'encerrado_por', type: 'uuid', nullable: true })
+  encerradoPor!: string | null;
+
+  @Column({ name: 'motivo_encerramento', type: 'varchar', length: 500, nullable: true })
+  motivoEncerramento!: string | null;
+
   /** Arquivamento lógico; NULL significa ativo, sem alterar o status operacional. */
   /** Reabertura documental explícita, independente do status operacional. */
   @Column({ name: 'reaberto_em', type: 'timestamptz', nullable: true })

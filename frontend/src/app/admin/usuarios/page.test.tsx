@@ -1,5 +1,5 @@
 import { renderComConsultas } from '@/test-utils';
-import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import AdministracaoUsuariosPage from "./page";
 import CadastrarFuncionarioPage from "./novo/page";
 import { PainelAdministracao } from "./components/painel-administracao";
@@ -200,17 +200,17 @@ test('botões administrativos são compactos, interativos e com realce no hover'
   renderComConsultas(<PainelAdministracao vista="edicao" idEdicao="b" />);
   await screen.findByRole('heading', { name: /Conta de Gestor de Teste/ });
   const salvar = screen.getByRole('button', { name: 'Salvar dados da conta' });
-  expect(salvar).toHaveClass('cursor-pointer', 'min-h-9', 'hover:brightness-110', 'focus-visible:outline-2');
+  expect(salvar).toHaveClass('cursor-pointer', 'min-h-9', 'hover:bg-brand-green/90', 'focus-visible:outline-2');
   expect(salvar).not.toHaveClass('min-h-11', 'min-w-44', 'px-5');
   fireEvent.click(screen.getByText('Alterar e-mail', { exact: false, selector: 'summary' }));
   const alterarEmail = screen.getByRole('button', { name: 'Confirmar mudança de e-mail' });
-  expect(alterarEmail).toHaveClass('hover:brightness-110', 'cursor-pointer');
+  expect(alterarEmail).toHaveClass('hover:bg-brand-green/90', 'cursor-pointer');
   fireEvent.click(screen.getByText('Redefinir senha', { exact: false, selector: 'summary' }));
   const alterarSenha = screen.getByRole('button', { name: 'Confirmar redefinição de senha' });
   expect(alterarSenha).toHaveClass('min-h-9', 'cursor-pointer');
   fireEvent.click(screen.getByText('Acesso aos contratos', { exact: false, selector: 'summary' }));
   const vincular = screen.getByRole('button', { name: 'Adicionar vínculo' });
-  expect(vincular).toHaveClass('min-h-9', 'cursor-pointer', 'hover:brightness-110');
+  expect(vincular).toHaveClass('min-h-9', 'cursor-pointer', 'hover:bg-brand-green/90');
   expect(vincular).not.toHaveClass('min-h-11', 'min-w-44', 'px-5');
 });
 
@@ -378,6 +378,9 @@ test("acessos exibem resumo curto mesmo em telas largas, sem perder identificaç
   const controlePermissoes = within(lista).getByRole("button", { name: "Ver permissões completas" });
   fireEvent.click(controlePermissoes);
   const permissoesModal = screen.getByRole("dialog", { name: "Permissões do contrato" });
+  // O modal agora distribui permissões por nível e grupo; não exibe todas de uma vez.
+  expect(within(permissoesModal).queryByRole("checkbox", { name: "Criar etapas" })).not.toBeInTheDocument();
+  fireEvent.click(within(permissoesModal).getByRole("tab", { name: "Etapas" }));
   expect(within(permissoesModal).getByRole("checkbox", { name: "Criar etapas" })).toBeInTheDocument();
   const estadoAntesPermissoes = window.history.state;
   const voltarPermissoes = jest.spyOn(window.history, 'back').mockImplementation(() => window.history.replaceState({}, '', window.location.href));

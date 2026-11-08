@@ -170,13 +170,13 @@ test('modal de evidência não reserva altura vazia; a rastreabilidade expandida
 });
 
 
-test('sobreposições são leves, com camadas distintas sem escurecimento cumulativo forte', () => {
+test('modal superior não apaga a camada anterior e mantém acesso pelo botão Voltar', () => {
   const { unmount } = render(<><ModalEtapa titulo="Etapa" ocupado={false} onFechar={() => {}}><p>Etapa</p></ModalEtapa>
     <ModalEtapa titulo="Entregável" camada="aninhada" ocupado={false} onFechar={() => {}}><p>Entregável</p></ModalEtapa>
     <ModalEtapa titulo="Evidência" camada="evidencia" ocupado={false} onFechar={() => {}}><p>Evidência</p></ModalEtapa></>);
-  expect(screen.getByRole('dialog', { name: 'Etapa' }).parentElement).toHaveClass('bg-black/[0.04]', 'backdrop-blur-[0.5px]');
-  expect(screen.getByRole('dialog', { name: 'Entregável' }).parentElement).toHaveClass('bg-black/[0.025]', 'backdrop-blur-[0.5px]');
-  expect(screen.getByRole('dialog', { name: 'Evidência' }).parentElement).toHaveClass('bg-black/[0.025]', 'backdrop-blur-[0.5px]');
+  expect(screen.getByRole('dialog', { name: 'Etapa' }).parentElement).toHaveClass('bg-black/[0.12]');
+  expect(screen.getByRole('dialog', { name: 'Entregável' }).parentElement).toHaveClass('bg-black/[0.055]');
+  expect(screen.getByRole('dialog', { name: 'Evidência' }).parentElement).toHaveClass('bg-black/[0.055]');
   for (const titulo of ['Etapa', 'Entregável', 'Evidência']) {
     const camada = screen.getByRole('dialog', { name: titulo }).parentElement!;
     expect(camada.className).not.toMatch(/bg-background\/(90|95)/);
@@ -197,7 +197,6 @@ test('as tres camadas ficam centralizadas, etapa e entregavel com mesma largura 
     const dialogo = screen.getByRole('dialog', { name: titulo });
     expect(dialogo).toHaveClass(largura);
     expect(dialogo.parentElement).toHaveClass('items-center', 'justify-center');
-    expect(dialogo.parentElement?.className).toContain('backdrop-blur-[0.5px]');
     expect(dialogo.parentElement?.className).not.toContain('items-start');
   }
 });
@@ -315,8 +314,33 @@ test('conclusão documental altera somente a borda e o título do modal para rox
     <p>Histórico preservado</p>
   </ModalEtapa>);
   const modal = screen.getByRole('dialog', { name: 'Detalhes verificados' });
-  expect(modal).toHaveClass('border-violet-400/60');
+  expect(modal).toHaveClass('border-violet-500/45');
   expect(screen.getByRole('heading', { name: 'Detalhes verificados' })).toHaveClass('text-violet-300');
   expect(screen.getByText('Histórico preservado')).toBeInTheDocument();
+  view.unmount();
+});
+
+
+test('altura de modal de entregável permanece fixa ao trocar aba, sem depender da quantidade de cartões', () => {
+  render(<ModalEtapa titulo="Entregável de QA" camada="aninhada" ocupado={false} onFechar={() => {}}>
+    <div>Conteúdo variável</div>
+  </ModalEtapa>);
+  const modal = screen.getByRole('dialog', { name: 'Entregável de QA' });
+  expect(modal).toHaveClass('h-[min(82dvh,730px)]');
+  expect(modal).toHaveClass('overflow-hidden');
+  expect(modal.querySelector('[data-tec08-corpo-modal]')).toHaveClass('overflow-y-auto');
+});
+
+test('modal de entregável aninhado conserva largura e altura do modal da etapa', () => {
+  const view = render(<>
+    <ModalEtapa titulo="Etapa" ocupado={false} alturaEstavel onFechar={() => {}}><p>Etapa</p></ModalEtapa>
+    <ModalEtapa titulo="Entregável" ocupado={false} alturaEstavel camada="aninhada" onFechar={() => {}}><p>Entregável</p></ModalEtapa>
+  </>);
+  const paines = Array.from(document.querySelectorAll<HTMLElement>('[data-tec08-modal] > [role="dialog"]'));
+  expect(paines).toHaveLength(2);
+  expect(paines[0]).toHaveClass('max-w-3xl');
+  expect(paines[1]).toHaveClass('max-w-3xl');
+  expect(paines[0]).toHaveClass('h-[min(82dvh,730px)]');
+  expect(paines[1]).toHaveClass('h-[min(82dvh,730px)]');
   view.unmount();
 });

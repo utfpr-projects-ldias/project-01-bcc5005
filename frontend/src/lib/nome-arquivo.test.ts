@@ -5,6 +5,12 @@ describe('Nomes dos comprovantes com caracteres acentuados', () => {
     expect(nomeArquivoLegivel('CM - CalendÃ¡rio Resumido 2026.pdf'))
       .toBe('CM - Calendário Resumido 2026.pdf');
   });
+  it('recupera sequências legadas junto de Unicode corretamente escrito', () => {
+    expect(nomeArquivoLegivel('RelatÃ³rio final – 2026.pdf'))
+      .toBe('Relatório final – 2026.pdf');
+    expect(nomeArquivoLegivel('Prova Ã¡rea e Ã§Ã£o.pdf'))
+      .toBe('Prova área e ção.pdf');
+  });
   it('preserva nomes que já chegaram corretamente', () => {
     expect(nomeArquivoLegivel('Relatório de execução – 2026.pdf'))
       .toBe('Relatório de execução – 2026.pdf');

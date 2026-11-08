@@ -101,7 +101,7 @@ def executar(contas, visivel: bool):
                 r['provas'].append('Arquivo bloqueia edição do contrato e criação de etapa, inclusive ADMIN')
                 aceitar(api(admin,f'/contratos/{contrato}/arquivar','PATCH')['status'],{409},'Arquivamento repetido deve gerar conflito')
                 r['provas'].append('Operação repetida gera conflito')
-                ret=api(admin,f'/contratos/{contrato}/reativar','PATCH')
+                ret=api(admin,f'/contratos/{contrato}/reativar','PATCH', {'motivo':'Reativação administrativa autorizada durante auditoria sintética QA.'})
                 aceitar(ret['status'],{200},'ADMIN reativar contrato')
                 exigir(ret['body'].get('arquivadoEm') is None and ret['body'].get('status')=='PLANEJAMENTO',
                        'Reativação não zerou o arquivo ou alterou o status')

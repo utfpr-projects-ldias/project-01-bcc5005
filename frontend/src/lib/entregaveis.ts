@@ -73,7 +73,7 @@ export type EventoHistoricoEntregavel = {
   id: string; acao: string; descricao: string; ocorridoEm: string;
   ator: { nome: string; email: string } | null;
   evidenciaNome: string | null; nomeArquivo: string | null;
-  nomeAnterior?: string | null; nomeAtual?: string | null; objetoRenomeado?: 'Evidência' | 'Entregável';
+  nomeAnterior?: string | null; nomeAtual?: string | null; objetoRenomeado?: 'Evidência' | 'Entregável'; justificativa?: string | null;
 };
 export const consultarHistoricoEntregavel = (contratoId: string, entregavelId: string, signal?: AbortSignal) =>
   consultar<EventoHistoricoEntregavel[]>(`${base(contratoId)}/${encodeURIComponent(entregavelId)}/historico`, signal);
@@ -125,18 +125,40 @@ export const criarEntregavel = (contratoId: string, dados: DadosPlanejamentoEntr
 export const editarEntregavel = (contratoId: string, id: string, dados: Partial<DadosPlanejamentoEntregavel>) =>
   alterarEntregavel<Entregavel>(`${base(contratoId)}/${encodeURIComponent(id)}`, 'PATCH', dados);
 
+/** Conclusão explícita de entregável, validada pelo backend e auditada na transação. */
+export async function concluirEntregavel(contratoId: string, id: string): Promise<Entregavel> {
+  let resposta: Response;
+  try {
+    resposta = await fetch(`${API}${base(contratoId)}/${encodeURIComponent(id)}/concluir`, {
+      method: 'PATCH', credentials: 'include', cache: 'no-store', headers: { Accept: 'application/json' },
+    });
+  } catch {
+    throw new ErroEntregavel(0, 'Falha de conexão ao concluir entregável. Tente novamente.');
+  }
+  if (!resposta.ok) {
+    const mensagens: Record<number, string> = {
+      401: 'Sua sessão expirou. Entre novamente.',
+      403: 'Você não tem permissão para concluir este entregável.',
+      404: 'Contrato ou entregável não encontrado ou não autorizado.',
+      409: 'O entregável ainda possui pendências ou foi alterado. Atualize os dados antes de concluir.',
+    };
+    throw new ErroEntregavel(resposta.status, mensagens[resposta.status] ?? 'Não foi possível concluir o entregável.');
+  }
+  return await resposta.json() as Entregavel;
+}
+
 /** Reabertura de conclusão física, sujeita à permissão especial no backend. */
-export async function reabrirEntregavel(contratoId: string, id: string) {
+export async function reabrirEntregavel(contratoId: string, id: string, motivo: string) {
   const r = await fetch(`${API}${base(contratoId)}/${encodeURIComponent(id)}/reabrir`, {
-    method: 'PATCH', credentials: 'include', cache: 'no-store',
+    method: 'PATCH', credentials: 'include', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ motivo }),
   });
   if (!r.ok) throw new ErroEntregavel(r.status, r.status === 403 ? 'Você não tem permissão para reabrir este entregável.' : 'Não foi possível reabrir o entregável.');
   return await r.json() as Entregavel;
 }
 
 /** Ações reversíveis e auditadas; jamais removem o entregável ou seus comprovantes. */
-export async function alterarArquivoEntregavel(contratoId: string, id: string, acao: 'arquivar' | 'reativar') {
-  const r = await fetch(`${API}${base(contratoId)}/${encodeURIComponent(id)}/${acao}`, { method: 'PATCH', credentials: 'include', cache: 'no-store' });
+export async function alterarArquivoEntregavel(contratoId: string, id: string, acao: 'arquivar' | 'reativar', motivo?: string) {
+  const r = await fetch(`${API}${base(contratoId)}/${encodeURIComponent(id)}/${acao}`, { method: 'PATCH', credentials: 'include', cache: 'no-store', ...(acao === 'reativar' ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ motivo }) } : {}) });
   if (!r.ok) throw new ErroEntregavel(r.status, r.status === 403 ? 'Sem permissão para arquivar ou reativar.' : 'Não foi possível alterar o arquivamento do entregável.');
   return await r.json() as { id: string; arquivadoEm: string | null };
 }

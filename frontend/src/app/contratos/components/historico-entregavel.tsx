@@ -34,6 +34,7 @@ export function HistoricoEntregavel({ contratoId, entregavelId, versao }: {
           {ev.objetoRenomeado ?? 'Item'}: “{ev.nomeAnterior}” → “{ev.nomeAtual}”
         </p>}
         {ev.nomeArquivo && <p className="break-all text-foreground/80">Arquivo: {ev.nomeArquivo}</p>}
+        {ev.justificativa && <p className="break-words text-foreground/80">Justificativa: {ev.justificativa}</p>}
         <p className="text-foreground/60"><time dateTime={ev.ocorridoEm}>{new Date(ev.ocorridoEm).toLocaleString('pt-BR')}</time>
           {ev.ator ? ` · ${ev.ator.nome} (${ev.ator.email})` : ' · autor não disponível'}</p>
       </li>)}

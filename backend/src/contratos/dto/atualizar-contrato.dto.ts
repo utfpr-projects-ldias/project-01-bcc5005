@@ -1,5 +1,5 @@
 import {
-  IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, Matches, MaxLength, ValidateIf,
+  IsBoolean, IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, Matches, MaxLength, ValidateIf,
 } from 'class-validator';
 
 import { ModoCalculo } from '../modo-calculo.enum.js';
@@ -21,6 +21,11 @@ import { StatusContrato } from '../status-contrato.enum.js';
  * `termino >= inicio` deve virar 400, não inconsistência silenciosa.
  */
 export class AtualizarContratoDto {
+  /** Legado: flag recusada; fechamento da revisão exige endpoint próprio. */
+  @IsOptional()
+  @IsBoolean()
+  retomarOperacao?: boolean;
+
   @ValidateIf((_, v) => v !== undefined)
   @IsString()
   @IsNotEmpty()

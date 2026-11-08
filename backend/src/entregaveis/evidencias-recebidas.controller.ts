@@ -4,6 +4,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
+import { JustificativaDecisaoDto } from '../contratos/dto/justificativa-decisao.dto.js';
 import { ExigirPoliticaOperacional } from '../autorizacao/politica.decorator.js';
 import type { RequisicaoAutorizada } from '../autorizacao/usuario-autenticado.js';
 import { lerInteiroPositivo, POLITICA_PROVISORIA } from '../armazenamento/politica-arquivos.js';
@@ -43,8 +44,8 @@ export class EvidenciasRecebidasController {
   @Patch(':esperadaId/reativar')
   @ExigirPoliticaOperacional('evidencias:reativaresperada', recurso)
   reativar(@Param('contratoId') c: string, @Param('entregavelId') e: string,
-    @Param('esperadaId') id: string, @Req() req: RequisicaoAutorizada) {
-    return this.arquivo.alterarEvidencia(c, e, id, false, req.usuarioDominio!);
+    @Param('esperadaId') id: string, @Body() dto: JustificativaDecisaoDto, @Req() req: RequisicaoAutorizada) {
+    return this.arquivo.alterarEvidencia(c, e, id, false, req.usuarioDominio!, dto.motivo);
   }
 
   @Post(':esperadaId/excluir')
@@ -68,8 +69,8 @@ export class EvidenciasRecebidasController {
   @Patch(':esperadaId/reabrir')
   @ExigirPoliticaOperacional('evidencias:reabrir', { tipo: 'contrato', parametro: 'contratoId' })
   reabrir(@Param('contratoId') c: string, @Param('entregavelId') e: string,
-    @Param('esperadaId') id: string, @Req() req: RequisicaoAutorizada) {
-    return this.service.reabrir(c, e, id, req.usuarioDominio!);
+    @Param('esperadaId') id: string, @Body() dto: JustificativaDecisaoDto, @Req() req: RequisicaoAutorizada) {
+    return this.service.reabrir(c, e, id, req.usuarioDominio!, dto.motivo);
   }
 
   @Post(':esperadaId/comprovantes')

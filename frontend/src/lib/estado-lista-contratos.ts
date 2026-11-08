@@ -1,11 +1,11 @@
 /** Estado de navegação da carteira por aba do navegador (não armazena dados contratuais). */
-export type AbaCarteira = 'ativos' | 'concluidos' | 'arquivados';
+export type AbaCarteira = 'todos' | 'ativos' | 'pendentes' | 'revisao' | 'concluidos' | 'suspensos' | 'cancelados' | 'arquivados';
 export type CampoCarteira = 'todos' | 'numero' | 'codigo' | 'orgao' | 'objeto';
 export type EstadoCarteira = {
   aba: AbaCarteira; busca: string; campo: CampoCarteira; status: string; rolagem: number;
 };
 const CHAVE = 'tec08:carteira:estado:v1';
-const ABAS: AbaCarteira[] = ['ativos', 'concluidos', 'arquivados'];
+const ABAS: AbaCarteira[] = ['todos', 'ativos', 'pendentes', 'revisao', 'concluidos', 'suspensos', 'cancelados', 'arquivados'];
 const CAMPOS: CampoCarteira[] = ['todos', 'numero', 'codigo', 'orgao', 'objeto'];
 export function lerEstadoCarteira(): EstadoCarteira | null {
   if (typeof window === 'undefined') return null;

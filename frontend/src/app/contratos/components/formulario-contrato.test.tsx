@@ -112,3 +112,57 @@ test('responsável ativo presente na lista segue identificado pelo nome, sem fal
   expect(seletor).toHaveTextContent('Gestor Exemplo');
   expect(seletor).not.toHaveTextContent(/identificador reservado/i);
 });
+
+test('TEC08: operações especiais são listadas no próprio status apenas com permissão', () => {
+  const view = render(<FormularioContrato inicial={inicial} responsaveis={[]} onSalvar={jest.fn()} />);
+  expect(screen.getByLabelText('Status operacional *')).not.toHaveTextContent('Suspenso');
+  expect(screen.getByLabelText('Status operacional *')).not.toHaveTextContent('Cancelado');
+  view.rerender(<FormularioContrato inicial={inicial} responsaveis={[]} onSalvar={jest.fn()} podeSuspender podeCancelar />);
+  expect(screen.getByLabelText('Status operacional *')).toHaveTextContent('Suspenso');
+  expect(screen.getByLabelText('Status operacional *')).toHaveTextContent('Cancelado');
+});
+
+test('TEC08: permissão exclusiva de suspensão não habilita edição dos demais dados', async () => {
+  const salvar = jest.fn().mockResolvedValue(undefined);
+  render(<FormularioContrato inicial={inicial} responsaveis={[]} onSalvar={salvar} podeSuspender somenteSituacao />);
+  expect(screen.queryByLabelText('Número do contrato *')).not.toBeInTheDocument();
+  const status = screen.getByLabelText('Status operacional *');
+  expect(status).toHaveTextContent('Suspenso');
+  expect(status).not.toHaveTextContent('Cancelado');
+  fireEvent.change(status, { target: { value: 'SUSPENSO' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+  await waitFor(() => expect(salvar).toHaveBeenCalledWith(expect.objectContaining({ status: 'SUSPENSO' })));
+});
+
+
+test('encerramento antecipado não deriva da edição ou da conclusão; exige permissão própria', async () => {
+  const salvar = jest.fn().mockResolvedValue(undefined);
+  const view = render(<FormularioContrato inicial={inicial} responsaveis={[]} onSalvar={salvar} />);
+  const status = screen.getByLabelText('Status operacional *');
+  expect(status).not.toHaveTextContent('Encerrar antecipadamente');
+  view.rerender(<FormularioContrato inicial={inicial} responsaveis={[]} onSalvar={salvar} podeEncerrar somenteSituacao />);
+  expect(screen.getByLabelText('Status operacional *')).toHaveTextContent('Encerrar');
+  fireEvent.change(screen.getByLabelText('Status operacional *'), { target: { value: 'ENCERRADO' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+  await waitFor(() => expect(salvar).toHaveBeenCalledWith(expect.objectContaining({ status: 'ENCERRADO' })));
+});
+
+
+test('editar texto ou fase durante revisão mantém a revisão sem retomar operação implicitamente', async () => {
+  const salvar = jest.fn().mockResolvedValue(undefined);
+  const revisao = { ...inicial, status: 'PLANEJAMENTO' as const, reabertoEm: '2026-11-08T09:00:00Z' };
+  const tela = render(<FormularioContrato inicial={revisao} responsaveis={[]} onSalvar={salvar} />);
+  expect(screen.getByLabelText('Status operacional *')).toHaveValue('PLANEJAMENTO');
+  fireEvent.change(screen.getByLabelText('Número do contrato *'), { target: { value: 'Contrato corrigido' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+  await waitFor(() => expect(salvar).toHaveBeenCalledTimes(1));
+  expect(salvar.mock.calls[0][0]).not.toHaveProperty('retomarOperacao');
+  tela.unmount();
+  salvar.mockClear();
+  render(<FormularioContrato inicial={revisao} responsaveis={[]} onSalvar={salvar} />);
+  fireEvent.change(screen.getByLabelText('Status operacional *'), { target: { value: 'EM_EXECUCAO' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+  await waitFor(() => expect(salvar).toHaveBeenCalledTimes(1));
+  expect(salvar.mock.calls[0][0]).toEqual(expect.objectContaining({ status: 'EM_EXECUCAO' }));
+  expect(salvar.mock.calls[0][0]).not.toHaveProperty('retomarOperacao');
+});

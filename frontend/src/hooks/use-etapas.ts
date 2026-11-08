@@ -14,16 +14,19 @@ export function useMutacoesEtapas(contratoId: string) {
     criar: async (dados: DadosEtapa) => {
       const etapa = await criarEtapa(contratoId, dados);
       cache.invalidar(chave);
+      cache.invalidar(['contratos', 'pendentes']);
       return etapa;
     },
     editar: async (etapaId: string, dados: DadosEtapa) => {
       const etapa = await editarEtapa(contratoId, etapaId, dados);
       cache.invalidar(chave);
+      cache.invalidar(['contratos', 'pendentes']);
       return etapa;
     },
     reordenar: async (ordemAnterior: string[], ordemNova: string[]) => {
       const lista = await reordenarEtapas(contratoId, ordemAnterior, ordemNova);
       cache.gravar(chaveTexto(chave), lista);
+      cache.invalidar(['contratos', 'pendentes']);
       return lista;
     },
   };

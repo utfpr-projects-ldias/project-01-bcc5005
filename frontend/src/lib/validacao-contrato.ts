@@ -35,7 +35,7 @@ export const contratoSchema = z.object({
   dataAssinatura: dataObrigatoria.nullable(),
   inicioVigencia: dataObrigatoria,
   terminoVigencia: dataObrigatoria,
-  status: z.enum(['PLANEJAMENTO', 'EM_EXECUCAO', 'EM_ENCERRAMENTO', 'CONCLUIDO', 'SUSPENSO', 'CANCELADO']),
+  status: z.enum(['PLANEJAMENTO', 'EM_EXECUCAO', 'EM_ENCERRAMENTO', 'CONCLUIDO', 'ENCERRADO', 'SUSPENSO', 'CANCELADO']),
   responsavelInternoId: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i, 'Selecione um responsável interno válido.').nullable(),
   fiscalGestor: textoOpcional('Fiscal/gestor público', LIMITES_CONTRATO.fiscalGestor),
   modoCalculo: z.enum(['SIMPLES', 'PONDERADO']),

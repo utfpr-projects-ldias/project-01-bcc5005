@@ -51,6 +51,13 @@ class TesteQATec0803(unittest.TestCase):
             self.assertFalse(resultado['segredosNoRelatorio'])
 
 
+    def test_roteiro_contem_suspensao_e_retomada_de_contrato_novo(self):
+        fonte = Path(ui.__file__).read_text(encoding='utf-8')
+        self.assertIn("f'/contratos/{b}/suspender', 'PATCH'", fonte)
+        self.assertIn("name='Retomar contrato suspenso'", fonte)
+        self.assertIn("'status') == 'PLANEJAMENTO'", fonte)
+        self.assertIn('status anterior exato', fonte)
+
     def test_pdf_possui_xref_e_trailer_coerentes(self):
         pdf = ui.PDF
         pos = int(pdf.rsplit(b'startxref\n', 1)[1].splitlines()[0])
@@ -91,6 +98,15 @@ class TesteQATec0803(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, 'Erro no próprio QA'):
             ui.arquivo_na_ui(None, 'teste', 'CONTRATO_PRINCIPAL',
                              'qa-principal.pdf', ui.PDF, mime='Contrato principal do QA')
+
+    def test_cadastro_abre_visao_geral_e_qa_seleciona_documentos_explicitamente(self):
+        fonte = Path(ui.__file__).read_text(encoding='utf-8')
+        pagina = (ui.RAIZ / 'frontend/src/app/contratos/novo/page.tsx').read_text(encoding='utf-8')
+        self.assertNotIn('anexarDocumento=principal', pagina)
+        self.assertIn('router.push(`/contratos/${encodeURIComponent(criado.id)}`)', pagina)
+        self.assertIn("page.get_by_role('tab', name='Documentos').click()", fonte)
+        self.assertIn("get_by_role('button', name='Anexar documento').click()", fonte)
+        self.assertIn("page.get_by_role('dialog', name='Anexar documento contratual')", fonte)
 
     def test_modal_documental_reutiliza_componente_e_nao_forca_scroll(self):
         componente = (ui.RAIZ / 'frontend/src/app/contratos/components/painel-documentos.tsx').read_text(encoding='utf-8')
@@ -167,9 +183,9 @@ class TesteQATec0803(unittest.TestCase):
     def test_historico_do_modal_somente_restaura_apos_popstate(self):
         """Rejeita regresso da corrida history.back() x scrollRestoration."""
         fonte = (ui.RAIZ / 'frontend/src/app/contratos/components/entregaveis-da-etapa.tsx').read_text(encoding='utf-8')
-        pos = fonte.index('function fecharDetalhe()')
+        pos = fonte.index('function fecharDetalhe(pularEdicao = false)')
         bloco = fonte[pos:fonte.index('useEffect(() => {', pos)]
-        self.assertIn('window.history.back();', bloco)
+        self.assertIn('else window.history.back();', bloco)
         self.assertIn('} else {', bloco)
         self.assertIn('restaurar();', bloco)
         self.assertNotIn('historico.current = null;\n    setDetalheId(null);', bloco)

@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useId, useRef, useState, type Ref, type FormEvent } from 'react';
 import { ErroEntregavel, ROTULOS_PERIODICIDADE, ROTULOS_TIPO, pesquisarResponsaveisEntregavel, type ResponsavelEntregavel, type Entregavel } from '@/lib/entregaveis';
-import { DESCRICOES_TIPO, PERIODICIDADES, TIPOS, inicialEntregavel, mudouEstrutura,
+import { DESCRICOES_TIPO, PERIODICIDADES, TIPOS, inicialEntregavel,
   validarEntregavel, type DadosPlanejamentoEntregavel, type ErrosEntregavel, type RascunhoEntregavel } from '@/lib/validacao-entregavel';
 
 const estilo = 'w-full min-w-0 rounded-lg border border-brand-green/35 bg-background px-3 py-2.5 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-neon aria-invalid:border-red-500';

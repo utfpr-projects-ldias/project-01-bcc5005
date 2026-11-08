@@ -10,7 +10,7 @@ export type VersaoComprovante = {
 export type EventoRastreabilidadeEvidencia = {
   id: string; acao: string; descricao: string; ocorridoEm: string;
   ator: { nome: string; email: string } | null;
-  nomeArquivo?: string | null; nomeAnterior?: string | null; nomeAtual?: string | null;
+  nomeArquivo?: string | null; nomeAnterior?: string | null; nomeAtual?: string | null; justificativa?: string | null;
 };
 export type DetalheEvidencia = {
   id: string; codigoPublico?: number; contratoId: string; entregavelId: string; tipoEvidencia: string;
@@ -101,9 +101,9 @@ export async function enviarComprovante(contrato: string, entregavel: string, es
     method: 'POST', body: dados,
   });
 }
-export const reabrirEvidencia = (c: string, e: string, id: string) => pedir<VersaoComprovante>(`${base(c,e,id)}/reabrir`, { method: 'PATCH' });
+export const reabrirEvidencia = (c: string, e: string, id: string, motivo: string) => pedir<VersaoComprovante>(`${base(c,e,id)}/reabrir`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ motivo }) });
 export const verificarComprovante = (contrato: string, entregavel: string, esperada: string, id: string) =>
-  pedir<VersaoComprovante>(`${base(contrato, entregavel, esperada)}/comprovantes/${encodeURIComponent(id)}/verificar`,
+  pedir<VersaoComprovante & { conclusoes?: string[] }>(`${base(contrato, entregavel, esperada)}/comprovantes/${encodeURIComponent(id)}/verificar`,
     { method: 'POST' });
 export async function baixarComprovante(contrato: string, entregavel: string, esperada: string,
   comprovante: VersaoComprovante) {
@@ -126,10 +126,10 @@ export async function baixarComprovante(contrato: string, entregavel: string, es
 /** Somente usuários com permissão real de planejamento podem ver/alterar arquivados. */
 export function listarEvidenciasArquivadas(contrato: string, entregavel: string) {
   const caminho = `/contratos/${encodeURIComponent(contrato)}/entregaveis/${encodeURIComponent(entregavel)}/evidencias-esperadas/arquivadas`;
-  return pedir<Array<{ id: string; codigoPublico?: number; entregavelId: string; tipoEvidencia: string; descricao: string | null; obrigatoria: boolean; arquivadoEm: string }>>(caminho);
+  return pedir<Array<{ id: string; codigoPublico?: number; entregavelId: string; tipoEvidencia: string; descricao: string | null; obrigatoria: boolean; arquivadoEm: string | null }>>(caminho);
 }
-export function alterarArquivoEvidencia(contrato: string, entregavel: string, esperada: string, acao: 'arquivar' | 'reativar') {
-  return pedir<{ id: string; arquivadoEm: string | null }>(`${base(contrato, entregavel, esperada)}/${acao}`, { method: 'PATCH' });
+export function alterarArquivoEvidencia(contrato: string, entregavel: string, esperada: string, acao: 'arquivar' | 'reativar', motivo?: string) {
+  return pedir<{ id: string; arquivadoEm: string | null }>(`${base(contrato, entregavel, esperada)}/${acao}`, { method: 'PATCH', ...(acao === 'reativar' ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ motivo }) } : {}) });
 }
 
 export function criarEvidenciaEsperada(contrato: string, entregavel: string,

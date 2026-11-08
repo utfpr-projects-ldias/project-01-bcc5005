@@ -2,6 +2,7 @@ import {
   BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Put,
   Query, Req, UsePipes, ValidationPipe,
 } from '@nestjs/common';
+import { JustificativaDecisaoDto } from '../contratos/dto/justificativa-decisao.dto.js';
 import { ExigirPoliticaOperacional } from '../autorizacao/politica.decorator.js';
 import type { RequisicaoAutorizada } from '../autorizacao/usuario-autenticado.js';
 import {
@@ -77,10 +78,16 @@ export class EntregaveisController {
     return this.service.editar(contratoId, entregavelId, dto, req.usuarioDominio!);
   }
 
+  @Patch(':entregavelId/concluir')
+  @ExigirPoliticaOperacional('entregaveis:concluir', { tipo: 'recurso', recurso: 'entregavel', parametro: 'entregavelId', parametroContratoPai: 'contratoId' })
+  concluir(@Param('contratoId') contratoId: string, @Param('entregavelId') entregavelId: string, @Req() req: RequisicaoAutorizada) {
+    return this.service.concluir(contratoId, entregavelId, req.usuarioDominio!);
+  }
+
   @Patch(':entregavelId/reabrir')
   @ExigirPoliticaOperacional('entregaveis:reabrir', { tipo: 'recurso', recurso: 'entregavel', parametro: 'entregavelId', parametroContratoPai: 'contratoId' })
-  reabrir(@Param('contratoId') c: string, @Param('entregavelId') id: string, @Req() req: RequisicaoAutorizada) {
-    return this.service.reabrir(c, id, req.usuarioDominio!);
+  reabrir(@Param('contratoId') c: string, @Param('entregavelId') id: string, @Body() dto: JustificativaDecisaoDto, @Req() req: RequisicaoAutorizada) {
+    return this.service.reabrir(c, id, req.usuarioDominio!, dto.motivo);
   }
 
   @Patch(':entregavelId/arquivar')
@@ -91,8 +98,8 @@ export class EntregaveisController {
 
   @Patch(':entregavelId/reativar')
   @ExigirPoliticaOperacional('entregaveis:reativar', { tipo: 'recurso', recurso: 'entregavel', parametro: 'entregavelId', parametroContratoPai: 'contratoId' })
-  reativar(@Param('contratoId') contratoId: string, @Param('entregavelId') id: string, @Req() req: RequisicaoAutorizada) {
-    return this.arquivo.alterarEntregavel(contratoId, id, false, req.usuarioDominio!);
+  reativar(@Param('contratoId') contratoId: string, @Param('entregavelId') id: string, @Body() dto: JustificativaDecisaoDto, @Req() req: RequisicaoAutorizada) {
+    return this.arquivo.alterarEntregavel(contratoId, id, false, req.usuarioDominio!, dto.motivo);
   }
 
   @Post(':entregavelId/excluir')

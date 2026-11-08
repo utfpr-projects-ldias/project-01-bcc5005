@@ -1,4 +1,6 @@
 import type { EntityManager } from 'typeorm';
+import { Etapa } from '../etapas/etapa.entity.js';
+import { StatusEtapa } from '../etapas/status-etapa.enum.js';
 /**
  * True somente quando cada nível ativo contém pelo menos um filho e cada
  * evidência ativa possui versão mais recente verificada. Sem conclusão por 0/0.
@@ -29,4 +31,69 @@ export async function documentacaoVerificada(m: EntityManager, contratoId: strin
   return !!r && Number(r.etapas) > 0 && Number(r.entregaveis) > 0 && Number(r.evidencias) > 0 &&
     Number(r.verificadas) === Number(r.evidencias) &&
     Number(r.etapas_sem_entregavel) === 0 && Number(r.entregaveis_sem_evidencia) === 0;
+}
+
+/** A comprovação de arquivos não fecha automaticamente um pai cujos filhos
+ * aguardam uma nova confirmação explícita. Nenhuma comparação por contador
+ * substitui esta consulta transacional de reabertura. */
+export async function filhosEmRevisao(m: EntityManager, contratoId: string,
+  etapaId: string | null = null): Promise<boolean> {
+  const linhas = await m.query(`
+    SELECT EXISTS (
+      SELECT 1 FROM etapas et WHERE et.contrato_id = $1
+        AND et.arquivado_em IS NULL AND et.reaberto_em IS NOT NULL
+        AND ($2::uuid IS NULL OR et.id = $2::uuid)
+    ) OR EXISTS (
+      SELECT 1 FROM entregaveis en WHERE en.contrato_id = $1
+        AND en.arquivado_em IS NULL AND en.reaberto_em IS NOT NULL
+        AND ($2::uuid IS NULL OR en.etapa_id = $2::uuid)
+    ) OR EXISTS (
+      SELECT 1 FROM evidencias_esperadas ev
+        INNER JOIN entregaveis en ON en.id = ev.entregavel_id
+        WHERE en.contrato_id = $1 AND en.arquivado_em IS NULL
+          AND ev.arquivado_em IS NULL AND ev.reaberto_em IS NOT NULL
+          AND ($2::uuid IS NULL OR en.etapa_id = $2::uuid)
+    ) AS possui_revisao`, [contratoId, etapaId]) as Array<{ possui_revisao: boolean }>;
+  return Boolean(linhas[0]?.possui_revisao);
+}
+
+
+/** Impede concluir a etapa com um entregável ativo ainda em revisão ou não
+ * concluído. Também considera evidências explicitamente reabertas, mesmo que
+ * a contagem de comprovantes seja 100%. A etapa pai não faz parte do filtro.
+ * A consulta roda na MESMA transação da verificação/conclusão. */
+export async function filhosPendentesDeConclusao(m: EntityManager, contratoId: string, etapaId: string): Promise<boolean> {
+  const linhas = await m.query(`SELECT EXISTS (
+    SELECT 1 FROM entregaveis en
+     WHERE en.contrato_id = $1 AND en.etapa_id = $2 AND en.arquivado_em IS NULL
+       AND (en.reaberto_em IS NOT NULL OR en.status_execucao IS DISTINCT FROM 'CONCLUIDO')
+  ) OR EXISTS (
+    SELECT 1 FROM evidencias_esperadas ev
+      JOIN entregaveis en ON en.id = ev.entregavel_id
+     WHERE en.contrato_id = $1 AND en.etapa_id = $2 AND en.arquivado_em IS NULL
+       AND ev.arquivado_em IS NULL AND ev.reaberto_em IS NOT NULL
+  ) AS pendentes`, [contratoId, etapaId]) as Array<{ pendentes: boolean }>;
+  return Boolean(linhas[0]?.pendentes);
+}
+
+
+/** Fecha automaticamente a etapa depois da última conclusão efetiva dos filhos.
+ * O contrato continua SEMPRE aguardando confirmação manual. Não fecha um pai
+ * com filhos em revisão, arquivos pendentes, ou sem entregáveis/evidências. */
+export async function concluirEtapaAposFilhos(
+  m: EntityManager, contratoId: string, etapaId: string,
+  auditar: (antes: { status: StatusEtapa; reabertoEm: Date | null },
+    depois: { status: StatusEtapa; reabertoEm: null }) => Promise<void>,
+): Promise<boolean> {
+  const repo = m.getRepository(Etapa);
+  const etapa = await repo.findOneBy({ id: etapaId, contratoId });
+  if (!etapa || etapa.arquivadoEm || etapa.status === StatusEtapa.ENCERRADA || (etapa.status === StatusEtapa.CONCLUIDA && !etapa.reabertoEm)) return false;
+  if (!await documentacaoVerificada(m, contratoId, etapaId) ||
+      await filhosPendentesDeConclusao(m, contratoId, etapaId)) return false;
+  const antes = { status: etapa.status, reabertoEm: etapa.reabertoEm ?? null };
+  etapa.status = StatusEtapa.CONCLUIDA;
+  etapa.reabertoEm = null;
+  await repo.save(etapa);
+  await auditar(antes, { status: etapa.status, reabertoEm: null });
+  return true;
 }

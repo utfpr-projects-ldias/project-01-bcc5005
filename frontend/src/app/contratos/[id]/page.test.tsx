@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import DetalheContratoPage from './page';
 import { useConsulta } from '@/app/components/provedor-consultas';
 import { useMeuPerfil } from '@/hooks/use-meu-perfil';
-import { useContrato, useAcessoContrato, useResponsaveis, useMutacoesContrato } from '@/hooks/use-contratos';
+import { useContrato, useAcessoContrato, useResponsaveis, useMutacoesContrato, usePendentesConclusao } from '@/hooks/use-contratos';
 import { useEtapas } from '@/hooks/use-etapas';
 import { useEntregaveis, useResumoDocumentalContrato } from '@/hooks/use-entregaveis';
 import type { Contrato } from '@/lib/contratos';
@@ -10,7 +10,7 @@ import type { Contrato } from '@/lib/contratos';
 jest.mock('next/navigation', () => ({ useParams: () => ({ id: 'contrato-real' }) }));
 jest.mock('@/app/components/provedor-consultas', () => ({ useConsulta: jest.fn(), useRepositorioConsultas: () => ({ invalidar: jest.fn() }) }));
 jest.mock('@/hooks/use-meu-perfil', () => ({ useMeuPerfil: jest.fn() }));
-jest.mock('@/hooks/use-contratos', () => ({ useContrato: jest.fn(), useAcessoContrato: jest.fn(), useResponsaveis: jest.fn(), useMutacoesContrato: jest.fn() }));
+jest.mock('@/hooks/use-contratos', () => ({ useContrato: jest.fn(), useAcessoContrato: jest.fn(), useResponsaveis: jest.fn(), useMutacoesContrato: jest.fn(), usePendentesConclusao: jest.fn() }));
 jest.mock('@/hooks/use-etapas', () => ({ useEtapas: jest.fn() }));
 jest.mock('@/hooks/use-entregaveis', () => ({ useEntregaveis: jest.fn(), useResumoDocumentalContrato: jest.fn() }));
 jest.mock('../components/painel-documentos', () => ({
@@ -33,13 +33,14 @@ const contrato: Contrato = {
 };
 const retorno = (dados: unknown) => ({ dados, carregando: false, erro: undefined, atualizando: false });
 beforeEach(() => {
+  (usePendentesConclusao as jest.Mock).mockReturnValue(retorno([]));
   (useEtapas as jest.Mock).mockReturnValue(retorno([]));
   (useEntregaveis as jest.Mock).mockReturnValue(retorno([]));
   (useResumoDocumentalContrato as jest.Mock).mockReturnValue(retorno({}));
   (useConsulta as jest.Mock).mockReturnValue(retorno(undefined));
   perfil.mockReturnValue(retorno({ ativo: true, perfil: 'GESTOR' }));
   contratoQuery.mockReturnValue(retorno(contrato));
-  acessoQuery.mockReturnValue(retorno({ podeEditar: true }));
+  acessoQuery.mockReturnValue(retorno({ podeEditar: false, permissoes: { editarContrato: false } }));
   (useResponsaveis as jest.Mock).mockReturnValue(retorno({ usuarios: [] }));
   (useMutacoesContrato as jest.Mock).mockReturnValue({ editar: jest.fn().mockResolvedValue(contrato) });
 });
@@ -48,14 +49,14 @@ test('HU06-03: integra Etapas uma vez ao detalhe real do Contrato sem cabeçalho
   expect(screen.getByRole('tab', { name: 'Visão geral' })).toHaveAttribute('aria-selected', 'true');
   fireEvent.click(screen.getByRole('tab', { name: 'Documentos' }));
   expect(screen.getByRole('tab', { name: 'Documentos' })).toHaveAttribute('aria-selected', 'true');
-  // Ser Gestor com permissão de editar contrato não concede permissão documental automaticamente.
+  // Ser Gestor sem permissao de editar cadastro ou documentos nao libera gestao.
   expect(screen.getByTestId('painel-documentos')).toHaveTextContent('contrato-real consulta');
   fireEvent.click(screen.getByRole('tab', { name: 'Etapas' }));
-  expect(screen.getByTestId('painel-etapas')).toHaveTextContent('contrato-real gerencia');
+  expect(screen.getByTestId('painel-etapas')).toHaveTextContent('contrato-real consulta');
   expect(screen.getAllByTestId('painel-etapas')).toHaveLength(1);
   expect(screen.getByRole('heading', { name: '01/2026', level: 2 })).toBeInTheDocument();
 });
-test('HU06-03: Gestor sem edição e Colaborador nunca recebem controle de gestão', () => {
+test('HU06-03: gestão depende da permissão individual, inclusive para Colaborador', () => {
   acessoQuery.mockReturnValue(retorno({ podeEditar: false }));
   const view = render(<DetalheContratoPage />);
   fireEvent.click(screen.getByRole('tab', { name: 'Etapas' }));
@@ -64,7 +65,7 @@ test('HU06-03: Gestor sem edição e Colaborador nunca recebem controle de gest�
   fireEvent.click(screen.getByRole('tab', { name: 'Documentos' }));
   expect(screen.getByTestId('painel-documentos')).toHaveTextContent('consulta');
   perfil.mockReturnValue(retorno({ ativo: true, perfil: 'COLABORADOR' }));
-  acessoQuery.mockReturnValue(retorno({ podeEditar: true }));
+  acessoQuery.mockReturnValue(retorno({ podeEditar: false, permissoes: { editarContrato: false } }));
   (useResponsaveis as jest.Mock).mockReturnValue(retorno({ usuarios: [] }));
   (useMutacoesContrato as jest.Mock).mockReturnValue({ editar: jest.fn().mockResolvedValue(contrato) });
   view.rerender(<DetalheContratoPage />);
@@ -113,6 +114,7 @@ test('consulta administrativa desabilitada para Gestor no detalhe', () => {
 
 test('ADMIN mantém ações no cabeçalho e exige confirmação ao arquivar contrato ativo', () => {
   perfil.mockReturnValue(retorno({ ativo: true, perfil: 'ADMINISTRADOR' }));
+  acessoQuery.mockReturnValue(retorno({ podeEditar: true, permissoes: { editarContrato: true } }));
   render(<DetalheContratoPage />);
   expect(screen.getByRole('button', { name: 'Arquivar contrato' })).toBeEnabled();
   fireEvent.click(screen.getByRole('button', { name: 'Arquivar contrato' }));
@@ -124,27 +126,52 @@ test('ADMIN mantém ações no cabeçalho e exige confirmação ao arquivar cont
   const modal = screen.getByRole('dialog', { name: /Editar contrato/ });
   expect(within(modal).queryByRole('button', { name: 'Arquivar contrato' })).not.toBeInTheDocument();
 });
-test('contrato arquivado desabilita edição e arquivamento; reativação é na lista', () => {
+test('ADMIN em revisão encontra Arquivar e Editar juntos no cabeçalho, sem Encerrar avulso', () => {
+  perfil.mockReturnValue(retorno({ ativo: true, perfil: 'ADMINISTRADOR' }));
+  acessoQuery.mockReturnValue(retorno({ podeEditar: true, permissoes: { editarContrato: true } }));
+  contratoQuery.mockReturnValue(retorno({ ...contrato, reabertoEm: '2026-11-07T14:00:00Z' }));
+  render(<DetalheContratoPage />);
+  const barra = screen.getByTestId('barra-navegacao-contrato');
+  expect(within(barra).getByRole('button', { name: 'Arquivar contrato' })).toBeEnabled();
+  expect(within(barra).getByRole('button', { name: 'Editar contrato' })).toBeEnabled();
+  expect(within(barra).queryByRole('button', { name: 'Encerrar antecipadamente' })).not.toBeInTheDocument();
+});
+
+test('contrato arquivado não oferece edição ou arquivamento no detalhe; reativação é na carteira', () => {
   perfil.mockReturnValue(retorno({ ativo: true, perfil: 'ADMINISTRADOR' }));
   contratoQuery.mockReturnValue(retorno({ ...contrato, arquivadoEm: '2026-11-03T15:00:00Z' }));
   render(<DetalheContratoPage />);
   expect(screen.queryByRole('button', { name: 'Reativar contrato' })).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Editar contrato' })).toBeDisabled();
-  expect(screen.getByRole('button', { name: 'Arquivar contrato' })).toBeDisabled();
+  expect(screen.queryByRole('button', { name: 'Editar contrato' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Arquivar contrato' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Alterar situação autorizada' })).not.toBeInTheDocument();
 });
-test('ADMIN pode reabrir documentalmente completo, mas nunca arquivar sem reabertura', () => {
+test('ADMIN com documentação completa vê Pendente de conclusão e ação autorizada', () => {
   perfil.mockReturnValue(retorno({ ativo: true, perfil: 'ADMINISTRADOR' }));
-  const etapa = { id:'etapa-1', contratoId:'contrato-real', arquivadoEm:null, reabertoEm:null };
-  const entregavel = { id:'entregavel-1', contratoId:'contrato-real', etapaId:'etapa-1', arquivadoEm:null, reabertoEm:null };
+  const etapa = { id:'etapa-1', contratoId:'contrato-real', status:'CONCLUIDA', arquivadoEm:null, reabertoEm:null };
+  const entregavel = { id:'entregavel-1', contratoId:'contrato-real', etapaId:'etapa-1', statusExecucao:'CONCLUIDO', evidenciasEsperadas:[{id:'e-1', arquivadoEm:null}], arquivadoEm:null, reabertoEm:null };
   (useEtapas as jest.Mock).mockReturnValue(retorno([etapa]));
   (useEntregaveis as jest.Mock).mockReturnValue(retorno([entregavel]));
   (useResumoDocumentalContrato as jest.Mock).mockReturnValue(retorno({ 'entregavel-1': {total: 1, verificadasTotal: 1} }));
   render(<DetalheContratoPage />);
-  expect(screen.getByRole('button', {name:'Reabrir contrato concluído'})).toBeInTheDocument();
+  expect(screen.getByRole('button', {name:'Aprovar conclusão do contrato'})).toBeDisabled();
+  expect(screen.getByRole('button', {name:'Não aprovar conclusão'})).toBeEnabled();
+  const faixaDecisoes = screen.getByTestId('barra-navegacao-contrato');
+  const abas = screen.getByRole('tablist', { name: 'Seções do contrato' });
+  const naoAprovar = screen.getByRole('button', { name: 'Não aprovar conclusão' });
+  expect(faixaDecisoes).toContainElement(abas);
+  expect(faixaDecisoes).toContainElement(naoAprovar);
+  expect(abas).not.toContainElement(naoAprovar);
+  expect(screen.getAllByText(/Pendente de conclusão/).length).toBeGreaterThan(0);
+  expect(screen.queryByRole('button', {name:'Reabrir contrato concluído'})).not.toBeInTheDocument();
   expect(screen.queryByRole('button', {name:'Arquivar contrato'})).not.toBeInTheDocument();
-  expect(screen.getByRole('button', {name:'Editar contrato'})).toBeDisabled();
+  // Em pendência, aprovação e devolução para revisão são os fluxos disponíveis;
+  // a edição de status não pode contornar a decisão do contrato.
+  expect(screen.queryByRole('button', {name:'Editar contrato'})).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', {name:'Alterar situação autorizada'})).not.toBeInTheDocument();
 });
 test('modal de edição conserva contrato sem navegar e retorna ao card com Escape', () => {
+  acessoQuery.mockReturnValue(retorno({ podeEditar: true, permissoes: { editarContrato: true } }));
   render(<DetalheContratoPage />);
   const editar = screen.getByRole('button', { name: 'Editar contrato' });
   editar.focus(); fireEvent.click(editar);
@@ -173,4 +200,73 @@ test('informações permanecem em largura total após planejamento, sem painel l
   expect(within(informacoes).getByText('Responsáveis').closest('details')).toHaveAttribute('open');
   expect(within(informacoes).getByText('Responsáveis')).toBeInTheDocument();
   expect(screen.queryByRole('complementary', { name: 'Informações do contrato' })).not.toBeInTheDocument();
+});
+
+test('decisão pendente exige PDF principal verificado e permite aprovação ou devolução autorizadas', () => {
+  perfil.mockReturnValue(retorno({ ativo: true, perfil: 'ADMINISTRADOR' }));
+  contratoQuery.mockReturnValue(retorno({ ...contrato, reabertoEm: null }));
+  (useEtapas as jest.Mock).mockReturnValue(retorno([{ id: 'etapa-1', contratoId: 'contrato-real', status: 'CONCLUIDA', reabertoEm: null }]));
+  (useEntregaveis as jest.Mock).mockReturnValue(retorno([{ id:'item-1', contratoId:'contrato-real', etapaId:'etapa-1', statusExecucao:'CONCLUIDO', reabertoEm:null, evidenciasEsperadas:[{id:'ev-1'}] }]));
+  (useResumoDocumentalContrato as jest.Mock).mockReturnValue(retorno({ 'item-1': { total:1, verificadasTotal:1 } }));
+  (useConsulta as jest.Mock).mockReturnValue(retorno({ itens: [{ categoria:'CONTRATO_PRINCIPAL', verificadoEm:'2026-11-07T04:00:00Z', reabertoEm:null, arquivadoEm:null }] }));
+  render(<DetalheContratoPage />);
+  expect(screen.getByRole('button', { name:'Aprovar conclusão do contrato' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name:'Não aprovar conclusão' }));
+  const dialogoDevolucao = screen.getByRole('dialog', { name:'Não aprovar a conclusão do contrato?' });
+  expect(dialogoDevolucao).toBeInTheDocument();
+  expect(within(dialogoDevolucao).getByRole('button', { name:'Cancelar' }).className).not.toContain('bg-red-600');
+  expect(within(dialogoDevolucao).getByRole('button', { name:'Não aprovar e devolver para revisão' })).toHaveClass('bg-red-600');
+  fireEvent.click(within(dialogoDevolucao).getByRole('button', { name:'Cancelar' }));
+  expect(screen.queryByRole('dialog', { name:'Não aprovar a conclusão do contrato?' })).not.toBeInTheDocument();
+});
+
+
+test('TEC08-03: aprovação bloqueada orienta claramente anexar o PDF e abre a aba correta', () => {
+  perfil.mockReturnValue(retorno({ ativo: true, perfil: 'ADMINISTRADOR' }));
+  (useEtapas as jest.Mock).mockReturnValue(retorno([{ id: 'etapa-qa', contratoId: 'contrato-real', status: 'CONCLUIDA', reabertoEm: null }]));
+  (useEntregaveis as jest.Mock).mockReturnValue(retorno([{ id: 'entregavel-qa', contratoId: 'contrato-real', etapaId: 'etapa-qa', statusExecucao: 'CONCLUIDO', reabertoEm: null, evidenciasEsperadas: [{ id: 'e-qa' }] }]));
+  (useResumoDocumentalContrato as jest.Mock).mockReturnValue(retorno({ 'entregavel-qa': { total: 1, verificadasTotal: 1 } }));
+  (useConsulta as jest.Mock).mockReturnValue(retorno({ itens: [], total: 0 }));
+  render(<DetalheContratoPage />);
+  const aprovar = screen.getByRole('button', { name: 'Aprovar conclusão do contrato' });
+  expect(aprovar).toBeDisabled();
+  expect(aprovar).toHaveAttribute('aria-describedby', 'aviso-pdf-principal-conclusao');
+  expect(aprovar).toHaveClass('text-green-200');
+  const aviso = screen.getByTestId('aviso-pdf-principal-conclusao');
+  expect(aviso).toHaveTextContent('Falta anexar e verificar o PDF principal');
+  fireEvent.click(within(aviso).getByRole('button', { name: 'Ir para Documentos' }));
+  expect(screen.getByRole('tab', { name: 'Documentos' })).toHaveAttribute('aria-selected', 'true');
+});
+
+test('TEC08-03: PDF anexado mas não verificado continua bloqueando a aprovação', () => {
+  perfil.mockReturnValue(retorno({ ativo: true, perfil: 'ADMINISTRADOR' }));
+  (useEtapas as jest.Mock).mockReturnValue(retorno([{ id: 'etapa-qa', contratoId: 'contrato-real', status: 'CONCLUIDA', reabertoEm: null }]));
+  (useEntregaveis as jest.Mock).mockReturnValue(retorno([{ id: 'entregavel-qa', contratoId: 'contrato-real', etapaId: 'etapa-qa', statusExecucao: 'CONCLUIDO', reabertoEm: null, evidenciasEsperadas: [{ id: 'e-qa' }] }]));
+  (useResumoDocumentalContrato as jest.Mock).mockReturnValue(retorno({ 'entregavel-qa': { total: 1, verificadasTotal: 1 } }));
+  (useConsulta as jest.Mock).mockReturnValue(retorno({ itens: [{ categoria: 'CONTRATO_PRINCIPAL', verificadoEm: null, reabertoEm: null, arquivadoEm: null }] }));
+  render(<DetalheContratoPage />);
+  expect(screen.getByRole('button', { name: 'Aprovar conclusão do contrato' })).toBeDisabled();
+  expect(screen.getByTestId('aviso-pdf-principal-conclusao')).toHaveTextContent('Verifique o PDF principal');
+});
+
+test('TEC08-03: no contrato suspenso, Retomar substitui Editar/Arquivar no topo', () => {
+  perfil.mockReturnValue(retorno({ ativo: true, perfil: 'ADMINISTRADOR' }));
+  contratoQuery.mockReturnValue(retorno({ ...contrato, status: 'SUSPENSO' }));
+  acessoQuery.mockReturnValue(retorno({ podeEditar: true, permissoes: { retomarContrato: true, editarContrato: true } }));
+  render(<DetalheContratoPage />);
+  const faixa = screen.getByTestId('barra-navegacao-contrato');
+  expect(within(faixa).getByRole('button', { name: 'Retomar contrato suspenso' })).toBeEnabled();
+  expect(within(faixa).queryByRole('button', { name: 'Editar contrato' })).not.toBeInTheDocument();
+  expect(within(faixa).queryByRole('button', { name: 'Arquivar contrato' })).not.toBeInTheDocument();
+});
+
+test('TEC08-03: reabertura substitui ações bloqueadas do contrato concluído', () => {
+  perfil.mockReturnValue(retorno({ ativo: true, perfil: 'ADMINISTRADOR' }));
+  contratoQuery.mockReturnValue(retorno({ ...contrato, status: 'CONCLUIDO', reabertoEm: null }));
+  acessoQuery.mockReturnValue(retorno({ podeEditar: true, permissoes: { reabrirContrato: true, editarContrato: true } }));
+  render(<DetalheContratoPage />);
+  const faixa = screen.getByTestId('barra-navegacao-contrato');
+  expect(within(faixa).getByRole('button', { name: 'Reabrir contrato concluído' })).toBeInTheDocument();
+  expect(within(faixa).queryByRole('button', { name: 'Editar contrato' })).not.toBeInTheDocument();
+  expect(within(faixa).queryByRole('button', { name: 'Arquivar contrato' })).not.toBeInTheDocument();
 });

@@ -2,28 +2,29 @@
 import { useEffect, useRef, useState } from 'react';
 import { useEtapas } from '@/hooks/use-etapas';
 import { useEntregaveis, useResumoDocumentalContrato } from '@/hooks/use-entregaveis';
-import { comprovacaoDocumentalCompleta, entregavelDocumentalmenteConcluido } from '@/lib/situacao-documental-etapa';
+import { calcularIndicadoresContrato } from '@/lib/indicadores-contrato';
 
-/** Indicadores de comprovação documental. Não representam avanço físico (PRD). */
-function Segmentos({ total, completos, rotulo }: {
-  total: number; completos: number; rotulo: string;
+function Progresso({ total, feitos, rotulo, amplo = false, arquivado = false, suspenso = false, revisao = false, encerrado = false }: {
+  total: number; feitos: number; rotulo: string; amplo?: boolean; arquivado?: boolean; suspenso?: boolean; revisao?: boolean; encerrado?: boolean;
 }) {
-  const taxa = total > 0 ? Math.min(100, Math.max(0, completos / total * 100)) : 0;
-  return <div className="h-[7px] w-[170px] max-w-full overflow-hidden rounded-full bg-violet-500/20"
-    role="img" aria-label={rotulo}>
-    <div className="h-full rounded-full bg-violet-500 transition-[width] duration-300" style={{ width: `${taxa}%` }} />
+  const taxa = total > 0 ? Math.min(100, Math.max(0, feitos / total * 100)) : 0;
+  const fundo = encerrado ? 'bg-slate-600/25' : arquivado ? 'bg-amber-500/20' : suspenso ? 'bg-amber-500/15' : revisao ? 'bg-teal-900/30' : 'bg-violet-500/20';
+  const cor = encerrado ? 'bg-slate-400' : arquivado ? 'bg-amber-400' : suspenso ? 'bg-amber-500' : revisao ? 'bg-teal-600' : 'bg-violet-500';
+  return <div role="img" aria-label={rotulo} className={`h-[7px] max-w-full overflow-hidden rounded-full ${amplo ? 'w-full' : 'w-full'} ${fundo}`}>
+    <div className={`h-full rounded-full transition-[width] duration-300 ${cor}`} style={{ width: `${taxa}%` }} />
   </div>;
 }
 
-export function ResumoPlanejamentoContrato({ contratoId, variante = 'carteira', compactoNaLista = false, contratoReabertoEm = null }: { contratoId: string; variante?: 'carteira' | 'detalhe'; compactoNaLista?: boolean; contratoReabertoEm?: string | null }) {
+export function ResumoPlanejamentoContrato({ contratoId, variante = 'carteira', compactoNaLista = false, contratoArquivado = false, contratoSuspenso = false, contratoEmRevisao = false, contratoEncerrado = false }: {
+  contratoId: string; variante?: 'carteira' | 'detalhe'; compactoNaLista?: boolean; contratoArquivado?: boolean; contratoSuspenso?: boolean; contratoEmRevisao?: boolean; contratoEncerrado?: boolean;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [visivel, setVisivel] = useState(false);
   useEffect(() => {
     const alvo = ref.current;
-    if (!alvo) return;
-    if (typeof IntersectionObserver === 'undefined') return;
-    const observar = new IntersectionObserver((entradas) => {
-      if (entradas.some((entrada) => entrada.isIntersecting)) setVisivel(true);
+    if (!alvo || typeof IntersectionObserver === 'undefined') return;
+    const observar = new IntersectionObserver(entradas => {
+      if (entradas.some(entrada => entrada.isIntersecting)) setVisivel(true);
     }, { rootMargin: '200px' });
     observar.observe(alvo);
     return () => observar.disconnect();
@@ -32,76 +33,50 @@ export function ResumoPlanejamentoContrato({ contratoId, variante = 'carteira', 
   const etapas = useEtapas(contratoId, habilitado);
   const entregaveis = useEntregaveis(contratoId, habilitado);
   const documental = useResumoDocumentalContrato(contratoId, habilitado);
-  const erro = etapas.erro || entregaveis.erro;
-  const pronto = habilitado && !erro && Array.isArray(etapas.dados) && Array.isArray(entregaveis.dados);
-  const itens = pronto ? entregaveis.dados!.filter(e => e.contratoId === contratoId && !e.arquivadoEm &&
-    etapas.dados!.some(etapa => etapa.id === e.etapaId && !etapa.arquivadoEm)) : [];
-  const previstas = itens.reduce((total, e) => total + e.evidenciasEsperadas.length, 0);
-  const obrigatorias = itens.reduce((total, e) => total + e.evidenciasEsperadas.filter(ev => ev.obrigatoria).length, 0);
-  const etapasDoContrato = pronto ? etapas.dados!.filter(e => e.contratoId === contratoId && !e.arquivadoEm) : [];
-  const etapasValidas = etapasDoContrato.length;
-  const resumo = documental.dados;
-  const comprovacaoCompleta = (id: string) => {
-    const estado = resumo?.[id];
-    const item = itens.find(e => e.id === id);
-    return !!item && entregavelDocumentalmenteConcluido(item, estado);
+  const erro = etapas.erro || entregaveis.erro || documental.erro;
+  const pronto = habilitado && !erro && Array.isArray(etapas.dados) && Array.isArray(entregaveis.dados) && Boolean(documental.dados);
+  const indicadores = pronto ? calcularIndicadoresContrato(contratoId, etapas.dados!, entregaveis.dados!, documental.dados!) : null;
+  const evidenciaAtiva = pronto ? entregaveis.dados!.filter(e => e.contratoId === contratoId && !e.arquivadoEm && etapas.dados!.some(et => et.id === e.etapaId && !et.arquivadoEm)) : [];
+  const evidenciasEsperadas = evidenciaAtiva.reduce((s, e) => s + e.evidenciasEsperadas.filter(ev => !ev.arquivadoEm).length, 0);
+  const evidenciasVerificadas = evidenciaAtiva.reduce((s, e) => s + (documental.dados?.[e.id]?.verificadasTotal ?? 0), 0);
+  const detalhe = variante === 'detalhe';
+  const progresso = [
+    { nome: 'Etapas', valor: indicadores?.etapas.concluidas ?? 0, total: indicadores?.etapas.total ?? 0, rotulo: `${indicadores?.etapas.concluidas ?? 0} de ${indicadores?.etapas.total ?? 0} etapas concluídas e comprovadas` },
+    { nome: 'Entregáveis', valor: indicadores?.entregaveis.concluidos ?? 0, total: indicadores?.entregaveis.total ?? 0, rotulo: `${indicadores?.entregaveis.concluidos ?? 0} de ${indicadores?.entregaveis.total ?? 0} entregáveis documentalmente comprovados` },
+    { nome: 'Evidências', valor: evidenciasVerificadas, total: evidenciasEsperadas, rotulo: `${evidenciasVerificadas} de ${evidenciasEsperadas} evidências verificadas` },
+  ];
+  const borda = contratoArquivado ? 'border-amber-500/35' : contratoSuspenso ? 'border-amber-500/45' : contratoEncerrado ? 'border-slate-500/45' : contratoEmRevisao ? 'border-teal-700/45' : 'border-brand-green/25';
+  const cor = contratoArquivado ? '#fbbf24' : contratoSuspenso ? '#ca8a04' : contratoEncerrado ? '#94a3b8' : contratoEmRevisao ? '#0d9488' : '#a78bfa';
+  const donut = (valor: number, total: number, tamanho = 'h-[76px] w-[76px]') => {
+    const percentual = total > 0 ? Math.min(100, Math.max(0, valor / total * 100)) : 0;
+    return <div aria-hidden="true" className={`relative flex ${tamanho} shrink-0 items-center justify-center rounded-full`}
+      style={{ background: `conic-gradient(${cor} ${percentual}%, rgba(148,163,184,.14) ${percentual}% 100%)` }}>
+      <div className="flex h-[72%] w-[72%] items-center justify-center rounded-full bg-background">
+        <strong className="text-xs font-semibold tabular-nums text-foreground sm:text-sm">{valor}/{total}</strong>
+      </div>
+    </div>;
   };
-  // Não alterar statusExecucao/status da etapa: comprovação documental e execução física são distintas.
-  const finalizados = resumo ? itens.filter(e => comprovacaoCompleta(e.id)).length : 0;
-  const concluidas = resumo ? etapasDoContrato.filter(etapa => {
-    const vinculados = itens.filter(e => e.etapaId === etapa.id);
-    return !etapa.reabertoEm && vinculados.length > 0 && vinculados.every(e => comprovacaoCompleta(e.id));
-  }).length : 0;
-  const evidenciasVerificadas = resumo ? itens.reduce((total, e) => total + (resumo[e.id]?.verificadasTotal ?? 0), 0) : 0;
-  // Conclusão DOCUMENTAL global; não reescreve o status operacional do contrato.
-  // Exigir registros evita concluir por vacuidade (0/0); contar somente itens ativos.
-  const documentacaoCompleta = Boolean(!contratoReabertoEm && pronto && resumo && !documental.erro &&
-    etapasValidas > 0 && itens.length > 0 && previstas > 0 &&
-    concluidas === etapasValidas && finalizados === itens.length &&
-    evidenciasVerificadas === previstas);
-  const taxaEntregaveis = itens.length ? (finalizados / itens.length) * 100 : 0;
-  const taxaEvidencias = previstas > 0 ? (evidenciasVerificadas / previstas) * 100 : 0;
-  const rotuloEtapas = `${concluidas} de ${etapasValidas} etapas com documentação completa; não é execução física`;
-  const rotuloEvidencias = `${evidenciasVerificadas} de ${previstas} evidências verificadas; não é execução física`;
-  const pizza = (concluidos: number, total: number, taxa: number, rotulo: string) => <div role="img"
-    aria-label={`${concluidos} de ${total} ${rotulo}`}
-    className="relative flex h-[76px] w-[76px] shrink-0 items-center justify-center rounded-full"
-    style={{ background: `conic-gradient(#a78bfa ${taxa}%, rgba(167,139,250,.17) 0)` }}>
-    <div className="flex h-[56px] w-[56px] items-center justify-center rounded-full bg-background">
-      <strong className="text-sm tabular-nums text-white">{concluidos}/{total}</strong>
-    </div>
-  </div>;
-  return <div ref={ref} data-testid="resumo-planejamento-contrato" data-documental-completo={documentacaoCompleta ? "true" : "false"} className={variante === 'detalhe'
-    ? 'grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3'
-    : `mt-3 grid min-w-0 gap-y-3 border-t border-brand-green/15 pt-3 text-xs ${compactoNaLista ? 'gap-x-3 md:grid-cols-[minmax(0,170px)_minmax(0,170px)]' : 'gap-x-4 sm:grid-cols-2'}`}>
-    {erro ? <p role="status" className="text-foreground/65">Indicadores indisponíveis.</p> : !pronto ?
-      <p role="status" className="text-foreground/60">Consultando planejamento...</p> : variante === 'detalhe' ? <>
-        <section className="min-w-0 space-y-3 rounded-xl border border-violet-500/30 bg-violet-500/[0.04] p-4" aria-label="Resumo de etapas">
-          <p className="text-xs font-medium uppercase tracking-wide text-white/80">Etapas</p>
-          <div className="flex flex-wrap items-baseline gap-2"><strong className="text-2xl tabular-nums text-white">{concluidas}/{etapasValidas}</strong>
-            <span className="text-xs text-foreground/65">com comprovação completa</span></div>
-          <Segmentos total={etapasValidas} completos={concluidas} rotulo={rotuloEtapas} />
-        </section>
-        <section className="flex min-w-0 items-center gap-3 rounded-xl border border-violet-500/30 bg-violet-500/[0.04] p-4" aria-label="Resumo de entregáveis">
-        {pizza(finalizados, itens.length, taxaEntregaveis, 'entregáveis com comprovação documental completa; não é execução física')}
-        <p className="min-w-0 text-sm font-semibold text-white">Entregáveis</p>
+  return <div ref={ref} data-testid="resumo-planejamento-contrato"
+    data-documental-completo={indicadores?.documentacaoCompleta ? 'true' : 'false'}
+    className={detalhe ? 'grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3' :
+      `mt-3 grid w-full max-w-[740px] min-w-0 grid-cols-3 items-start justify-start gap-2 border-t border-brand-green/15 pt-3 text-xs sm:gap-3 ${compactoNaLista ? 'lg:max-w-[650px]' : ''}`}>
+    {erro ? <p role="status" className="col-span-full text-foreground/65">Indicadores indisponíveis.</p> :
+    !indicadores ? <p role="status" className="col-span-full text-foreground/60">Consultando planejamento...</p> : detalhe ? <>
+      <section aria-label="Resumo de etapas" className={`min-w-0 space-y-3 rounded-xl border bg-background p-4 ${borda}`}>
+        <div className="flex flex-wrap items-center gap-2"><strong className="text-xs font-semibold uppercase tracking-wide text-foreground/80">Etapas</strong><span className="text-lg font-bold tabular-nums text-foreground">{progresso[0].valor}/{progresso[0].total}</span></div>
+        <Progresso total={progresso[0].total} feitos={progresso[0].valor} rotulo={progresso[0].rotulo} amplo arquivado={contratoArquivado} suspenso={contratoSuspenso} revisao={contratoEmRevisao} encerrado={contratoEncerrado}/>
       </section>
-      <section className="flex min-w-0 items-center gap-3 rounded-xl border border-violet-500/30 bg-violet-500/[0.04] p-4" aria-label="Resumo de evidências">
-        {pizza(evidenciasVerificadas, previstas, taxaEvidencias, 'evidências verificadas; não é execução física')}
-        <p className="min-w-0 text-sm font-semibold text-white">Evidências</p>
-      </section>
-      </> : <>
-      <div className="min-w-0 space-y-1.5">
-        <div className="flex max-w-[170px] items-center justify-between gap-2"><strong>Etapas</strong>
-          <span className="tabular-nums text-foreground/75">{etapasValidas ? `${concluidas} de ${etapasValidas}` : '0 de 0'}</span></div>
-        <Segmentos total={etapasValidas} completos={concluidas} rotulo={rotuloEtapas} />
+      {progresso.slice(1).map(item => <section key={item.nome} aria-label={`Resumo de ${item.nome.toLowerCase()}`} className={`flex min-w-0 items-center gap-3 rounded-xl border bg-background p-4 ${borda}`}>
+        <div role="img" aria-label={item.rotulo}>{donut(item.valor, item.total)}</div>
+        <p className="min-w-0 text-sm font-semibold text-foreground">{item.nome}</p>
+      </section>)}
+    </> : progresso.map(item => <section key={item.nome} aria-label={`Resumo de ${item.nome.toLowerCase()}`} className="min-w-0 text-left">
+      <div className="mb-2 text-[10px] font-semibold text-foreground sm:text-xs">{item.nome}</div>
+      <div className="flex justify-center sm:hidden">{donut(item.valor, item.total, 'h-[66px] w-[66px]')}<span className="sr-only">{item.nome}: {item.valor}/{item.total}</span></div>
+      <div className="hidden space-y-2 sm:block">
+        <strong className="block tabular-nums text-xs font-medium text-foreground/80">{item.valor}/{item.total}</strong>
+        <Progresso total={item.total} feitos={item.valor} rotulo={item.rotulo} arquivado={contratoArquivado} suspenso={contratoSuspenso} revisao={contratoEmRevisao} encerrado={contratoEncerrado}/>
       </div>
-      <div className="min-w-0 space-y-1.5">
-        <div className="flex max-w-[170px] items-center justify-between gap-2"><strong>Evidências</strong>
-          <span className="tabular-nums text-foreground/75">{previstas ? `${resumo ? evidenciasVerificadas : '…'} de ${previstas}` : '0 de 0'}</span></div>
-        <Segmentos total={previstas} completos={evidenciasVerificadas} rotulo={rotuloEvidencias} />
-      </div>
-      <span className="sr-only">{obrigatorias} obrigatórias. {itens.length} entregáveis previstos. O andamento físico e a comprovação real são dimensões separadas.</span>
-    </>}
+    </section>)}
   </div>;
 }

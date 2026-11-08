@@ -5,100 +5,122 @@ import { useEntregaveis, useResumoDocumentalContrato } from '@/hooks/use-entrega
 
 jest.mock('@/hooks/use-etapas', () => ({ useEtapas: jest.fn() }));
 jest.mock('@/hooks/use-entregaveis', () => ({ useEntregaveis: jest.fn(), useResumoDocumentalContrato: jest.fn() }));
-
 const etapas = useEtapas as jest.Mock;
 const entregaveis = useEntregaveis as jest.Mock;
 const documental = useResumoDocumentalContrato as jest.Mock;
-const etapaA = { id: 'etapa-a', contratoId: 'contrato-a', status: 'PLANEJADA' };
-const etapaB = { id: 'etapa-b', contratoId: 'contrato-a', status: 'EM_ANDAMENTO' };
-const itemA = { id: 'item-a', contratoId: 'contrato-a', etapaId: 'etapa-a', evidenciasEsperadas: [{ id: 'ev-a', obrigatoria: true }] };
-const itemB = { id: 'item-b', contratoId: 'contrato-a', etapaId: 'etapa-b', evidenciasEsperadas: [{ id: 'ev-b', obrigatoria: true }] };
-
-// JSDOM não aciona interseções reais; testar o fallback não-intersectável do componente.
+const etapaA = { id: 'etapa-a', contratoId: 'contrato-a', status: 'CONCLUIDA', reabertoEm: null };
+const etapaB = { id: 'etapa-b', contratoId: 'contrato-a', status: 'EM_ANDAMENTO', reabertoEm: null };
+const itemA = { id: 'item-a', contratoId: 'contrato-a', etapaId: 'etapa-a', statusExecucao: 'CONCLUIDO', reabertoEm: null, evidenciasEsperadas: [{ id: 'ev-a', obrigatoria: true }] };
+const itemB = { id: 'item-b', contratoId: 'contrato-a', etapaId: 'etapa-b', statusExecucao: 'EM_ANDAMENTO', reabertoEm: null, evidenciasEsperadas: [{ id: 'ev-b', obrigatoria: true }] };
+const baseResumo = {
+  'item-a': { total: 1, obrigatorias: 1, verificadas: 1, verificadasTotal: 1 },
+  'item-b': { total: 1, obrigatorias: 1, verificadas: 0, verificadasTotal: 0 },
+};
 const observador = Object.getOwnPropertyDescriptor(globalThis, 'IntersectionObserver');
 beforeAll(() => { Object.defineProperty(globalThis, 'IntersectionObserver', { configurable: true, value: undefined }); });
 afterAll(() => {
   if (observador) Object.defineProperty(globalThis, 'IntersectionObserver', observador);
   else Reflect.deleteProperty(globalThis, 'IntersectionObserver');
 });
-
 beforeEach(() => {
   etapas.mockReturnValue({ dados: [etapaA, etapaB], carregando: false });
   entregaveis.mockReturnValue({ dados: [itemA, itemB], carregando: false });
-  documental.mockReturnValue({ dados: {
-    'item-a': { total: 1, obrigatorias: 1, verificadas: 1, verificadasTotal: 1 },
-    'item-b': { total: 1, obrigatorias: 1, verificadas: 0, verificadasTotal: 0 },
-  }, carregando: false });
+  documental.mockReturnValue({ dados: baseResumo, carregando: false });
 });
 
-test('comprovação completa de uma etapa e de um entregável não altera status de execução', () => {
+test('carteira apresenta três indicadores de execução com layout adaptável', () => {
+  render(<ResumoPlanejamentoContrato contratoId="contrato-a" />);
+  const resumo = screen.getByTestId('resumo-planejamento-contrato');
+  expect(resumo).toHaveTextContent('Etapas');
+  expect(resumo).toHaveTextContent('Entregáveis');
+  expect(resumo).toHaveTextContent('Evidências');
+  expect(within(resumo).getByRole('img', { name: /1 de 2 etapas concluídas e comprovadas/ })).toBeInTheDocument();
+  expect(within(resumo).getByRole('img', { name: /1 de 2 entregáveis documentalmente comprovados/ })).toBeInTheDocument();
+  expect(within(resumo).getAllByRole('img')).toHaveLength(3);
+  expect(resumo).not.toHaveTextContent('Pendente de conclusão');
+});
+
+test('página de detalhes preserva três indicadores: barra de etapas e pizzas de entregáveis e evidências', () => {
   render(<ResumoPlanejamentoContrato contratoId="contrato-a" variante="detalhe" />);
   expect(within(screen.getByRole('region', { name: 'Resumo de etapas' })).getByText('1/2')).toBeInTheDocument();
-  expect(screen.getByRole('img', { name: /1 de 2 etapas com documentação completa/ })).toBeInTheDocument();
-  expect(within(screen.getByRole('region', { name: 'Resumo de entregáveis' })).getByText('1/2')).toBeInTheDocument();
-  expect(within(screen.getByRole('region', { name: 'Resumo de evidências' })).getByText('1/2')).toBeInTheDocument();
-  expect(etapaA.status).toBe('PLANEJADA');
-  expect(etapaB.status).toBe('EM_ANDAMENTO');
+  expect(within(screen.getByRole('region', { name: 'Resumo de entregáveis' })).getByRole('img', { name: /1 de 2 entregáveis documentalmente comprovados/ })).toBeInTheDocument();
+  expect(within(screen.getByRole('region', { name: 'Resumo de evidências' })).getByRole('img', { name: /1 de 2 evidências verificadas/ })).toBeInTheDocument();
+  expect(screen.getAllByRole('img')).toHaveLength(3);
 });
 
-test('carteira mostra razão de evidências verificadas, em vez de barra puramente decorativa', () => {
+test('em revisão mostra teal no lugar do roxo sem alterar contagens dos filhos', () => {
+  render(<ResumoPlanejamentoContrato contratoId="contrato-a" variante="detalhe" contratoEmRevisao />);
+  expect(screen.getByRole('region', { name: 'Resumo de etapas' })).toHaveClass('border-teal-700/45');
+  expect(screen.getByRole('img', { name: /1 de 2 etapas concluídas/ })).toHaveClass('bg-teal-900/30');
+  expect(screen.getByRole('region', { name: 'Resumo de evidências' })).toHaveClass('border-teal-700/45');
+});
+
+test('arquivos verificados não contam como etapa concluída quando o status dela ainda é planejamento', () => {
+  etapas.mockReturnValue({ dados: [{ ...etapaA, status: 'PLANEJADA' }], carregando: false });
+  entregaveis.mockReturnValue({ dados: [itemA], carregando: false });
+  documental.mockReturnValue({ dados: { 'item-a': baseResumo['item-a'] }, carregando: false });
   render(<ResumoPlanejamentoContrato contratoId="contrato-a" />);
-  const resumo = screen.getByTestId('resumo-planejamento-contrato');
-  expect(resumo).toHaveTextContent('1 de 2');
-  expect(within(resumo).getByRole('img', { name: /1 de 2 evidências verificadas/ })).toBeInTheDocument();
+  expect(screen.getByRole('img', { name: /0 de 1 etapas concluídas e comprovadas/ })).toBeInTheDocument();
+  expect(screen.getByRole('img', { name: /1 de 1 entregáveis documentalmente comprovados/ })).toBeInTheDocument();
 });
 
-test('sem consulta documental não inventa uma evidência verificada', () => {
+test('etapa explicitamente reaberta não fecha sozinha só porque seus entregáveis continuam concluídos', () => {
+  etapas.mockReturnValue({ dados: [{ ...etapaA, reabertoEm: '2026-11-06T20:00:00Z' }], carregando: false });
+  entregaveis.mockReturnValue({ dados: [itemA], carregando: false });
+  documental.mockReturnValue({ dados: { 'item-a': baseResumo['item-a'] }, carregando: false });
+  render(<ResumoPlanejamentoContrato contratoId="contrato-a" />);
+  expect(screen.getByRole('img', { name: /0 de 1 etapas concluídas e comprovadas/ })).toBeInTheDocument();
+  expect(screen.getByRole('img', { name: /1 de 1 entregáveis documentalmente comprovados/ })).toBeInTheDocument();
+  expect(screen.getByTestId('resumo-planejamento-contrato')).toHaveAttribute('data-documental-completo', 'false');
+});
+
+test('entregável explicitamente reaberto não conta como concluído mesmo com evidência ainda verificada', () => {
+  etapas.mockReturnValue({ dados: [etapaA], carregando: false });
+  entregaveis.mockReturnValue({ dados: [{ ...itemA, reabertoEm: '2026-11-06T20:00:00Z' }], carregando: false });
+  documental.mockReturnValue({ dados: { 'item-a': baseResumo['item-a'] }, carregando: false });
+  render(<ResumoPlanejamentoContrato contratoId="contrato-a" />);
+  expect(screen.getByRole('img', { name: /0 de 1 etapas concluídas e comprovadas/ })).toBeInTheDocument();
+  expect(screen.getByRole('img', { name: /0 de 1 entregáveis documentalmente comprovados/ })).toBeInTheDocument();
+});
+
+test('sem resumo documental não exibe falsamente 0/N enquanto dados estão carregando', () => {
   documental.mockReturnValue({ dados: undefined, carregando: true });
   render(<ResumoPlanejamentoContrato contratoId="contrato-a" />);
-  const resumo = screen.getByTestId('resumo-planejamento-contrato');
-  expect(resumo).toHaveTextContent('… de 2');
+  expect(screen.getByText('Consultando planejamento...')).toBeInTheDocument();
+  expect(screen.queryByRole('img')).not.toBeInTheDocument();
 });
 
-
-test('arquivar etapa e entregável retira os itens dos indicadores ativos sem perder cadastro', () => {
+test('arquivados não entram em contagens ativas; indicador arquivado fica âmbar', () => {
   etapas.mockReturnValue({ dados: [{ ...etapaA, arquivadoEm: '2026-11-05T16:00:00Z' }, etapaB], carregando: false });
-  entregaveis.mockReturnValue({ dados: [itemA, itemB], carregando: false });
-  render(<ResumoPlanejamentoContrato contratoId="contrato-a" variante="detalhe" />);
-  expect(within(screen.getByRole('region', { name: 'Resumo de etapas' })).getByText('0/1')).toBeInTheDocument();
-  expect(within(screen.getByRole('region', { name: 'Resumo de entregáveis' })).getByText('0/1')).toBeInTheDocument();
-  expect(within(screen.getByRole('region', { name: 'Resumo de evidências' })).getByText('0/1')).toBeInTheDocument();
-  expect(itemA.evidenciasEsperadas).toHaveLength(1); // arquivo histórico continua no objeto fonte.
+  render(<ResumoPlanejamentoContrato contratoId="contrato-a" contratoArquivado />);
+  expect(screen.getByRole('img', { name: /0 de 1 etapas concluídas e comprovadas/ })).toHaveClass('bg-amber-500/20');
+  expect(screen.getByRole('img', { name: /0 de 1 entregáveis documentalmente comprovados/ })).toBeInTheDocument();
+  expect(itemA.evidenciasEsperadas).toHaveLength(1);
 });
 
-test('entregável arquivado também deixa de entrar no planejamento da etapa ativa', () => {
-  entregaveis.mockReturnValue({ dados: [{ ...itemA, arquivadoEm: '2026-11-05T16:00:00Z' }, itemB], carregando: false });
-  render(<ResumoPlanejamentoContrato contratoId="contrato-a" variante="detalhe" />);
-  expect(within(screen.getByRole('region', { name: 'Resumo de entregáveis' })).getByText('0/1')).toBeInTheDocument();
-});
-
-
-test('comprovação opcional verificada também conclui indicadores documentais de etapa e entregável', () => {
-  entregaveis.mockReturnValue({ dados: [{ ...itemA, evidenciasEsperadas: [{ id: 'ev-a', obrigatoria: false }] }], carregando: false });
+test('uma única evidência opcional verificada também permite contar conclusão confirmada', () => {
   etapas.mockReturnValue({ dados: [etapaA], carregando: false });
-  documental.mockReturnValue({ dados: { 'item-a': { total: 1, obrigatorias: 0, verificadas: 0, verificadasTotal: 1 } }, carregando: false });
-  render(<ResumoPlanejamentoContrato contratoId="contrato-a" variante="detalhe" />);
-  expect(within(screen.getByRole('region', { name: 'Resumo de etapas' })).getByText('1/1')).toBeInTheDocument();
-  expect(within(screen.getByRole('region', { name: 'Resumo de entregáveis' })).getByText('1/1')).toBeInTheDocument();
-  expect(etapaA.status).toBe('PLANEJADA'); // A validação documental NÃO atualiza status físico no banco.
-});
-
-
-test('contrato marcado completo quando todas as evidências ativas inclusive opcionais estão verificadas', () => {
   entregaveis.mockReturnValue({ dados: [{ ...itemA, evidenciasEsperadas: [{ id: 'ev-a', obrigatoria: false }] }], carregando: false });
-  etapas.mockReturnValue({ dados: [etapaA], carregando: false });
   documental.mockReturnValue({ dados: { 'item-a': { total: 1, obrigatorias: 0, verificadas: 0, verificadasTotal: 1 } }, carregando: false });
-  render(<ResumoPlanejamentoContrato contratoId="contrato-a" variante="detalhe" />);
+  render(<ResumoPlanejamentoContrato contratoId="contrato-a" />);
+  expect(screen.getByRole('img', { name: /1 de 1 etapas concluídas e comprovadas/ })).toBeInTheDocument();
+  expect(screen.getByRole('img', { name: /1 de 1 entregáveis documentalmente comprovados/ })).toBeInTheDocument();
   expect(screen.getByTestId('resumo-planejamento-contrato')).toHaveAttribute('data-documental-completo', 'true');
-  // Comprovação documental não muda status operacional.
-  expect(etapaA.status).toBe('PLANEJADA');
 });
 
-test('contrato incompleto, sem dados ou sem entregáveis não recebe destaque roxo', () => {
-  const { rerender } = render(<ResumoPlanejamentoContrato contratoId="contrato-a" />);
+test('resumo acompanha o card da etapa mesmo quando a execução do filho ainda não foi reconciliada', () => {
+  etapas.mockReturnValue({ dados: [etapaA], carregando: false });
+  entregaveis.mockReturnValue({ dados: [{ ...itemA, statusExecucao: 'EM_ANDAMENTO' }], carregando: false });
+  documental.mockReturnValue({ dados: { 'item-a': baseResumo['item-a'] }, carregando: false });
+  render(<ResumoPlanejamentoContrato contratoId="contrato-a" variante="detalhe" />);
+  expect(screen.getByRole('region', { name: 'Resumo de etapas' })).toHaveTextContent('1/1');
+  expect(screen.getByRole('region', { name: 'Resumo de entregáveis' })).toHaveTextContent('Entregáveis');
   expect(screen.getByTestId('resumo-planejamento-contrato')).toHaveAttribute('data-documental-completo', 'false');
-  entregaveis.mockReturnValue({ dados: [], carregando: false });
-  documental.mockReturnValue({ dados: {}, carregando: false });
-  rerender(<ResumoPlanejamentoContrato contratoId="contrato-a" />);
-  expect(screen.getByTestId('resumo-planejamento-contrato')).toHaveAttribute('data-documental-completo', 'false');
+});
+
+test('encerramento administrativo preserva indicadores reais sem inventar barra de cem por cento', () => {
+  render(<ResumoPlanejamentoContrato contratoId="contrato-a" variante="detalhe" contratoEncerrado />);
+  expect(screen.queryByText(/Encerramento antecipado · execução incompleta preservada/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/A barra cinza representa/)).not.toBeInTheDocument();
+  expect(within(screen.getByRole('region', { name: 'Resumo de etapas' })).getByText('1/2')).toBeInTheDocument();
 });

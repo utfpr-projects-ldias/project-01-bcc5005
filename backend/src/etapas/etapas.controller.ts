@@ -2,6 +2,8 @@ import {
   Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Req,
   UsePipes, ValidationPipe,
 } from '@nestjs/common';
+import { EncerrarEtapaDto } from './dto/encerrar-etapa.dto.js';
+import { JustificativaDecisaoDto } from '../contratos/dto/justificativa-decisao.dto.js';
 import { ExigirPoliticaOperacional } from '../autorizacao/politica.decorator.js';
 import type { RequisicaoAutorizada } from '../autorizacao/usuario-autenticado.js';
 import { AtualizarEtapaDto } from './dto/atualizar-etapa.dto.js';
@@ -44,10 +46,34 @@ export class EtapasController {
     return this.etapas.detalhar(contratoId, etapaId);
   }
 
+  @Patch(':etapaId/concluir')
+  @ExigirPoliticaOperacional('etapas:concluir', { tipo: 'recurso', recurso: 'etapa', parametro: 'etapaId', parametroContratoPai: 'contratoId' })
+  concluir(@Param('contratoId') contratoId: string, @Param('etapaId') etapaId: string, @Req() req: RequisicaoAutorizada) {
+    return this.etapas.concluir(contratoId, etapaId, req.usuarioDominio!);
+  }
+
+  @Get(':etapaId/historico')
+  @ExigirPoliticaOperacional('etapas:visualizar', { tipo: 'recurso', recurso: 'etapa', parametro: 'etapaId', parametroContratoPai: 'contratoId' })
+  historico(@Param('contratoId') contratoId: string, @Param('etapaId') etapaId: string, @Req() req: RequisicaoAutorizada) {
+    return this.etapas.historico(contratoId, etapaId, req.usuarioDominio!);
+  }
+
+  @Patch(':etapaId/encerrar')
+  @ExigirPoliticaOperacional('etapas:encerrar', { tipo: 'recurso', recurso: 'etapa', parametro: 'etapaId', parametroContratoPai: 'contratoId' })
+  encerrar(@Param('contratoId') c: string, @Param('etapaId') id: string, @Body() dto: EncerrarEtapaDto, @Req() req: RequisicaoAutorizada) {
+    return this.etapas.encerrar(c, id, req.usuarioDominio!, dto.motivo);
+  }
+
+  @Patch(':etapaId/reabrir-encerrada')
+  @ExigirPoliticaOperacional('etapas:reabrir-encerrada', { tipo: 'recurso', recurso: 'etapa', parametro: 'etapaId', parametroContratoPai: 'contratoId' })
+  reabrirEncerrada(@Param('contratoId') c: string, @Param('etapaId') id: string, @Body() dto: JustificativaDecisaoDto, @Req() req: RequisicaoAutorizada) {
+    return this.etapas.reabrir(c, id, req.usuarioDominio!, dto.motivo, true);
+  }
+
   @Patch(':etapaId/reabrir')
   @ExigirPoliticaOperacional('etapas:reabrir', { tipo: 'recurso', recurso: 'etapa', parametro: 'etapaId', parametroContratoPai: 'contratoId' })
-  reabrir(@Param('contratoId') c: string, @Param('etapaId') id: string, @Req() req: RequisicaoAutorizada) {
-    return this.etapas.reabrir(c, id, req.usuarioDominio!);
+  reabrir(@Param('contratoId') c: string, @Param('etapaId') id: string, @Body() dto: JustificativaDecisaoDto, @Req() req: RequisicaoAutorizada) {
+    return this.etapas.reabrir(c, id, req.usuarioDominio!, dto.motivo);
   }
 
   @Patch(':etapaId/arquivar')
@@ -58,8 +84,8 @@ export class EtapasController {
 
   @Patch(':etapaId/reativar')
   @ExigirPoliticaOperacional('etapas:reativar', { tipo: 'recurso', recurso: 'etapa', parametro: 'etapaId', parametroContratoPai: 'contratoId' })
-  reativar(@Param('contratoId') c: string, @Param('etapaId') id: string, @Req() req: RequisicaoAutorizada) {
-    return this.etapas.alterarArquivamento(c, id, false, req.usuarioDominio!);
+  reativar(@Param('contratoId') c: string, @Param('etapaId') id: string, @Body() dto: JustificativaDecisaoDto, @Req() req: RequisicaoAutorizada) {
+    return this.etapas.alterarArquivamento(c, id, false, req.usuarioDominio!, dto.motivo);
   }
 
   @Post(':etapaId/excluir')

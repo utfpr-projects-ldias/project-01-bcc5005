@@ -40,4 +40,8 @@ export class ListarDocumentosDto {
   @IsOptional()
   @IsIn(['true', 'false'])
   arquivados?: 'true' | 'false';
+
+  @IsOptional()
+  @IsIn(['ATIVOS', 'PENDENTE_VERIFICACAO', 'EM_REVISAO', 'VERIFICADO', 'ARQUIVADO'])
+  situacao?: 'ATIVOS' | 'PENDENTE_VERIFICACAO' | 'EM_REVISAO' | 'VERIFICADO' | 'ARQUIVADO';
 }

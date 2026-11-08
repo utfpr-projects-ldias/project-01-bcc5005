@@ -4,11 +4,21 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, QueryFailedError, type EntityManager, type Repository } from 'typeorm';
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
-import { documentacaoVerificada } from '../entregaveis/conclusao-documental.js';
+import { documentacaoVerificada, filhosEmRevisao, filhosPendentesDeConclusao } from '../entregaveis/conclusao-documental.js';
 import { ordemAposArquivamento } from './ordem-apos-arquivamento.js';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
+import { PermissaoContrato } from '../autorizacao/permissao-contrato.entity.js';
+import { permissoesEfetivas } from '../autorizacao/permissoes-granulares.js';
+import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
+import { ForbiddenException } from '@nestjs/common';
+import { EventoAuditoria } from '../auditoria/evento-auditoria.entity.js';
+import { Entregavel } from '../entregaveis/entregavel.entity.js';
+import { EvidenciaEsperada } from '../entregaveis/evidencia-esperada.entity.js';
+import { ComprovanteEvidencia } from '../entregaveis/comprovante-evidencia.entity.js';
+import { In } from 'typeorm';
 import { Contrato } from '../contratos/contrato.entity.js';
+import { Usuario } from '../usuarios/usuario.entity.js';
 import type { AtualizarEtapaDto } from './dto/atualizar-etapa.dto.js';
 import type { CriarEtapaDto } from './dto/criar-etapa.dto.js';
 import type { ReordenarEtapasDto } from './dto/reordenar-etapas.dto.js';
@@ -103,15 +113,15 @@ export class EtapasService {
   }
 
   /** Serializa criação, reordenação e edição sem expor bloqueios ao navegador. */
-  private async bloquearContrato(manager: EntityManager, id: string): Promise<Contrato> {
+  private async bloquearContrato(manager: EntityManager, id: string, somenteConclusao = false): Promise<Contrato> {
     const contrato = await manager.getRepository(Contrato)
       .createQueryBuilder('c')
       .setLock('pessimistic_write')
       .where('c.id = :id', { id })
       .getOne();
     if (!contrato) throw new NotFoundException('Contrato não encontrado');
-    if (contrato.arquivadoEm || contrato.status === 'CONCLUIDO' ||
-      (contrato.reabertoEm === null && await documentacaoVerificada(manager, id)))
+    if (contrato.arquivadoEm || (contrato.status === 'CONCLUIDO' || contrato.status === 'ENCERRADO') ||
+      (!somenteConclusao && contrato.reabertoEm === null && await documentacaoVerificada(manager, id) && !await filhosEmRevisao(manager, id)))
       throw new ConflictException('Reative ou reabra o contrato antes de modificar etapas');
     return contrato;
   }
@@ -135,6 +145,7 @@ export class EtapasService {
     try {
       return await this.dataSource.transaction(async (manager) => {
         const contrato = await this.bloquearContrato(manager, contratoId);
+        if (dto.status === StatusEtapa.CONCLUIDA || dto.status === StatusEtapa.ENCERRADA) throw new ForbiddenException('Cadastre a etapa em planejamento ou andamento; a finalização é uma operação separada');
         const repo = manager.getRepository(Etapa);
         const ultima = await repo.findOne({ where: { contratoId }, order: { sequencia: 'DESC' } });
         const etapa = repo.create({
@@ -165,7 +176,7 @@ export class EtapasService {
         const etapa = await repo.findOneBy({ contratoId, id: etapaId });
         if (!etapa) throw new NotFoundException('Etapa não encontrada');
         if (etapa.arquivadoEm) throw new ConflictException('Reative a etapa antes de editar');
-        if (etapa.status === StatusEtapa.CONCLUIDA ||
+        if (etapa.status === StatusEtapa.CONCLUIDA || etapa.status === StatusEtapa.ENCERRADA ||
           (etapa.reabertoEm === null && await documentacaoVerificada(manager, contratoId, etapaId)))
           throw new ConflictException('Etapa concluída: reabra antes de editar');
         const anterior = snapshot(etapa);
@@ -177,8 +188,8 @@ export class EtapasService {
         if (dto.inicioPrevisto !== undefined) etapa.inicioPrevisto = dto.inicioPrevisto;
         if (dto.terminoPrevisto !== undefined) etapa.terminoPrevisto = dto.terminoPrevisto;
         if (dto.status !== undefined) {
+          if (dto.status === StatusEtapa.CONCLUIDA || dto.status === StatusEtapa.ENCERRADA) throw new ForbiddenException('Use uma operação de finalização autorizada');
           etapa.status = dto.status;
-          if (dto.status === StatusEtapa.CONCLUIDA) etapa.reabertoEm = null;
         }
         if (dto.observacoes !== undefined) etapa.observacoes = dto.observacoes;
         verificarDados(etapa);
@@ -205,32 +216,176 @@ export class EtapasService {
     } catch (error: unknown) { return traduzirErro(error); }
   }
 
-  async reabrir(contratoId: string, etapaId: string, ator: UsuarioAutenticado): Promise<RespostaEtapa> {
+  /** Confirmação explícita da etapa pela MESMA permissão no primeiro fechamento e no retorno da revisão. */
+  async concluir(contratoId: string, etapaId: string, ator: UsuarioAutenticado): Promise<RespostaEtapa> {
+    return this.dataSource.transaction(async manager => {
+      const contrato = await this.bloquearContrato(manager, contratoId, true);
+      if (contrato.arquivadoEm || (contrato.status === 'CONCLUIDO' || contrato.status === 'ENCERRADO'))
+        throw new ConflictException('Reative ou reabra o contrato antes de concluir etapas');
+      if (ator.perfil !== PerfilUsuario.ADMINISTRADOR) {
+        const vinculo = await manager.getRepository(PermissaoContrato).findOneBy({ usuarioId: ator.id, contratoId });
+        if (!vinculo || !permissoesEfetivas(ator.perfil, vinculo.podeEditar, vinculo.permissoesDetalhadas).concluirEtapas)
+          throw new ForbiddenException('Sem permissão para concluir etapas');
+      }
+      const repo = manager.getRepository(Etapa);
+      const etapa = await repo.findOneBy({ contratoId, id: etapaId });
+      if (!etapa) throw new NotFoundException('Etapa não encontrada');
+      if (etapa.arquivadoEm) throw new ConflictException('Reative a etapa arquivada primeiro');
+      if ((etapa.status === StatusEtapa.CONCLUIDA || etapa.status === StatusEtapa.ENCERRADA) && !etapa.reabertoEm)
+        throw new ConflictException('Etapa já concluída');
+      if (!await documentacaoVerificada(manager, contratoId, etapaId))
+        throw new ConflictException('Ainda existem comprovações pendentes nesta etapa');
+      if (await filhosPendentesDeConclusao(manager, contratoId, etapaId))
+        throw new ConflictException('Conclua primeiro os entregáveis e evidências em revisão');
+      const anterior = { status: etapa.status, reabertoEm: etapa.reabertoEm ?? null };
+      etapa.status = StatusEtapa.CONCLUIDA;
+      etapa.reabertoEm = null;
+      const salva = await repo.save(etapa);
+      await this.auditoria.registrarNaTransacao(manager, ator, {
+        acao: AcaoAuditoria.ETAPA_STATUS_ALTERADO, entidadeTipo: 'ETAPA', entidadeId: etapaId,
+        dadosAnteriores: anterior,
+        dadosPosteriores: { status: salva.status, reabertoEm: null, motivo: 'CONCLUSAO_EXPLICITA' },
+      });
+      return resposta(salva, contrato);
+    });
+  }
+
+  /** Encerrar é uma decisão administrativa, nunca uma conclusão de execução. */
+  async encerrar(contratoId: string, etapaId: string, ator: UsuarioAutenticado, motivo: string): Promise<RespostaEtapa> {
+    const justificativa = typeof motivo === 'string' ? motivo.trim() : '';
+    if (justificativa.length < 15 || justificativa.length > 200)
+      throw new BadRequestException('Informe justificativa de 15 a 200 caracteres para encerrar a etapa');
     return this.dataSource.transaction(async manager => {
       const contrato = await this.bloquearContrato(manager, contratoId);
-      if (contrato.arquivadoEm || contrato.status === 'CONCLUIDO') throw new ConflictException('Reabra o contrato antes de modificar etapas');
+      if (contrato.status === 'SUSPENSO' || contrato.status === 'CANCELADO')
+        throw new ConflictException('Retome o contrato antes de encerrar uma etapa');
+      if (ator.perfil !== PerfilUsuario.ADMINISTRADOR) {
+        const vinculo = await manager.getRepository(PermissaoContrato).findOneBy({ usuarioId: ator.id, contratoId });
+        if (!vinculo || !permissoesEfetivas(ator.perfil, vinculo.podeEditar, vinculo.permissoesDetalhadas).encerrarEtapas)
+          throw new ForbiddenException('Sem permissão para encerrar etapas');
+      }
+      const repo = manager.getRepository(Etapa);
+      const etapa = await repo.findOneBy({ id: etapaId, contratoId });
+      if (!etapa) throw new NotFoundException('Etapa não encontrada');
+      if (etapa.arquivadoEm) throw new ConflictException('Reative a etapa antes de encerrar');
+      if (etapa.status === StatusEtapa.CONCLUIDA || etapa.status === StatusEtapa.ENCERRADA)
+        throw new ConflictException('Etapa já finalizada; uma nova decisão exige reabertura');
+      const anterior = { status: etapa.status, reabertoEm: etapa.reabertoEm };
+      etapa.status = StatusEtapa.ENCERRADA;
+      etapa.reabertoEm = null;
+      const salvo = await repo.save(etapa);
+      await this.auditoria.registrarNaTransacao(manager, ator, {
+        acao: AcaoAuditoria.ETAPA_STATUS_ALTERADO, entidadeTipo: 'ETAPA', entidadeId: etapaId,
+        dadosAnteriores: anterior, dadosPosteriores: { status: salvo.status, nome: salvo.nome, justificativa },
+      });
+      return resposta(salvo, contrato);
+    });
+  }
+
+  /** Rastreabilidade da etapa + das alterações de entregáveis ligados a ela. */
+  async historico(contratoId: string, etapaId: string, ator: UsuarioAutenticado) {
+    await this.detalhar(contratoId, etapaId);
+    if (ator.perfil !== PerfilUsuario.ADMINISTRADOR) {
+      const vinculo = await this.dataSource.getRepository(PermissaoContrato).findOneBy({ usuarioId: ator.id, contratoId });
+      if (!vinculo || !permissoesEfetivas(ator.perfil, vinculo.podeEditar, vinculo.permissoesDetalhadas).editarEtapas)
+        throw new ForbiddenException('Sem permissão para consultar rastreabilidade da etapa');
+    }
+    const filhos = await this.dataSource.getRepository(Entregavel).find({
+      where: { contratoId, etapaId }, select: { id: true, nome: true },
+    });
+    const nomes = new Map(filhos.map(f => [f.id, f.nome]));
+    const eventos = await this.dataSource.getRepository(EventoAuditoria).find({
+      where: [
+        { contratoId, entidadeTipo: 'ETAPA', entidadeId: etapaId },
+        ...(filhos.length ? [{ contratoId, entidadeTipo: 'ENTREGAVEL' as const, entidadeId: In(filhos.map(f => f.id)) }] : []),
+      ], order: { registradoEm: 'DESC', id: 'DESC' }, take: 100,
+    });
+    const autores = [...new Set(eventos.map(ev => ev.atorSupertokensUserId)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0))];
+    const usuariosHistorico = autores.length ? await this.dataSource.getRepository(Usuario).find({
+      where: { supertokensUserId: In(autores) },
+      select: { supertokensUserId: true, nome: true, email: true },
+    }) : [];
+    const porAutor = new Map(usuariosHistorico.map(u => [u.supertokensUserId, u]));
+    const referenciaEvidencia = (ev: EventoAuditoria): string | null => {
+      const antes = ev.dadosAnteriores ?? {};
+      const depois = ev.dadosPosteriores ?? {};
+      const id = [depois['evidenciaEsperadaId'], depois['itemId'], antes['evidenciaEsperadaId'], antes['itemId']]
+        .find((x): x is string => typeof x === 'string');
+      return id ?? null;
+    };
+    const evidenciasIds = [...new Set(eventos.map(referenciaEvidencia).filter((id): id is string => !!id))];
+    const evidencias = evidenciasIds.length ? await this.dataSource.getRepository(EvidenciaEsperada).find({
+      where: { id: In(evidenciasIds), entregavelId: In(filhos.map(f => f.id)) },
+      select: { id: true, tipoEvidencia: true },
+    }) : [];
+    const evidenciaPorId = new Map(evidencias.map(ev => [ev.id, ev.tipoEvidencia]));
+    const comprovanteIds = [...new Set(eventos.flatMap(ev => [
+      ev.dadosAnteriores?.['comprovanteId'], ev.dadosPosteriores?.['comprovanteId'],
+    ].filter((x): x is string => typeof x === 'string')))];
+    const comprovantes = comprovanteIds.length ? await this.dataSource.getRepository(ComprovanteEvidencia).find({
+      where: { id: In(comprovanteIds), contratoId, entregavelId: In(filhos.map(f => f.id)) },
+      select: { id: true, nomeOriginal: true },
+    }) : [];
+    const arquivoPorId = new Map(comprovantes.map(c => [c.id, c.nomeOriginal]));
+    return eventos.map(ev => {
+      const idEvidencia = referenciaEvidencia(ev);
+      const comprovanteId = [ev.dadosPosteriores?.['comprovanteId'], ev.dadosAnteriores?.['comprovanteId']]
+        .find((id): id is string => typeof id === 'string');
+      const nomeEvidencia = idEvidencia ? evidenciaPorId.get(idEvidencia) : null;
+      const nomeNoEvento = [ev.dadosPosteriores?.['tipoEvidencia'], ev.dadosAnteriores?.['tipoEvidencia']]
+        .find((v): v is string => typeof v === 'string');
+      const nomeArquivo = comprovanteId ? arquivoPorId.get(comprovanteId) : null;
+      const arquivoNoEvento = [ev.dadosPosteriores?.['nomeOriginal'], ev.dadosAnteriores?.['nomeOriginal']]
+        .find((v): v is string => typeof v === 'string');
+      return ({ id: ev.id, acao: ev.acao, ocorridoEm: ev.registradoEm,
+
+      descricao: ev.entidadeTipo === 'ETAPA' ? 'Etapa: ' + ev.acao.replaceAll('_', ' ').toLowerCase() :
+        'Entregável ' + (nomes.get(ev.entidadeId) ?? 'histórico') + ': ' + ev.acao.replaceAll('_', ' ').toLowerCase(),
+      entidadeTipo: ev.entidadeTipo, entidadeId: ev.entidadeId,
+      evidenciaId: idEvidencia,
+      contexto: [ev.entidadeTipo === 'ENTREGAVEL' ? `Entregável: ${nomes.get(ev.entidadeId) ?? 'registro histórico'}` : null,
+        nomeEvidencia ?? nomeNoEvento ? `Evidência: ${nomeEvidencia ?? nomeNoEvento}` : null].filter(Boolean).join(' · '),
+      nomeArquivo: nomeArquivo ?? arquivoNoEvento ?? null,
+      ator: porAutor.has(ev.atorSupertokensUserId) ? { nome: porAutor.get(ev.atorSupertokensUserId)!.nome ?? 'Nome não informado', email: porAutor.get(ev.atorSupertokensUserId)!.email } : null,
+      justificativa: typeof ev.dadosPosteriores?.['justificativa'] === 'string' ? ev.dadosPosteriores['justificativa'].slice(0, 200) : null,
+    });
+    });
+  }
+
+  async reabrir(contratoId: string, etapaId: string, ator: UsuarioAutenticado, motivo?: string, somenteEncerrada = false): Promise<RespostaEtapa> {
+    return this.dataSource.transaction(async manager => {
+      const contrato = await this.bloquearContrato(manager, contratoId, true);
+      if (contrato.arquivadoEm || (contrato.status === 'CONCLUIDO' || contrato.status === 'ENCERRADO')) throw new ConflictException('Reabra o contrato antes de modificar etapas');
       const repo = manager.getRepository(Etapa);
       const etapa = await repo.findOneBy({ id: etapaId, contratoId });
       if (!etapa) throw new NotFoundException('Etapa não encontrada');
       if (etapa.arquivadoEm) throw new ConflictException('Reative a etapa arquivada primeiro');
       if (etapa.reabertoEm) throw new ConflictException('Etapa já foi reaberta');
-      const operacional = etapa.status === StatusEtapa.CONCLUIDA;
+      if (somenteEncerrada !== (etapa.status === StatusEtapa.ENCERRADA))
+        throw new ConflictException('Use a reabertura correspondente ao estado da etapa');
+      if (somenteEncerrada && ator.perfil !== PerfilUsuario.ADMINISTRADOR) {
+        const vinculo = await manager.getRepository(PermissaoContrato).findOneBy({ usuarioId: ator.id, contratoId });
+        if (!vinculo || !permissoesEfetivas(ator.perfil, vinculo.podeEditar, vinculo.permissoesDetalhadas).reabrirEtapasEncerradas)
+          throw new ForbiddenException('Sem permissão especial para reabrir etapa encerrada');
+      }
+      const operacional = etapa.status === StatusEtapa.CONCLUIDA || etapa.status === StatusEtapa.ENCERRADA;
       if (!operacional && !await documentacaoVerificada(manager, contratoId, etapaId))
         throw new ConflictException('Etapa ainda não tem comprovação concluída');
       const anterior = etapa.status;
-      if (operacional) etapa.status = StatusEtapa.EM_ANDAMENTO;
+      if (operacional) etapa.status = StatusEtapa.PLANEJADA;
       etapa.reabertoEm = new Date();
       await repo.save(etapa);
       await this.auditoria.registrarNaTransacao(manager, ator, {
         acao: AcaoAuditoria.ETAPA_REABERTA, entidadeTipo: 'ETAPA', entidadeId: etapaId,
         dadosAnteriores: { status: anterior, reabertoEm: null },
-        dadosPosteriores: { status: etapa.status, reabertoEm: etapa.reabertoEm },
+        dadosPosteriores: { status: etapa.status, reabertoEm: etapa.reabertoEm, ...(motivo ? { justificativa: motivo } : {}) },
       });
       return resposta(etapa, contrato);
     });
   }
 
-  async alterarArquivamento(contratoId: string, etapaId: string, arquivar: boolean, ator: UsuarioAutenticado): Promise<RespostaEtapa> {
+  async alterarArquivamento(contratoId: string, etapaId: string, arquivar: boolean, ator: UsuarioAutenticado, motivo?: string): Promise<RespostaEtapa> {
     return this.dataSource.transaction(async (manager) => {
       const contrato = await this.bloquearContrato(manager, contratoId);
       const repo = manager.getRepository(Etapa);
@@ -238,7 +393,7 @@ export class EtapasService {
       if (!etapa) throw new NotFoundException('Etapa não encontrada');
       if (Boolean(etapa.arquivadoEm) === arquivar) throw new ConflictException('Etapa já está neste estado de arquivamento');
       const anterior = { arquivadoEm: etapa.arquivadoEm, sequencia: etapa.sequencia };
-      if (arquivar && (etapa.status === StatusEtapa.CONCLUIDA ||
+      if (arquivar && (etapa.status === StatusEtapa.CONCLUIDA || etapa.status === StatusEtapa.ENCERRADA ||
         (etapa.reabertoEm === null && await documentacaoVerificada(manager, contratoId, etapaId))))
         throw new ConflictException('Etapa concluída: reabra antes de arquivar');
       etapa.arquivadoEm = arquivar ? new Date() : null;
@@ -259,15 +414,15 @@ export class EtapasService {
         await this.auditoria.registrarNaTransacao(manager, ator, {
           acao: AcaoAuditoria.ETAPA_REORDENADA,
           entidadeTipo: 'ETAPA', entidadeId: registro.id,
-          dadosAnteriores: { sequencia: sequenciaAntiga },
-          dadosPosteriores: { sequencia: sequenciaNova },
+          dadosAnteriores: { sequencia: sequenciaAntiga, nome: registro.nome },
+          dadosPosteriores: { sequencia: sequenciaNova, nome: registro.nome },
         });
       }
       await this.auditoria.registrarNaTransacao(manager, ator, {
         acao: arquivar ? AcaoAuditoria.ETAPA_ARQUIVADA : AcaoAuditoria.ETAPA_REATIVADA,
         entidadeTipo: 'ETAPA', entidadeId: etapaId,
-        dadosAnteriores: anterior,
-        dadosPosteriores: { arquivadoEm: etapa.arquivadoEm, sequencia: etapa.sequencia },
+        dadosAnteriores: { ...anterior, nome: etapa.nome },
+        dadosPosteriores: { arquivadoEm: etapa.arquivadoEm, sequencia: etapa.sequencia, nome: etapa.nome, ...(motivo && !arquivar ? { justificativa: motivo } : {}) },
       });
       return resposta(etapa, contrato);
     });
@@ -302,7 +457,7 @@ export class EtapasService {
             etapa.sequencia = novaSequencia;
             await this.auditoria.registrarNaTransacao(manager, ator, {
               acao: AcaoAuditoria.ETAPA_REORDENADA, entidadeTipo: 'ETAPA', entidadeId: id,
-              dadosAnteriores: { sequencia: antiga }, dadosPosteriores: { sequencia: novaSequencia },
+              dadosAnteriores: { sequencia: antiga, nome: etapa.nome }, dadosPosteriores: { sequencia: novaSequencia, nome: etapa.nome },
             });
           }
           resultado.push(etapa);

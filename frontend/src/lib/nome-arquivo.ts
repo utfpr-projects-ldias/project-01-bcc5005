@@ -1,11 +1,21 @@
-/** Conserta somente nomes UTF-8 que foram interpretados como Latin-1 em uploads legados.
- * Não altera hashes, bytes, extensão nem registros históricos da auditoria. */
+/** Exibe nomes de uploads legados com sequências UTF-8 interpretadas como Latin-1.
+ * Não altera os bytes do arquivo, extensão, metadados persistidos nem auditoria.
+ * Cada trecho suspeito é recuperado isoladamente, preservando Unicode já correto
+ * (como travessões e emojis) presente no restante do nome.
+ */
 export function nomeArquivoLegivel(valor: string): string {
-  if (!/[ÃÂ][\u0080-\u00BF©¡¢£¤¥¦§¨ª«¬®¯°±²³´µ¶·¸¹º»¼½¾¿]/u.test(valor)) return valor.normalize('NFC');
-  try {
-    const bytes = Uint8Array.from(valor, caractere => caractere.charCodeAt(0));
-    const recuperado = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-    if (!recuperado.includes('\uFFFD') && recuperado !== valor) return recuperado.normalize('NFC');
-  } catch { /* O nome pode ser Latin-1 legítimo; não convertê-lo cegamente. */ }
-  return valor.normalize('NFC');
+  const suspeito = /(?:[ÃÂ][\u0080-\u00BF])+/gu;
+  return valor.replace(suspeito, (trecho) => {
+    try {
+      // decodeURIComponent está presente em Node/Jest/jsdom e navegadores;
+      // TextDecoder pode estar ausente no ambiente de testes.
+      const bytes = Array.from(trecho, (caractere) =>
+        `%${caractere.charCodeAt(0).toString(16).padStart(2, '0')}`,
+      ).join('');
+      return decodeURIComponent(bytes);
+    } catch {
+      // Sequência realmente Latin-1 ou bytes incompletos: preservar o original.
+      return trecho;
+    }
+  }).normalize('NFC');
 }

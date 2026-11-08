@@ -10,7 +10,7 @@ import { ARMAZENAMENTO_ARQUIVOS, type ArmazenamentoArquivos } from '../armazenam
 import { ArmazenamentoIndisponivelError } from '../armazenamento/armazenamento-local.js';
 import { ArquivoInvalidoError, LimiteArmazenamentoError } from '../armazenamento/politica-arquivos.js';
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
-import { documentacaoVerificada } from './conclusao-documental.js';
+import { documentacaoVerificada, filhosEmRevisao, concluirEtapaAposFilhos } from './conclusao-documental.js';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import { EventoAuditoria } from '../auditoria/evento-auditoria.entity.js';
 import { PermissaoContrato } from '../autorizacao/permissao-contrato.entity.js';
@@ -20,6 +20,10 @@ import { Contrato } from '../contratos/contrato.entity.js';
 import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
 import { Usuario } from '../usuarios/usuario.entity.js';
 import { Entregavel } from './entregavel.entity.js';
+import { Etapa } from '../etapas/etapa.entity.js';
+import { StatusEtapa } from '../etapas/status-etapa.enum.js';
+import { StatusContrato } from '../contratos/status-contrato.enum.js';
+import { StatusExecucaoEntregavel } from './status-execucao-entregavel.enum.js';
 import { EvidenciaEsperada } from './evidencia-esperada.entity.js';
 import { ComprovanteEvidencia } from './comprovante-evidencia.entity.js';
 import type { EditarEvidenciaEsperadaDto, EnviarComprovanteDto } from './dto/evidencias-recebidas.dto.js';
@@ -55,13 +59,23 @@ export class EvidenciasRecebidasService {
     if (entregavel.arquivadoEm || esperada.arquivadoEm)
       throw new ConflictException('Item arquivado: reative-o antes de enviar, editar ou verificar comprovantes');
   }
+  /** Arquivar uma etapa bloqueia operações em todos os seus descendentes.
+   * Leitura histórica continua permitida; esta checagem é exclusiva de mutações. */
+  private async etapaAtiva(m: EntityManager, entregavel: Entregavel): Promise<void> {
+    if (!entregavel.etapaId) return; // fixtures legadas sem relacionamento
+    const etapa = await m.getRepository(Etapa).findOneBy({ id: entregavel.etapaId, contratoId: entregavel.contratoId });
+    if (!etapa) throw new NotFoundException('Etapa vinculada não encontrada');
+    if (etapa.arquivadoEm) throw new ConflictException('Etapa arquivada: reative a etapa antes de alterar evidências');
+    if ((etapa.status === 'CONCLUIDA' || etapa.status === 'ENCERRADA') && !etapa.reabertoEm)
+      throw new ConflictException('Etapa concluída: reabra a etapa antes de alterar evidências');
+  }
   private async contratoEditavel(m: EntityManager, contratoId: string) {
     const contrato = await m.getRepository(Contrato).createQueryBuilder('c')
       .setLock('pessimistic_write').where('c.id = :id', { id: contratoId }).getOne();
     if (!contrato) throw new NotFoundException('Contrato não encontrado');
     if (contrato.arquivadoEm) throw new ConflictException('Contrato arquivado: operação não permitida');
-    if (contrato.status === 'CONCLUIDO' ||
-      (contrato.reabertoEm === null && await documentacaoVerificada(m, contratoId)))
+    if ((contrato.status === 'CONCLUIDO' || contrato.status === 'ENCERRADO') ||
+      (contrato.reabertoEm === null && await documentacaoVerificada(m, contratoId) && !await filhosEmRevisao(m, contratoId)))
       throw new ConflictException('Contrato concluído: reabra antes de alterar evidências');
   }
   private async leituraDeArquivoPermitida(ator: UsuarioAutenticado, entregavel: Entregavel): Promise<boolean> {
@@ -89,6 +103,8 @@ export class EvidenciasRecebidasService {
     const versoes = await this.versoes(this.db.manager, esperadaId);
     const ultima = versoes[0];
     const contrato = await this.db.getRepository(Contrato).findOne({ where: { id: contratoId }, select: { arquivadoEm: true } });
+    const etapaPai = entregavel.etapaId
+      ? await this.db.getRepository(Etapa).findOneBy({ id: entregavel.etapaId, contratoId }) : null;
     // A trilha de auditoria já existe na base; filtrar também pelo ID do item
     // para não revelar operações de outras evidências do mesmo entregável.
     const eventos = await this.db.getRepository(EventoAuditoria).find({
@@ -139,6 +155,7 @@ export class EvidenciasRecebidasService {
         nomeAtual: typeof ev.dadosPosteriores?.['tipoEvidencia'] === 'string' &&
           ev.dadosAnteriores?.['tipoEvidencia'] !== ev.dadosPosteriores['tipoEvidencia']
           ? ev.dadosPosteriores['tipoEvidencia'] : null,
+        justificativa: typeof ev.dadosPosteriores?.['justificativa'] === 'string' ? ev.dadosPosteriores['justificativa'].slice(0, 200) : null,
         nomeArquivo: (() => {
           const dados = ev.dadosPosteriores ?? {};
           const anteriores = ev.dadosAnteriores ?? {};
@@ -150,7 +167,9 @@ export class EvidenciasRecebidasService {
           return typeof id === 'string' ? arquivoPorId.get(id) ?? null : null;
         })(),
       })),
-      podeVerificar: Boolean(!contrato?.arquivadoEm && !entregavel.arquivadoEm && !esperada.arquivadoEm && ultima && ultima.status === 'PENDENTE_VERIFICACAO' &&
+      podeVerificar: Boolean(!contrato?.arquivadoEm && !etapaPai?.arquivadoEm &&
+        etapaPai?.status !== StatusEtapa.CONCLUIDA && etapaPai?.status !== StatusEtapa.ENCERRADA && !entregavel.arquivadoEm &&
+        entregavel.statusExecucao !== StatusExecucaoEntregavel.CONCLUIDO && !esperada.arquivadoEm && ultima && ultima.status === 'PENDENTE_VERIFICACAO' &&
         await this.verificadorAutorizado(this.db.manager, ator, entregavel)),
     };
   }
@@ -170,6 +189,7 @@ export class EvidenciasRecebidasService {
       const e = await m.getRepository(Entregavel).findOneBy({ id: entregavelId, contratoId });
       if (!e) throw new NotFoundException('Entregável não encontrado neste contrato');
       if (e.arquivadoEm) throw new ConflictException('Entregável arquivado');
+      await this.etapaAtiva(m, e);
       if (e.reabertoEm === null && await documentacaoVerificada(m, contratoId, e.etapaId, entregavelId))
         throw new ConflictException('Entregável verificado: reabra antes de cadastrar outra evidência');
       if (dto.obrigatoria === false && !await this.alterarObrigatoriedadePermitido(m, contratoId, ator))
@@ -197,6 +217,7 @@ export class EvidenciasRecebidasService {
       await this.contratoEditavel(m, contratoId);
       const { entregavel, esperada } = await this.contexto(m, contratoId, entregavelId, esperadaId);
       this.validarPlanejamentoAtivo(entregavel, esperada);
+      await this.etapaAtiva(m, entregavel);
       // Um documento já verificado não pode ter seus critérios alterados sem reabertura explícita.
       const ultima = await m.getRepository(ComprovanteEvidencia).findOne({
         where: { evidenciaEsperadaId: esperadaId }, order: { criadoEm: 'DESC', id: 'DESC' },
@@ -230,6 +251,7 @@ export class EvidenciasRecebidasService {
     // Verificar escopo antes de criar blob; repetir sob lock na transação.
     const antes = await this.contexto(this.db.manager, contratoId, entregavelId, esperadaId);
     this.validarPlanejamentoAtivo(antes.entregavel, antes.esperada);
+    await this.etapaAtiva(this.db.manager, antes.entregavel);
     const nomeRecebido = normalizarNomeArquivo(arquivo.originalname);
     const validarTipo = (tipo: string) => {
       const categoria = tipo.trim().toLocaleLowerCase('pt-BR');
@@ -256,6 +278,7 @@ export class EvidenciasRecebidasService {
         await this.contratoEditavel(m, contratoId);
         const atual = await this.contexto(m, contratoId, entregavelId, esperadaId);
         this.validarPlanejamentoAtivo(atual.entregavel, atual.esperada);
+        await this.etapaAtiva(m, atual.entregavel);
         validarTipo(atual.esperada.tipoEvidencia);
         const repo = m.getRepository(ComprovanteEvidencia);
         // Depois da verificação, o comprovante fica encerrado. Nunca aceitar
@@ -292,12 +315,52 @@ export class EvidenciasRecebidasService {
       throw new ServiceUnavailableException('Comprovante registrado, confirme o armazenamento'); }
     return publico(salvo);
   }
+  /** A confirmação de todas as provas é um gatilho de conclusão solicitado pelo cliente.
+   * Mantém explicitamente execução e comprovação como dados distintos, mas registra
+   * uma transição operacional auditável (nunca apenas uma cor/etiqueta na interface).
+   * Chamado dentro da mesma transação e com a linha do contrato bloqueada. */
+  private async concluirHierarquiaSeComprovada(m: EntityManager, ator: UsuarioAutenticado,
+    contratoId: string, entregavel: Entregavel): Promise<string[]> {
+    const conclusoes: string[] = [];
+    const repoEntregavel = m.getRepository(Entregavel);
+    // Uma NOVA verificação completa encerra também uma revisão do entregável.
+    // Reabrir sem verificar nada não dispara esta função: exige Concluir explícito.
+    if (!entregavel.arquivadoEm &&
+        (entregavel.statusExecucao !== StatusExecucaoEntregavel.CONCLUIDO || entregavel.reabertoEm) &&
+        await documentacaoVerificada(m, contratoId, entregavel.etapaId, entregavel.id)) {
+      const anterior = entregavel.statusExecucao;
+      const reabertoAntes = entregavel.reabertoEm ?? null;
+      entregavel.statusExecucao = StatusExecucaoEntregavel.CONCLUIDO;
+      entregavel.reabertoEm = null;
+      await repoEntregavel.save(entregavel);
+      await this.auditoria.registrarNaTransacao(m, ator, {
+        acao: AcaoAuditoria.ENTREGAVEL_STATUS_ALTERADO,
+        entidadeTipo: 'ENTREGAVEL', entidadeId: entregavel.id,
+        dadosAnteriores: { statusExecucao: anterior, reabertoEm: reabertoAntes },
+        dadosPosteriores: { statusExecucao: entregavel.statusExecucao, reabertoEm: null, motivo: 'COMPROVACAO_COMPLETA' },
+      });
+      conclusoes.push('entregável');
+    }
+    // A etapa pode ter sido explicitamente reaberta. Só se fecha quando
+    // TODOS os entregáveis estiverem novamente concluídos e sem revisão.
+    if (await concluirEtapaAposFilhos(m, contratoId, entregavel.etapaId, async (antes, depois) => {
+      await this.auditoria.registrarNaTransacao(m, ator, {
+        acao: AcaoAuditoria.ETAPA_STATUS_ALTERADO, entidadeTipo: 'ETAPA', entidadeId: entregavel.etapaId,
+        dadosAnteriores: antes,
+        dadosPosteriores: { ...depois, motivo: 'COMPROVACAO_COMPLETA' },
+      });
+    })) conclusoes.push('etapa');
+    // Um contrato documentalmente completo aguarda conclusão operacional explícita.
+    // A ação PATCH /contratos/:id/concluir verifica a permissão e registra auditoria.
+    return conclusoes;
+  }
   async verificar(contratoId: string, entregavelId: string, esperadaId: string, comprovanteId: string,
     ator: UsuarioAutenticado) {
     return this.db.transaction(async m => {
       await this.contratoEditavel(m, contratoId);
       const { entregavel, esperada } = await this.contexto(m, contratoId, entregavelId, esperadaId);
       this.validarPlanejamentoAtivo(entregavel, esperada);
+      await this.etapaAtiva(m, entregavel);
       const repo = m.getRepository(ComprovanteEvidencia);
       const ultima = await repo.createQueryBuilder('c').setLock('pessimistic_write').where('c.evidenciaEsperadaId = :esperadaId', { esperadaId })
         .orderBy('c.criadoEm', 'DESC').addOrderBy('c.id', 'DESC').getOne();
@@ -317,15 +380,17 @@ export class EvidenciasRecebidasService {
         dadosPosteriores: { comprovanteId, evidenciaEsperadaId: esperadaId, status: resultado.status,
           verificadoPor: ator.id, verificadoEm: resultado.verificadoEm },
       });
-      return publico(resultado);
+      const conclusoes = await this.concluirHierarquiaSeComprovada(m, ator, contratoId, entregavel);
+      return { ...publico(resultado), conclusoes };
     });
   }
   /** Retorna o comprovante mais recente à análise, mantendo o arquivo e a auditoria. */
-  async reabrir(contratoId: string, entregavelId: string, esperadaId: string, ator: UsuarioAutenticado) {
+  async reabrir(contratoId: string, entregavelId: string, esperadaId: string, ator: UsuarioAutenticado, motivo?: string) {
     return this.db.transaction(async m => {
       await this.contratoEditavel(m, contratoId);
       const { entregavel, esperada } = await this.contexto(m, contratoId, entregavelId, esperadaId);
       this.validarPlanejamentoAtivo(entregavel, esperada);
+      await this.etapaAtiva(m, entregavel);
       if (!entregavel.reabertoEm && await documentacaoVerificada(m, contratoId, entregavel.etapaId, entregavelId))
         throw new ConflictException('Reabra o entregável antes de reabrir suas evidências');
       const repo = m.getRepository(ComprovanteEvidencia);
@@ -344,7 +409,7 @@ export class EvidenciasRecebidasService {
         acao: AcaoAuditoria.ENTREGAVEL_COMPROVANTE_REABERTO,
         entidadeTipo: 'ENTREGAVEL', entidadeId: entregavelId,
         dadosAnteriores: { comprovanteId: ultima.id, evidenciaEsperadaId: esperadaId, status: 'VERIFICADA', verificadoPor, verificadoEm },
-        dadosPosteriores: { comprovanteId: ultima.id, evidenciaEsperadaId: esperadaId, status: ultima.status },
+        dadosPosteriores: { comprovanteId: ultima.id, evidenciaEsperadaId: esperadaId, status: ultima.status, ...(motivo ? { justificativa: motivo } : {}) },
       });
       return publico(ultima);
     });

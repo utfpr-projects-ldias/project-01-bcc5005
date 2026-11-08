@@ -51,9 +51,17 @@ describe('políticas por perfil e escopo', () => {
     expect(busca).toHaveBeenCalledWith({ usuarioId: 'usuario-1', contratoId: CONTRATO_ID });
   });
 
-  it('colaborador nunca edita contrato, mesmo com vínculo marcado como editável', async () => {
+  it('colaborador não herda edição do vínculo legado, mesmo com podeEditar=true', async () => {
+    busca.mockResolvedValue({ podeEditar: true, permissoesDetalhadas: null } as PermissaoContrato);
     expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR), { acao: 'contratos:editar' }, CONTRATO_ID)).toBe(false);
-    expect(busca).not.toHaveBeenCalled();
+    expect(busca).toHaveBeenCalledWith({ usuarioId: 'usuario-1', contratoId: CONTRATO_ID });
+  });
+
+  it('colaborador só edita se receber permissão granular explícita para este contrato', async () => {
+    busca.mockResolvedValueOnce({ podeEditar: false, permissoesDetalhadas: { editarContrato: true } } as PermissaoContrato)
+      .mockResolvedValueOnce({ podeEditar: true, permissoesDetalhadas: { editarContrato: false } } as PermissaoContrato);
+    expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR), { acao: 'contratos:editar' }, CONTRATO_ID)).toBe(true);
+    expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR), { acao: 'contratos:editar' }, CONTRATO_ID)).toBe(false);
   });
 
   it('gestor edita somente contrato com vínculo explicitamente editável', async () => {

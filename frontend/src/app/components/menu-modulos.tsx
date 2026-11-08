@@ -28,17 +28,17 @@ function IconeMenu({ tipo }: { tipo: string }) {
       <><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></>}
   </svg>;
 }
-function Itens({ compactos = false }: { compactos?: boolean }) {
+function Itens({ compactos = false, soIcones = false }: { compactos?: boolean; soIcones?: boolean }) {
   const itens = useItens();
   const path = usePathname();
   const ativo = (href: string) => path === href ||
     ((href === '/contratos' || href === '/admin/usuarios') && path.startsWith(`${href}/`));
   return <>{itens.map(item => {
     const selecionado = item.href ? ativo(item.href) : false;
-    const classes = `${compactos ? 'gap-2 px-3 py-2' : 'gap-3 px-3 py-3'} flex min-h-10 items-center rounded-xl transition-all duration-200 motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-brand-green ${selecionado
+    const classes = `${soIcones ? 'h-11 w-11 shrink-0 justify-center p-2' : compactos ? 'gap-2 px-3 py-2' : 'gap-3 px-3 py-3'} flex min-h-10 items-center rounded-xl transition-all duration-200 motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-brand-green ${selecionado
       ? 'bg-brand-green/20 text-brand-neon shadow-[inset_3px_0_0_var(--accent-green),0_0_14px_rgba(95,211,74,.14)]'
       : 'text-foreground/80 hover:bg-brand-green/10 hover:text-brand-neon'}`;
-    const conteudo = <><IconeMenu tipo={item.icone}/><span className={compactos ? 'text-xs font-medium' : 'max-w-0 overflow-hidden whitespace-nowrap text-sm font-semibold opacity-0 transition-all duration-200 group-hover/nav:max-w-[135px] group-hover/nav:opacity-100 motion-reduce:transition-none'}>{item.nome}{item.aviso && compactos ? ` · ${item.aviso}` : ''}</span></>;
+    const conteudo = <><IconeMenu tipo={item.icone}/><span className={soIcones ? 'sr-only' : compactos ? 'text-xs font-medium' : 'max-w-0 overflow-hidden whitespace-nowrap text-sm font-semibold opacity-0 transition-all duration-200 group-hover/nav:max-w-[135px] group-hover/nav:opacity-100 motion-reduce:transition-none'}>{item.nome}{item.aviso && compactos ? ` · ${item.aviso}` : ''}</span></>;
     return item.href ? <Link key={item.nome} href={item.href} title={item.nome} aria-label={item.nome} aria-current={selecionado ? 'page' : undefined} className={classes}>{conteudo}</Link>
       : <span key={item.nome} title={`${item.nome} · ${item.aviso}`} aria-label={`${item.nome} · ${item.aviso}`} className={`${classes} cursor-not-allowed opacity-50`}>{conteudo}</span>;
   })}</>;
@@ -53,5 +53,5 @@ export function MenuLateral() {
   </aside>;
 }
 export function MenuMobile() {
-  return <nav aria-label="Navegação móvel" className="flex flex-wrap gap-1 border-b border-brand-green/20 p-2 md:hidden"><Itens compactos /></nav>;
+  return <nav aria-label="Navegação móvel" className="flex w-full flex-nowrap items-center justify-between gap-1 overflow-x-auto border-b border-brand-green/20 px-2 py-2 md:hidden"><Itens compactos soIcones /></nav>;
 }

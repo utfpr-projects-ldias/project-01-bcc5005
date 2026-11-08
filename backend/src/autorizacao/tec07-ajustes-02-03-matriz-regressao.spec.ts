@@ -59,10 +59,15 @@ describe('TEC07-AJUSTES-02-03 — matriz completa de regressão RF-39/RF-40', ()
     buscarVinculo.mockResolvedValue({ podeEditar: false } as PermissaoContrato);
     for (const [acao, operacao] of casos) {
       const politicaAlvo = { acao, escopoOperacional: escopoPara(operacao) };
-      expect(await politica.permitido(usuario(PerfilUsuario.GESTOR), politicaAlvo, CONTRATO))
-        .toBe(operacao.classe !== 'planejamento');
-      expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR), politicaAlvo, CONTRATO))
-        .toBe(operacao.classe !== 'planejamento');
+      // Operações de leitura independem do flag legado. Para escrita, os padrões
+      // granulares (incluindo exceções de envio/verificação) prevalecem sobre a classe.
+      const chave = ACAO_PERMISSAO[acao];
+      for (const perfil of [PerfilUsuario.GESTOR, PerfilUsuario.COLABORADOR]) {
+        const esperado = chave
+          ? permissoesEfetivas(perfil, false, null)[chave]
+          : operacao.classe !== 'planejamento';
+        expect(await politica.permitido(usuario(perfil), politicaAlvo, CONTRATO)).toBe(esperado);
+      }
     }
     buscarVinculo.mockResolvedValue({ podeEditar: true } as PermissaoContrato);
     for (const [acao, operacao] of casos) {
@@ -75,9 +80,23 @@ describe('TEC07-AJUSTES-02-03 — matriz completa de regressão RF-39/RF-40', ()
         : true;
       expect(await politica.permitido(usuario(PerfilUsuario.GESTOR), politicaAlvo, CONTRATO))
         .toBe(gestorEsperado);
+      const colaboradorEsperado = chave
+        ? permissoesEfetivas(PerfilUsuario.COLABORADOR, true, null)[chave]
+        : operacao.classe !== 'planejamento';
       expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR), politicaAlvo, CONTRATO))
-        .toBe(operacao.classe !== 'planejamento');
+        .toBe(colaboradorEsperado);
     }
+  });
+
+  it('permissão explícita autoriza só a ação declarada, sem liberar arquivamento ou exclusão por herança', async () => {
+    buscarVinculo.mockResolvedValue({ podeEditar: false,
+      permissoesDetalhadas: { criarEtapas: true, excluirEtapasArquivadas: false } } as PermissaoContrato);
+    const criar = POLITICAS_OPERACIONAIS['etapas:criar'];
+    const excluir = POLITICAS_OPERACIONAIS['etapas:excluir'];
+    expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR),
+      { acao: 'etapas:criar', escopoOperacional: escopoPara(criar) }, CONTRATO)).toBe(true);
+    expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR),
+      { acao: 'etapas:excluir', escopoOperacional: escopoPara(excluir) }, CONTRATO)).toBe(false);
   });
 
   it('Gestor com podeEditar legado não recebe exclusão definitiva por padrão', async () => {

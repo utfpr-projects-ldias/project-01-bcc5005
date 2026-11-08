@@ -34,7 +34,7 @@ export class PoliticaAcessoService {
     const encontrado = await this.contratos.findOne({
       where: { id: contratoId }, select: { id: true, arquivadoEm: true, status: true },
     });
-    return Boolean(encontrado && !encontrado.arquivadoEm && encontrado.status !== 'CONCLUIDO');
+    return Boolean(encontrado && !encontrado.arquivadoEm && encontrado.status !== 'CONCLUIDO' && encontrado.status !== 'ENCERRADO' && encontrado.status !== 'CANCELADO' && encontrado.status !== 'SUSPENSO');
   }
 
   async permitido(usuario: UsuarioAutenticado, politica: Politica, contratoId?: string): Promise<boolean> {
@@ -72,6 +72,27 @@ export class PoliticaAcessoService {
         return admin && uuidValido(contratoId);
       case 'contratos:listar':
         return true; // listagem permanece filtrada no SQL do módulo Contratos
+      case 'contratos:concluir':
+      case 'contratos:encerrar': {
+        if (!uuidValido(contratoId)) return false;
+        if (admin) return true;
+        const vinculo = await this.vinculos.findOneBy({ usuarioId: usuario.id, contratoId });
+        return Boolean(vinculo && permissoesEfetivas(usuario.perfil, vinculo.podeEditar,
+          vinculo.permissoesDetalhadas)[politica.acao === 'contratos:encerrar' ? 'encerrarContrato' : 'concluirContrato']);
+      }
+      case 'contratos:cancelar':
+      case 'contratos:reverter-cancelamento':
+      case 'contratos:suspender':
+      case 'contratos:retomar': {
+        if (!uuidValido(contratoId)) return false;
+        if (admin) return true;
+        const vinculo = await this.vinculos.findOneBy({ usuarioId: usuario.id, contratoId });
+        if (!vinculo) return false;
+        const chave = politica.acao === 'contratos:cancelar' ? 'cancelarContrato'
+          : politica.acao === 'contratos:reverter-cancelamento' ? 'reverterCancelamentoContrato'
+          : politica.acao === 'contratos:suspender' ? 'suspenderContrato' : 'retomarContrato';
+        return permissoesEfetivas(usuario.perfil, vinculo.podeEditar, vinculo.permissoesDetalhadas)[chave];
+      }
       case 'contratos:reabrir': {
         if (!uuidValido(contratoId)) return false;
         if (admin) return true;
@@ -83,10 +104,9 @@ export class PoliticaAcessoService {
         if (!uuidValido(contratoId)) return false;
         if (politica.acao === 'contratos:editar' && !await this.disponivelParaOperacao(contratoId)) return false;
         if (admin) return true;
-        if (politica.acao === 'contratos:editar' && usuario.perfil !== PerfilUsuario.GESTOR) return false;
         const vinculo = await this.vinculos.findOneBy({ usuarioId: usuario.id, contratoId });
         if (!vinculo) return politica.acao === 'contratos:visualizar' && await this.responsavelPodeLer(contratoId, usuario.id);
-        return politica.acao === 'contratos:visualizar' || (usuario.perfil === PerfilUsuario.GESTOR &&
+        return politica.acao === 'contratos:visualizar' || (
           permissoesEfetivas(usuario.perfil, vinculo.podeEditar, vinculo.permissoesDetalhadas).editarContrato);
       }
       default:

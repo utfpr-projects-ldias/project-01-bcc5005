@@ -129,12 +129,27 @@ def testar(contas, visivel):
             rel['provas'].append('ADMIN autoverificou mediante permissão; histórico auditável foi exibido')
             # Botão Voltar do navegador/mouse deve fechar somente a camada da evidência.
             rel['etapaAtual']='Retorno do navegador preserva o modal-pai'
+            antes = pagina.evaluate('''() => ({
+              evidencia: Boolean(history.state?.__modalEvidencia),
+              editor: Boolean(history.state?.__edicaoEvidencia)
+            })''')
             pagina.evaluate('window.history.back()')
-            filha.wait_for(state='hidden', timeout=15000)
+            try:
+                filha.wait_for(state='hidden', timeout=15000)
+            except Exception as falha:
+                depois = pagina.evaluate('''() => ({
+                  evidencia: Boolean(history.state?.__modalEvidencia),
+                  editor: Boolean(history.state?.__edicaoEvidencia),
+                  camadas: document.querySelectorAll('[data-tec08-modal]').length
+                })''')
+                raise AssertionError(f'Voltar não fechou a evidência: histórico {antes} -> {depois}') from falha
             base.exigir(pai.is_visible(), 'Voltar do navegador fechou o entregável em vez da evidência')
             rel['provas'].append('Voltar do navegador/mouse fecha somente a evidência')
-            # O botão X deve oferecer o mesmo retorno sem desmontar o entregável.
-            pai.get_by_role('button', name='Ver detalhes da evidência esperada Relatório de QA').click()
+            # Evidência verificada migra para a aba Concluídas, sem duplicar cartão na lista ativa.
+            pai.get_by_role('tablist', name='Consultar evidências').first.get_by_role('tab', name='Evidências concluídas').click()
+            botao_concluido = pai.get_by_role('button', name='Ver detalhes da evidência esperada Relatório de QA')
+            botao_concluido.wait_for(state='visible', timeout=15000)
+            botao_concluido.click()
             filha = pagina.get_by_role('dialog', name='Relatório de QA', exact=True)
             filha.wait_for(state='visible', timeout=15000)
             filha.get_by_role('button', name='Fechar evidência').click()

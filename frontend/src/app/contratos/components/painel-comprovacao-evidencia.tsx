@@ -1,11 +1,12 @@
 'use client';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
+import { useRepositorioConsultasOpcional } from '@/app/components/provedor-consultas';
 import { ModalEtapa } from './modal-etapa';
 import { ConfirmacaoSimples } from '@/app/components/confirmacao-simples';
 import { IconeEvidencia } from './icone-evidencia';
 import { nomeArquivoLegivel } from '@/lib/nome-arquivo';
-import { toastSucesso, toastErro } from '@/app/components/toast-notificacoes';
+import { toastSucesso, toastErro, toastConclusao } from '@/app/components/toast-notificacoes';
 import {
   aceitarArquivoEvidencia, arquivoCompativelEvidencia,
   baixarComprovante, CLASSE_STATUS, consultarEvidencia, editarEvidencia,
@@ -23,6 +24,7 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
   registrarVoltaEdicao?: (voltar: (() => void) | null) => void;
   cancelamentoNoCabecalho?: boolean;
 }) {
+  const cache = useRepositorioConsultasOpcional();
   const [dados, setDados] = useState<DetalheEvidencia | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
@@ -95,7 +97,17 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
   }, [contratoId, entregavelId, esperadaId]);
   async function executar(acao: () => Promise<unknown>, mensagem: string) {
     setOcupado(true); setErro('');
-    try { await acao(); await recarregar(); onComprovanteAlterado?.(); toastSucesso(mensagem); }
+    try {
+      const resposta = await acao() as { conclusoes?: string[] } | undefined;
+      await recarregar(); onComprovanteAlterado?.();
+      if (resposta?.conclusoes?.length) {
+        cache?.invalidar(['contratos']);
+        cache?.invalidar(['etapas', 'contrato', contratoId]);
+        cache?.invalidar(['entregaveis', 'contrato', contratoId]);
+        const nomes = resposta.conclusoes.map(nome => nome === 'etapa' ? 'etapa' : nome);
+        toastConclusao(`Evidência verificada. Também concluídos: ${nomes.join(', ')}.`);
+      } else toastConclusao(mensagem);
+    }
     catch (e) { setErro(e instanceof Error ? e.message : 'Não foi possível concluir a operação.'); }
     finally { setOcupado(false); }
   }
@@ -345,6 +357,7 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
           <p className="font-semibold">{ev.descricao}</p>
           {ev.nomeAnterior && ev.nomeAtual && <p className="break-words text-foreground/80">Nome anterior: {ev.nomeAnterior} · Novo nome: {ev.nomeAtual}</p>}
           {ev.nomeArquivo && <p className="break-all text-foreground/85">Arquivo: {ev.nomeArquivo}</p>}
+          {ev.justificativa && <p className="break-words text-foreground/80">Justificativa: {ev.justificativa}</p>}
           <p className="text-foreground/65">{new Date(ev.ocorridoEm).toLocaleString('pt-BR')}
             {ev.ator ? ` · ${ev.ator.nome} (${ev.ator.email})` : ' · usuário não identificado'}</p>
         </li>)}

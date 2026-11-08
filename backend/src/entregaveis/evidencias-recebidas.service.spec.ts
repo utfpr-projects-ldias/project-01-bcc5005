@@ -4,6 +4,8 @@ import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
 import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
 import { Contrato } from '../contratos/contrato.entity.js';
 import { Entregavel } from './entregavel.entity.js';
+import { StatusExecucaoEntregavel } from './status-execucao-entregavel.enum.js';
+import { Etapa } from '../etapas/etapa.entity.js';
 import { EvidenciaEsperada } from './evidencia-esperada.entity.js';
 import { ComprovanteEvidencia } from './comprovante-evidencia.entity.js';
 import { EventoAuditoria } from '../auditoria/evento-auditoria.entity.js';
@@ -35,12 +37,16 @@ function cenario() {
   const queryComprovante = { setLock: jest.fn().mockReturnThis(), where: jest.fn().mockReturnThis(),
     orderBy: jest.fn().mockReturnThis(), addOrderBy: jest.fn().mockReturnThis(),
     getOne: jest.fn(async () => status as ComprovanteEvidencia | null) };
+  const contrato = { id: contratoId, status: 'PLANEJAMENTO', arquivadoEm: null, reabertoEm: null as Date | null };
   const contratos = { createQueryBuilder: jest.fn(() => queryContrato),
-    findOne: jest.fn(async () => ({ id: contratoId, arquivadoEm: null })) };
-  const entregaveis = { findOneBy: jest.fn(async () => entregavel) };
-  const esperadas = { findOneBy: jest.fn(async () => esperado), count: jest.fn(async () => 0),
+    findOne: jest.fn(async () => contrato), findOneBy: jest.fn(async () => contrato), save: jest.fn(async (d: unknown) => d) };
+  const etapas = { findOneBy: jest.fn(async () => ({ id: 'etapa-qa', contratoId, status: 'PLANEJADA', arquivadoEm: null, reabertoEm: null as Date | null })),
+    save: jest.fn(async (d: unknown) => d) };
+  const entregaveis = { findOneBy: jest.fn(async () => entregavel), save: jest.fn(async (d: unknown) => d) };
+  const esperadas = { findOneBy: jest.fn(async () => esperado), update: jest.fn(async () => ({ affected: 1 })), count: jest.fn(async () => 0),
     create: jest.fn((d: unknown) => d), save: jest.fn(async (d: unknown) => d) };
   const comprovantes = { createQueryBuilder: jest.fn(() => queryComprovante),
+    findOne: jest.fn(async () => null as ComprovanteEvidencia | null),
     save: jest.fn(async (d: unknown) => d), find: jest.fn(async () => [status]) };
   const vinculos = { findOneBy: jest.fn(async () => ({ contratoId, usuarioId: gestorId, podeEditar: true })) };
   const eventos = { find: jest.fn(async () => [
@@ -53,10 +59,12 @@ function cenario() {
   ]) };
   const usuarios = { find: jest.fn(async () => [{ id: autorId, supertokensUserId: 'st-admin',
     nome: 'Administrador de QA', email: 'admin@example.org' }]) };
-  const m = { getRepository: jest.fn((e: unknown) => {
+  const m = { query: jest.fn(async () => [{ etapas: 0, entregaveis: 0, evidencias: 0, verificadas: 0,
+    etapas_sem_entregavel: 0, entregaveis_sem_evidencia: 0 }]), getRepository: jest.fn((e: unknown) => {
     if (e === EventoAuditoria) return eventos;
     if (e === Usuario) return usuarios;
     if (e === Contrato) return contratos;
+    if (e === Etapa) return etapas;
     if (e === Entregavel) return entregaveis;
     if (e === EvidenciaEsperada) return esperadas;
     if (e === ComprovanteEvidencia) return comprovantes;
@@ -67,7 +75,8 @@ function cenario() {
   const auditoria = { registrarNaTransacao: jest.fn(async () => undefined) };
   const storage = { salvar: jest.fn(), ler: jest.fn(), confirmarPersistencia: jest.fn(), removerOrfao: jest.fn() };
   const service = new EvidenciasRecebidasService(comprovantes as never, db as never, auditoria as never, storage as never);
-  return { service, db, auditoria, storage, status, m, queryComprovante, queryContrato, esperadas, comprovantes, vinculos, entregavel, eventos, usuarios };
+  return { service, db, auditoria, storage, status, m, queryComprovante, queryContrato,
+    esperadas, comprovantes, vinculos, entregavel, entregaveis, etapas, contratos, contrato, eventos, usuarios };
 }
 
 test('ADMIN autorizado pode verificar seu próprio envio e registra autoria da verificação', async () => {
@@ -77,6 +86,33 @@ test('ADMIN autorizado pode verificar seu próprio envio e registra autoria da v
   expect(retorno.verificadoPor).toBe(autorId);
   expect(auditoria.registrarNaTransacao).toHaveBeenCalledWith(expect.anything(), autor,
     expect.objectContaining({ acao: AcaoAuditoria.ENTREGAVEL_COMPROVANTE_VERIFICADO }));
+});
+
+test('verificar última evidência conclui entregável e etapa; contrato exige aceite explícito', async () => {
+  const a = cenario();
+  a.entregavel.etapaId = 'etapa-qa';
+  a.m.query.mockResolvedValue([{
+    etapas: 1, entregaveis: 1, evidencias: 1, verificadas: 1,
+    etapas_sem_entregavel: 0, entregaveis_sem_evidencia: 0,
+  }]);
+  const resultado = await a.service.verificar(contratoId, entregavelId, esperadaId, comprovanteId, autor);
+  expect(resultado.conclusoes).toEqual(['entregável', 'etapa']);
+  expect(a.entregaveis.save).toHaveBeenCalledWith(expect.objectContaining({ statusExecucao: 'CONCLUIDO' }));
+  expect(a.etapas.save).toHaveBeenCalledWith(expect.objectContaining({ status: 'CONCLUIDA' }));
+  expect(a.contratos.save).not.toHaveBeenCalled();
+  expect(a.auditoria.registrarNaTransacao).not.toHaveBeenCalledWith(a.m, autor,
+    expect.objectContaining({ acao: AcaoAuditoria.CONTRATO_STATUS_ALTERADO }));
+});
+
+test('etapa arquivada impede verificar e reabrir evidência mesmo com autorização', async () => {
+  const a = cenario();
+  a.entregavel.etapaId = 'etapa-qa';
+  a.etapas.findOneBy.mockResolvedValue({ id: 'etapa-qa', contratoId, arquivadoEm: new Date(), status: 'PLANEJADA' });
+  await expect(a.service.verificar(contratoId, entregavelId, esperadaId, comprovanteId, autor))
+    .rejects.toBeInstanceOf(ConflictException);
+  expect(a.auditoria.registrarNaTransacao).not.toHaveBeenCalled();
+  await expect(a.service.reabrir(contratoId, entregavelId, esperadaId, autor))
+    .rejects.toBeInstanceOf(ConflictException);
 });
 
 test('gestor com vínculo de edição verifica em transação e registra auditoria', async () => {
@@ -89,6 +125,24 @@ test('gestor com vínculo de edição verifica em transação e registra auditor
   expect(a.auditoria.registrarNaTransacao).toHaveBeenCalledWith(a.m, gestor,
     expect.objectContaining({ acao: AcaoAuditoria.ENTREGAVEL_COMPROVANTE_VERIFICADO,
       entidadeTipo: 'ENTREGAVEL', entidadeId: entregavelId }));
+});
+
+test('nova verificação encerra entregável e etapa; contrato reaberto depende de conclusão manual', async () => {
+  const a = cenario();
+  a.entregavel.etapaId = 'etapa-qa';
+  a.entregavel.reabertoEm = new Date('2026-11-05T10:00:00Z');
+  a.entregavel.statusExecucao = StatusExecucaoEntregavel.EM_ANDAMENTO;
+  const etapa = { id: 'etapa-qa', contratoId, status: 'EM_ANDAMENTO', reabertoEm: new Date('2026-11-05T10:00:00Z'), arquivadoEm: null };
+  a.etapas.findOneBy.mockImplementation(async () => etapa);
+  a.contrato.reabertoEm = new Date('2026-11-05T10:00:00Z');
+  a.m.query.mockResolvedValue([{ etapas: 1, entregaveis: 1, evidencias: 1, verificadas: 1,
+    etapas_sem_entregavel: 0, entregaveis_sem_evidencia: 0 }]);
+  const resultado = await a.service.verificar(contratoId, entregavelId, esperadaId, comprovanteId, autor);
+  expect(resultado.conclusoes).toEqual(['entregável', 'etapa']);
+  expect(a.entregavel.reabertoEm).toBeNull();
+  expect(etapa.reabertoEm).toBeNull();
+  expect(a.contrato.reabertoEm).toEqual(new Date('2026-11-05T10:00:00Z'));
+  expect(a.contratos.save).not.toHaveBeenCalled();
 });
 
 test('vínculo somente leitura não concede verificação ao gestor', async () => {

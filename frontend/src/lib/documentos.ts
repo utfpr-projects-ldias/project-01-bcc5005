@@ -9,6 +9,7 @@ export const CATEGORIAS_DOCUMENTO = {
 } as const;
 export type CategoriaDocumento = keyof typeof CATEGORIAS_DOCUMENTO;
 export type FiltroCategoriaDocumento = CategoriaDocumento | '';
+export type SituacaoDocumentoFiltro = 'ATIVOS' | 'PENDENTE_VERIFICACAO' | 'EM_REVISAO' | 'VERIFICADO' | 'ARQUIVADO';
 
 export type DocumentoContratual = {
   id: string;
@@ -22,6 +23,10 @@ export type DocumentoContratual = {
   autorNome: string | null;
   criadoEm: string;
   arquivadoEm?: string | null;
+  verificadoEm?: string | null;
+  verificadoPor?: string | null;
+  reabertoEm?: string | null;
+  situacao?: 'ARQUIVADO' | 'EM_REVISAO' | 'PENDENTE_VERIFICACAO' | 'VERIFICADO';
 };
 export type PaginaDocumentos = {
   itens: DocumentoContratual[];
@@ -52,7 +57,7 @@ const MENSAGENS: Record<number, string> = {
   401: 'Sua sessão expirou. Entre novamente para continuar.',
   403: 'Você não tem permissão para esta operação neste contrato.',
   404: 'Documento ou contrato não encontrado, ou acesso não autorizado.',
-  409: 'O contrato ou documento mudou ou o limite de 20 arquivos (incluindo arquivados) foi atingido. Atualize e tente novamente.',
+  409: 'Operação incompatível com o estado atual. Confira a verificação, a revisão e os limites de documentos.',
   413: 'Arquivo acima do limite permitido ou capacidade de armazenamento excedida.',
   503: 'Arquivo ou serviço temporariamente indisponível. Tente novamente mais tarde.',
 };
@@ -75,10 +80,11 @@ async function requisitar(caminho: string, init?: RequestInit): Promise<Response
   return resposta;
 }
 
-export async function listarDocumentos(contratoId: string, categoria: FiltroCategoriaDocumento, pagina: number, signal?: AbortSignal, arquivados = false): Promise<PaginaDocumentos> {
+export async function listarDocumentos(contratoId: string, categoria: FiltroCategoriaDocumento, pagina: number, signal?: AbortSignal, arquivados = false, situacao?: SituacaoDocumentoFiltro): Promise<PaginaDocumentos> {
   const parametros = new URLSearchParams({ pagina: String(pagina) });
   if (categoria) parametros.set('categoria', categoria);
   if (arquivados) parametros.set('arquivados', 'true');
+  if (situacao) parametros.set('situacao', situacao);
   const resposta = await requisitar(`${base(contratoId)}?${parametros}`, { signal });
   return resposta.json() as Promise<PaginaDocumentos>;
 }
@@ -119,6 +125,15 @@ export async function enviarDocumento(contratoId: string, categoria: CategoriaDo
   return resposta.json() as Promise<DocumentoContratual>;
 }
 
+export async function verificarDocumento(contratoId: string, id: string): Promise<DocumentoContratual> {
+  const resposta = await requisitar(`${base(contratoId)}/${encodeURIComponent(id)}/verificar`, { method: 'PATCH' });
+  return resposta.json() as Promise<DocumentoContratual>;
+}
+export async function reabrirDocumento(contratoId: string, id: string, motivo: string): Promise<DocumentoContratual> {
+  const resposta = await requisitar(`${base(contratoId)}/${encodeURIComponent(id)}/reabrir`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ motivo }) });
+  return resposta.json() as Promise<DocumentoContratual>;
+}
+
 /** Arquivamento lógico: não apaga blob nem metadados da auditoria. */
 export async function arquivarDocumento(contratoId: string, id: string): Promise<DocumentoContratual> {
   const resposta = await requisitar(`${base(contratoId)}/${encodeURIComponent(id)}/arquivar`, { method: 'PATCH' });
@@ -126,8 +141,8 @@ export async function arquivarDocumento(contratoId: string, id: string): Promise
 }
 
 /** Um documento arquivado pode voltar à categoria ativa; principal exige autorização especial. */
-export async function reativarDocumento(contratoId: string, id: string): Promise<DocumentoContratual> {
-  const resposta = await requisitar(`${base(contratoId)}/${encodeURIComponent(id)}/reativar`, { method: 'PATCH' });
+export async function reativarDocumento(contratoId: string, id: string, motivo: string): Promise<DocumentoContratual> {
+  const resposta = await requisitar(`${base(contratoId)}/${encodeURIComponent(id)}/reativar`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ motivo }) });
   return resposta.json() as Promise<DocumentoContratual>;
 }
 

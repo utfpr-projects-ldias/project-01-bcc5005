@@ -259,7 +259,17 @@ def fluxo(contas,visivel):
                             'IDOR entre contratos reais')
                 rel['provas'].append('Confirmação repetida e acesso com contrato incorreto negados')
                 modal_evidencia.get_by_role('button',name='Fechar evidência').click()
-                modal_evidencia.wait_for(state='hidden',timeout=12000)
+                try:
+                    modal_evidencia.wait_for(state='hidden',timeout=12000)
+                except Exception as falha:
+                    # Diagnóstico sem cookies, tokens ou dados contratuais: útil
+                    # quando um popstate do Next devolve uma entrada intermediária.
+                    estado = gestor.evaluate('''() => ({
+                      evidencia: Boolean(history.state?.__modalEvidencia),
+                      editor: Boolean(history.state?.__edicaoEvidencia),
+                      aberto: document.querySelectorAll('[data-tec08-modal]').length
+                    })''')
+                    raise AssertionError(f'Fechar evidência não desmontou o diálogo; histórico: {estado}') from falha
                 modal.get_by_role('tablist',name='Consultar evidências').first.get_by_role('tab',name='Evidências',exact=True).wait_for(timeout=12000)
                 gestor.keyboard.press('Escape')
                 modal.wait_for(state='hidden',timeout=12000)
@@ -306,7 +316,7 @@ def fluxo(contas,visivel):
                             'Evidência arquivada não consta da lista de arquivados')
                 base.aceitar(base.api(admin,caminho_e2,'PATCH',{'descricao':'Alteração proibida'})['status'],{409},
                             'Edição de evidência arquivada deve ser bloqueada')
-                base.aceitar(base.api(admin,caminho_e2+'/reativar','PATCH')['status'],{200},'Reativar evidência')
+                base.aceitar(base.api(admin,caminho_e2+'/reativar','PATCH', {'motivo':'Reativação sintética da evidência para QA auditável.'})['status'],{200},'Reativar evidência')
                 base.exigir(len(base.api(admin,f'/contratos/{contrato}/entregaveis/{entregavel}')['body']['evidenciasEsperadas'])==2,
                             'Evidência reativada não reapareceu no checklist')
                 rel['provas'].append('Evidência: arquivar, ocultar, listar, bloquear alteração, reativar e manter checklist')
@@ -321,7 +331,7 @@ def fluxo(contas,visivel):
                             'Entregável arquivado não pode ser editado')
                 base.aceitar(postar_arquivo(admin,path+'/comprovantes','qa-arquivado.txt')['status'],{409},
                             'Arquivo arquivado deve negar operações de escrita')
-                base.aceitar(base.api(admin,raiz_entrega+'/reativar','PATCH')['status'],{200},'Reativar entregável')
+                base.aceitar(base.api(admin,raiz_entrega+'/reativar','PATCH', {'motivo':'Reativação sintética do entregável para QA auditável.'})['status'],{200},'Reativar entregável')
                 visao=base.api(admin,path)
                 base.exigir(visao['status']==200 and len(visao['body']['versoes'])==1,
                             'Reativação não preservou comprovante verificado')

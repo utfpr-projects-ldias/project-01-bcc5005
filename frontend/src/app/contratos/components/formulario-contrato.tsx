@@ -33,8 +33,8 @@ function Campo({ titulo, id, obrigatorio = false, ajuda, erro, contador, childre
   </div>;
 }
 
-export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando = false, podeDefinirResponsavel = true, onCancelar }:
-  { inicial?: Contrato; responsaveis: UsuarioPublico[]; onSalvar: (dados: DadosContrato) => Promise<void>; salvando?: boolean; podeDefinirResponsavel?: boolean; onCancelar?: () => void }) {
+export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando = false, podeDefinirResponsavel = true, podeSuspender = false, podeCancelar = false, podeReverter = false, podeEncerrar = false, somenteSituacao = false, onCancelar }:
+  { inicial?: Contrato; responsaveis: UsuarioPublico[]; onSalvar: (dados: DadosContrato) => Promise<void>; salvando?: boolean; podeDefinirResponsavel?: boolean; podeSuspender?: boolean; podeCancelar?: boolean; podeReverter?: boolean; podeEncerrar?: boolean; somenteSituacao?: boolean; onCancelar?: () => void }) {
   const [form, setForm] = useState<DadosContrato>(() => {
     if (!inicial) return { ...dadosIniciais };
     // O identificador público é somente leitura: jamais compõe um PATCH.
@@ -44,6 +44,11 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
     return { ...dados, dataAssinatura: dataCivil(inicial.dataAssinatura) || null,
       inicioVigencia: dataCivil(inicial.inicioVigencia), terminoVigencia: dataCivil(inicial.terminoVigencia) };
   });
+  const emRevisao = Boolean(inicial?.reabertoEm && ['PLANEJAMENTO', 'EM_EXECUCAO'].includes(inicial.status));
+  // A fase operacional é independente da revisão. O seletor mostra a fase
+  // persistida e nunca encerra a revisão; Fechar novamente é ação própria.
+  const valorSelectStatus = form.status;
+  const selecionarStatus = (valor: StatusContrato) => atualizar('status', valor);
   const [modo, setModo] = useState<'data' | 'meses'>('data');
   const [meses, setMeses] = useState('12');
   const [terminoManualConfirmado, setTerminoManualConfirmado] = useState(false);
@@ -56,6 +61,16 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
   const responsavelSelecionavel = !form.responsavelInternoId ||
     responsaveis.some(usuario => usuario.id === form.responsavelInternoId);
   const responsavelExibido = responsavelSelecionavel ? (form.responsavelInternoId ?? '') : '';
+  // Uma única coleção com chaves estáveis evita misturar arrays e opções avulsas no select.
+  const statusDisponiveis: StatusContrato[] = !inicial ? ['PLANEJAMENTO', 'EM_EXECUCAO']
+    : inicial.status === 'CANCELADO'
+      ? (podeReverter ? ['CANCELADO', 'PLANEJAMENTO'] : ['CANCELADO'])
+      : [
+          ...(somenteSituacao ? [inicial.status] : [...(['PLANEJAMENTO', 'EM_EXECUCAO'] as StatusContrato[]), ...(inicial.status === 'EM_ENCERRAMENTO' ? ['EM_ENCERRAMENTO' as const] : [])]),
+          ...(podeSuspender ? ['SUSPENSO' as const] : []),
+          ...(podeEncerrar ? ['ENCERRADO' as const] : []),
+          ...(podeCancelar ? ['CANCELADO' as const] : []),
+        ].filter((status, indice, todos) => todos.indexOf(status) === indice);
   const calculado = modo === 'meses' ? terminoPorMeses(form.inicioVigencia, Number(meses)) : null;
   const fimAmbiguo = modo === 'meses' && Boolean(form.inicioVigencia) && duracaoMesesSchema.safeParse(meses).success && calculado === null;
   const termino = modo === 'meses' && calculado ? calculado : form.terminoVigencia;
@@ -81,6 +96,24 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
     if (modo === 'meses' && fimAmbiguo && (!form.terminoVigencia || !terminoManualConfirmado)) {
       errosExtras.terminoVigencia = 'Confirme explicitamente o término neste caso de calendário, mesmo ao editar um contrato existente.';
     }
+    // Encerrar antecipadamente é decisão administrativa independente: o serviço
+    // solicita justificativa e audita. Não enviar ENCERRADO pelo PATCH comum.
+    if (inicial && form.status === 'ENCERRADO' && inicial.status !== 'ENCERRADO' && podeEncerrar) {
+      setErros({}); setErroGeral('');
+      await onSalvar({ ...form, terminoVigencia: termino });
+      return;
+    }
+    // Uma decisão isolada usa endpoint próprio; não reprovar dados legados
+    // que não estão disponíveis para edição neste formulário restrito.
+    if (somenteSituacao && inicial) {
+      if (form.status === inicial.status || !statusDisponiveis.includes(form.status)) {
+        setErroGeral('Selecione uma situação diferente da atual.');
+        return;
+      }
+      setErros({}); setErroGeral('');
+      await onSalvar({ ...form, terminoVigencia: termino });
+      return;
+    }
     const validacao = validarContrato({ ...form, terminoVigencia: termino });
     if (!validacao.sucesso || Object.keys(errosExtras).length) {
       setErros({ ...(!validacao.sucesso ? validacao.erros : {}), ...errosExtras });
@@ -90,6 +123,20 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
     setErros({}); setErroGeral('');
     await onSalvar(validacao.dados);
   }
+  if (somenteSituacao && inicial) return <form noValidate onSubmit={e => void enviar(e)} className="space-y-4" aria-label="Alterar situação do contrato">
+    <p className="text-sm text-foreground/75">Você tem autorização para uma mudança de situação, mas não para editar os demais dados contratuais.</p>
+    <Campo titulo="Status operacional" id="status" obrigatorio ajuda="Suspensão, cancelamento e encerramento antecipado exigem autorização e confirmação independentes." erro={erroDo('status')}>
+      <select id="status" value={valorSelectStatus} onChange={e => selecionarStatus(e.target.value as StatusContrato)} className={input}>
+        {statusDisponiveis.map(k => <option key={`situacao-${k}`} value={k}>{k === 'ENCERRADO' ? 'Encerrar' : STATUS[k]}</option>)}
+      </select>
+    </Campo>
+    {erroGeral && <p role="alert" className="text-red-300 text-sm">{erroGeral}</p>}
+    <div className="flex justify-end gap-2">
+      {onCancelar && <button type="button" onClick={onCancelar} className="rounded-lg border border-foreground/30 px-4 py-2">Voltar</button>}
+      <button type="submit" disabled={salvando || form.status === inicial.status}
+        className="rounded-lg bg-brand-green px-4 py-2 font-semibold text-on-brand-green disabled:opacity-40">Continuar</button>
+    </div>
+  </form>;
   return <form noValidate onSubmit={e => void enviar(e)} className="space-y-4" aria-label={inicial ? 'Editar dados do contrato' : 'Cadastrar contrato'}>
     <div className="rounded-2xl border border-brand-green/25 bg-brand-darkgreen/10 p-4 md:p-6 space-y-5">
       <div><h2 className="text-lg font-semibold text-brand-neon">Identificação do contrato</h2>
@@ -135,8 +182,8 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
     <div className="rounded-2xl border border-brand-green/25 bg-brand-darkgreen/10 p-4 md:p-6 space-y-4">
       <h2 className="text-lg font-semibold text-brand-neon">Situação e acompanhamento físico</h2>
       <div className="grid gap-4 md:grid-cols-2">
-        <Campo titulo="Status operacional" id="status" obrigatorio ajuda="Planejamento, execução, encerramento, conclusão, suspensão ou cancelamento." erro={erroDo('status')}>
-          <select id="status" className={input} value={form.status} onChange={e => atualizar('status', e.target.value as StatusContrato)} {...acessibilidade('status', 'status', true)}>{(Object.keys(STATUS) as StatusContrato[]).map(k => <option key={k} value={k}>{STATUS[k]}</option>)}</select></Campo>
+        <Campo titulo="Status operacional" id="status" obrigatorio ajuda={emRevisao ? 'Fase operacional durante a revisão.' : inicial ? 'Situações especiais exigem autorização. Concluído depende de aprovação separada.' : 'O novo contrato começa em Planejamento ou Em execução.'} erro={erroDo('status')}>
+          <select id="status" className={input} value={valorSelectStatus} onChange={e => selecionarStatus(e.target.value as StatusContrato)} {...acessibilidade('status', 'status', true)}>{statusDisponiveis.map(k => <option key={`contrato-status-${k}`} value={k}>{k === 'ENCERRADO' ? 'Encerrar' : STATUS[k]}</option>)}</select></Campo>
         <Campo titulo="Modo de cálculo físico" id="modo-calculo" obrigatorio erro={erroDo('modoCalculo')} ajuda="Define como o avanço físico será calculado com os entregáveis, não um valor financeiro.">
           <select id="modo-calculo" className={input} value={form.modoCalculo} onChange={e => atualizar('modoCalculo', e.target.value as ModoCalculo)} {...acessibilidade('modo-calculo', 'modoCalculo', true)}>{(Object.keys(MODOS) as ModoCalculo[]).map(k => <option key={k} value={k}>{MODOS[k]}</option>)}</select></Campo>
       </div>
@@ -176,7 +223,7 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
     <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-brand-green/20 px-1 pt-4 pb-2">
       {onCancelar ? <button type="button" onClick={onCancelar} disabled={salvando} className="inline-flex min-h-9 cursor-pointer items-center rounded-lg border border-brand-green/35 px-3 py-2 text-sm font-medium text-foreground transition-colors hover:border-brand-green/65 hover:bg-brand-green/10 focus-visible:outline-2 focus-visible:outline-brand-neon disabled:cursor-not-allowed disabled:opacity-50">Cancelar</button> :
         <Link href={inicial ? `/contratos/${encodeURIComponent(inicial.id)}` : '/contratos'} className="inline-flex min-h-9 cursor-pointer items-center rounded-lg border border-brand-green/35 px-3 py-2 text-sm font-medium text-foreground transition-colors hover:border-brand-green/65 hover:bg-brand-green/10 focus-visible:outline-2 focus-visible:outline-brand-neon">Cancelar</Link>}
-      <button type="submit" disabled={salvando} className="inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border border-brand-green/60 bg-brand-green px-3 py-2 text-sm font-semibold text-on-brand-green transition-[filter,transform,box-shadow] hover:brightness-110 hover:shadow-[0_0_0_2px_rgba(95,211,74,0.16)] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-brand-neon disabled:cursor-not-allowed disabled:opacity-50">
+      <button type="submit" disabled={salvando} className="inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border border-green-600 bg-green-800 px-3 py-2 text-sm font-semibold text-white transition-[filter,transform,box-shadow] hover:bg-green-700 hover:shadow-[0_0_0_2px_rgba(22,163,74,0.16)] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-green-300 disabled:cursor-not-allowed disabled:opacity-50">
         {salvando ? 'Salvando...' : inicial ? 'Salvar alterações' : 'Cadastrar contrato'}
       </button>
     </div>

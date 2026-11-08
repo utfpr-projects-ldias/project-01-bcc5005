@@ -34,3 +34,29 @@ describe('HU06-04 — validação acessível e envio do formulário', () => {
     expect(screen.getByRole('button', { name: 'Salvar etapa' })).toHaveAttribute('type', 'submit');
   });
 });
+
+
+test('nova etapa não permite seleção manual de Concluída nem Encerrada', () => {
+  render(<FormularioEtapa onSalvar={jest.fn()} onCancelar={jest.fn()} />);
+  expect(screen.queryByRole('option', { name: 'Concluída' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('option', { name: 'Encerrada' })).not.toBeInTheDocument();
+});
+
+test('encerramento de etapa existente exige permissão e justificativa de 15 a 200 caracteres', async () => {
+  const encerrar = jest.fn<Promise<void>, [string]>().mockResolvedValue(undefined);
+  render(<FormularioEtapa inicial={{
+    id: '11111111-1111-4111-8111-111111111111', contratoId: '22222222-2222-4222-8222-222222222222',
+    nome: 'Execução de QA', codigo: null, descricao: null, sequencia: 1,
+    inicioPrevisto: null, terminoPrevisto: null, status: 'EM_ANDAMENTO', observacoes: null,
+    vigenciaContrato: { inicioVigencia: '2026-01-01', terminoVigencia: '2026-12-31' }, avisoVigencia: false,
+  }} onSalvar={jest.fn()} onCancelar={jest.fn()} podeEncerrar onEncerrar={encerrar} />);
+  expect(screen.queryByRole('option', { name: 'Concluída' })).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'ENCERRADA' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Continuar para encerramento' }));
+  expect(screen.getByRole('dialog', { name: 'Encerrar etapa?' })).toBeInTheDocument();
+  const confirmar = screen.getByRole('button', { name: 'Confirmar encerramento' });
+  expect(confirmar).toBeDisabled();
+  fireEvent.change(screen.getByLabelText(/Justificativa obrigatória/), { target: { value: 'Encerramento administrativo autorizado.' } });
+  await act(async () => { fireEvent.click(confirmar); });
+  expect(encerrar).toHaveBeenCalledWith('Encerramento administrativo autorizado.');
+});

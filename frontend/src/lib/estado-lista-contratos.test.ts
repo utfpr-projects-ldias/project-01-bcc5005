@@ -15,3 +15,10 @@ test('valida o estado salvo para não quebrar a carteira diante de cache inváli
   window.sessionStorage.setItem('tec08:carteira:estado:v1', JSON.stringify({ aba: 'ativos', campo: 'todos', rolagem: -9 }));
   expect(lerEstadoCarteira()).toEqual({ aba: 'ativos', busca: '', campo: 'todos', status: '', rolagem: 0 });
 });
+
+test('mantém a aba Suspensos ao voltar do detalhe e rejeita aba desconhecida', () => {
+  salvarEstadoCarteira({ aba: 'suspensos', busca: '', campo: 'todos', status: 'SUSPENSO', rolagem: 120 });
+  expect(lerEstadoCarteira()).toEqual({ aba: 'suspensos', busca: '', campo: 'todos', status: 'SUSPENSO', rolagem: 120 });
+  window.sessionStorage.setItem('tec08:carteira:estado:v1', JSON.stringify({ aba: 'inexistente', campo: 'todos' }));
+  expect(lerEstadoCarteira()).toBeNull();
+});

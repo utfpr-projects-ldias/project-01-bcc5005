@@ -4,11 +4,11 @@ import type { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
  * O ADMIN sempre administra tudo; exceção: obrigatoriedade de checklist não é delegada por padrão.
  */
 export const CHAVES_PERMISSOES = [
-  'criarEtapas', 'editarEtapas', 'reordenarEtapas', 'bloquearOrdemEtapas', 'arquivarEtapas', 'reativarEtapas', 'reabrirEtapas', 'excluirEtapasArquivadas',
+  'criarEtapas', 'editarEtapas', 'reordenarEtapas', 'bloquearOrdemEtapas', 'arquivarEtapas', 'reativarEtapas', 'reabrirEtapas', 'encerrarEtapas', 'reabrirEtapasEncerradas', 'excluirEtapasArquivadas',
   'criarEntregaveis', 'editarEntregaveis', 'arquivarEntregaveis', 'reativarEntregaveis', 'reabrirEntregaveis', 'excluirEntregaveisArquivados',
   'criarEvidencias', 'editarEvidencias', 'arquivarEvidencias', 'reativarEvidencias', 'reabrirEvidencias', 'excluirEvidenciasArquivadas',
   'alterarObrigatoriedade', 'enviarComprovantes', 'verificarComprovantes',
-  'editarContrato', 'reabrirContrato', 'anexarDocumentos', 'editarDocumentos', 'arquivarDocumentos', 'reativarDocumentos', 'excluirDocumentosArquivados', 'administrarDocumentoPrincipal',
+  'editarContrato', 'concluirContrato', 'encerrarContrato', 'reabrirContrato', 'cancelarContrato', 'reverterCancelamentoContrato', 'suspenderContrato', 'retomarContrato', 'verificarDocumentos', 'reabrirDocumentos', 'concluirEtapas', 'concluirEntregaveis', 'anexarDocumentos', 'editarDocumentos', 'arquivarDocumentos', 'reativarDocumentos', 'excluirDocumentosArquivados', 'verificarDocumentoPrincipal', 'reabrirDocumentoPrincipal', 'arquivarDocumentoPrincipal', 'reativarDocumentoPrincipal', 'excluirDocumentoPrincipal', 'administrarDocumentoPrincipal',
 ] as const;
 export type ChavePermissao = typeof CHAVES_PERMISSOES[number];
 export type PermissoesGranulares = Partial<Record<ChavePermissao, boolean>>;
@@ -20,11 +20,15 @@ export const ACAO_PERMISSAO: Readonly<Record<string, ChavePermissao>> = {
   'etapas:arquivar': 'arquivarEtapas',
   'etapas:reativar': 'reativarEtapas',
   'etapas:reabrir': 'reabrirEtapas',
+  'etapas:reabrir-encerrada': 'reabrirEtapasEncerradas',
+  'etapas:encerrar': 'encerrarEtapas',
+  'etapas:concluir': 'concluirEtapas',
   'etapas:excluir': 'excluirEtapasArquivadas',
   'entregaveis:criar': 'criarEntregaveis', 'entregaveis:editar': 'editarEntregaveis',
   'entregaveis:arquivar': 'arquivarEntregaveis',
   'entregaveis:reativar': 'reativarEntregaveis',
   'entregaveis:reabrir': 'reabrirEntregaveis',
+  'entregaveis:concluir': 'concluirEntregaveis',
   'entregaveis:excluir': 'excluirEntregaveisArquivados',
   'evidencias:criaresperada': 'criarEvidencias',
   'evidencias:editaresperada': 'editarEvidencias',
@@ -34,11 +38,16 @@ export const ACAO_PERMISSAO: Readonly<Record<string, ChavePermissao>> = {
   'evidencias:excluiresperada': 'excluirEvidenciasArquivadas',
   'evidencias:anexar': 'enviarComprovantes',
   'evidencias:verificar': 'verificarComprovantes',
+  'documentos:verificar': 'verificarDocumentos',
+  'documentos:reabrir': 'reabrirDocumentos',
   'documentos:anexar': 'anexarDocumentos',
   'documentos:editar': 'editarDocumentos',
   'documentos:arquivar': 'arquivarDocumentos',
   'documentos:reativar': 'reativarDocumentos',
   'documentos:excluir': 'excluirDocumentosArquivados',
+  // Operações do principal são conferidas pelo serviço após resolver a categoria real.
+  // 'administrarDocumentoPrincipal' é chave LEGADA, sem privilégio operacional.
+
 };
 
 /** Padrões conservadores: gestor com edição mantém comportamento atual;
@@ -49,7 +58,7 @@ export function permissoesEfetivas(perfil: PerfilUsuario | string, podeEditar: b
   const gestorEditor = perfil === 'GESTOR' && podeEditar;
   const base = {} as Record<ChavePermissao, boolean>;
   for (const chave of CHAVES_PERMISSOES) {
-    const padrao = (chave === 'alterarObrigatoriedade' || chave === 'administrarDocumentoPrincipal' || chave === 'bloquearOrdemEtapas' || chave.startsWith('excluir') || chave.startsWith('reativar') || chave.startsWith('reabrir') || chave === 'arquivarEtapas') ? false
+    const padrao = (chave === 'verificarDocumentos' || chave === 'reabrirDocumentos' || chave === 'alterarObrigatoriedade' || chave === 'encerrarContrato' || chave === 'encerrarEtapas' || chave === 'cancelarContrato' || chave === 'reverterCancelamentoContrato' || chave === 'suspenderContrato' || chave === 'retomarContrato' || chave === 'administrarDocumentoPrincipal' || chave.endsWith('DocumentoPrincipal') || chave === 'bloquearOrdemEtapas' || chave.startsWith('excluir') || chave.startsWith('reativar') || chave.startsWith('reabrir') || chave === 'arquivarEtapas' || chave.startsWith('concluir')) ? false
       : chave === 'enviarComprovantes' ? true
       : chave === 'verificarComprovantes' ? true // serviço exige verificador distinto e autorizado
       : gestorEditor;

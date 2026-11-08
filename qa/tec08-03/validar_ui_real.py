@@ -80,10 +80,14 @@ def criacao_pela_ui(page, execucao):
     form.get_by_role('button', name='Cadastrar contrato').click()
     dialogo = page.get_by_role('dialog', name='Confirmar cadastro?')
     dialogo.get_by_role('button', name='Confirmar cadastro').click()
-    page.wait_for_url('**/contratos/*?anexarDocumento=principal', timeout=30000)
+    # O cadastro abre a Visão geral; o upload é sempre uma decisão separada.
+    page.wait_for_url('**/contratos/*', timeout=30000)
     contrato = page.url.split('/contratos/')[1].split('?')[0]
     exigir(base.uuid_ok(contrato), 'Cadastro via UI não retornou UUID de contrato')
-    page.get_by_role('heading', name='Documentos do contrato').wait_for(timeout=20000)
+    page.get_by_role('tab', name='Documentos').click()
+    page.get_by_role('tabpanel', name='Documentos').wait_for(state='visible', timeout=20000)
+    page.locator('#documentos-contratuais').get_by_role('button', name='Anexar documento').click()
+    page.get_by_role('dialog', name='Anexar documento contratual').wait_for(state='visible', timeout=20000)
     return contrato
 
 
@@ -224,12 +228,45 @@ def executar(contas, visivel=False):
             exigir('documento principal' in aviso_principal.inner_text().lower(),
                    'Aviso de PDF principal ausente não descreve corretamente o estado')
             exigir(admin.get_by_role('dialog', name='Anexar documento contratual').count() == 1,
-                   'Redirecionamento não abriu modal de PDF principal')
-            rel['provas'].append('HU05: cadastro via formulário real -> detalhe persistido -> PDF opcional e formulário aberto')
+                   'O formulário de PDF principal não abriu após seleção explícita de Documentos')
+            rel['provas'].append('HU05: cadastro via formulário real -> Visão geral -> Documentos escolhidos pelo usuário -> upload')
             # O contrato B também é real, mas criado por API reutilizada da TEC08-02.
             b = base.criar_contrato(admin, execucao + '-B')
             rel['contratosQA']['B'] = b
             rel['provas'].append('Contrato B real para isolamento de ACL; sem IDs informados manualmente')
+            # Contrato NOVO: prova suspensão e retomada reais com histórico confiável.
+            # Esse cenário detecta o bug de suspensão histórica sem precisar inventar
+            # situação anterior nem alterar contratos não criados pelo QA.
+            susp = base.api(admin, f'/contratos/{b}/suspender', 'PATCH')
+            exigir(susp['status'] == 200 and susp['body'].get('status') == 'SUSPENSO',
+                   'Suspender contrato de teste novo falhou ou retornou situação errada')
+            # A interface deve oferecer Retomar exclusivamente no detalhe.
+            pagina_retomada = admin.context.new_page()
+            try:
+                pagina_retomada.goto(f'{WEB}/contratos/{b}', wait_until='domcontentloaded')
+                pagina_retomada.get_by_role('button', name='Retomar contrato suspenso').wait_for(timeout=20000)
+                exigir(pagina_retomada.get_by_role('button', name='Editar contrato').count() == 0,
+                       'Contrato suspenso ainda exibe edição comum no detalhe')
+                # O botão abre confirmação auditável: aguardar resposta somente
+                # depois do preenchimento da justificativa obrigatória.
+                pagina_retomada.get_by_role('button', name='Retomar contrato suspenso').click()
+                confirmacao = pagina_retomada.get_by_role('dialog', name='Retomar contrato suspenso?')
+                confirmacao.wait_for(state='visible', timeout=12000)
+                confirmacao.get_by_label('Justificativa obrigatória (15 a 200 caracteres)').fill(
+                    'Retomada controlada do contrato sintético após suspensão de QA.')
+                with pagina_retomada.expect_response(
+                    lambda r: r.request.method == 'PATCH' and r.url.split('?')[0].endswith(f'/contratos/{b}/retomar'),
+                    timeout=20000,
+                ) as aguardando_retomada:
+                    confirmacao.get_by_role('button', name='Confirmar retomada').click()
+                exigir(aguardando_retomada.value.status == 200,
+                       'Botão Retomar não concluiu a operação HTTP 200 no contrato de QA')
+            finally:
+                pagina_retomada.close()
+            retorno = base.api(admin, f'/contratos/{b}')
+            exigir(retorno['status'] == 200 and retorno['body'].get('status') == 'PLANEJAMENTO',
+                   'Retomada não restaurou a situação PLANEJAMENTO registrada no evento de auditoria')
+            rel['provas'].append('API + UI: suspensão auditada e retomada do contrato B ao status anterior exato')
             # Upload deliberadamente inválido: backend deve recusar bytes de PDF falso, manter seleção.
             falso = arquivo_na_ui(admin, a, 'CONTRATO_PRINCIPAL', 'qa-falso.pdf', b'PDF FALSO', mime='application/pdf')
             rel['respostasUpload'].append(falso)
@@ -500,7 +537,7 @@ def executar(contas, visivel=False):
             base.aceitar(base.api(admin, base.documento_base(b) + '/' + ids['qa-principal.pdf'] + '/download')['status'],
                          {404}, 'IDOR real: não aceitar documento A sob contrato B')
             rel['provas'].append('IDOR: contrato B existente não permite download de documento A')
-            # Cartão da carteira: as contagens vêm do planejamento real.
+            # Cartão da lista de contratos: as contagens vêm do planejamento real.
             # Não confundir checklist com comprovantes recebidos.
             admin.goto(WEB + '/contratos', wait_until='domcontentloaded')
             numero_qa = f'QA-TEC08-03-{execucao}-A'
@@ -521,7 +558,7 @@ def executar(contas, visivel=False):
                    'Cartão confundiu checklist planejado com prova de entrega')
             exigir(resumo.locator('progress[aria-label="Etapas concluídas"]').count() == 1,
                    'Indicador de etapas não utiliza status real')
-            rel['provas'].append('Carteira mostra etapas/entregáveis/evidências esperadas reais sem progresso fictício')
+            rel['provas'].append('Lista de contratos mostra etapas/entregáveis/evidências esperadas reais sem progresso fictício')
         except Exception as exc:
             falha = exc
             try:

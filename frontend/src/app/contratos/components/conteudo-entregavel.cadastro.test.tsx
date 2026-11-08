@@ -32,7 +32,8 @@ function abrirCadastro() {
   render(<ConteudoEntregavel item={item} podeCriarEvidencia podeEnviarComprovantes />);
   fireEvent.click(screen.getByRole('button', { name: 'Nova evidência' }));
   const modal = screen.getByRole('dialog', { name: 'Nova evidência esperada' });
-  expect(modal.parentElement).toHaveClass('bg-black/[0.025]', 'items-center');
+  // Modal aninhado mantém visível o contexto anterior, conforme modal-etapa.test.tsx.
+  expect(modal.parentElement).toHaveClass('bg-black/[0.055]', 'items-center');
   return modal;
 }
 test('cadastro com primeiro anexo fecha somente o modal após sucesso, sem duplicar o requisito', async () => {
@@ -115,7 +116,7 @@ test('card exibe nome do comprovante e categoria Foto ou Relatório, sem legenda
   expect(screen.getByText('Relatório')).toBeInTheDocument();
   const itemVerificado = screen.getByText('laudo-final.pdf').closest('li');
   expect(itemVerificado).toHaveClass('border-violet-500/60');
-  expect(itemVerificado).toHaveClass('hover:bg-violet-500/[0.12]');
+  expect(itemVerificado).toHaveClass('hover:border-violet-400', 'hover:opacity-100');
   expect(itemVerificado).not.toHaveClass('hover:bg-brand-green/5');
   expect(within(itemVerificado!).getByLabelText('Evidência com comprovação documental verificada')).toHaveClass('rounded-full');
   expect(within(itemVerificado!).getByLabelText('Status da evidência Relatório')).toHaveClass('text-violet-100');
@@ -137,10 +138,24 @@ test('desarquivar pede confirmação, audita via API e mantém aba Arquivados se
   fireEvent.click(within(confirmar).getByRole('button', { name: 'Cancelar' }));
   expect(reativar).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'Reativar' }));
-  fireEvent.click(within(screen.getByRole('dialog', { name: 'Desarquivar evidência?' }))
-    .getByRole('button', { name: 'Confirmar desarquivamento' }));
-  await waitFor(() => expect(reativar).toHaveBeenCalledWith('contrato-qa', 'entregavel-qa', 'evidencia-arch', 'reativar'));
+  const dialogo = screen.getByRole('dialog', { name: 'Desarquivar evidência?' });
+  fireEvent.change(within(dialogo).getByRole('textbox', { name: /Justificativa obrigatória/ }), { target: { value: 'Retomar esta evidência para complementar o checklist.' } });
+  fireEvent.click(within(dialogo).getByRole('button', { name: 'Confirmar desarquivamento' }));
+  await waitFor(() => expect(reativar).toHaveBeenCalledWith('contrato-qa', 'entregavel-qa', 'evidencia-arch', 'reativar', 'Retomar esta evidência para complementar o checklist.'));
   expect(screen.getByRole('tab', { name: 'Evidências arquivadas' })).toHaveAttribute('aria-selected', 'true');
   expect(screen.getByText('Nenhuma evidência arquivada.')).toBeInTheDocument();
   expect(screen.queryByRole('dialog', { name: /Evidência esperada/i })).not.toBeInTheDocument();
+});
+
+
+test('pai arquivado mantém aba de histórico de evidências mesmo sem permissão de edição', async () => {
+  const listar = listarEvidenciasArquivadas as jest.Mock;
+  listar.mockResolvedValue([{ id: 'evidencia-historica', tipoEvidencia: 'Relatório', obrigatoria: true, arquivadoEm: null }]);
+  render(<ConteudoEntregavel item={item} paiArquivado bloqueadoPorPai />);
+  const aba = screen.getByRole('tab', { name: 'Evidências arquivadas' });
+  fireEvent.click(aba);
+  expect(await screen.findByText(/somente leitura por arquivamento do pai/)).toBeInTheDocument();
+  expect(listar).toHaveBeenCalledWith('contrato-qa', 'entregavel-qa');
+  expect(screen.queryByRole('button', { name: 'Reativar' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /Nova evidência/ })).not.toBeInTheDocument();
 });

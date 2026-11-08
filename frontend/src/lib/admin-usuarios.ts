@@ -26,11 +26,11 @@ export type AtualizarFuncionario = {
 
 export type PaginaUsuarios = { itens: UsuarioPublico[]; pagina: number; limite: number; total: number; totalPaginas: number };
 export type OperacaoPermissao =
-  'criarEtapas' | 'editarEtapas' | 'reordenarEtapas' | 'bloquearOrdemEtapas' | 'arquivarEtapas' | 'reativarEtapas' | 'reabrirEtapas' | 'excluirEtapasArquivadas' |
-  'criarEntregaveis' | 'editarEntregaveis' | 'arquivarEntregaveis' | 'reativarEntregaveis' | 'reabrirEntregaveis' | 'excluirEntregaveisArquivados' |
+  'criarEtapas' | 'editarEtapas' | 'reordenarEtapas' | 'bloquearOrdemEtapas' | 'arquivarEtapas' | 'reativarEtapas' | 'reabrirEtapas' | 'reabrirEtapasEncerradas' | 'encerrarEtapas' | 'concluirEtapas' | 'excluirEtapasArquivadas' |
+  'criarEntregaveis' | 'editarEntregaveis' | 'arquivarEntregaveis' | 'reativarEntregaveis' | 'reabrirEntregaveis' | 'concluirEntregaveis' | 'excluirEntregaveisArquivados' |
   'criarEvidencias' | 'editarEvidencias' | 'arquivarEvidencias' | 'reativarEvidencias' | 'reabrirEvidencias' | 'excluirEvidenciasArquivadas' |
   'alterarObrigatoriedade' | 'enviarComprovantes' | 'verificarComprovantes' |
-  'editarContrato' | 'reabrirContrato' | 'anexarDocumentos' | 'editarDocumentos' | 'arquivarDocumentos' | 'reativarDocumentos' | 'excluirDocumentosArquivados' | 'administrarDocumentoPrincipal';
+  'editarContrato' | 'concluirContrato' | 'encerrarContrato' | 'reabrirContrato' | 'cancelarContrato' | 'reverterCancelamentoContrato' | 'suspenderContrato' | 'retomarContrato' | 'verificarDocumentos' | 'reabrirDocumentos' | 'verificarDocumentoPrincipal' | 'reabrirDocumentoPrincipal' | 'anexarDocumentos' | 'editarDocumentos' | 'arquivarDocumentos' | 'reativarDocumentos' | 'excluirDocumentosArquivados' | 'arquivarDocumentoPrincipal' | 'reativarDocumentoPrincipal' | 'excluirDocumentoPrincipal';
 export type PermissaoFuncionario = { contratoId: string; podeEditar: boolean;
   permissoesDetalhadas?: Partial<Record<OperacaoPermissao, boolean>> | null };
 export const OPERACOES_CONTRATO: ReadonlyArray<{ chave: OperacaoPermissao; rotulo: string }> = [
@@ -40,12 +40,16 @@ export const OPERACOES_CONTRATO: ReadonlyArray<{ chave: OperacaoPermissao; rotul
   { chave: 'bloquearOrdemEtapas', rotulo: 'Bloquear ou liberar a reordenação das etapas' },
   { chave: 'arquivarEtapas', rotulo: 'Arquivar etapas' },
   { chave: 'reativarEtapas', rotulo: 'Reativar etapas arquivadas (especial)' },
+  { chave: 'concluirEtapas', rotulo: 'Conclusão manual de etapas (legado)' },
+  { chave: 'encerrarEtapas', rotulo: 'Encerrar administrativamente etapas (especial)' },
+  { chave: 'reabrirEtapasEncerradas', rotulo: 'Reabrir etapas encerradas (especial)' },
   { chave: 'reabrirEtapas', rotulo: 'Reabrir etapas concluídas (especial)' },
   { chave: 'excluirEtapasArquivadas', rotulo: 'Excluir definitivamente etapas arquivadas' },
   { chave: 'criarEntregaveis', rotulo: 'Criar entregáveis' },
   { chave: 'editarEntregaveis', rotulo: 'Editar entregáveis' },
   { chave: 'arquivarEntregaveis', rotulo: 'Arquivar entregáveis' },
   { chave: 'reativarEntregaveis', rotulo: 'Reativar entregáveis arquivados (especial)' },
+  { chave: 'concluirEntregaveis', rotulo: 'Concluir e reconcluir entregáveis (especial)' },
   { chave: 'reabrirEntregaveis', rotulo: 'Reabrir entregáveis concluídos (especial)' },
   { chave: 'excluirEntregaveisArquivados', rotulo: 'Excluir definitivamente entregáveis arquivados' },
   { chave: 'criarEvidencias', rotulo: 'Cadastrar evidências esperadas' },
@@ -57,20 +61,32 @@ export const OPERACOES_CONTRATO: ReadonlyArray<{ chave: OperacaoPermissao; rotul
   { chave: 'alterarObrigatoriedade', rotulo: 'Alterar obrigatoriedade de evidências' },
   { chave: 'enviarComprovantes', rotulo: 'Enviar comprovantes' },
   { chave: 'verificarComprovantes', rotulo: 'Verificar comprovantes' },
+  { chave: 'concluirContrato', rotulo: 'Aprovar conclusão com requisitos verificados' },
+  { chave: 'encerrarContrato', rotulo: 'Encerrar antecipadamente com justificativa (independente da conclusão)' },
   { chave: 'reabrirContrato', rotulo: 'Reabrir contrato concluído (especial)' },
+  { chave: 'cancelarContrato', rotulo: 'Cancelar contrato (decisão independente)' },
+  { chave: 'reverterCancelamentoContrato', rotulo: 'Reverter cancelamento de contrato (especial)' },
+  { chave: 'suspenderContrato', rotulo: 'Suspender contrato sem alterar prazos ou progresso' },
+  { chave: 'retomarContrato', rotulo: 'Retomar contrato suspenso (especial)' },
   { chave: 'editarContrato', rotulo: 'Editar cadastro do contrato' },
-  { chave: 'anexarDocumentos', rotulo: 'Anexar documentos administrativos' },
+  { chave: 'anexarDocumentos', rotulo: 'Anexar documentos, incluindo o PDF principal' },
   { chave: 'editarDocumentos', rotulo: 'Editar categoria e descrição dos anexos' },
-  { chave: 'arquivarDocumentos', rotulo: 'Arquivar documentos administrativos' },
-  { chave: 'reativarDocumentos', rotulo: 'Reativar documentos arquivados (especial)' },
-  { chave: 'excluirDocumentosArquivados', rotulo: 'Excluir definitivamente documentos arquivados' },
-  { chave: 'administrarDocumentoPrincipal', rotulo: 'Arquivar ou anexar documento principal (especial)' },
+  { chave: 'verificarDocumentos', rotulo: 'Verificar anexos' },
+  { chave: 'reabrirDocumentos', rotulo: 'Reabrir anexos verificados' },
+  { chave: 'verificarDocumentoPrincipal', rotulo: 'Verificar PDF principal' },
+  { chave: 'reabrirDocumentoPrincipal', rotulo: 'Reabrir PDF principal verificado' },
+  { chave: 'arquivarDocumentos', rotulo: 'Arquivar anexos' },
+  { chave: 'reativarDocumentos', rotulo: 'Reativar anexos arquivados (especial)' },
+  { chave: 'excluirDocumentosArquivados', rotulo: 'Excluir anexos arquivados' },
+  { chave: 'arquivarDocumentoPrincipal', rotulo: 'Arquivar PDF principal (especial)' },
+  { chave: 'reativarDocumentoPrincipal', rotulo: 'Reativar PDF principal (especial)' },
+  { chave: 'excluirDocumentoPrincipal', rotulo: 'Excluir PDF principal arquivado (especial)' },
 ];
 export function obterPermissoesIniciais(perfil: PerfilFuncionario, vinculo: PermissaoFuncionario): Record<OperacaoPermissao, boolean> {
   const resultado = {} as Record<OperacaoPermissao, boolean>;
   for (const { chave } of OPERACOES_CONTRATO) {
     resultado[chave] = vinculo.permissoesDetalhadas?.[chave] ?? (
-      (chave === 'alterarObrigatoriedade' || chave === 'administrarDocumentoPrincipal' || chave === 'bloquearOrdemEtapas' || chave === 'arquivarEtapas' || chave.startsWith('reativar') || chave.startsWith('reabrir') || chave.startsWith('excluir')) ? false :
+      (chave.startsWith('concluir') || chave === 'encerrarContrato' || chave === 'encerrarEtapas' || chave === 'suspenderContrato' || chave === 'retomarContrato' || chave === 'cancelarContrato' || chave === 'reverterCancelamentoContrato' || chave === 'alterarObrigatoriedade' || chave === 'verificarDocumentos' || chave === 'reabrirDocumentos' || chave.endsWith('DocumentoPrincipal') || chave === 'bloquearOrdemEtapas' || chave === 'arquivarEtapas' || chave.startsWith('reativar') || chave.startsWith('reabrir') || chave.startsWith('excluir')) ? false :
       chave === 'enviarComprovantes' || chave === 'verificarComprovantes' ? true :
       perfil === 'GESTOR' && vinculo.podeEditar);
   }
