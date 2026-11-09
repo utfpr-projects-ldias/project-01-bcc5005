@@ -11,7 +11,7 @@ OK=0; ERRO=0
 
 verificar_origem() {
   case "$(git branch --show-current 2>/dev/null)" in
-    tec-08|tec-08-04-05) ;;
+    tec-08|tec-08-04-05|tec-08--04-05) ;;
     *) echo 'BLOQUEIO: branch nao autorizada para este QA.' >&2; return 3 ;;
   esac
   if ! git merge-base --is-ancestor '3eeed69ccb1af2b069cb38ef0563c7b45354072b' HEAD; then
