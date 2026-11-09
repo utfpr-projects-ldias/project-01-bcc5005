@@ -271,8 +271,27 @@ def fluxo(contas,visivel):
                     })''')
                     raise AssertionError(f'Fechar evidência não desmontou o diálogo; histórico: {estado}') from falha
                 modal.get_by_role('tablist',name='Consultar evidências').first.get_by_role('tab',name='Evidências',exact=True).wait_for(timeout=12000)
+                # A evidência usa history.back() e popstate assincronos. Esperar
+                # terminar a transição antes de fechar o nivel do entregável.
+                gestor.wait_for_function(
+                    '() => !history.state?.__modalEvidencia && !history.state?.__edicaoEvidencia',
+                    timeout=12000,
+                )
+                # Acionamento por teclado dentro do proprio modal, sem usar
+                # clique como substituto do teste de Escape.
+                modal.get_by_role('button', name='Voltar à etapa').focus()
                 gestor.keyboard.press('Escape')
-                modal.wait_for(state='hidden',timeout=12000)
+                try:
+                    modal.wait_for(state='hidden', timeout=12000)
+                except Exception as falha:
+                    estado = gestor.evaluate('''() => ({
+                        evidencia: Boolean(history.state?.__modalEvidencia),
+                        entregavel: Boolean(history.state?.__modalEntregavel),
+                        editor: Boolean(history.state?.__edicaoEvidencia),
+                        focoNoDialogo: Boolean(document.activeElement?.closest('[role="dialog"]')),
+                        modais: document.querySelectorAll('[data-tec08-modal]').length
+                    })''')
+                    raise AssertionError(f'Fechar entregável por Escape falhou; contexto: {estado}') from falha
                 modal_etapa.get_by_role('button',name='Voltar às etapas').click()
                 gestor.wait_for_function("(top)=>document.body.style.overflow !== 'hidden' && Math.abs(window.scrollY-top)<=100",arg=scroll,timeout=10000)
                 rel['provas'].append('Voltar na pilha de modais preserva a posição do contrato')
@@ -305,37 +324,83 @@ def fluxo(contas,visivel):
                 base.exigir(enviados==3 and verificados==2 and segredos==0,
                             'Auditoria não corresponde aos três envios e duas verificações')
                 rel['provas'].append('SQL: três envios, duas verificações e auditoria sem segredos de storage')
-                # Arquivamento lógico: item arquivado permanece persistido, sem envio nem edição.
+                # Uma evidência VERIFICADA e um entregável CONCLUÍDO não podem
+                # ser arquivados sem reabertura explícita, mesmo pelo ADMIN.
+                # Esta proteção é uma regra de negócio, não erro de QA.
                 caminho_e2=f'/contratos/{contrato}/entregaveis/{entregavel}/evidencias-esperadas/{e2}'
-                base.aceitar(base.api(admin,caminho_e2+'/arquivar','PATCH')['status'],{200},'Arquivar evidência isolada')
-                visao=base.api(admin,f'/contratos/{contrato}/entregaveis/{entregavel}')
+                base.aceitar(base.api(admin,caminho_e2+'/arquivar','PATCH')['status'],{409},
+                            'Evidência verificada deve bloquear arquivamento sem reabertura')
+                base.aceitar(base.api(admin,f'/contratos/{contrato}/entregaveis/{entregavel}/arquivar','PATCH')['status'],{409},
+                            'Entregável concluído deve bloquear arquivamento sem reabertura')
+                preservado=base.api(admin,path)
+                base.exigir(preservado['status']==200 and preservado['body']['status']=='VERIFICADA'
+                            and len(preservado['body']['versoes'])==1,
+                            'Tentativas bloqueadas modificaram a evidência verificada')
+                rel['provas'].append('Arquivo verificado e entregável concluído protegidos contra arquivamento implícito')
+
+                # Arquivamento deve ser testado numa árvore operacional realmente
+                # EDITÁVEL, sem adulterar os comprovantes já verificados acima.
+                # O segundo contrato, previamente criado, garante isolamento.
+                rel['etapaAtual'] = 'Arquivar evidência opcional ainda não verificada em outro contrato'
+                etapa_arquivo=base.api(admin,f'/contratos/{contrato_b}/etapas','POST',{
+                    'nome':'Etapa de arquivamento QA '+nome[-6:],
+                })
+                base.aceitar(etapa_arquivo['status'],{201},'Criar etapa independente para arquivamento')
+                etapa_arquivo_id=etapa_arquivo['body']['id']
+                entrega_arquivo=base.api(admin,f'/contratos/{contrato_b}/entregaveis','POST',{
+                    'etapaId':etapa_arquivo_id,
+                    'nome':'Entregável de arquivamento QA '+nome[-6:],
+                    'tipo':'UNICO',
+                    'evidenciasEsperadas':[
+                        {'tipoEvidencia':'Relatório obrigatório de QA','obrigatoria':True},
+                        {'tipoEvidencia':'Anexo opcional de QA','obrigatoria':False},
+                    ],
+                })
+                base.aceitar(entrega_arquivo['status'],{201},'Criar entregável ainda não concluído para arquivamento')
+                entregavel_arquivo=entrega_arquivo['body']['id']
+                candidatos=[x for x in entrega_arquivo['body']['evidenciasEsperadas']
+                            if x['tipoEvidencia']=='Anexo opcional de QA']
+                base.exigir(len(candidatos)==1,'Fixture de arquivamento não tem evidência opcional distinta')
+                evidencia_arquivo=candidatos[0]['id']
+                caminho_arquivo=(f'/contratos/{contrato_b}/entregaveis/{entregavel_arquivo}'
+                                 f'/evidencias-esperadas/{evidencia_arquivo}')
+                base.aceitar(base.api(admin,caminho_arquivo+'/arquivar','PATCH')['status'],{200},
+                            'Arquivar evidência opcional sem comprovante')
+                visao=base.api(admin,f'/contratos/{contrato_b}/entregaveis/{entregavel_arquivo}')
                 base.exigir(visao['status']==200 and len(visao['body']['evidenciasEsperadas'])==1,
                             'Evidência arquivada permanece indevidamente no checklist ativo')
-                historico=base.api(admin,f'/contratos/{contrato}/entregaveis/{entregavel}/evidencias-esperadas/arquivadas')
-                base.exigir(historico['status']==200 and any(x['id']==e2 for x in historico['body']),
+                historico=base.api(admin,f'/contratos/{contrato_b}/entregaveis/{entregavel_arquivo}/evidencias-esperadas/arquivadas')
+                base.exigir(historico['status']==200 and any(x['id']==evidencia_arquivo for x in historico['body']),
                             'Evidência arquivada não consta da lista de arquivados')
-                base.aceitar(base.api(admin,caminho_e2,'PATCH',{'descricao':'Alteração proibida'})['status'],{409},
+                base.aceitar(base.api(admin,caminho_arquivo,'PATCH',{'descricao':'Alteração proibida'})['status'],{409},
                             'Edição de evidência arquivada deve ser bloqueada')
-                base.aceitar(base.api(admin,caminho_e2+'/reativar','PATCH', {'motivo':'Reativação sintética da evidência para QA auditável.'})['status'],{200},'Reativar evidência')
-                base.exigir(len(base.api(admin,f'/contratos/{contrato}/entregaveis/{entregavel}')['body']['evidenciasEsperadas'])==2,
+                base.aceitar(base.api(admin,caminho_arquivo+'/reativar','PATCH',
+                            {'motivo':'Reativação sintética da evidência para QA auditável.'})['status'],{200},
+                            'Reativar evidência opcional')
+                visao=base.api(admin,f'/contratos/{contrato_b}/entregaveis/{entregavel_arquivo}')
+                base.exigir(visao['status']==200 and len(visao['body']['evidenciasEsperadas'])==2,
                             'Evidência reativada não reapareceu no checklist')
-                rel['provas'].append('Evidência: arquivar, ocultar, listar, bloquear alteração, reativar e manter checklist')
-                raiz_entrega=f'/contratos/{contrato}/entregaveis/{entregavel}'
-                base.aceitar(base.api(admin,raiz_entrega+'/arquivar','PATCH')['status'],{200},'Arquivar entregável')
-                ativos=base.api(admin,f'/contratos/{contrato}/entregaveis?etapaId={etapa_id}')
-                arquivados=base.api(admin,f'/contratos/{contrato}/entregaveis/arquivados?etapaId={etapa_id}')
-                base.exigir(ativos['status']==200 and not any(x['id']==entregavel for x in ativos['body'])
-                            and arquivados['status']==200 and any(x['id']==entregavel for x in arquivados['body']),
+                rel['provas'].append('Evidência opcional não verificada: arquivar, ocultar, listar, bloquear alteração e reativar')
+                raiz_entrega=f'/contratos/{contrato_b}/entregaveis/{entregavel_arquivo}'
+                base.aceitar(base.api(admin,raiz_entrega+'/arquivar','PATCH')['status'],{200},
+                            'Arquivar entregável operacional ainda não concluído')
+                ativos=base.api(admin,f'/contratos/{contrato_b}/entregaveis?etapaId={etapa_arquivo_id}')
+                arquivados=base.api(admin,f'/contratos/{contrato_b}/entregaveis/arquivados?etapaId={etapa_arquivo_id}')
+                base.exigir(ativos['status']==200 and not any(x['id']==entregavel_arquivo for x in ativos['body'])
+                            and arquivados['status']==200 and any(x['id']==entregavel_arquivo for x in arquivados['body']),
                             'Entregável arquivado não foi isolado da carteira ativa')
                 base.aceitar(base.api(admin,raiz_entrega,'PATCH',{'nome':'Alteração proibida'})['status'],{409},
                             'Entregável arquivado não pode ser editado')
-                base.aceitar(postar_arquivo(admin,path+'/comprovantes','qa-arquivado.txt')['status'],{409},
+                base.aceitar(postar_arquivo(admin,caminho_arquivo+'/comprovantes','qa-arquivado.txt')['status'],{409},
                             'Arquivo arquivado deve negar operações de escrita')
-                base.aceitar(base.api(admin,raiz_entrega+'/reativar','PATCH', {'motivo':'Reativação sintética do entregável para QA auditável.'})['status'],{200},'Reativar entregável')
+                base.aceitar(base.api(admin,raiz_entrega+'/reativar','PATCH',
+                            {'motivo':'Reativação sintética do entregável para QA auditável.'})['status'],{200},
+                            'Reativar entregável operacional')
                 visao=base.api(admin,path)
-                base.exigir(visao['status']==200 and len(visao['body']['versoes'])==1,
-                            'Reativação não preservou comprovante verificado')
-                rel['provas'].append('Entregável: arquivar, isolar, bloquear edição, reativar e preservar original')
+                base.exigir(visao['status']==200 and len(visao['body']['versoes'])==1
+                            and visao['body']['status']=='VERIFICADA',
+                            'Arquivamento independente alterou comprovante verificado do contrato original')
+                rel['provas'].append('Entregável operacional: arquivar, isolar, bloquear edição, reativar e preservar prova original')
                 rel['etapaAtual'] = 'Concluído'
                 rel['status']='APROVADO'
             finally:

@@ -133,8 +133,13 @@ def fluxo(contas, visivel):
                 aba_arch = painel.get_by_role('tabpanel', name='Entregáveis arquivados')
                 aba_arch.get_by_text(nome, exact=True).wait_for(timeout=15000)
                 aba_arch.get_by_role('button', name='Reativar', exact=True).click()
-                pagina.get_by_role('dialog', name='Reativar entregável?').get_by_role(
-                    'button', name='Confirmar reativação').click()
+                # Reativar exige justificativa de 15 a 200 caracteres;
+                # sem preenchimento o botão fica corretamente desabilitado.
+                confirmacao = pagina.get_by_role('dialog', name='Reativar entregável?')
+                confirmacao.get_by_role('textbox', name=re.compile('Justificativa obrigatória')).fill(
+                    'Reativação do entregável no teste automatizado de integração.'
+                )
+                confirmacao.get_by_role('button', name='Confirmar reativação').click()
                 aba_arch.get_by_text(nome, exact=True).wait_for(state='hidden', timeout=15000)
                 painel.get_by_role('tab', name='Entregáveis', exact=True).click()
                 cartao.wait_for(state='visible', timeout=15000)

@@ -1,0 +1,23 @@
+{
+  "contas": {
+    "administrador": {
+      "email": "rinaldi@gmail.com",
+      "senha": "Rinaldi.123!"
+    },
+    "gestor": {
+      "email": "rinaldi3@gmail.com",
+      "senha": "Rinaldi.123!"
+    },
+    "colaborador": {
+      "email": "rinaldi2@gmail.com",
+      "senha": "Rinaldi.123!"
+    }
+  },
+  "perfis": {
+    "administrador": "administrador",
+    "gestor-edicao": "gestor",
+    "gestor-leitura": "gestor",
+    "colaborador": "colaborador",
+    "sem-vinculo": "colaborador"
+  }
+}

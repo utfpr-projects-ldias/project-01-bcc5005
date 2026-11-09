@@ -9,7 +9,10 @@ falhar() { printf 'BLOQUEADO: %s\n' "$*" >&2; exit 2; }
 
 [[ "$(basename "$ROOT")" == 'project-01-bcc5005' ]] || falhar 'Nome inesperado da raiz do projeto.'
 [[ -d backend/src && -d frontend/src && -f docker-compose.yml ]] || falhar 'Fontes/Compose não encontrados.'
-[[ "$(git branch --show-current 2>/dev/null)" == 'tec-08' ]] || falhar 'Exige a branch tec-08.'
+case "$(git branch --show-current 2>/dev/null)" in
+  tec-08|tec-08-04-05) ;;
+  *) falhar 'Exige branch TEC08 autorizada (tec-08 ou tec-08-04-05).' ;;
+esac
 command -v docker >/dev/null || falhar 'Docker indisponível.'
 command -v python3 >/dev/null || falhar 'Python 3 indisponível.'
 docker compose config -q || falhar 'Compose inválido.'
