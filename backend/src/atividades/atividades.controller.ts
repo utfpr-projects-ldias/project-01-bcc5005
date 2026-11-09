@@ -14,6 +14,7 @@ import { AtividadesService } from './atividades.service.js';
 import { CreateAtividadeDto } from './dto/create-atividade.dto.js';
 import { UpdateAtividadeDto } from './dto/update-atividade.dto.js';
 import { AutorizacaoGuard } from '../autorizacao/autorizacao.guard.js';
+import { Politica } from '../autorizacao/politica.decorator.js';
 
 @Controller('atividades')
 @UseGuards(AutorizacaoGuard) 
@@ -21,12 +22,14 @@ export class AtividadesController {
   constructor(private readonly atividadesService: AtividadesService) {}
 
   @Post()
+  @Politica('CRIAR_ATIVIDADE', 'contratoId')
   async create(@Body() createAtividadeDto: CreateAtividadeDto, @Req() req: any) {
     const usuarioLogado = req.user || {}; 
     return this.atividadesService.create(createAtividadeDto, usuarioLogado);
   }
 
   @Get()
+  @Politica('VISUALIZAR_DIARIO', 'contratoId')
   async findAll(
     @Query('contratoId') contratoId: string,
     @Query('page') page?: string,
@@ -47,22 +50,26 @@ export class AtividadesController {
   }
 
   @Get(':id')
+  @Politica('VISUALIZAR_DIARIO')
   async findOne(@Param('id') id: string) {
     return this.atividadesService.findOne(id);
   }
 
   @Patch(':id')
+  @Politica('EDITAR_ATIVIDADE')
   async update(
     @Param('id') id: string, 
     @Body() updateAtividadeDto: UpdateAtividadeDto,
     @Req() req: any 
   ) {
     const usuarioLogado = req.user || {};
-    return this.atividadesService.update(id, updateAtividadeDto);
+    return this.atividadesService.update(id, updateAtividadeDto, usuarioLogado);
   }
 
   @Delete(':id')
+  @Politica('EXCLUIR_ATIVIDADE')
   async remove(@Param('id') id: string, @Req() req: any) {
-    return this.atividadesService.remove(id);
+    const usuarioLogado = req.user || {};
+    return this.atividadesService.remove(id, usuarioLogado);
   }
 }

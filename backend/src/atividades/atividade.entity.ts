@@ -32,19 +32,18 @@ export class AtividadeEntity {
   @Column({ type: 'varchar' })
   responsavel: string;
 
-  @Column({ type: 'simple-array' })
+  @Column({ type: 'simple-array', nullable: true })
   participantes: string[];
 
-  @Column({ type: 'varchar' })
+  @Column({ type: 'varchar', nullable: true })
   local: string;
 
-  @Column({ type: 'varchar' })
+  @Column({ type: 'varchar', nullable: true })
   duracao: string;
 
   @Column({ type: 'text', nullable: true })
   observacoes?: string;
 
-  // Mapeamento correto da relação N:N com a Entidade Entregavel usando a tabela pivot
   @ManyToMany(() => Entregavel, { cascade: true })
   @JoinTable({
     name: 'atividade_entregaveis',
