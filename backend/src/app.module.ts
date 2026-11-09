@@ -13,7 +13,7 @@ import { EtapasModule } from './etapas/etapas.module.js';
 import { EntregaveisModule } from './entregaveis/entregaveis.module.js';
 import { DocumentosModule } from './documentos/documentos.module.js';
 import { AtividadesModule } from './atividades/atividades.module.js';
-
+import { OcorrenciasModule } from './ocorrencias/ocorrencias.module.js';
 
 @Module({
   imports: [
@@ -30,6 +30,7 @@ import { AtividadesModule } from './atividades/atividades.module.js';
     ContratosModule,
     EtapasModule,
     EntregaveisModule,
+    OcorrenciasModule,
     DocumentosModule,
     AtividadesModule,
   ],
