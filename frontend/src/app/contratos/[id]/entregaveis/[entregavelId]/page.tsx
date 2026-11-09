@@ -11,6 +11,7 @@ import type { DadosPlanejamentoEntregavel } from '@/lib/validacao-entregavel';
 import { useDetalheEntregavel } from '@/hooks/use-entregaveis';
 import { ConteudoEntregavel } from '@/app/contratos/components/conteudo-entregavel';
 import { toastSucesso } from '@/app/components/toast-notificacoes';
+import { AtividadesVinculadas } from '@/app/contratos/components/atividades-vinculadas';
 
 
 export default function DetalheEntregavelPage() {
@@ -53,5 +54,6 @@ export default function DetalheEntregavelPage() {
     </div>}
     {item && !editando && <ConteudoEntregavel item={item} podeEditarEsperada={podeEditar} podeVerHistorico={podeEditar}
       aoAtualizarEsperada={() => { void consulta.atualizar().catch(() => {}); }} />}
+    {item && !editando && <AtividadesVinculadas contratoId={contratoId} entregavelId={entregavelId} />}
   </AreaContratos>;
 }

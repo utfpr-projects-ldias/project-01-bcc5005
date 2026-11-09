@@ -1,75 +1,44 @@
-import { 
-  Controller, 
-  Get, 
-  Post, 
-  Body, 
-  Patch, 
-  Param, 
-  Delete, 
-  Query, 
-  Req, 
-  UseGuards
+import {
+  Body, Controller, Get, Param, Patch, Post, Query, Req, UsePipes, ValidationPipe,
 } from '@nestjs/common';
+import { ExigirPoliticaOperacional } from '../autorizacao/politica.decorator.js';
+import type { RequisicaoAutorizada } from '../autorizacao/usuario-autenticado.js';
 import { AtividadesService } from './atividades.service.js';
 import { CreateAtividadeDto } from './dto/create-atividade.dto.js';
 import { UpdateAtividadeDto } from './dto/update-atividade.dto.js';
-import { AutorizacaoGuard } from '../autorizacao/autorizacao.guard.js';
-import { Politica } from '../autorizacao/politica.decorator.js';
 
-@Controller('atividades')
-@UseGuards(AutorizacaoGuard) 
+/** Rotas aninhadas: o guard resolve o contrato da URL ou da atividade persistida. */
+@Controller('contratos/:contratoId/atividades')
+@UsePipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
 export class AtividadesController {
-  constructor(private readonly atividadesService: AtividadesService) {}
+  constructor(private readonly atividades: AtividadesService) {}
 
   @Post()
-  @Politica('CRIAR_ATIVIDADE', 'contratoId')
-  async create(@Body() createAtividadeDto: CreateAtividadeDto, @Req() req: any) {
-    const usuarioLogado = req.user || {}; 
-    return this.atividadesService.create(createAtividadeDto, usuarioLogado);
+  @ExigirPoliticaOperacional('atividades:registrar', { tipo: 'contrato', parametro: 'contratoId' })
+  criar(@Param('contratoId') contratoId: string, @Body() dto: CreateAtividadeDto, @Req() req: RequisicaoAutorizada) {
+    return this.atividades.create(contratoId, dto, req.usuarioDominio!);
   }
 
   @Get()
-  @Politica('VISUALIZAR_DIARIO', 'contratoId')
-  async findAll(
-    @Query('contratoId') contratoId: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-    @Query('dataInicio') dataInicio?: string,
-    @Query('dataFim') dataFim?: string,
-  ) {
-    const pageNumber = page ? parseInt(page, 10) : 1;
-    const limitNumber = limit ? parseInt(limit, 10) : 10;
-    
-    return this.atividadesService.findAllPaginated(
-      contratoId, 
-      pageNumber, 
-      limitNumber, 
-      dataInicio, 
-      dataFim
-    );
+  @ExigirPoliticaOperacional('atividades:listar', { tipo: 'contrato', parametro: 'contratoId' })
+  listar(@Param('contratoId') contratoId: string, @Query() query: Record<string, string>) {
+    return this.atividades.findAllPaginated(contratoId, query);
   }
 
   @Get(':id')
-  @Politica('VISUALIZAR_DIARIO')
-  async findOne(@Param('id') id: string) {
-    return this.atividadesService.findOne(id);
+  @ExigirPoliticaOperacional('atividades:visualizar', {
+    tipo: 'recurso', recurso: 'atividade', parametro: 'id', parametroContratoPai: 'contratoId',
+  })
+  detalhar(@Param('contratoId') contratoId: string, @Param('id') id: string) {
+    return this.atividades.findOne(contratoId, id);
   }
 
   @Patch(':id')
-  @Politica('EDITAR_ATIVIDADE')
-  async update(
-    @Param('id') id: string, 
-    @Body() updateAtividadeDto: UpdateAtividadeDto,
-    @Req() req: any 
-  ) {
-    const usuarioLogado = req.user || {};
-    return this.atividadesService.update(id, updateAtividadeDto, usuarioLogado);
-  }
-
-  @Delete(':id')
-  @Politica('EXCLUIR_ATIVIDADE')
-  async remove(@Param('id') id: string, @Req() req: any) {
-    const usuarioLogado = req.user || {};
-    return this.atividadesService.remove(id, usuarioLogado);
+  @ExigirPoliticaOperacional('atividades:editar', {
+    tipo: 'recurso', recurso: 'atividade', parametro: 'id', parametroContratoPai: 'contratoId',
+  })
+  editar(@Param('contratoId') contratoId: string, @Param('id') id: string,
+    @Body() dto: UpdateAtividadeDto, @Req() req: RequisicaoAutorizada) {
+    return this.atividades.update(contratoId, id, dto, req.usuarioDominio!);
   }
 }

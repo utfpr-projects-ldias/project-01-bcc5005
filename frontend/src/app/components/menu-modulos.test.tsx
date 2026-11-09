@@ -9,14 +9,15 @@ const perfil = consultarMeuPerfil as jest.MockedFunction<typeof consultarMeuPerf
 
 beforeEach(() => jest.clearAllMocks());
 
-test("B3 libera contratos e mostra módulos indisponíveis sem linguagem interna", async () => {
+test("B3 libera diário e contratos sem mostrar módulos futuros como ativos", async () => {
   perfil.mockResolvedValue({ id: "u", nome: "Colaborador de Teste", email: "teste@example.com", perfil: "COLABORADOR", ativo: true });
   // Verifica a ausência do link administrativo após a consulta do perfil terminar.
   await act(async () => {
     renderComConsultas(<MenuMobile />);
   });
   expect(screen.getByRole("link", { name: /Contratos/ })).toHaveAttribute("href", "/contratos");
-  expect(screen.getByLabelText('Atividades · Indisponível')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Atividades' })).toHaveAttribute('href', '/atividades');
+  expect(screen.getByLabelText('Evidências · Indisponível')).toBeInTheDocument();
   expect(screen.getByRole('navigation', { name: 'Navegação móvel' })).toHaveClass('flex-nowrap');
   expect(screen.queryByRole("link", { name: "Funcionários" })).not.toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "Minha conta" })).not.toBeInTheDocument();

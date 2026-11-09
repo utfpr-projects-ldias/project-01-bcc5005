@@ -10,7 +10,7 @@ function useItens(): Item[] {
   return [
     { nome: 'Dashboard', href: '/dashboard', icone: 'inicio' },
     { nome: 'Contratos', href: '/contratos', icone: 'arquivo' },
-    { nome: 'Atividades', aviso: 'Indisponível', icone: 'lista' },
+    { nome: 'Atividades', href: '/atividades', icone: 'lista' },
     { nome: 'Evidências', aviso: 'Indisponível', icone: 'evidencia' },
     { nome: 'Relatórios', aviso: 'Indisponível', icone: 'relatorio' },
     ...(perfil?.ativo && perfil.perfil === 'ADMINISTRADOR'

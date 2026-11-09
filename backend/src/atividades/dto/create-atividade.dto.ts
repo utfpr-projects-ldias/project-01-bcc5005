@@ -1,48 +1,16 @@
-import { IsString, IsNotEmpty, IsArray, IsUUID, IsOptional, IsDateString } from 'class-validator';
+import { ArrayMinSize, ArrayUnique, IsArray, IsDateString, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
+/** HU08: o contrato raiz é sempre conferido contra :contratoId na URL. */
 export class CreateAtividadeDto {
-  @IsUUID()
-  @IsNotEmpty()
-  contratoId: string;
-
-  @IsString()
-  @IsNotEmpty()
-  titulo: string;
-
-  @IsDateString()
-  @IsNotEmpty()
-  dataHora: string; // ou data civil
-
-  @IsString()
-  @IsNotEmpty()
-  descricao: string;
-
-  @IsString()
-  @IsNotEmpty()
-  tipo: string;
-
-  @IsString()
-  @IsNotEmpty()
-  responsavel: string;
-
-  @IsArray()
-  @IsString({ each: true })
-  participantes: string[];
-
-  @IsString()
-  @IsNotEmpty()
-  local: string;
-
-  @IsString()
-  @IsNotEmpty()
-  duracao: string;
-
-  @IsOptional()
-  @IsString()
-  observacoes?: string;
-
-  @IsArray()
-  @IsUUID('4', { each: true })
-  @IsNotEmpty()
-  entregavelIds: string[]; // Relação N:N com múltiplos entregáveis
+  @IsUUID() contratoId!: string;
+  @IsString() @IsNotEmpty() @MaxLength(255) titulo!: string;
+  @IsDateString({ strict: true }) dataHora!: string;
+  @IsString() @IsNotEmpty() @MaxLength(5000) descricao!: string;
+  @IsString() @IsNotEmpty() @MaxLength(80) tipo!: string;
+  @IsOptional() @IsString() @MaxLength(255) responsavel?: string;
+  @IsOptional() @IsArray() @IsString({ each: true }) participantes?: string[];
+  @IsOptional() @IsString() @MaxLength(255) local?: string;
+  @IsOptional() @IsString() @MaxLength(80) duracao?: string;
+  @IsOptional() @IsString() @MaxLength(5000) observacoes?: string;
+  @IsArray() @ArrayMinSize(1) @ArrayUnique() @IsUUID('all', { each: true }) entregavelIds!: string[];
 }
