@@ -14,7 +14,7 @@ import { ConfirmacaoSimples } from "./confirmacao-simples";
 /** O layout raiz permanece montado mesmo ao navegar entre login e dashboard. */
 export function EstruturaInterna({ children }: { children: ReactNode }) {
   const rota = usePathname();
-  const interna = rota === "/dashboard" || rota === "/usuario" || rota === "/contratos" || rota.startsWith("/contratos/") ||
+  const interna = rota === "/dashboard" || rota === "/usuario" || rota === "/atividades" || rota === "/ocorrencias" || rota === "/execucao" || rota === "/contratos" || rota.startsWith("/contratos/") ||
     rota === "/admin/usuarios" || rota.startsWith("/admin/usuarios/");
 
   if (!interna) return <>{children}</>;
@@ -33,6 +33,9 @@ function CabecalhoInterno({ rota, children }: { rota: string; children: ReactNod
 
   let titulo = "Dashboard";
   if (rota === "/usuario") titulo = "Minha conta";
+  else if (rota === "/atividades") titulo = "Diário de atividades";
+  else if (rota === "/ocorrencias") titulo = "Ocorrências";
+  else if (rota === "/execucao") titulo = "Execução e progresso";
   else if (rota.startsWith("/admin/usuarios")) {
     titulo = rota === "/admin/usuarios" ? "Funcionários" :
       rota === "/admin/usuarios/novo" ? "Cadastrar funcionário" : "Editar funcionário";

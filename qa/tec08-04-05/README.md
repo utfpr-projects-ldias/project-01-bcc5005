@@ -8,6 +8,21 @@ Este diretório complementa, **não substitui**, os roteiros históricos em `qa/
 
 A atualização adiciona teste de login real e gate anterior a qualquer fixture persistente; mantém os scripts históricos e as 23 migrations, sem alterar Nest/Next/SuperTokens.
 
+## Fechamento seguro TEC08-04 e TEC08-05 (branch atual)
+
+A branch de trabalho `tec-08--04-05` é aceita por `qa/tec08-uiux-final/VALIDAR.sh`.
+O QA existente cobre storage, upload/download, ACL, auditoria e a integração real; **não recriar esses fluxos**.
+
+1. Sem gravar dados de domínio: `bash qa/tec08-uiux-final/VALIDAR.sh --preflight`, `--target` e `--full` (comandos separados).
+2. Com serviços DEV ativos: `bash qa/tec08-uiux-final/VALIDAR.sh --qa-verificar` (autentica as três contas; cria sessões).
+3. Somente no DEV e após o `--full` aprovar: `bash qa/tec08-uiux-final/VALIDAR.sh --qa-executar --confirmar-persistencia`. **Cria registros sintéticos persistentes.**
+4. Depois, testar documento real no storage sem alterar nada: `python3 qa/tec08-04-05/validar_persistencia_reinicio.py --verificar`.
+5. Com autorização explícita para interromper temporariamente Next/Nest: `python3 qa/tec08-04-05/validar_persistencia_reinicio.py --executar --confirmar-reinicio`.
+
+A verificação de reinício seleciona o documento ativo mais recente (ou `--documento UUID`), compara SHA-256 do arquivo com o PostgreSQL **antes e depois** de `docker compose restart backend frontend` e compara todos os metadados documentais. Não executa `down`, `-v`, migrations, alteração de contas nem exclusões. Sem documento preexistente, execute antes o QA real do passo 3; a verificação falha em vez de criar dados ocultamente.
+
+**Evidência para um único PR:** anotar o commit-base, os seis resultados de `--full`, os resultados de `--target`/`--qa-verificar`/`--qa-executar` e o teste de reinício. Os logs de QA permanecem em `qa/tec08-uiux-final/.local/execucoes/` (privados). Somente concluir TEC08-04 e TEC08-05 após verificar as saídas reais. Não é necessário executar a reconstrução destrutiva abaixo.
+
 ## Opção A — aproveitar o banco existente (sem apagar)
 
 ```bash

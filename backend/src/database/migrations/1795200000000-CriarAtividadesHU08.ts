@@ -12,7 +12,7 @@ export class CriarAtividadesHU0817952000000 implements MigrationInterface {
             type: 'uuid',
             isPrimary: true,
             generationStrategy: 'uuid',
-            default: 'uuid_generate_v4()',
+            default: 'gen_random_uuid()',
           },
           {
             name: 'contratoId',
@@ -100,7 +100,7 @@ export class CriarAtividadesHU0817952000000 implements MigrationInterface {
             type: 'uuid',
             isPrimary: true,
             generationStrategy: 'uuid',
-            default: 'uuid_generate_v4()',
+            default: 'gen_random_uuid()',
           },
           {
             name: 'atividadeId',

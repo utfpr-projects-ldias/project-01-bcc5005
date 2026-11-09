@@ -12,6 +12,7 @@ import { ContratosModule } from './contratos/contratos.module.js';
 import { EtapasModule } from './etapas/etapas.module.js';
 import { EntregaveisModule } from './entregaveis/entregaveis.module.js';
 import { DocumentosModule } from './documentos/documentos.module.js';
+import { AtividadesModule } from './atividades/atividades.module.js';
 
 
 @Module({
@@ -30,6 +31,7 @@ import { DocumentosModule } from './documentos/documentos.module.js';
     EtapasModule,
     EntregaveisModule,
     DocumentosModule,
+    AtividadesModule,
   ],
   controllers: [
     AppController,

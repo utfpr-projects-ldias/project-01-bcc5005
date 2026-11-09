@@ -40,6 +40,7 @@ export const POLITICAS_OPERACIONAIS = {
   'atividades:listar': { recurso: 'atividade', classe: 'leitura', escopo: 'contrato' },
   'atividades:visualizar': { recurso: 'atividade', classe: 'leitura', escopo: 'recurso' },
   'atividades:registrar': { recurso: 'atividade', classe: 'operacional', escopo: 'contrato' },
+  'atividades:editar': { recurso: 'atividade', classe: 'operacional', escopo: 'recurso' },
   'evidencias:listar': { recurso: 'evidencia', classe: 'leitura', escopo: 'contrato' },
   'evidencias:visualizar': { recurso: 'evidencia', classe: 'leitura', escopo: 'recurso' },
   'evidencias:anexar': { recurso: 'evidencia', classe: 'operacional', escopo: 'contrato' },

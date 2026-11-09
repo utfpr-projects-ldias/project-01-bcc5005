@@ -1,91 +1,43 @@
-import { useState, useEffect, useCallback } from 'react';
+'use client';
 
-export interface ProgressoEntregable {
-  entregavelId: string;
-  tipo: 'QUANTITATIVO' | 'RECORRENTE' | 'MARCO' | 'UNICO' | 'CONTINUO';
-  realizado: number;
-  previsto: number;
-  percentualExecucao: number; // 0 a 100 (teto 100%)
-  percentualComprovação: number; // Independente
-  pesoOperacional?: number;
-  dataEfetivaMarco?: string;
-}
+import { useConsulta } from '@/app/components/provedor-consultas';
 
-export interface ProgressoContrato {
-  contratoId: string;
-  avancoSimples: number;
-  avancoPonderado: number;
-  pesosValidos: boolean; // Soma dos pesos == 100%
-  entregaveis: ProgressoEntregable[];
-}
+export type ProgressoEntregavel = {
+  entregavelId: string; nome: string; tipo: 'QUANTITATIVO' | 'RECORRENTE' | 'MARCO' | 'UNICO' | 'CONTINUO';
+  realizado: string | null; previsto: string | null; percentualExecucao: number | null;
+  pesoOperacional: string | null; dataEfetivaMarco: string | null;
+};
+export type ProgressoContrato = {
+  contratoId: string; avancoSimples: number | null; avancoPonderado: number | null;
+  pesosValidos: boolean; somaPesos: number | null; entregaveis: ProgressoEntregavel[];
+};
+export type AtualizacaoExecucao = {
+  percentualManual?: number; quantidadeRealizada?: string; dataEfetivaMarco?: string;
+};
+const API = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001').replace(/\/$/, '');
 
-export function useProgresso(contratoId?: string) {
-  const [progresso, setProgresso] = useState<ProgressoContrato | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
-
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-
-  const buscarProgresso = useCallback(async () => {
-    if (!contratoId) return;
-    setLoading(true);
-    setErro(null);
-
-    try {
-      const res = await fetch(`${API_URL}/contratos/${contratoId}/progresso`, {
-        credentials: 'include',
-      });
-
-      if (!res.ok) {
-        throw new Error('Erro ao carregar os dados de progresso e execução.');
-      }
-
-      const dados = await res.json();
-      setProgresso(dados);
-    } catch (err: any) {
-      setErro(err.message || 'Erro desconhecido ao carregar progresso.');
-    } finally {
-      setLoading(false);
-    }
-  }, [contratoId, API_URL]);
-
-  useEffect(() => {
-    if (contratoId) {
-      buscarProgresso();
-    }
-  }, [contratoId, buscarProgresso]);
-
-  const atualizarExecucao = async (
-    entregavelId: string,
-    payload: { realizado?: number; dataEfetivaMarco?: string; pesoOperacional?: number }
-  ) => {
-    setErro(null);
-    try {
-      const res = await fetch(`${API_URL}/entregaveis/${entregavelId}/execucao`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.message || 'Erro ao atualizar execução do entregável.');
-      }
-
-      // Recarrega o cálculo determinístico do contrato
-      await buscarProgresso();
-    } catch (err: any) {
-      setErro(err.message || 'Falha ao registrar atualização.');
-      throw err;
-    }
-  };
-
+/** A fonte do progresso físico é sempre o backend TEC09; não inferir de documentos. */
+export function useProgresso(contratoId: string) {
+  const base = `${API}/contratos/${encodeURIComponent(contratoId)}`;
+  const consulta = useConsulta(['execucao', contratoId], async signal => {
+    const resposta = await fetch(`${base}/progresso`, { credentials: 'include', cache: 'no-store', signal });
+    if (!resposta.ok) throw new Error(resposta.status === 404
+      ? 'A API de progresso físico ainda não está disponível neste ambiente.'
+      : 'Não foi possível consultar o avanço físico.');
+    return await resposta.json() as ProgressoContrato;
+  }, { habilitada: Boolean(contratoId) });
   return {
-    progresso,
-    loading,
-    erro,
-    buscarProgresso,
-    atualizarExecucao,
+    progresso: consulta.dados ?? null, loading: consulta.carregando,
+    erro: consulta.erro ? String(consulta.erro) : null, atualizar: consulta.atualizar,
+    atualizarExecucao: async (entregavelId: string, dados: AtualizacaoExecucao) => {
+      const resposta = await fetch(`${base}/entregaveis/${encodeURIComponent(entregavelId)}/execucao`, {
+        method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dados),
+      });
+      if (!resposta.ok) throw new Error(resposta.status === 404
+        ? 'A edição de execução ainda não está disponível na API TEC09.'
+        : resposta.status === 409 ? 'Conflito de atualização; confira os dados.'
+        : 'Não foi possível atualizar a execução.');
+      await consulta.atualizar();
+    },
   };
 }
