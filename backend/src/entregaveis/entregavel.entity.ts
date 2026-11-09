@@ -22,6 +22,15 @@ import { TipoEntregavel } from './tipo-entregavel.enum.js';
 @Index('idx_entregaveis_etapa_tipo', ['etapaId', 'tipo'])
 @Index('idx_entregaveis_contrato_termino', ['contratoId', 'terminoPrevisto'])
 @Index('idx_entregaveis_responsavel', ['responsavelId'])
+
+
+@Index(
+  'uq_entregaveis_id_contrato',
+  ['id', 'contratoId'],
+  { unique: true },
+)
+
+
 @Check('ck_entregaveis_nome_nao_vazio', 'length(btrim("nome")) > 0')
 @Check('ck_entregaveis_codigo_nao_vazio', '"codigo" IS NULL OR length(btrim("codigo")) > 0')
 @Check('ck_entregaveis_datas', '"inicio_previsto" IS NULL OR "termino_previsto" IS NULL OR "termino_previsto" >= "inicio_previsto"')
