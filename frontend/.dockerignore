@@ -1,0 +1,21 @@
+# Contexto de build Docker DEV: preservar src/, test/, package*.json e configs.
+# Dependencias do Linux Mint nao devem substituir binarios instalados no Alpine.
+node_modules/
+.next/
+dist/
+coverage/
+out/
+.vercel/
+.git/
+.vscode/
+.idea/
+.env
+.env.*
+!.env.example
+*.log
+*.tsbuildinfo
+*.dump
+*.backup
+*.bak
+__pycache__/
+.pytest_cache/

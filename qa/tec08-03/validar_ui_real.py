@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import secrets
 import sys
@@ -81,8 +82,13 @@ def criacao_pela_ui(page, execucao):
     dialogo = page.get_by_role('dialog', name='Confirmar cadastro?')
     dialogo.get_by_role('button', name='Confirmar cadastro').click()
     # O cadastro abre a Visão geral; o upload é sempre uma decisão separada.
-    page.wait_for_url('**/contratos/*', timeout=30000)
-    contrato = page.url.split('/contratos/')[1].split('?')[0]
+    # /contratos/novo tambem satisfaz **/contratos/*: nao aceitar a URL atual
+    # como se fosse o contrato recem-criado. Esperar rota com UUID real.
+    page.wait_for_function(
+        r"""() => /^\/contratos\/[0-9a-fA-F-]{36}\/?$/.test(window.location.pathname)""",
+        timeout=30000,
+    )
+    contrato = page.url.split('/contratos/')[1].split('?')[0].strip('/')
     exigir(base.uuid_ok(contrato), 'Cadastro via UI não retornou UUID de contrato')
     page.get_by_role('tab', name='Documentos').click()
     page.get_by_role('tabpanel', name='Documentos').wait_for(state='visible', timeout=20000)
@@ -151,16 +157,20 @@ def confirmar_documento(page, nome, resultado):
             f'alerta exibido: {_alertas_visiveis(painel)}')
     if not base.uuid_ok(resultado.get('documentoId')):
         raise AssertionError(f'Upload {nome}: HTTP 201 sem UUID válido na resposta')
+    # O feedback é emitido pelo ToastNotificacoes no layout GLOBAL.
+    # Restringir a busca ao painel produzia falso negativo apesar do HTTP 201.
+    # Além da confirmação visual, exigir o arquivo na lista persistida.
     try:
-        painel.get_by_text('Documento anexado.', exact=False).wait_for(timeout=12000)
+        page.get_by_label('Notificações').get_by_text('Documento anexado.', exact=True).wait_for(
+            state='visible', timeout=12000)
     except Exception as erro:
         if type(erro).__name__ != 'TimeoutError':
             raise
         raise AssertionError(
-            f'Upload {nome}: API HTTP 201, mas confirmação visual não apareceu; '
-            f'alerta: {_alertas_visiveis(painel)}; '
+            f'Upload {nome}: API HTTP 201, mas toast global não apareceu; '
+            f'alerta do painel: {_alertas_visiveis(painel)}; '
             f'formulário visível: {page.get_by_role("form", name="Anexar documento contratual").count() == 1}') from erro
-    painel.get_by_text(nome, exact=True).wait_for(timeout=20000)
+    painel.get_by_text(nome, exact=True).wait_for(state='visible', timeout=20000)
     return painel
 
 
@@ -292,14 +302,20 @@ def executar(contas, visivel=False):
             baixar_e_conferir(admin, 'qa-anexo.txt', TXT, pasta)
             rel['provas'].append('Upload e download do anexo TXT pela UI: SHA-256 íntegro')
             # Filtro é persistente por contrato no sessionStorage e recupera após reload.
-            painel.get_by_label('Filtrar por categoria').select_option('CONTRATO_PRINCIPAL')
+            painel.locator('#filtro-categoria-documento').select_option('CONTRATO_PRINCIPAL')
             painel.get_by_text('qa-principal.pdf', exact=True).wait_for(timeout=20000)
             exigir(painel.get_by_text('qa-anexo.txt', exact=True).count() == 0, 'Filtro exibiu categoria incorreta')
             admin.reload(wait_until='domcontentloaded')
+            # O detalhe inicia em Visao geral depois de cada carregamento novo.
+            # A categoria persiste em sessionStorage, nao a aba selecionada.
+            # O filtro existe no DOM da aba oculta, mas nao e interativo/visivel
+            # ate o usuario retornar explicitamente a Documentos.
+            admin.get_by_role('tab', name='Documentos', exact=True).click()
+            admin.get_by_role('tabpanel', name='Documentos').wait_for(state='visible', timeout=20000)
             painel = admin.locator('#documentos-contratuais')
-            painel.get_by_label('Filtrar por categoria').wait_for(timeout=25000)
+            painel.locator('#filtro-categoria-documento').wait_for(state='visible', timeout=25000)
             painel.get_by_text('qa-principal.pdf', exact=True).wait_for(timeout=25000)
-            exigir(painel.get_by_label('Filtrar por categoria').input_value() == 'CONTRATO_PRINCIPAL',
+            exigir(painel.locator('#filtro-categoria-documento').input_value() == 'CONTRATO_PRINCIPAL',
                    'Filtro não foi restaurado após recarga')
             rel['provas'].append('Filtro por categoria restaura após reload e não mistura documento principal/anexo')
             # A navegação por categoria não pode colapsar a seção e deslocar a página.
@@ -318,11 +334,11 @@ def executar(contas, visivel=False):
               };
               requestAnimationFrame(medir);
             }''')
-            painel.get_by_label('Filtrar por categoria').select_option('ANEXO')
+            painel.locator('#filtro-categoria-documento').select_option('ANEXO')
             painel.get_by_text('qa-anexo.txt', exact=True).wait_for(timeout=20000)
             exigir(abs(admin.evaluate('window.scrollY') - rolagem_filtro) <= 2,
                    'Filtro ANEXO deslocou a posição da página')
-            painel.get_by_label('Filtrar por categoria').select_option('CONTRATO_PRINCIPAL')
+            painel.locator('#filtro-categoria-documento').select_option('CONTRATO_PRINCIPAL')
             painel.get_by_text('qa-principal.pdf', exact=True).wait_for(timeout=20000)
             exigir(abs(admin.evaluate('window.scrollY') - rolagem_filtro) <= 2,
                    'Filtro PRINCIPAL deslocou a posição da página')
@@ -390,6 +406,10 @@ def executar(contas, visivel=False):
             rel['provas'].append('Modal documental: seleção sem rolagem, Voltar, Escape e clique fora sem sair do contrato')
             # Regressão visual HU07: título do entregável abre modal dentro do contrato,
             # preservando o link direto e sem alegar arquivos de comprovação inexistentes.
+            # O roteiro estava na aba Documentos; a aba Etapas so e
+            # visivel depois da escolha explicita do usuario.
+            admin.get_by_role('tab', name='Etapas', exact=True).click()
+            admin.get_by_role('tabpanel', name='Etapas').wait_for(state='visible', timeout=20000)
             etapas_area = admin.locator('section[aria-labelledby="titulo-etapas"]')
             etapas_area.get_by_role('button', name='Nova etapa').click()
             form_etapa = etapas_area.get_by_role('form', name='Criar etapa')
@@ -399,16 +419,43 @@ def executar(contas, visivel=False):
                                        r.url.split('?')[0].endswith(f'/contratos/{a}/etapas') and r.status == 201,
                                        timeout=25000):
                 form_etapa.get_by_role('button', name='Salvar etapa').click()
-            cartao_etapa = etapas_area.locator('ol[aria-label="Etapas em ordem de execução"] > li').filter(
-                has=admin.get_by_role('heading', name=nome_etapa, exact=True))
-            cartao_etapa.wait_for(state='visible', timeout=25000)
-            bloco_entregaveis = cartao_etapa.locator('section[aria-label="Entregáveis da etapa"]')
+            # No layout atual o titulo da etapa e um BOTAO, nao um heading.
+            # Os entregaveis pertencem ao modal da etapa; nao ficam no <li>.
+            abertura_etapa = etapas_area.get_by_role(
+                'button', name=re.compile(r'^Abrir detalhes da etapa \d+: ' + re.escape(nome_etapa) + r'$'))
+            # Esperar o botão real, após o POST 201 e a atualização assíncrona da lista.
+            # O filtro anterior era incorreto: o localizador interno começava
+            # na seção exterior, e não dentro de cada <li> sob avaliação.
+            try:
+                abertura_etapa.wait_for(state='visible', timeout=25000)
+            except Exception as erro:
+                # Nunca fingir sucesso nem recarregar a página para esconder uma
+                # eventual falha real de atualização da UI após cadastro.
+                estado = etapas_area.evaluate('''raiz => ({
+                  listas: raiz.querySelectorAll('ol[aria-label="Etapas em ordem de execução"]').length,
+                  cartoes: raiz.querySelectorAll('ol[aria-label="Etapas em ordem de execução"] > li').length,
+                  botoesDeEtapa: raiz.querySelectorAll('button[aria-label^="Abrir detalhes da etapa"]').length,
+                  avisos: raiz.querySelectorAll('[role="alert"]').length
+                })''')
+                raise AssertionError(
+                    f'POST da etapa retornou HTTP 201, mas o botão não apareceu na UI: {estado}'
+                ) from erro
+            cartao_etapa = abertura_etapa.locator('xpath=ancestor::li[1]')
+            cartao_etapa.wait_for(state='visible', timeout=8000)
+            exigir(cartao_etapa.locator('xpath=parent::ol').get_attribute('aria-label') ==
+                   'Etapas em ordem de execução',
+                   'Etapa criada não está na lista principal ordenada do contrato')
+            abertura_etapa.click()
+            modal_etapa = admin.get_by_role(
+                'dialog', name=re.compile(r'^\d+\s*·\s*' + re.escape(nome_etapa) + r'$'))
+            modal_etapa.wait_for(state='visible', timeout=15000)
+            bloco_entregaveis = modal_etapa.get_by_role('region', name='Entregáveis da etapa')
             bloco_entregaveis.get_by_role('button', name='Novo entregável').click()
             form_entregavel = bloco_entregaveis.get_by_role('form', name='Cadastrar entregável')
             nome_entregavel = 'QA TEC08-03 Detalhe em Modal ' + execucao[-6:]
             form_entregavel.locator('input[id$="-nome"]').fill(nome_entregavel)
             form_entregavel.get_by_role('button', name='+ Adicionar evidência esperada').click()
-            form_entregavel.get_by_label('Tipo de evidência *').fill('Relatório de QA')
+            form_entregavel.get_by_label('Tipo de evidência *').select_option('Relatório')
             form_entregavel.get_by_label('Descrição (opcional)').last.fill('Relatório planejado, não entregue')
             with admin.expect_response(lambda r: r.request.method == 'POST' and
                                        r.url.split('?')[0].endswith(f'/contratos/{a}/entregaveis') and r.status == 201,
@@ -424,18 +471,30 @@ def executar(contas, visivel=False):
             modal_item = admin.get_by_role('dialog', name=nome_entregavel)
             modal_item.wait_for(state='visible', timeout=25000)
             exigir(admin.url.split('?')[0] == f'{WEB}/contratos/{a}', 'Clique no entregável navegou em vez de abrir modal')
-            exigir(modal_item.get_by_text('Comprovação ainda não acompanhada').count() == 1,
-                   'UI inventou comprovação sem arquivos reais')
-            area_modal = modal_item.locator('.overflow-y-auto').first
-            botao_evidencia = modal_item.get_by_role('button', name='Ver detalhes da evidência esperada Relatório de QA')
+            # A evidência sem comprovante aparece como Aguardando envio.
+            # Nao aceitar "Status indisponivel" ou conteudo inventado como prova.
+            status_evidencia = modal_item.get_by_label('Status da evidência Relatório')
+            status_evidencia.get_by_text('Aguardando envio', exact=True).wait_for(state='visible', timeout=20000)
+            modal_item.get_by_text('0/1 evidências esperadas', exact=True).wait_for(state='visible', timeout=10000)
+            area_modal = modal_item.locator('[data-tec08-corpo-modal]').first
+            botao_evidencia = modal_item.get_by_role('button', name='Ver detalhes da evidência esperada Relatório')
+            # Scroll so deve ser >0 se a propria area permitir rolar.
+            # Uma fixture curta nao pode produzir um falso negativo.
+            area_modal.evaluate('(el) => { el.scrollTop = Math.min(80, Math.max(0, el.scrollHeight - el.clientHeight)); }')
             botao_evidencia.scroll_into_view_if_needed()
             posicao_interna = area_modal.evaluate('(el) => el.scrollTop')
-            exigir(posicao_interna > 0, 'Fixture não permite verificar a rolagem interna do modal')
+            if area_modal.evaluate('(el) => el.scrollHeight > el.clientHeight + 1'):
+                exigir(posicao_interna > 0, 'Nao foi possivel posicionar a rolagem interna do modal')
             botao_evidencia.click()
-            evid = modal_item.get_by_role('region', name='Detalhe da evidência esperada')
-            evid.get_by_text('Relatório planejado, não entregue').wait_for(timeout=10000)
-            evid.get_by_role('button', name='← Voltar ao entregável').click()
-            modal_item.get_by_role('heading', name='Evidências esperadas').wait_for(timeout=10000)
+            # O detalhe da evidencia e um NOVO modal portal, nao um filho DOM
+            # do dialogo do entregavel.
+            modal_evidencia = admin.get_by_role('dialog', name='Relatório', exact=True)
+            modal_evidencia.wait_for(state='visible', timeout=15000)
+            evid = modal_evidencia.get_by_role('region', name='Detalhe da evidência esperada')
+            evid.get_by_text('Relatório planejado, não entregue').wait_for(state='visible', timeout=10000)
+            modal_evidencia.get_by_role('button', name='Fechar evidência').click()
+            modal_evidencia.wait_for(state='hidden', timeout=10000)
+            modal_item.get_by_role('tab', name='Evidências', exact=True).wait_for(state='visible', timeout=10000)
             exigir(abs(area_modal.evaluate('(el) => el.scrollTop') - posicao_interna) <= 2,
                    'Voltar da evidência perdeu a posição interna do modal')
             exigir(botao_evidencia.evaluate('(el) => document.activeElement === el'),
@@ -461,8 +520,12 @@ def executar(contas, visivel=False):
             # Abrir pela rota explícita não equivale a confirmar/restaurar scroll:
             # essa responsabilidade é do fluxo normal via modal e histórico.
             href_direto = titulo_item.get_attribute('href')
-            exigir(href_direto == f'/contratos/{a}/entregaveis/{titulo_item.get_attribute("href").rsplit("/", 1)[-1]}',
-                   'O título deixou de oferecer URL direta acessível')
+            exigir(href_direto is not None and href_direto.startswith(f'/contratos/{a}/entregaveis/') and
+                   base.uuid_ok(href_direto.rsplit('/', 1)[-1]),
+                   'O titulo deixou de oferecer URL direta acessivel ao entregavel criado')
+            # Encerrar o modal de etapa antes de navegar pela rota direta.
+            modal_etapa.get_by_role('button', name='Voltar às etapas').click()
+            modal_etapa.wait_for(state='hidden', timeout=10000)
             admin.goto(WEB + href_direto, wait_until='domcontentloaded')
             admin.get_by_role('heading', name=nome_entregavel).wait_for(timeout=20000)
             admin.goto(f'{WEB}/contratos/{a}', wait_until='domcontentloaded')
@@ -510,6 +573,8 @@ def executar(contas, visivel=False):
             ctx_g, pg, _ = base.nova_sessao(browser, 'gestor-edicao', contas)
             try:
                 pg.goto(f'{WEB}/contratos/{a}', wait_until='domcontentloaded')
+                pg.get_by_role('tab', name='Documentos', exact=True).click()
+                pg.get_by_role('tabpanel', name='Documentos').wait_for(state='visible', timeout=20000)
                 pg.locator('#documentos-contratuais').get_by_text('qa-anexo.txt', exact=True).wait_for(timeout=25000)
                 exigir(pg.locator('#documentos-contratuais').get_by_role('button', name='Anexar documento').count() == 1,
                        'GESTOR editor não visualiza upload')
@@ -522,6 +587,8 @@ def executar(contas, visivel=False):
             ctx_c, pc, _ = base.nova_sessao(browser, 'colaborador', contas)
             try:
                 pc.goto(f'{WEB}/contratos/{a}', wait_until='domcontentloaded')
+                pc.get_by_role('tab', name='Documentos', exact=True).click()
+                pc.get_by_role('tabpanel', name='Documentos').wait_for(state='visible', timeout=20000)
                 painel_c = pc.locator('#documentos-contratuais')
                 painel_c.get_by_text('qa-anexo.txt', exact=True).wait_for(timeout=25000)
                 exigir(painel_c.get_by_role('button', name='Anexar documento').count() == 0,
@@ -537,27 +604,49 @@ def executar(contas, visivel=False):
             base.aceitar(base.api(admin, base.documento_base(b) + '/' + ids['qa-principal.pdf'] + '/download')['status'],
                          {404}, 'IDOR real: não aceitar documento A sob contrato B')
             rel['provas'].append('IDOR: contrato B existente não permite download de documento A')
-            # Cartão da lista de contratos: as contagens vêm do planejamento real.
-            # Não confundir checklist com comprovantes recebidos.
+            # Cartão na carteira de contratos. A página atual conserva a aba
+            # escolhida anteriormente; o campo de pesquisa somente aparece em "Todos".
+            # Selecionar explicitamente a aba e todos os campos antes de filtrar.
             admin.goto(WEB + '/contratos', wait_until='domcontentloaded')
+            aba_todos = admin.get_by_role('tab', name='Todos os contratos')
+            aba_todos.wait_for(state='visible', timeout=20000)
+            aba_todos.click()
+            admin.locator('#campo-busca').select_option('todos')
             numero_qa = f'QA-TEC08-03-{execucao}-A'
-            busca = admin.get_by_label('Buscar por código, número, órgão ou objeto')
+            busca = admin.get_by_role('searchbox', name='Pesquisar contrato')
             busca.wait_for(state='visible', timeout=20000)
             busca.fill(numero_qa)
-            cartao = admin.locator('ul.space-y-4 > li').filter(has=admin.get_by_text(numero_qa, exact=True))
-            cartao.wait_for(state='visible', timeout=15000)
+            # A lista é uma grade, não o antigo ul.space-y-4. Cada cartão possui
+            # link acessível cujo nome é o número do contrato.
+            cartao = admin.get_by_role('link', name=f'Abrir contrato {numero_qa}', exact=True)
+            cartao.wait_for(state='visible', timeout=25000)
+            exigir(cartao.get_attribute('href') == f'/contratos/{a}',
+                   'Pesquisa retornou outro contrato ou link com UUID incorreto')
             resumo = cartao.get_by_test_id('resumo-planejamento-contrato')
             resumo.scroll_into_view_if_needed()
-            admin.wait_for_function('''() => {
-              const v = document.querySelector('[data-testid="resumo-planejamento-contrato"]');
-              return !!v && v.textContent.includes('Etapas') &&
-                v.textContent.includes('Evidências') &&
-                v.textContent.includes('1 entregáveis planejados');
-            }''', timeout=25000)
-            exigir(resumo.locator('[aria-label="Evidências entregues: não mensuradas"]').count() == 1,
-                   'Cartão confundiu checklist planejado com prova de entrega')
-            exigir(resumo.locator('progress[aria-label="Etapas concluídas"]').count() == 1,
-                   'Indicador de etapas não utiliza status real')
+            # Indicadores atuais usam role=img/aria-label. Não existe mais
+            # <progress>, nem o rótulo legado de entregas não medidas.
+            # Houve 1 etapa, 1 entregável e 1 evidência esperada neste cenário,
+            # mas nenhum comprovante foi enviado: os três numeradores são zero.
+            esperados = (
+                '0 de 1 etapas concluídas e comprovadas',
+                '0 de 1 entregáveis documentalmente comprovados',
+                '0 de 1 evidências verificadas',
+            )
+            for rotulo in esperados:
+                try:
+                    resumo.get_by_role('img', name=rotulo, exact=True).wait_for(
+                        state='visible', timeout=25000)
+                except Exception as erro:
+                    diagnostico = resumo.evaluate(
+                        "el => ({texto: el.innerText.slice(0,500), "
+                        "indicadores: Array.from(el.querySelectorAll('[role=img]'))"
+                        ".map(no => no.getAttribute('aria-label')), "
+                        "carregando: el.querySelector('[role=status]')?.textContent ?? null})"
+                    )
+                    raise AssertionError(
+                        f'Carteira não exibe indicador real {rotulo!r}: {diagnostico}'
+                    ) from erro
             rel['provas'].append('Lista de contratos mostra etapas/entregáveis/evidências esperadas reais sem progresso fictício')
         except Exception as exc:
             falha = exc

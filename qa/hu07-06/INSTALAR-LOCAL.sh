@@ -7,6 +7,10 @@ chmod 700 "$LOCAL"
 if [[ ! -f "$LOCAL/credenciais.json" ]]; then
   python3 "$RAIZ/qa/hu07-06/migrar_qa_local.py"
 fi
+if [[ ! -f "$LOCAL/credenciais.json" ]]; then
+  install -m 600 "$RAIZ/qa/hu07-06/contas-dev-fixture.json" "$LOCAL/credenciais.json"
+  echo '[QA] Credenciais DEV carregadas da fixture versionada.'
+fi
 if [[ ! -x "$LOCAL/venv/bin/python" ]]; then
   python3 -m venv "$LOCAL/venv"
 fi

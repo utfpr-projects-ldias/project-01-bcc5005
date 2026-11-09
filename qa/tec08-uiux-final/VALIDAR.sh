@@ -10,9 +10,10 @@ LOGDIR=""
 OK=0; ERRO=0
 
 verificar_origem() {
-  if [[ "$(git branch --show-current 2>/dev/null)" != "tec-08" ]]; then
-    echo 'BLOQUEIO: verificador QA reservado a branch tec-08.' >&2; return 3
-  fi
+  case "$(git branch --show-current 2>/dev/null)" in
+    tec-08|tec-08-04-05) ;;
+    *) echo 'BLOQUEIO: branch nao autorizada para este QA.' >&2; return 3 ;;
+  esac
   if ! git merge-base --is-ancestor '3eeed69ccb1af2b069cb38ef0563c7b45354072b' HEAD; then
     echo 'BLOQUEIO: HEAD nao contem o commit-base auditado 3eeed69.' >&2; return 3
   fi
@@ -94,6 +95,8 @@ case "$MODO" in
       python3 -m unittest discover -s qa/tec08-uiux-final -p 'teste_fluxos_qa_atualizados.py' -v
     passo 'Regressões TEC08-03: uploads, contratos e transições' 'qa-documentos-unitarios' \
       python3 -m unittest discover -s qa/tec08-03 -p 'teste_validar_ui_real.py' -v
+    passo 'Regressões Python dos roteiros QA históricos e atuais' 'qa-regressoes-historicas' \
+      python3 qa/tec08-04-05/testar_roteiros.py
     passo 'Backend Jest: eventos, comprovantes e arquivamento' 'backend-jest-focal' \
       docker compose exec -T backend npm test -- --runInBand --runTestsByPath \
       src/entregaveis/evidencias-recebidas.service.spec.ts \
@@ -134,6 +137,17 @@ case "$MODO" in
       "$PY" qa/tec08-modal-ux/validar_modal_real.py --verificar
     passo 'Pré-voo card/modal de evidência' 'qa-card-preflight' \
       "$PY" qa/tec08-uiux-final/validar_card_evidencia_real.py --verificar
+    # Agora autentica de verdade as três contas (sessões efêmeras).
+    # Antes, 5/5 pré-voos passavam mesmo com Gestor e Colaborador inválidos.
+    passo 'Logins reais: Admin, Gestor e Colaborador' 'qa-tres-logins' \
+      "$PY" qa/tec08-04-05/verificar_logins.py
+    resumo ;;
+  --qa-logins)
+    verificar_origem || exit $?
+    python_privado || exit $?
+    abrir_logs
+    passo 'Logins reais: Admin, Gestor e Colaborador' 'qa-tres-logins' \
+      "$PY" qa/tec08-04-05/verificar_logins.py
     resumo ;;
   --qa-executar)
     verificar_origem || exit $?
@@ -149,6 +163,14 @@ case "$MODO" in
       echo 'O código mudou após o --full; execute-o novamente.' >&2; exit 3
     }
     abrir_logs
+    # Gate ANTES de qualquer fixture: evitar 0 provas por falha conhecida de login.
+    passo 'Logins reais obrigatórios (gate 3/3)' 'qa-tres-logins' \
+      "$PY" qa/tec08-04-05/verificar_logins.py
+    if (( ERRO > 0 )); then
+      echo 'BLOQUEIO: contas de QA inválidas; nenhuma suíte mutável foi iniciada.' >&2
+      resumo
+      exit 1
+    fi
     PASSOS_QA=(--executar --confirmar-persistencia)
     [[ "${3:-}" == '--visivel' ]] && PASSOS_QA+=(--visivel)
     passo 'Chromium real: evidências e autorizações' 'qa-evidencias-real' \
@@ -166,7 +188,8 @@ Uso: bash qa/tec08-uiux-final/VALIDAR.sh MODO
   --preflight             Somente hash/branch/HEAD/status
   --target                Jest focais (backend/frontend)
   --full                  Jest, lint, build backend/frontend independentes
-  --qa-verificar          Playwright: pré-voo SEM criar registros
+  --qa-verificar          Pré-voo + login real das 3 contas (sem criar contratos)
+  --qa-logins            Somente as 3 autenticações reais Next/SuperTokens/Nest
   --qa-executar --confirmar-persistencia [--visivel]
                           Executa QA real e grava dados SINTÉTICOS no DEV
 Nenhum modo executa migrations, reset de banco, commit ou altera contas permanentes.

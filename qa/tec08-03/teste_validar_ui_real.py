@@ -15,6 +15,53 @@ class TesteQATec0803(unittest.TestCase):
         self.assertTrue(ui.base.uuid_ok('11111111-1111-4111-8111-111111111111'))
         self.assertFalse(ui.base.uuid_ok('nao-uuid'))
 
+    def test_lista_contratos_acessibilidade_e_indicadores_reais(self):
+        """Evita regressão do QA após o fluxo inteiro já ter criado seus dados."""
+        qa = Path(ui.__file__).read_text(encoding='utf-8')
+        carteira = (ui.RAIZ / 'frontend/src/app/contratos/page.tsx').read_text(encoding='utf-8')
+        resumo = (ui.RAIZ / 'frontend/src/app/contratos/components/resumo-planejamento-contrato.tsx').read_text(encoding='utf-8')
+        self.assertIn('aria-label="Pesquisar contrato"', carteira)
+        self.assertIn('id="campo-busca"', carteira)
+        self.assertIn("aria-label={opcao === 'todos' ? 'Todos os contratos'", carteira)
+        self.assertIn('aria-label={`Abrir contrato ${c.numeroContrato}`}', carteira)
+        self.assertIn('data-testid="resumo-planejamento-contrato"', resumo)
+        self.assertIn('role="img" aria-label={rotulo}', resumo)
+        self.assertIn('etapas concluídas e comprovadas', resumo)
+        self.assertIn('entregáveis documentalmente comprovados', resumo)
+        self.assertIn('evidências verificadas', resumo)
+        self.assertIn("get_by_role('tab', name='Todos os contratos')", qa)
+        self.assertIn("locator('#campo-busca').select_option('todos')", qa)
+        self.assertIn("get_by_role('searchbox', name='Pesquisar contrato')", qa)
+        self.assertIn("get_by_role('link', name=f'Abrir contrato {numero_qa}'", qa)
+        self.assertIn("get_by_test_id('resumo-planejamento-contrato')", qa)
+        self.assertIn("get_by_role('img', name=rotulo, exact=True)", qa)
+        for rotulo in ('0 de 1 etapas concluídas e comprovadas',
+                       '0 de 1 entregáveis documentalmente comprovados',
+                       '0 de 1 evidências verificadas'):
+            self.assertIn(rotulo, qa)
+        for obsoleto in ('Buscar por código, número, órgão ou objeto',
+                         'ul.space-y-4 > li', 'progress[aria-label',
+                         'Evidências entregues: não mensuradas', '1 entregáveis planejados'):
+            self.assertNotIn(obsoleto, qa)
+
+    def test_cadastro_so_aceita_redirect_com_uuid(self):
+        # Antes a glob **/contratos/* aceitava /contratos/novo imediatamente.
+        codigo = Path(ui.__file__).read_text(encoding='utf-8')
+        self.assertNotIn("page.wait_for_url('**/contratos/*'", codigo)
+        self.assertIn('page.wait_for_function(', codigo)
+        self.assertIn('window.location.pathname', codigo)
+
+    def test_confirmacao_upload_esta_no_toast_global_e_documento_na_lista(self):
+        # A API HTTP 201 isolada não basta: conferir feedback real e listagem.
+        fonte = Path(ui.__file__).read_text(encoding='utf-8')
+        componente = (ui.RAIZ / 'frontend/src/app/contratos/components/painel-documentos.tsx').read_text(encoding='utf-8')
+        layout = (ui.RAIZ / 'frontend/src/app/layout.tsx').read_text(encoding='utf-8')
+        self.assertIn("page.get_by_label('Notificações').get_by_text('Documento anexado.'", fonte)
+        self.assertNotIn("painel.get_by_text('Documento anexado.'", fonte)
+        self.assertIn("painel.get_by_text(nome, exact=True).wait_for(state='visible'", fonte)
+        self.assertIn("toastSucesso('Documento anexado.')", componente)
+        self.assertIn('<ToastNotificacoes />', layout)
+
     def test_pdf_qa_valido_para_storage(self):
         self.assertTrue(ui.PDF.startswith(b'%PDF-'))
         self.assertIn(b'%%EOF', ui.PDF)
@@ -131,6 +178,39 @@ class TesteQATec0803(unittest.TestCase):
         self.assertIn("get_by_test_id('documento-principal-ausente')", conteudo)
         self.assertNotIn("get_by_text('Ainda não há documento principal'", conteudo)
 
+    def test_filtro_documental_usa_id_estavel_igual_ao_frontend(self):
+        # Evita falso negativo em Chromium se somente o texto do rótulo for editado.
+        roteiro = Path(ui.__file__).read_text(encoding='utf-8')
+        componente = (ui.RAIZ / 'frontend/src/app/contratos/components/painel-documentos.tsx').read_text(encoding='utf-8')
+        self.assertIn('id="filtro-categoria-documento"', componente)
+        self.assertIn('htmlFor="filtro-categoria-documento"', componente)
+        self.assertEqual(roteiro.count("painel.locator('#filtro-categoria-documento')"), 5)
+        self.assertNotIn("painel.get_by_label('Filtrar por categoria')", roteiro)
+
+    def test_qa_volta_aba_documentos_depois_de_recarregar(self):
+        codigo = Path(ui.__file__).read_text(encoding='utf-8')
+        bloco = codigo.split("admin.reload(wait_until='domcontentloaded')", 1)[1].split(
+            "rel['provas'].append('Filtro por categoria restaura", 1)[0]
+        selecao = "admin.get_by_role('tab', name='Documentos', exact=True).click()"
+        visivel = "admin.get_by_role('tabpanel', name='Documentos').wait_for(state='visible'"
+        filtro = "painel.locator('#filtro-categoria-documento').wait_for(state='visible'"
+        self.assertIn(selecao, bloco)
+        self.assertIn(visivel, bloco)
+        self.assertIn(filtro, bloco)
+        self.assertLess(bloco.index(selecao), bloco.index(filtro))
+        self.assertLess(bloco.index(visivel), bloco.index(filtro))
+        # A preferencia por categoria persiste, mas nao muda a aba da UI.
+        pagina = (ui.RAIZ / 'frontend/src/app/contratos/[id]/page.tsx').read_text(encoding='utf-8')
+        self.assertIn("useState<'visao' | 'etapas' | 'documentos'>('visao')", pagina)
+
+    def test_qa_ativa_abas_de_etapas_e_documentos_por_perfil(self):
+        codigo = Path(ui.__file__).read_text(encoding='utf-8')
+        self.assertIn("admin.get_by_role('tab', name='Etapas', exact=True).click()", codigo)
+        self.assertIn("admin.get_by_role('tabpanel', name='Etapas').wait_for(state='visible'", codigo)
+        for perfil in ('pg', 'pc'):
+            self.assertIn(f"{perfil}.get_by_role('tab', name='Documentos', exact=True).click()", codigo)
+            self.assertIn(f"{perfil}.get_by_role('tabpanel', name='Documentos').wait_for(state='visible'", codigo)
+
     def test_filtro_e_seletor_acessivel_sao_checados_no_qa(self):
         origem = Path(ui.__file__).read_text(encoding='utf-8')
         self.assertIn("name='Escolher arquivo'", origem)
@@ -154,10 +234,62 @@ class TesteQATec0803(unittest.TestCase):
         fonte = Path(ui.__file__).read_text(encoding='utf-8')
         self.assertIn('modal_item.wait_for', fonte)
         self.assertIn("get_by_role('region', name='Detalhe da evidência esperada')", fonte)
-        self.assertIn('Comprovação ainda não acompanhada', fonte)
+        self.assertIn("get_by_text('Aguardando envio', exact=True)", fonte)
+        self.assertIn("get_by_text('0/1 evidências esperadas', exact=True)", fonte)
         self.assertIn('HU07: etapa/entregável criados por UI', fonte)
         componente = ui.RAIZ / 'frontend/src/app/contratos/components/entregaveis-da-etapa.tsx'
         self.assertIn('__modalEntregavel', componente.read_text(encoding='utf-8'))
+
+    def test_etapa_e_entregavel_seguem_modal_real_nao_card_antigo(self):
+        fonte = Path(ui.__file__).read_text(encoding='utf-8')
+        etapa = (ui.RAIZ / 'frontend/src/app/contratos/components/painel-etapas.tsx').read_text(encoding='utf-8')
+        entregaveis = (ui.RAIZ / 'frontend/src/app/contratos/components/entregaveis-da-etapa.tsx').read_text(encoding='utf-8')
+        self.assertIn('aria-label={`Abrir detalhes da etapa ${indice + 1}: ${etapa.nome}`}', etapa)
+        self.assertIn('aria-label="Etapas em ordem de execução"', fonte)
+        self.assertNotIn("has=abertura_etapa", fonte)
+        self.assertIn("abertura_etapa.wait_for(state='visible'", fonte)
+        self.assertIn("cartao_etapa = abertura_etapa.locator('xpath=ancestor::li[1]')", fonte)
+        self.assertIn("'Etapas em ordem de execução'", fonte)
+        self.assertIn('abertura_etapa.click()', fonte)
+        self.assertIn("modal_etapa.get_by_role('region', name='Entregáveis da etapa')", fonte)
+        self.assertNotIn("has=admin.get_by_role('heading', name=nome_etapa", fonte)
+        self.assertNotIn("cartao_etapa.locator('section[aria-label=", fonte)
+        self.assertIn('<EntregaveisDaEtapa contratoId=', etapa)
+        self.assertIn('aria-label="Entregáveis da etapa"', entregaveis)
+
+    def test_cadastro_de_evidencia_usa_select_nativo_e_rotulos_reais(self):
+        fonte = Path(ui.__file__).read_text(encoding='utf-8')
+        formulario = (ui.RAIZ / 'frontend/src/app/contratos/components/formulario-entregavel.tsx').read_text(encoding='utf-8')
+        self.assertIn('<select id={formId(`ev-${item.chave}-tipo`)}', formulario)
+        self.assertIn('<option value="Relatório">Relatório</option>', formulario)
+        self.assertIn("get_by_label('Tipo de evidência *').select_option('Relatório')", fonte)
+        self.assertNotIn("get_by_label('Tipo de evidência *').fill(", fonte)
+        self.assertIn("get_by_label('Status da evidência Relatório')", fonte)
+        self.assertIn("name='Relatório', exact=True", fonte)
+        self.assertNotIn('Relatório de QA', fonte)
+
+    def test_localizador_da_etapa_nao_usa_has_absoluto(self):
+        fonte = Path(ui.__file__).read_text(encoding='utf-8')
+        painel = (ui.RAIZ / 'frontend/src/app/contratos/components/painel-etapas.tsx').read_text(encoding='utf-8')
+        self.assertIn('aria-label={`Abrir detalhes da etapa ${indice + 1}: ${etapa.nome}`}', painel)
+        self.assertIn("cartao_etapa = abertura_etapa.locator('xpath=ancestor::li[1]')", fonte)
+        self.assertIn("xpath=parent::ol", fonte)
+        self.assertIn('POST da etapa retornou HTTP 201, mas o botão não apareceu na UI', fonte)
+        self.assertNotIn('has=abertura_etapa)', fonte)
+        self.assertNotIn('admin.reload(', fonte.split("form_etapa.get_by_role('button', name='Salvar etapa')",1)[1].split('abertura_etapa.click()',1)[0])
+
+    def test_evidencia_portal_status_real_e_volta_pelo_cabecalho(self):
+        fonte = Path(ui.__file__).read_text(encoding='utf-8')
+        conteudo = (ui.RAIZ / 'frontend/src/app/contratos/components/conteudo-entregavel.tsx').read_text(encoding='utf-8')
+        self.assertIn("modal_evidencia = admin.get_by_role('dialog', name='Relatório', exact=True)", fonte)
+        self.assertIn("modal_evidencia.get_by_role('region', name='Detalhe da evidência esperada')", fonte)
+        self.assertIn("modal_evidencia.get_by_role('button', name='Fechar evidência').click()", fonte)
+        self.assertIn("modal_item.get_by_role('tab', name='Evidências', exact=True)", fonte)
+        self.assertNotIn("name='← Voltar ao entregável'", fonte)
+        self.assertNotIn("name='Evidências esperadas').wait_for", fonte)
+        self.assertIn('rotuloFechar="Fechar evidência"', conteudo)
+        self.assertIn("SEM_ENVIO: 'Aguardando envio'", (ui.RAIZ / 'frontend/src/lib/comprovantes.ts').read_text())
+        self.assertIn("modal_etapa.get_by_role('button', name='Voltar às etapas').click()", fonte)
 
     def test_seletor_nativo_nao_deve_revalidar_sessao_global(self):
         origem = ui.RAIZ / 'frontend/src/app/components/protecao-sessao-interna.tsx'
