@@ -17,6 +17,10 @@ export class AtividadesService {
   ) {}
 
   async create(dto: CreateAtividadeDto, usuarioLogado: any) {
+    if (!dto.entregavelIds || !Array.isArray(dto.entregavelIds) || dto.entregavelIds.length !== 2) {
+      throw new BadRequestException('A atividade deve estar vinculada a exatamente dois entregáveis antes da HU09.');
+    }
+
     const entregaveisValidos = await this.entregavelRepository.find({
       where: {
         id: In(dto.entregavelIds),
@@ -24,8 +28,8 @@ export class AtividadesService {
       },
     });
 
-    if (entregaveisValidos.length !== dto.entregavelIds.length) {
-      throw new BadRequestException('Um ou mais entregáveis não pertencem a este contrato ou não existem.');
+    if (entregaveisValidos.length !== 2) {
+      throw new BadRequestException('Um ou mais entregáveis selecionados não existem ou não pertencem ao mesmo contrato.');
     }
 
     const novaAtividade = this.atividadeRepository.create({
@@ -35,7 +39,7 @@ export class AtividadesService {
       descricao: dto.descricao,
       tipo: dto.tipo,
       responsavel: dto.responsavel,
-      participantes: dto.participantes,
+      participantes: dto.participantes || [],
       local: dto.local,
       duracao: dto.duracao,
       observacoes: dto.observacoes,
@@ -46,6 +50,10 @@ export class AtividadesService {
   }
 
   async findAllPaginated(contratoId: string, page = 1, limit = 10, dataInicio?: string, dataFim?: string) {
+    if (!contratoId) {
+      throw new BadRequestException('O parâmetro contratoId é obrigatório para consultar as atividades.');
+    }
+
     const skip = (page - 1) * limit;
     
     const query = this.atividadeRepository.createQueryBuilder('atividade')
@@ -53,9 +61,13 @@ export class AtividadesService {
       .where('atividade.contratoId = :contratoId', { contratoId });
 
     if (dataInicio && dataFim) {
-      query.andWhere('atividade.dataHora BETWEEN :dataInicio AND :dataFim', {
-        dataInicio: new Date(dataInicio),
-        dataFim: new Date(dataFim),
+      const inicio = new Date(dataInicio);
+      const fim = new Date(dataFim);
+      fim.setHours(23, 59, 59, 999);
+
+      query.andWhere('atividade.dataHora BETWEEN :inicio AND :fim', {
+        inicio,
+        fim,
       });
     }
 
@@ -88,7 +100,7 @@ export class AtividadesService {
     return atividade;
   }
 
-  async update(id: string, dto: UpdateAtividadeDto) {
+  async update(id: string, dto: UpdateAtividadeDto, usuarioLogado?: any) {
     const atividade = await this.findOne(id);
 
     const queryRunner = this.dataSource.createQueryRunner();
@@ -97,6 +109,10 @@ export class AtividadesService {
 
     try {
       if (dto.entregavelIds) {
+        if (!Array.isArray(dto.entregavelIds) || dto.entregavelIds.length !== 2) {
+          throw new BadRequestException('A atividade deve manter a vinculação a dois entregáveis.');
+        }
+
         const entregaveisValidos = await queryRunner.manager.find(Entregavel, {
           where: { 
             id: In(dto.entregavelIds), 
@@ -104,15 +120,17 @@ export class AtividadesService {
           },
         });
 
-        if (entregaveisValidos.length !== dto.entregavelIds.length) {
+        if (entregaveisValidos.length !== 2) {
           throw new BadRequestException('Um ou mais entregáveis informados não pertencem a este contrato.');
         }
 
         atividade.entregaveis = entregaveisValidos;
       }
 
+      const { entregavelIds, ...dadosAtualizacao } = dto as any;
+
       Object.assign(atividade, {
-        ...dto,
+        ...dadosAtualizacao,
         dataHora: dto.dataHora ? new Date(dto.dataHora) : atividade.dataHora,
       });
 
@@ -128,7 +146,7 @@ export class AtividadesService {
     }
   }
 
-  async remove(id: string) {
+  async remove(id: string, usuarioLogado?: any) {
     const atividade = await this.findOne(id);
     return await this.atividadeRepository.remove(atividade);
   }
