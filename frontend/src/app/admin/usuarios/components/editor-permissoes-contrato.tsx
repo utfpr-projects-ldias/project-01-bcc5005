@@ -32,6 +32,11 @@ const ESCOPOS_PERMISSOES: readonly GrupoPermissoes[] = [
     { icone: '✓', nome: 'Conclusão e revisão', chaves: ['concluirEntregaveis', 'reabrirEntregaveis'] },
     { icone: '▣', nome: 'Arquivamento e exclusão', chaves: ['arquivarEntregaveis', 'reativarEntregaveis', 'excluirEntregaveisArquivados'] },
   ] },
+  { titulo: 'Atividades', secoes: [
+    { icone: '✎', nome: 'Registro e edição', chaves: ['registrarAtividades', 'editarAtividades'] },
+    { icone: '✓', nome: 'Conferência e reabertura', chaves: ['verificarAtividades', 'reabrirAtividades'] },
+    { icone: '▣', nome: 'Arquivamento, reativação e exclusão', chaves: ['arquivarAtividades', 'reativarAtividades', 'excluirAtividadesArquivadas'] },
+  ] },
   { titulo: 'Evidências', secoes: [
     { icone: '✎', nome: 'Cadastro e critérios', chaves: ['criarEvidencias', 'editarEvidencias', 'alterarObrigatoriedade'] },
     { icone: '✓', nome: 'Comprovação e revisão', chaves: ['enviarComprovantes', 'verificarComprovantes', 'reabrirEvidencias'] },

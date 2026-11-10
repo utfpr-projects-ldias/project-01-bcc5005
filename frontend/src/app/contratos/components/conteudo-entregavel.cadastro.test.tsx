@@ -159,3 +159,51 @@ test('pai arquivado mantém aba de histórico de evidências mesmo sem permissã
   expect(screen.queryByRole('button', { name: 'Reativar' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /Nova evidência/ })).not.toBeInTheDocument();
 });
+
+
+test('criação em entregável em revisão recebe o contexto, mas não muda o estado do registro', () => {
+  render(<ConteudoEntregavel item={item} paiEmRevisao podeCriarEvidencia />);
+  const secao = screen.getByRole('heading', { name: 'Identificação e planejamento' }).closest('[data-tec08-secao-contextual]');
+  expect(secao).toBeInTheDocument();
+  const botao = screen.getByRole('button', { name: 'Nova evidência' });
+  expect(botao).toHaveAttribute('data-tec08-acao-criar');
+  fireEvent.click(botao);
+  const modal = screen.getByRole('dialog', { name: 'Nova evidência esperada' });
+  expect(modal).toHaveAttribute('data-tec08-estado', 'normal'); // Nova evidência começa neutra/verde; o registro existente mantém seu próprio estado.
+  expect(within(modal).getByRole('form', { name: 'Cadastrar evidência esperada' })).toHaveAttribute('data-tec08-formulario-contextual');
+});
+
+test('evidência pendente mantém estado próprio no cartão e no ícone', async () => {
+  consultar.mockResolvedValue({
+    id: 'evidencia-pendente', contratoId: 'contrato-qa', entregavelId: 'entregavel-qa',
+    status: 'PENDENTE_VERIFICACAO', versoes: [{ nomeOriginal: 'comprovante.pdf' }],
+  });
+  render(<ConteudoEntregavel item={{ ...item, evidenciasEsperadas: [
+    { id: 'evidencia-pendente', tipoEvidencia: 'Relatório', descricao: null, obrigatoria: true },
+  ] }} paiEmRevisao />);
+  const situacao = await screen.findByText('Pendente de verificação');
+  const cartao = situacao.closest('[data-evidencia-estado]');
+  expect(cartao).toHaveAttribute('data-evidencia-estado', 'pendente');
+  expect(cartao?.querySelector('[data-tec08-icone-evidencia]')).toBeInTheDocument();
+});
+
+
+test('evidência opcional verificada continua violeta mesmo com etapa arquivada', async () => {
+  consultar.mockResolvedValue({
+    id: 'evidencia-opcional', contratoId: 'contrato-qa', entregavelId: 'entregavel-qa',
+    status: 'VERIFICADA', versoes: [{ nomeOriginal: 'foto-final.jpg' }],
+  });
+  render(<ConteudoEntregavel item={{ ...item, statusExecucao: 'CONCLUIDO', evidenciasEsperadas: [
+    { id: 'evidencia-opcional', tipoEvidencia: 'Foto', descricao: null, obrigatoria: false },
+  ] }} paiArquivado bloqueadoPorPai />);
+  fireEvent.click(screen.getByRole('tab', { name: 'Evidências concluídas' }));
+  const opcional = await screen.findByRole('list', { name: 'Evidências opcionais' });
+  const card = opcional.querySelector('[data-evidencia-estado]');
+  expect(card).toHaveAttribute('data-evidencia-estado', 'concluido');
+  expect(card).toHaveAttribute('data-tec08-item-clicavel');
+  expect(card).toHaveClass('border-violet-500/60');
+  expect(card).not.toHaveClass('border-amber-500/60');
+  const contexto = screen.getByRole('heading', { name: 'Identificação e planejamento' }).closest('[data-tec08-contexto-operacional]');
+  expect(contexto).toHaveAttribute('data-tec08-estado', 'concluido');
+  expect(screen.queryByRole('button', { name: 'Nova evidência' })).not.toBeInTheDocument();
+});

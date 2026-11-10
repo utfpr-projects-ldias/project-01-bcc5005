@@ -10,7 +10,7 @@ import { In, QueryFailedError, type EntityManager, type Repository } from 'typeo
 
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
 import { EventoAuditoria } from '../auditoria/evento-auditoria.entity.js';
-import { documentacaoVerificada, filhosEmRevisao } from '../entregaveis/conclusao-documental.js';
+import { documentacaoVerificada, filhosEmRevisao, atividadesPendentesDeVerificacao } from '../entregaveis/conclusao-documental.js';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
 import { PermissaoContrato } from '../autorizacao/permissao-contrato.entity.js';
@@ -170,7 +170,7 @@ export class ContratosService {
       CONTRATO_PRAZO_ALTERADO: 'Prazo do contrato alterado',
       CONTRATO_STATUS_ALTERADO: 'Situação do contrato alterada',
       CONTRATO_ARQUIVADO: 'Contrato arquivado', CONTRATO_REATIVADO: 'Contrato reativado',
-      CONTRATO_REABERTO: 'Contrato reaberto',
+      CONTRATO_REABERTO: 'Contrato reaberto', CONTRATO_EXCLUIDO: 'Contrato excluído',
       DOCUMENTO_ANEXADO: 'Documento anexado', DOCUMENTO_METADADOS_ALTERADOS: 'Metadados do documento alterados',
       DOCUMENTO_VERIFICADO: 'Documento verificado', DOCUMENTO_REABERTO: 'Verificação do documento reaberta',
       DOCUMENTO_ARQUIVADO: 'Documento arquivado', DOCUMENTO_REATIVADO: 'Documento reativado',
@@ -180,6 +180,35 @@ export class ContratosService {
       ETAPA_REORDENADA: 'Posição da etapa alterada',
       ETAPA_REABERTA: 'Etapa reaberta', ETAPA_STATUS_ALTERADO: 'Situação da etapa alterada',
       ETAPA_PRAZO_ALTERADO: 'Prazos da etapa alterados',
+      ETAPA_EXCLUIDA: 'Etapa excluída',
+      ENTREGAVEL_CRIADO: 'Entregável cadastrado',
+      ENTREGAVEL_EDITADO: 'Dados do entregável editados',
+      ENTREGAVEL_PRAZO_ALTERADO: 'Prazo do entregável alterado',
+      ENTREGAVEL_STATUS_ALTERADO: 'Situação do entregável alterada',
+      ENTREGAVEL_PESO_ALTERADO: 'Peso operacional do entregável alterado',
+      ENTREGAVEL_EXECUCAO_ATUALIZADA: 'Execução do entregável atualizada',
+      ENTREGAVEL_EVIDENCIA_ESPERADA_CONFIGURADA: 'Evidência esperada configurada',
+      ENTREGAVEL_EVIDENCIA_ESPERADA_ARQUIVADA: 'Evidência esperada arquivada',
+      ENTREGAVEL_EVIDENCIA_ESPERADA_REATIVADA: 'Evidência esperada reativada',
+      ENTREGAVEL_EVIDENCIA_ESPERADA_EXCLUIDA: 'Evidência esperada excluída',
+      ENTREGAVEL_COMPROVANTE_ENVIADO: 'Comprovante de evidência enviado',
+      ENTREGAVEL_COMPROVANTE_VERIFICADO: 'Comprovante de evidência verificado',
+      ENTREGAVEL_COMPROVANTE_REABERTO: 'Comprovante de evidência reaberto para verificação',
+      ENTREGAVEL_ARQUIVADO: 'Entregável arquivado',
+      ENTREGAVEL_REATIVADO: 'Entregável reativado',
+      ENTREGAVEL_REABERTO: 'Entregável reaberto',
+      ENTREGAVEL_EXCLUIDO: 'Entregável excluído',
+      DOCUMENTO_SUBSTITUIDO: 'Arquivo do documento substituído',
+      DOCUMENTO_EXCLUIDO: 'Documento excluído',
+      OCORRENCIA_CRIADA: 'Ocorrência criada', OCORRENCIA_GERADA: 'Ocorrência gerada',
+      OCORRENCIA_EDITADA: 'Ocorrência editada', OCORRENCIA_REPROGRAMADA: 'Ocorrência reprogramada',
+      OCORRENCIA_STATUS_ALTERADO: 'Situação da ocorrência alterada',
+      OCORRENCIA_EXECUCAO_REGISTRADA: 'Execução da ocorrência registrada',
+      ATIVIDADE_CRIADA: 'Atividade registrada', ATIVIDADE_EDITADA: 'Atividade editada',
+      ATIVIDADE_VINCULOS_ALTERADOS: 'Entregáveis da atividade alterados',
+      ATIVIDADE_VERIFICADA: 'Atividade verificada', ATIVIDADE_REABERTA: 'Atividade reaberta',
+      ATIVIDADE_ARQUIVADA: 'Atividade arquivada', ATIVIDADE_REATIVADA: 'Atividade reativada',
+      ATIVIDADE_EXCLUIDA: 'Atividade excluída logicamente',
     };
     // Os autores são resolvidos pelo identificador do SuperTokens já gravado no
     // evento imutável, nunca por nome/e-mail recebidos do cliente. Uma conta
@@ -199,7 +228,8 @@ export class ContratosService {
         et.nome AS etapa, en.nome AS entregavel, ee.tipo_evidencia AS evidencia,
         COALESCE(doc.nome_original, ce.nome_original) AS arquivo,
         doc.categoria AS categoria_documento,
-        COALESCE(a.dados_posteriores->>'nome', a.dados_anteriores->>'nome') AS nome_evento,
+        COALESCE(a.dados_posteriores->>'nome', a.dados_anteriores->>'nome',
+          a.dados_posteriores->>'titulo', a.dados_anteriores->>'titulo') AS nome_evento,
         COALESCE(a.dados_posteriores->>'tipoEvidencia', a.dados_anteriores->>'tipoEvidencia') AS evidencia_evento
       FROM eventos_auditoria a
       LEFT JOIN entregaveis en ON a.entidade_tipo = 'ENTREGAVEL' AND a.entidade_id = en.id::text AND en.contrato_id = $1
@@ -230,13 +260,20 @@ export class ContratosService {
         : valor === 'EM_EXECUCAO' ? 'Em execução' : valor === 'CONCLUIDO' ? 'Concluído'
         : valor === 'ENCERRADO' ? 'Encerrado' : valor === 'SUSPENSO' ? 'Suspenso'
         : valor === 'CANCELADO' ? 'Cancelado' : valor === 'EM_ENCERRAMENTO' ? 'Em encerramento'
+        : valor === 'CONCLUIDA' ? 'Concluída' : valor === 'PLANEJADA' ? 'Planejada'
+        : valor === 'EM_ANDAMENTO' ? 'Em andamento' : valor === 'VERIFICADA' ? 'Verificada'
+        : valor === 'PENDENTE_VERIFICACAO' ? 'Pendente de verificação'
+        : valor === 'REGISTRADA' ? 'Registrada' : valor === 'ARQUIVADA' ? 'Arquivada'
         : valor;
       const motivo = depoisEvento['motivo'];
+      const posicao = (valor: unknown): string =>
+        typeof valor === 'number' && Number.isFinite(valor) ? String(valor) :
+        typeof valor === 'string' && /^\d+$/.test(valor) ? valor : '?';
       const mudancaVisivel = evento.acao === AcaoAuditoria.CONTRATO_ORDEM_ETAPAS_ALTERADA
         ? [antesEvento['ordemEtapasBloqueada'] ? 'Bloqueada' : 'Liberada',
            depoisEvento['ordemEtapasBloqueada'] ? 'Bloqueada' : 'Liberada']
         : evento.acao === AcaoAuditoria.ETAPA_REORDENADA
-          ? [`Posição ${antesEvento['sequencia'] ?? '?'}`, `Posição ${depoisEvento['sequencia'] ?? '?'}`]
+          ? [`Posição ${posicao(antesEvento['sequencia'])}`, `Posição ${posicao(depoisEvento['sequencia'])}`]
         : evento.acao === AcaoAuditoria.ETAPA_ARQUIVADA
           ? ['Ativa', 'Arquivada']
         : evento.acao === AcaoAuditoria.ETAPA_REATIVADA
@@ -257,17 +294,35 @@ export class ContratosService {
                   ? [fase(statusAntes) ?? 'Situação final', `Em revisão · ${fase(statusDepois) ?? 'Planejamento'}`]
                   : statusAntes && statusDepois && statusAntes !== statusDepois
                     ? [fase(statusAntes)!, fase(statusDepois)!] : null;
+      // Expõe somente os NOMES dos campos públicos alterados, nunca os valores
+      // dos snapshots imutáveis (que podem conter dados privados/identificadores).
+      const camposExibiveis: Record<string, string> = {
+        nome: 'nome', titulo: 'título', descricao: 'descrição', tipo: 'tipo',
+        inicioPrevisto: 'início previsto', terminoPrevisto: 'término previsto',
+        peso: 'peso', pesoOperacional: 'peso operacional', dataHora: 'data e hora',
+        responsavel: 'responsável', local: 'local', duracao: 'duração',
+        participantes: 'participantes', observacoes: 'observações',
+        obrigatoria: 'obrigatoriedade', tipoEvidencia: 'tipo da evidência',
+        entregavelIds: 'vínculos com entregáveis', status: 'situação',
+        statusExecucao: 'execução',
+      };
+      const camposModificados = Object.entries(camposExibiveis)
+        .filter(([campo]) => Object.hasOwn(antesEvento, campo) && Object.hasOwn(depoisEvento, campo)
+          && JSON.stringify(antesEvento[campo]) !== JSON.stringify(depoisEvento[campo]))
+        .map(([, rotulo]) => rotulo);
+      const detalheModificacao = camposModificados.length && /(?:_EDITAD[OA]|_ALTERAD[OA]|_CONFIGURADA|_ATUALIZADA)$/.test(evento.acao)
+        ? ` · Campos alterados: ${camposModificados.join(', ')}` : '';
       const nome = tipo === 'CONTRATO' || tipo === 'DOCUMENTO' ? null : tipo === 'ETAPA'
         ? contexto?.etapa ?? contexto?.nome_evento ?? 'Etapa histórica'
-        : contexto?.entregavel ?? contexto?.nome_evento ?? 'Entregável histórico';
+        : contexto?.entregavel ?? contexto?.nome_evento ?? (tipo === 'ATIVIDADE' ? 'Atividade histórica' : 'Entregável histórico');
       return {
         id: evento.id, acao: evento.acao,
-        descricao: rotulos[evento.acao] ?? (tipo === 'DOCUMENTO' ? 'Documento contratual alterado' : tipo === 'ETAPA' ? 'Etapa alterada' :
-          tipo === 'ENTREGAVEL' ? 'Entregável ou evidência alterados' : 'Atualização contratual registrada'),
+        descricao: (rotulos[evento.acao] ?? (tipo === 'DOCUMENTO' ? 'Evento documental registrado' : tipo === 'ETAPA' ? 'Evento de etapa registrado' :
+          tipo === 'ENTREGAVEL' ? `Evento ${evento.acao} no entregável` : `Evento ${evento.acao} registrado`)) + detalheModificacao,
         ocorridoEm: evento.registradoEm, entidadeTipo: tipo,
         ator: autor ? { nome: autor.nome ?? 'Nome não informado', email: autor.email } : null,
         contexto: [contexto?.etapa && tipo !== 'ETAPA' ? `Etapa: ${contexto.etapa}` : null,
-          nome ? `${tipo === 'ETAPA' ? 'Etapa' : 'Entregável'}: ${nome}` : null,
+          nome ? `${tipo === 'ETAPA' ? 'Etapa' : tipo === 'ATIVIDADE' ? 'Atividade' : 'Entregável'}: ${nome}` : null,
           tipo === 'DOCUMENTO' ? `Documento ${contexto?.categoria_documento === 'CONTRATO_PRINCIPAL' ? 'principal' : 'anexo'}: ${contexto?.arquivo ?? 'histórico'}` : null,
           contexto?.evidencia ?? contexto?.evidencia_evento
             ? `Evidência: ${contexto.evidencia ?? contexto.evidencia_evento}` : null].filter(Boolean).join(' · '),
@@ -360,6 +415,8 @@ export class ContratosService {
       }
       if (!await documentacaoVerificada(manager, id) || await filhosEmRevisao(manager, id))
         throw new ConflictException('Conclua novamente as etapas, entregáveis e evidências em revisão antes do contrato');
+      if (await atividadesPendentesDeVerificacao(manager, id))
+        throw new ConflictException('Verifique as atividades registradas antes de concluir o contrato');
       const abertas = await manager.query(`
         SELECT EXISTS (SELECT 1 FROM etapas WHERE contrato_id = $1 AND arquivado_em IS NULL
             AND status IS DISTINCT FROM 'CONCLUIDA') OR
@@ -534,6 +591,8 @@ export class ContratosService {
       }
       if (!await documentacaoVerificada(manager, id) || await filhosEmRevisao(manager, id))
         throw new ConflictException('Conclua primeiro as etapas, entregáveis e evidências');
+      if (await atividadesPendentesDeVerificacao(manager, id))
+        throw new ConflictException('Verifique as atividades registradas antes de encerrar a revisão');
       const abertos = await manager.query(`SELECT EXISTS (
         SELECT 1 FROM etapas WHERE contrato_id = $1 AND arquivado_em IS NULL
           AND status IS DISTINCT FROM 'CONCLUIDA') OR EXISTS (

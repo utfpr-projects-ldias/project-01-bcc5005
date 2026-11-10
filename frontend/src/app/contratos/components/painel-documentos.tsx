@@ -333,7 +333,7 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
         </div>
 
       </div>
-      {podeEscrever && <button data-tec08-acao="anexar-documento" type="button" onClick={abrirModal} disabled={limiteAtingido}
+      {podeEscrever && <button data-tec08-acao="anexar-documento" data-tec08-contextual type="button" onClick={abrirModal} disabled={limiteAtingido}
         aria-haspopup="dialog" aria-controls="formulario-documento"
         className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-on-brand-green shadow-sm transition duration-150 hover:brightness-110 hover:shadow-[0_0_0_3px_rgba(84,211,56,0.16)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-neon">
         <svg aria-hidden="true" className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -351,7 +351,7 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
     {totalRegistrados !== null && totalRegistrados >= 18 && <p className="text-xs text-amber-200" aria-label="Limite de documentos">{20 - totalRegistrados} arquivo(s) disponíveis.</p>}
     {limiteAtingido && <p role="alert" className="rounded-lg bg-amber-500/10 p-2 text-xs text-amber-200">Limite de 20 documentos atingido. Arquivar não libera vagas.</p>}
     <p className="text-xs text-foreground/55">Máximo de 20 documentos por contrato (inclusive arquivados) e 10 anexos arquivados. Arquivar não permite apagar o histórico.</p>
-    {podeEscrever && formularioAberto && preparado && createPortal(<ModalEtapa
+    {podeEscrever && formularioAberto && preparado && createPortal(<ModalEtapa estadoContextual="normal"
       titulo="Anexar documento contratual" contexto="Documentos do contrato" rotuloFechar="Fechar anexo de documento"
       ocupado={enviando} focoRetorno={gatilhoModal} onFechar={() => fecharModal()}>
       <div id="formulario-documento">
@@ -414,8 +414,8 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
     </ModalEtapa>, document.body)}
     {erroMetadados && !documentoEdicao && !documentoArquivar && <p role="alert" className="text-sm text-error-text">{erroMetadados}</p>}
     {(podeEditarRegistro || podeArquivarRegistro) && documentoEdicao && createPortal(<ModalEtapa titulo={`${documentoEdicao.categoria === 'CONTRATO_PRINCIPAL' ? 'Documento principal' : 'Documento'} · ${documentoEdicao.nomeOriginal}`}
-      contexto="Metadados documentais" compacto ocupado={salvandoMetadados} onFechar={() => setDocumentoEdicao(null)}>
-      <form onSubmit={evento => void salvarMetadados(evento)} className="space-y-4" aria-label="Editar metadados do documento">
+      contexto="Metadados documentais" estadoContextual={documentoEdicao.arquivadoEm ? 'arquivado' : documentoEdicao.reabertoEm ? 'revisao' : documentoEdicao.verificadoEm ? 'concluido' : 'pendente'} compacto ocupado={salvandoMetadados} onFechar={() => setDocumentoEdicao(null)}>
+      <form data-tec08-formulario-contextual onSubmit={evento => void salvarMetadados(evento)} className="space-y-4" aria-label="Editar metadados do documento">
         {documentoEdicao.categoria !== 'CONTRATO_PRINCIPAL' && podeEditarRegistro && <>
         <label className="block text-sm">Categoria
           <select className={`${campos} mt-1`} value={categoriaEdicao} onChange={e => setCategoriaEdicao(e.target.value as CategoriaDocumento)}>

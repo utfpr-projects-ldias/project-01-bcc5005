@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 import Session from "supertokens-web-js/recipe/session";
 import { MenuLateral, MenuMobile } from "./menu-modulos";
 import { ProtecaoSessaoInterna } from "./protecao-sessao-interna";
@@ -10,11 +10,17 @@ import { useMeuPerfil } from "@/hooks/use-meu-perfil";
 import Link from "next/link";
 import { toastErro } from "./toast-notificacoes";
 import { ConfirmacaoSimples } from "./confirmacao-simples";
+import { FeedbackCartoes } from "./feedback-cartoes";
+
+/** A prévia mantém autenticação e provedores do contrato, sem repetir a navegação global. */
+const semEvento = () => () => {};
+const dentroPainel = () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('painel') === '1';
+const foraDoPainel = () => false;
 
 /** O layout raiz permanece montado mesmo ao navegar entre login e dashboard. */
 export function EstruturaInterna({ children }: { children: ReactNode }) {
   const rota = usePathname();
-  const interna = rota === "/dashboard" || rota === "/usuario" || rota === "/atividades" || rota === "/ocorrencias" || rota === "/execucao" || rota === "/contratos" || rota.startsWith("/contratos/") ||
+  const interna = rota === "/dashboard" || rota === "/usuario" || (rota === "/atividades" || rota.startsWith("/atividades/")) || rota === "/ocorrencias" || rota === "/execucao" || rota === "/contratos" || rota.startsWith("/contratos/") ||
     rota === "/admin/usuarios" || rota.startsWith("/admin/usuarios/");
 
   if (!interna) return <>{children}</>;
@@ -30,10 +36,12 @@ function CabecalhoInterno({ rota, children }: { rota: string; children: ReactNod
   const { dados: perfil } = useMeuPerfil();
   const [saindo, setSaindo] = useState(false);
   const [confirmarSaida, setConfirmarSaida] = useState(false);
+  const embutido = useSyncExternalStore(semEvento, dentroPainel, foraDoPainel);
 
   let titulo = "Dashboard";
   if (rota === "/usuario") titulo = "Minha conta";
   else if (rota === "/atividades") titulo = "Diário de atividades";
+  else if (rota.startsWith("/atividades/")) titulo = "Detalhes da atividade";
   else if (rota === "/ocorrencias") titulo = "Ocorrências";
   else if (rota === "/execucao") titulo = "Execução e progresso";
   else if (rota.startsWith("/admin/usuarios")) {
@@ -42,7 +50,8 @@ function CabecalhoInterno({ rota, children }: { rota: string; children: ReactNod
   } else if (rota.startsWith("/contratos")) {
     titulo = rota === "/contratos" ? "Gestão de Contratos" :
       rota === "/contratos/novo" ? "Cadastrar contrato" :
-      rota.endsWith("/editar") ? "Editar contrato" : "Detalhes do contrato";
+      rota.endsWith("/editar") ? "Editar contrato" :
+      rota.includes("/entregaveis/") ? "Detalhes do entregável" : "Detalhes do contrato";
   }
 
   async function sair() {
@@ -60,7 +69,14 @@ function CabecalhoInterno({ rota, children }: { rota: string; children: ReactNod
     }
   }
 
+  if (embutido && rota.startsWith('/contratos/')) {
+    return <main id="conteudo-principal" data-visualizacao="painel-contrato" className="min-h-screen min-w-0 bg-background px-3 py-4 font-sans text-foreground sm:px-5">
+      <div className="mx-auto w-full min-w-0 max-w-7xl">{children}</div>
+    </main>;
+  }
+
   return <div className="flex min-h-screen min-w-0 bg-background font-sans text-foreground">
+    <FeedbackCartoes />
     <MenuLateral />
     <div className="flex min-w-0 flex-1 flex-col">
       <header className="flex min-h-11 items-center justify-between gap-2 border-b border-brand-green/20 bg-background px-4 py-1 md:px-6">

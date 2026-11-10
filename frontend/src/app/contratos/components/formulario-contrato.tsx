@@ -137,7 +137,7 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
         className="rounded-lg bg-brand-green px-4 py-2 font-semibold text-on-brand-green disabled:opacity-40">Continuar</button>
     </div>
   </form>;
-  return <form noValidate onSubmit={e => void enviar(e)} className="space-y-4" aria-label={inicial ? 'Editar dados do contrato' : 'Cadastrar contrato'}>
+  return <form data-tec08-formulario-contextual data-tec08-edicao={inicial ? "true" : undefined} data-tec08-criacao={inicial ? undefined : "true"} noValidate onSubmit={e => void enviar(e)} className="space-y-4" aria-label={inicial ? 'Editar dados do contrato' : 'Cadastrar contrato'}>
     <div className="rounded-2xl border border-brand-green/25 bg-brand-darkgreen/10 p-4 md:p-6 space-y-5">
       <div><h2 className="text-lg font-semibold text-brand-neon">Identificação do contrato</h2>
         <p className="mt-1 text-sm text-foreground/65">Dados administrativos. Campos com * são obrigatórios.</p></div>
@@ -223,7 +223,7 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
     <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-brand-green/20 px-1 pt-4 pb-2">
       {onCancelar ? <button type="button" onClick={onCancelar} disabled={salvando} className="inline-flex min-h-9 cursor-pointer items-center rounded-lg border border-brand-green/35 px-3 py-2 text-sm font-medium text-foreground transition-colors hover:border-brand-green/65 hover:bg-brand-green/10 focus-visible:outline-2 focus-visible:outline-brand-neon disabled:cursor-not-allowed disabled:opacity-50">Cancelar</button> :
         <Link href={inicial ? `/contratos/${encodeURIComponent(inicial.id)}` : '/contratos'} className="inline-flex min-h-9 cursor-pointer items-center rounded-lg border border-brand-green/35 px-3 py-2 text-sm font-medium text-foreground transition-colors hover:border-brand-green/65 hover:bg-brand-green/10 focus-visible:outline-2 focus-visible:outline-brand-neon">Cancelar</Link>}
-      <button type="submit" disabled={salvando} className="inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border border-green-600 bg-green-800 px-3 py-2 text-sm font-semibold text-white transition-[filter,transform,box-shadow] hover:bg-green-700 hover:shadow-[0_0_0_2px_rgba(22,163,74,0.16)] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-green-300 disabled:cursor-not-allowed disabled:opacity-50">
+      <button type="submit" data-tec08-salvar-contextual aria-busy={salvando} disabled={salvando} className="inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border border-brand-green/70 bg-brand-green px-3 py-2 text-sm font-semibold text-on-brand-green transition-[filter,transform,box-shadow] hover:brightness-110 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-brand-neon disabled:cursor-not-allowed disabled:opacity-50">
         {salvando ? 'Salvando...' : inicial ? 'Salvar alterações' : 'Cadastrar contrato'}
       </button>
     </div>

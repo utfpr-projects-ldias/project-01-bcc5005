@@ -166,3 +166,14 @@ test('editar texto ou fase durante revisão mantém a revisão sem retomar opera
   expect(salvar.mock.calls[0][0]).toEqual(expect.objectContaining({ status: 'EM_EXECUCAO' }));
   expect(salvar.mock.calls[0][0]).not.toHaveProperty('retomarOperacao');
 });
+
+
+test('diferencia visualmente cadastro verde de edição contextual sem alterar a validação', () => {
+  const nova = render(<FormularioContrato responsaveis={[]} onSalvar={jest.fn()} />);
+  expect(screen.getByRole('form', { name: 'Cadastrar contrato' })).toHaveAttribute('data-tec08-criacao', 'true');
+  expect(screen.getByRole('button', { name: 'Cadastrar contrato' })).toHaveAttribute('aria-busy', 'false');
+  nova.unmount();
+  render(<FormularioContrato inicial={inicial} responsaveis={[]} onSalvar={jest.fn()} />);
+  expect(screen.getByRole('form', { name: 'Editar dados do contrato' })).toHaveAttribute('data-tec08-edicao', 'true');
+  expect(screen.getByRole('button', { name: 'Salvar alterações' })).toHaveAttribute('aria-busy', 'false');
+});

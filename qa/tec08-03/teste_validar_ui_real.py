@@ -201,7 +201,7 @@ class TesteQATec0803(unittest.TestCase):
         self.assertLess(bloco.index(visivel), bloco.index(filtro))
         # A preferencia por categoria persiste, mas nao muda a aba da UI.
         pagina = (ui.RAIZ / 'frontend/src/app/contratos/[id]/page.tsx').read_text(encoding='utf-8')
-        self.assertIn("useState<'visao' | 'etapas' | 'documentos'>('visao')", pagina)
+        self.assertIn("useState<'visao' | 'etapas' | 'atividades' | 'documentos'>('visao')", pagina)
 
     def test_qa_ativa_abas_de_etapas_e_documentos_por_perfil(self):
         codigo = Path(ui.__file__).read_text(encoding='utf-8')
@@ -254,7 +254,7 @@ class TesteQATec0803(unittest.TestCase):
         self.assertIn("modal_etapa.get_by_role('region', name='Entregáveis da etapa')", fonte)
         self.assertNotIn("has=admin.get_by_role('heading', name=nome_etapa", fonte)
         self.assertNotIn("cartao_etapa.locator('section[aria-label=", fonte)
-        self.assertIn('<EntregaveisDaEtapa contratoId=', etapa)
+        self.assertRegex(etapa, r'<EntregaveisDaEtapa\b[^>]*\bcontratoId=')
         self.assertIn('aria-label="Entregáveis da etapa"', entregaveis)
 
     def test_cadastro_de_evidencia_usa_select_nativo_e_rotulos_reais(self):

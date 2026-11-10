@@ -17,10 +17,11 @@ test('Gestor editor recebe planejamento, ordenação e arquivamento, sem reativa
   expect(p.enviarComprovantes).toBe(true);
   for (const { chave } of OPERACOES_CONTRATO) {
     if (chave.startsWith('excluir') || chave.startsWith('reativar')) expect(p[chave]).toBe(false);
-    if (chave.startsWith('arquivar') && chave !== 'arquivarDocumentoPrincipal') expect(p[chave]).toBe(true);
+    if (chave.startsWith('arquivar') && !['arquivarDocumentoPrincipal', 'arquivarAtividades'].includes(chave)) expect(p[chave]).toBe(true);
   }
   expect(p.bloquearOrdemEtapas).toBe(false);
   expect(p.arquivarDocumentoPrincipal).toBe(false);
+  expect(p.arquivarAtividades).toBe(false);
   expect(p.reativarDocumentoPrincipal).toBe(false);
   expect(p.excluirDocumentoPrincipal).toBe(false);
 });

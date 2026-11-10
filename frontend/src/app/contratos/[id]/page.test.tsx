@@ -8,7 +8,7 @@ import { useEntregaveis, useResumoDocumentalContrato } from '@/hooks/use-entrega
 import type { Contrato } from '@/lib/contratos';
 
 jest.mock('next/navigation', () => ({ useParams: () => ({ id: 'contrato-real' }) }));
-jest.mock('@/app/components/provedor-consultas', () => ({ useConsulta: jest.fn(), useRepositorioConsultas: () => ({ invalidar: jest.fn() }) }));
+jest.mock('@/app/components/provedor-consultas', () => ({ useConsulta: jest.fn(), useRepositorioConsultas: () => ({ invalidar: jest.fn() }), useRepositorioConsultasOpcional: () => null }));
 jest.mock('@/hooks/use-meu-perfil', () => ({ useMeuPerfil: jest.fn() }));
 jest.mock('@/hooks/use-contratos', () => ({ useContrato: jest.fn(), useAcessoContrato: jest.fn(), useResponsaveis: jest.fn(), useMutacoesContrato: jest.fn(), usePendentesConclusao: jest.fn() }));
 jest.mock('@/hooks/use-etapas', () => ({ useEtapas: jest.fn() }));
@@ -269,4 +269,14 @@ test('TEC08-03: reabertura substitui ações bloqueadas do contrato concluído',
   expect(within(faixa).getByRole('button', { name: 'Reabrir contrato concluído' })).toBeInTheDocument();
   expect(within(faixa).queryByRole('button', { name: 'Editar contrato' })).not.toBeInTheDocument();
   expect(within(faixa).queryByRole('button', { name: 'Arquivar contrato' })).not.toBeInTheDocument();
+});
+
+
+test('contrato encerrado informa ao design system estado cinza nas abas e ações contextuais', () => {
+  contratoQuery.mockReturnValue(retorno({ ...contrato, status: 'ENCERRADO', reabertoEm: null }));
+  render(<DetalheContratoPage />);
+  const aba = screen.getByRole('tab', { name: 'Documentos' });
+  fireEvent.click(aba);
+  expect(aba).toHaveAttribute('aria-selected', 'true');
+  expect(aba.closest('.contrato-detalhe-documental')).toHaveAttribute('data-tec08-estado', 'encerrado');
 });

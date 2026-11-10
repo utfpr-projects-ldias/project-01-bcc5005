@@ -8,14 +8,16 @@ import { listarEvidenciasArquivadas, alterarArquivoEvidencia, criarEvidenciaEspe
 import { ModalEtapa } from './modal-etapa';
 import { ConfirmacaoSimples } from '@/app/components/confirmacao-simples';
 import { HistoricoEntregavel } from './historico-entregavel';
+import { AtividadesVinculadas } from './atividades-vinculadas';
 import { IconeEvidencia } from './icone-evidencia';
+import { estadoVisualEvidencia } from '@/lib/estado-visual-evidencia';
 import { nomeArquivoLegivel } from '@/lib/nome-arquivo';
 import { rotuloCodigoPublico } from '@/lib/codigos-publicos';
 import { toastSucesso, toastAviso } from '@/app/components/toast-notificacoes';
 
 type Campo = [nome: string, valor: string | null | undefined];
 function Quadro({ titulo, campos, estado = 'normal' }: { titulo: string; campos: Campo[]; estado?: 'normal' | 'concluido' | 'arquivado' }) {
-  return <section className={`min-w-0 space-y-2 rounded-xl border p-3 sm:p-4 ${estado === 'arquivado' ? 'border-amber-500/45 bg-amber-500/[0.04]' : estado === 'concluido' ? 'border-violet-400/40 bg-violet-500/[0.04]' : 'border-brand-green/20 bg-brand-darkgreen/5'}`}>
+  return <section data-tec08-secao-contextual className={`min-w-0 space-y-2 rounded-xl border p-3 sm:p-4 ${estado === 'arquivado' ? 'border-amber-500/45 bg-amber-500/[0.04]' : estado === 'concluido' ? 'border-violet-400/40 bg-violet-500/[0.04]' : 'border-brand-green/20 bg-brand-darkgreen/5'}`}>
     <h2 className={`text-lg font-semibold ${estado === 'arquivado' ? 'text-amber-200' : estado === 'concluido' ? 'text-violet-200' : 'text-brand-neon'}`}>{titulo}</h2>
     <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm lg:grid-cols-3">
       {campos.map(([nome, valor]) => <div key={nome} className={`min-w-0 ${nome === 'Critério operacional' ? 'col-span-full' : ''}`}><dt className="text-xs text-foreground/60">{nome}</dt>
@@ -24,11 +26,11 @@ function Quadro({ titulo, campos, estado = 'normal' }: { titulo: string; campos:
   </section>;
 }
 export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = false, podeCriarEvidencia,
-  podeArquivarEvidencia, podeReativarEvidencia = false, podeReabrirEvidencia = false, podeExcluirEvidenciaArquivada = false, podeAlterarObrigatoriedade = false, podeEnviarComprovantes = true, podeVerHistorico = false, bloqueadoPorPai = false, paiArquivado = false, paiConcluido = false, paiEmRevisao = false, aoAtualizarEsperada,
+  podeArquivarEvidencia, podeReativarEvidencia = false, podeReabrirEvidencia = false, podeExcluirEvidenciaArquivada = false, podeAlterarObrigatoriedade = false, podeEnviarComprovantes = true, podeVerHistorico = false, bloqueadoPorPai = false, paiArquivado = false, paiConcluido = false, contextoModal = false, aoAtualizarEsperada,
   registrarVoltaEvidencia, registrarVoltaEdicao }: {
   item: Entregavel; resumoInicial?: ResumoDocumentalEntregavel; podeEditarEsperada?: boolean;
   podeCriarEvidencia?: boolean; podeArquivarEvidencia?: boolean; podeReativarEvidencia?: boolean; podeReabrirEvidencia?: boolean; podeExcluirEvidenciaArquivada?: boolean; podeAlterarObrigatoriedade?: boolean;
-  podeEnviarComprovantes?: boolean; podeVerHistorico?: boolean; bloqueadoPorPai?: boolean; paiArquivado?: boolean; paiConcluido?: boolean; paiEmRevisao?: boolean;
+  podeEnviarComprovantes?: boolean; podeVerHistorico?: boolean; bloqueadoPorPai?: boolean; paiArquivado?: boolean; paiConcluido?: boolean; paiEmRevisao?: boolean; contextoModal?: boolean;
   aoAtualizarEsperada?: () => void;
   registrarVoltaEvidencia?: (voltar: (() => void) | null) => void;
   registrarVoltaEdicao?: (voltar: (() => void) | null) => void;
@@ -58,7 +60,8 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
     let ativo = true;
     // Máximo de dez registros por entregável. Uma consulta sem sucesso não vira
     // falsamente 'aguardando envio'; o status fica indisponível.
-    const ids = item.evidenciasEsperadas.map(e => e.id);
+    // A chave inclui a lista de IDs, sem depender da identidade instável do array da API.
+    const ids = chaveEvidencias.split(':')[2]?.split(',').filter(Boolean) ?? [];
     if (!ids.length) return;
     void Promise.allSettled(ids.map(id => consultarEvidencia(item.contratoId, item.id, id)))
       .then(resultados => { if (!ativo) return;
@@ -105,7 +108,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
     } catch (e) { setErroArquivo(e instanceof Error ? e.message : 'Não foi possível arquivar a evidência.'); }
     finally { setArquivandoItem(false); }
   }
-  const classeAbaAtiva = paiArquivado || item.arquivadoEm ? 'bg-amber-500/20 text-amber-200' : item.reabertoEm ? 'bg-teal-700/25 text-teal-200' : item.statusExecucao === 'CONCLUIDO' ? 'bg-violet-500/20 text-violet-200' : paiEmRevisao ? 'bg-teal-700/25 text-teal-200' : 'bg-brand-green/20 text-brand-neon';
+  const classeAbaAtiva = item.arquivadoEm ? 'bg-amber-500/20 text-amber-200' : item.reabertoEm ? 'bg-teal-700/25 text-teal-200' : item.statusExecucao === 'CONCLUIDO' ? 'bg-violet-500/20 text-violet-200' : 'bg-brand-green text-on-brand-green';
   const [abaChecklist, setAbaChecklist] = useState<'ativas' | 'pendentes' | 'revisao' | 'concluidas' | 'arquivadas'>('ativas');
   const abrirArquivo = abaChecklist === 'arquivadas';
   const [arquivadas, setArquivadas] = useState<Array<{ id: string; codigoPublico?: number; tipoEvidencia: string; obrigatoria: boolean; arquivadoEm: string | null }>>([]);
@@ -304,12 +307,16 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
     if (abaChecklist === 'pendentes') return Boolean(status && status.status !== 'VERIFICADA' && !status.reabertoEm);
     return status?.status !== 'VERIFICADA' && !status?.reabertoEm;
   };
-  return <><div className="min-w-0 space-y-3">
+  return <><div data-tec08-contexto-operacional data-tec08-estado={item.arquivadoEm ? 'arquivado' : item.reabertoEm ? 'revisao' : item.statusExecucao === 'CONCLUIDO' ? 'concluido' : 'normal'} className="min-w-0 space-y-3">
     {item.descricao && <p className="whitespace-pre-wrap break-words text-xs text-foreground/75">{item.descricao}</p>}
-    <Quadro titulo="Identificação e planejamento" campos={campos} estado={paiArquivado || Boolean(item.arquivadoEm) ? "arquivado" : item.statusExecucao === "CONCLUIDO" ? "concluido" : "normal"} />
-    <section className={`min-h-[min(34dvh,300px)] space-y-3 rounded-xl border p-3 sm:p-4 ${paiArquivado || item.arquivadoEm ? 'border-amber-500/45 bg-amber-500/[0.04]' : item.statusExecucao === 'CONCLUIDO' ? 'border-violet-400/40 bg-violet-500/[0.04]' : paiEmRevisao ? 'border-teal-700/40 bg-teal-700/[0.04]' : 'border-brand-green/20 bg-brand-darkgreen/5'}`}>
+    <Quadro titulo="Identificação e planejamento" campos={campos} estado={item.arquivadoEm ? 'arquivado' : item.statusExecucao === 'CONCLUIDO' && !item.reabertoEm ? 'concluido' : 'normal'} />
+    {podeVerHistorico && <details onToggle={evento => setHistoricoExpandido(evento.currentTarget.open)} className="rounded-xl border border-brand-green/20 px-3 py-2">
+      <summary data-tec08-titulo-historico className="cursor-pointer text-sm font-semibold text-brand-neon">Rastreabilidade do entregável</summary>
+      {historicoExpandido && <HistoricoEntregavel contratoId={item.contratoId} entregavelId={item.id} versao={versaoEstado} ocultarTitulo />}
+    </details>}
+    <section className={`min-h-[min(34dvh,300px)] space-y-3 rounded-xl border p-3 sm:p-4 ${item.arquivadoEm ? 'border-amber-500/45 bg-amber-500/[0.04]' : item.statusExecucao === 'CONCLUIDO' ? 'border-violet-400/40 bg-violet-500/[0.04]' : item.reabertoEm ? 'border-teal-700/40 bg-teal-700/[0.04]' : 'border-brand-green/20 bg-brand-darkgreen/5'}`}>
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 sm:flex-nowrap">
-        <AbasRolaveis className="min-w-0 flex-1"><div role="tablist" aria-label="Consultar evidências" className={`inline-flex items-center gap-1 rounded-xl border p-1 ${paiArquivado || item.arquivadoEm ? 'border-amber-500/40' : item.statusExecucao === 'CONCLUIDO' ? 'border-violet-400/35' : paiEmRevisao ? 'border-teal-700/35' : 'border-brand-green/20'}`}>
+        <AbasRolaveis className="min-w-0 flex-1"><div role="tablist" aria-label="Consultar evidências" className={`inline-flex items-center gap-1 rounded-xl border p-1 ${item.arquivadoEm ? 'border-amber-500/40' : item.statusExecucao === 'CONCLUIDO' ? 'border-violet-400/35' : item.reabertoEm ? 'border-teal-700/35' : 'border-brand-green/20'}`}>
           <button type="button" role="tab" aria-selected={abaChecklist === 'ativas'} onClick={() => setAbaChecklist('ativas')}
             className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-none ${abaChecklist === 'ativas' ? classeAbaAtiva : 'text-foreground/65 hover:text-foreground'}`}>Evidências</button>
           <button type="button" role="tab" aria-selected={abaChecklist === 'pendentes'} onClick={() => setAbaChecklist('pendentes')}
@@ -328,7 +335,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
           </button>}
         </div></AbasRolaveis>
         {abaChecklist === 'ativas' && !bloqueadoPorPai && !paiConcluido && !paiArquivado && (podeCriarEvidencia ?? podeEditarEsperada) && <button type="button" aria-expanded={criandoEvidencia} disabled={item.evidenciasEsperadas.length >= 10 && !criandoEvidencia}
-          onClick={abrirCadastro}
+          onClick={abrirCadastro} data-tec08-acao-criar
           className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-lg bg-brand-green px-3 py-2 text-xs font-semibold text-on-brand-green hover:brightness-110">
           {criandoEvidencia ? 'Cancelar cadastro' : item.evidenciasEsperadas.length >= 10 ? 'Limite de evidências' : 'Nova evidência'}
         </button>}
@@ -346,8 +353,8 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
           </div></>;
       })()}
       {criandoEvidencia && createPortal(<ModalEtapa titulo="Nova evidência esperada" contexto="Checklist documental" ocupado={salvandoNova}
-        camada="evidencia" compacto textoFechar="Fechar ×" rotuloFechar="Fechar cadastro de evidência" onFechar={() => fecharCadastro()}>
-        <form aria-label="Cadastrar evidência esperada" onSubmit={e => void adicionarEvidencia(e)}
+        camada="evidencia" compacto estadoContextual="normal" textoFechar="Fechar ×" rotuloFechar="Fechar cadastro de evidência" onFechar={() => fecharCadastro()}>
+        <form data-tec08-formulario-contextual data-tec08-criacao="true" aria-label="Cadastrar evidência esperada" onSubmit={e => void adicionarEvidencia(e)}
         className="space-y-3 p-1 text-sm">
 
         <div className="space-y-1">
@@ -392,7 +399,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
               {obrigatoria ? `Obrigatórias (${grupo.length})` : `Opcionais (${grupo.length})`}
             </h3>
             <ul aria-label={obrigatoria ? 'Evidências obrigatórias' : 'Evidências opcionais'} className="space-y-2">
-              {grupo.map(e => <li key={e.id} className={`group relative min-w-0 rounded-xl border pb-14 transition-opacity duration-150 ${paiArquivado || item.arquivadoEm || e.arquivadoEm ? 'border-amber-500/60 bg-background text-foreground' : estadoEvidencias[e.id]?.reabertoEm ? 'border-teal-700/60 bg-background text-foreground' : estadoEvidencias[e.id]?.status === 'VERIFICADA' ? 'border-violet-500/60 bg-background opacity-90 hover:border-violet-400 hover:opacity-100 focus-within:border-violet-400 focus-within:opacity-100' : 'border-brand-green/25 bg-background hover:border-brand-green/50 focus-within:border-brand-neon'}`}>
+              {grupo.map(e => <li key={e.id} data-evidencia-estado={estadoVisualEvidencia(estadoEvidencias[e.id]?.status, estadoEvidencias[e.id]?.reabertoEm, Boolean(e.arquivadoEm))} data-tec08-card-evidencia data-tec08-item-clicavel className={`group relative min-w-0 rounded-xl border pb-14 transition-opacity duration-150 ${e.arquivadoEm ? 'border-amber-500/60 bg-background text-foreground' : estadoEvidencias[e.id]?.reabertoEm ? 'border-teal-700/60 bg-background text-foreground' : estadoEvidencias[e.id]?.status === 'VERIFICADA' ? 'border-violet-500/60 bg-background hover:border-violet-400 hover:opacity-100 focus-within:border-violet-400 focus-within:opacity-100' : 'border-brand-green/25 bg-background hover:border-brand-green/50 focus-within:border-brand-neon'}`}>
                 <div className="relative flex min-w-0 flex-wrap items-center justify-between gap-3 px-3 py-2.5">
                   {estadoEvidencias[e.id]?.status === 'VERIFICADA' ? <span aria-label="Evidência com comprovação documental verificada" title="Verificada"
                     className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-violet-400/65 bg-violet-500/20 text-violet-200">
@@ -404,7 +411,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
                     <button type="button" data-evidencia-esperada-id={e.id}
                       onClick={evento => abrirEvidencia(evento, e.id)}
                       aria-label={`Ver detalhes da evidência esperada ${e.tipoEvidencia}`}
-                      className={`block w-full appearance-none border-0 bg-transparent p-0 text-left break-words text-sm font-semibold focus-visible:outline-2 ${estadoEvidencias[e.id]?.status === 'VERIFICADA'
+                      data-tec08-titulo-evidencia className={`block w-full appearance-none border-0 bg-transparent p-0 text-left break-words text-sm font-semibold focus-visible:outline-2 ${estadoEvidencias[e.id]?.status === 'VERIFICADA'
                       ? 'text-violet-800 dark:text-violet-200'
                       : 'text-brand-neon'}`}>
                       {estadoEvidencias[e.id]?.arquivo ? nomeArquivoLegivel(estadoEvidencias[e.id]?.arquivo ?? '') : e.tipoEvidencia}
@@ -433,7 +440,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
                   {podeEditarEsperada && <button type="button" title={`Editar evidência ${e.tipoEvidencia}`} aria-label={`Editar evidência ${e.tipoEvidencia}`}
                     disabled={bloqueadoPorPai || paiArquivado || Boolean(item.arquivadoEm) || estadoEvidencias[e.id]?.status === 'VERIFICADA'}
                     onClick={evento => { if (!bloqueadoPorPai && !paiArquivado && !item.arquivadoEm) abrirEvidencia(evento, e.id, true); }}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-brand-green/40 text-brand-neon hover:bg-brand-green/15 disabled:cursor-not-allowed disabled:border-slate-500/35 disabled:bg-slate-700/10 disabled:text-slate-400">
+                    data-tec08-acao-evidencia="editar" className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-brand-green/40 text-brand-neon hover:bg-brand-green/15 disabled:cursor-not-allowed disabled:border-slate-500/35 disabled:bg-slate-700/10 disabled:text-slate-400">
                     <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><path d="m15 5 4 4M4 20l4.5-1 11-11a2 2 0 0 0-3-3l-11 11L4 20Z"/></svg>
                   </button>}
                 </div>}
@@ -455,13 +462,11 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
           </li>)}</ul>}
       </div>}
     </section>
-    {podeVerHistorico && <details onToggle={evento => setHistoricoExpandido(evento.currentTarget.open)} className="rounded-xl border border-brand-green/20 px-3 py-2">
-      <summary className="cursor-pointer text-sm font-semibold text-brand-neon">Rastreabilidade do entregável</summary>
-      {historicoExpandido && <HistoricoEntregavel contratoId={item.contratoId} entregavelId={item.id} versao={versaoEstado} />}
-    </details>}
+    <AtividadesVinculadas contratoId={item.contratoId} entregavelId={item.id} somenteLeitura={bloqueadoPorPai || paiArquivado || paiConcluido || Boolean(item.arquivadoEm)} ocultarAcessoDiario={contextoModal} />
+
   </div>
   {selecionada && createPortal(<ModalEtapa titulo={selecionada.tipoEvidencia} codigoPublico={selecionada.codigoPublico} contexto={`Evidência esperada · ${selecionada.obrigatoria ? 'Obrigatória' : 'Opcional'}`}
-    camada="evidencia" arquivado={paiArquivado || Boolean(selecionada.arquivadoEm)} concluido={!paiArquivado && !selecionada.arquivadoEm && estadoEvidencias[selecionada.id]?.status === 'VERIFICADA'} ocupado={false} focoRetorno={focoRetornoEvidencia}
+    camada="evidencia" arquivado={Boolean(selecionada.arquivadoEm)} concluido={!selecionada.arquivadoEm && estadoEvidencias[selecionada.id]?.status === 'VERIFICADA'} revisao={Boolean(estadoEvidencias[selecionada.id]?.reabertoEm)} estadoContextual={estadoEvidencias[selecionada.id]?.status === 'PENDENTE_VERIFICACAO' ? 'pendente' : 'normal'} ocupado={false} focoRetorno={focoRetornoEvidencia}
     textoFechar="Fechar ×" somenteIconeFechar bloqueadoPorSubmodal={edicaoAberta}
     rotuloFechar="Fechar evidência"
     onFechar={() => {

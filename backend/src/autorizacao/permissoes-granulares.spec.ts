@@ -105,3 +105,32 @@ describe('encerramento antecipado tem competência independente', () => {
     expect(p.concluirContrato).toBe(false);
   });
 });
+
+
+describe('HU08-05-01 — ciclo de vida e segregação de permissões', () => {
+  it('não concede poderes de verificação, arquivamento, reabertura ou reativação automaticamente', () => {
+    const padrao = permissoesEfetivas('GESTOR', true, null);
+    expect(padrao.registrarAtividades).toBe(true);
+    expect(padrao.editarAtividades).toBe(true);
+    for (const chave of ['verificarAtividades', 'reabrirAtividades', 'arquivarAtividades', 'reativarAtividades', 'excluirAtividadesArquivadas'] as const)
+      expect(padrao[chave]).toBe(false);
+  });
+  it('exige autorização independente para cada transição', () => {
+    const base = permissoesEfetivas('COLABORADOR', false, { arquivarAtividades: true, verificarAtividades: false });
+    expect(base.arquivarAtividades).toBe(true);
+    expect(base.verificarAtividades).toBe(false);
+    expect(ACAO_PERMISSAO['atividades:reativar']).toBe('reativarAtividades');
+    expect(ACAO_PERMISSAO['atividades:excluir']).toBe('excluirAtividadesArquivadas');
+    expect(() => validarPermissoes({ verificarAtividades: 'true' })).toThrow();
+  });
+});
+
+
+test('vínculo sem acesso de edição não herda escrita no diário, mas aceita delegação explícita', () => {
+  const somenteLeitura = permissoesEfetivas('COLABORADOR', false, null);
+  expect(somenteLeitura.registrarAtividades).toBe(false);
+  expect(somenteLeitura.editarAtividades).toBe(false);
+  const delegado = permissoesEfetivas('COLABORADOR', false, { registrarAtividades: true, editarAtividades: false });
+  expect(delegado.registrarAtividades).toBe(true);
+  expect(delegado.editarAtividades).toBe(false);
+});

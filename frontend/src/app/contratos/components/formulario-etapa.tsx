@@ -59,7 +59,7 @@ export function FormularioEtapa({ inicial, onSalvar, onCancelar, onSalvandoMudou
       setErroGeral(erro instanceof ErroEtapa ? erro.message : 'Não foi possível salvar a etapa. Seus dados foram mantidos.');
     } finally { setSalvando(false); onSalvandoMudou?.(false); }
   }
-  return <form noValidate aria-label={inicial ? `Editar etapa ${inicial.nome}` : 'Criar etapa'} onSubmit={(e) => void enviar(e)}
+  return <form data-tec08-formulario-contextual data-tec08-edicao={inicial ? "true" : undefined} data-tec08-criacao={inicial ? undefined : "true"} noValidate aria-label={inicial ? `Editar etapa ${inicial.nome}` : 'Criar etapa'} onSubmit={(e) => void enviar(e)}
     className="min-w-0 space-y-4 rounded-2xl border border-brand-green/40 bg-brand-darkgreen/10 p-4 md:p-5">
     <h4 className="text-lg font-semibold text-brand-neon">{inicial ? 'Editar etapa' : 'Nova etapa'}</h4>
     <p className="text-sm text-foreground/65">Somente o nome é obrigatório. A posição é definida pelo sistema; a conclusão é calculada automaticamente.</p>
@@ -94,7 +94,7 @@ export function FormularioEtapa({ inicial, onSalvar, onCancelar, onSalvandoMudou
     {erroGeral && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-error-text">{erroGeral}</p>}
     <div className="flex flex-wrap justify-end gap-2">
       <button type="button" onClick={onCancelar} disabled={salvando} className="rounded-lg border border-brand-green/40 px-4 py-2 text-sm transition-colors hover:bg-brand-green/10 disabled:opacity-50">Voltar sem salvar</button>
-      <button type="submit" disabled={salvando} className="rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-on-brand-green disabled:opacity-50">
+      <button type="submit" aria-busy={salvando} disabled={salvando} className="rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-on-brand-green disabled:opacity-50">
         {salvando ? 'Salvando etapa...' : dados.status === 'ENCERRADA' ? 'Continuar para encerramento' : 'Salvar etapa'}
       </button>
     </div>

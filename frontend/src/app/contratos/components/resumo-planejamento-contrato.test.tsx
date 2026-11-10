@@ -124,3 +124,16 @@ test('encerramento administrativo preserva indicadores reais sem inventar barra 
   expect(screen.queryByText(/A barra cinza representa/)).not.toBeInTheDocument();
   expect(within(screen.getByRole('region', { name: 'Resumo de etapas' })).getByText('1/2')).toBeInTheDocument();
 });
+
+
+test.each([
+  { titulo: 'cancelado', propriedade: { contratoCancelado: true }, borda: 'border-red-500/45', fundo: 'bg-red-500/20' },
+  { titulo: 'concluído', propriedade: { contratoConcluido: true }, borda: 'border-violet-500/45', fundo: 'bg-violet-500/20' },
+  { titulo: 'encerrado', propriedade: { contratoEncerrado: true }, borda: 'border-slate-500/45', fundo: 'bg-slate-600/25' },
+])('indicadores do contrato $titulo respeitam status sem falsificar contagens', ({ propriedade, borda, fundo }) => {
+  render(<ResumoPlanejamentoContrato contratoId="contrato-a" variante="detalhe" {...propriedade} />);
+  const etapasResumo = screen.getByRole('region', { name: 'Resumo de etapas' });
+  expect(etapasResumo).toHaveClass(borda);
+  expect(within(etapasResumo).getByRole('img', { name: /1 de 2 etapas concluídas/ })).toHaveClass(fundo);
+  expect(etapasResumo).toHaveTextContent('1/2');
+});

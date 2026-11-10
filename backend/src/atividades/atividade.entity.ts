@@ -1,6 +1,8 @@
 import { Column, CreateDateColumn, Entity, JoinTable, ManyToMany, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { Entregavel } from '../entregaveis/entregavel.entity.js';
 
+export type EstadoAtividade = 'REGISTRADA' | 'VERIFICADA' | 'ARQUIVADA';
+
 /** Atividade operacional vinculada a contrato; nenhum progresso é calculado aqui. */
 @Entity('atividades')
 export class AtividadeEntity {
@@ -16,6 +18,11 @@ export class AtividadeEntity {
   @Column({ type: 'varchar', nullable: true }) local!: string | null;
   @Column({ type: 'varchar', nullable: true }) duracao!: string | null;
   @Column({ type: 'text', nullable: true }) observacoes!: string | null;
+  @Column({ type: 'varchar', length: 20, default: 'REGISTRADA' }) status!: EstadoAtividade;
+  @Column({ type: 'timestamptz', nullable: true }) verificadaEm!: Date | null;
+  @Column({ type: 'timestamptz', nullable: true }) arquivadaEm!: Date | null;
+  /** Exclusão lógica: auditoria e vínculos N:N nunca são apagados. */
+  @Column({ type: 'timestamptz', nullable: true }) excluidaEm!: Date | null;
 
   /** Sem cascade: excluir um entregável não pode eliminar registros de atividades. */
   @ManyToMany(() => Entregavel, { cascade: false })

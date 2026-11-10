@@ -452,7 +452,7 @@ def executar(contas, visivel=False):
             bloco_entregaveis = modal_etapa.get_by_role('region', name='Entregáveis da etapa')
             bloco_entregaveis.get_by_role('button', name='Novo entregável').click()
             form_entregavel = bloco_entregaveis.get_by_role('form', name='Cadastrar entregável')
-            nome_entregavel = 'QA TEC08-03 Detalhe em Modal ' + execucao[-6:]
+            nome_entregavel = 'QA TEC08-03 Entregável de referência ' + execucao[-6:]
             form_entregavel.locator('input[id$="-nome"]').fill(nome_entregavel)
             form_entregavel.get_by_role('button', name='+ Adicionar evidência esperada').click()
             form_entregavel.get_by_label('Tipo de evidência *').select_option('Relatório')

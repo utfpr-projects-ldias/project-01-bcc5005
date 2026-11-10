@@ -5,6 +5,7 @@ import { useRepositorioConsultasOpcional } from '@/app/components/provedor-consu
 import { ModalEtapa } from './modal-etapa';
 import { ConfirmacaoSimples } from '@/app/components/confirmacao-simples';
 import { IconeEvidencia } from './icone-evidencia';
+import { estadoVisualEvidencia } from '@/lib/estado-visual-evidencia';
 import { nomeArquivoLegivel } from '@/lib/nome-arquivo';
 import { toastSucesso, toastErro, toastConclusao } from '@/app/components/toast-notificacoes';
 import {
@@ -220,10 +221,10 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
     </div>
   </div>;
   const editorArquivo = editando && createPortal(<ModalEtapa titulo={ultima ? 'Substituir comprovante' : 'Anexar comprovante'}
-    contexto="Arquivo da evidência" camada="edicao" compacto ocupado={ocupado} textoFechar="Fechar ×"
+    contexto="Arquivo da evidência" camada="edicao" compacto estadoContextual={dados.reabertoEm ? 'revisao' : dados.status === 'PENDENTE_VERIFICACAO' ? 'pendente' : 'normal'} ocupado={ocupado} textoFechar="Fechar ×"
     somenteIconeFechar rotuloFechar="Cancelar edição do arquivo" onFechar={voltarDaEdicao}>
     <section aria-label="Edição individual da evidência" data-testid="painel-edicao-evidencia" className="space-y-3">
-      <form aria-label="Enviar comprovação" onSubmit={e => void salvarEdicao(e)} className="space-y-4 text-sm">
+      <form data-tec08-formulario-contextual aria-label="Enviar comprovação" onSubmit={e => void salvarEdicao(e)} className="space-y-4 text-sm">
         <p className="text-sm text-foreground/70">{ultima ? 'Escolha o novo arquivo para criar outra versão. A versão anterior ficará preservada.' : 'Escolha o primeiro comprovante desta evidência.'}</p>
         <label className="block space-y-2"><span className="text-sm font-medium">{ultima ? 'Novo arquivo' : 'Arquivo'}</span>
           <input ref={inputArquivoEdicaoRef} id={`editar-arquivo-${esperadaId}`}
@@ -245,7 +246,7 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
       </form>
     </section>
   </ModalEtapa>, document.body);
-  return <><div className="space-y-3" data-testid="painel-comprovacao-evidencia">
+  return <><div className="space-y-3" data-testid="painel-comprovacao-evidencia" data-evidencia-estado={estadoVisualEvidencia(dados.status, dados.reabertoEm, arquivada)} data-tec08-painel-evidencia>
     <div className="flex items-center gap-2">
       <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${CLASSE_STATUS[dados.status]}`}
         data-testid="status-verificacao">{ROTULO_STATUS[dados.status]}</span>
@@ -299,10 +300,36 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
     </div>
     {!editando && confirmacaoArquivo}
     {arquivada && <p role="status" className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-200">Evidência arquivada. Arquivos e histórico disponíveis para consulta.</p>}
+    <details data-tec08-historico-evidencia aria-label="Histórico da evidência" className="group rounded-xl border border-brand-green/20 bg-brand-darkgreen/5 p-3 sm:p-4">
+      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 focus-visible:outline-2 focus-visible:outline-brand-neon [&::-webkit-details-marker]:hidden">
+        <span className="inline-flex items-center gap-2 text-sm font-semibold text-brand-neon"><svg aria-hidden="true" className="h-4 w-4 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 5 7 7-7 7"/></svg>Rastreabilidade da evidência</span>
+        <span className="text-xs text-foreground/60">{dados.historico?.length ?? 0} eventos · expandir histórico</span>
+      </summary>
+      <div className="mt-3 border-t border-brand-green/15 pt-3">
+      {dados.historico?.length ? <ol className="space-y-2 border-l-2 border-brand-green/20 pl-3 text-xs">
+        {dados.historico.map(ev => <li key={ev.id} className="relative space-y-1 before:absolute before:-left-[18px] before:top-1.5 before:h-2 before:w-2 before:rounded-full before:bg-brand-green">
+          <p className="font-semibold">{ev.descricao}</p>
+          {ev.nomeAnterior && ev.nomeAtual && <p className="break-words text-foreground/80">Nome anterior: {ev.nomeAnterior} · Novo nome: {ev.nomeAtual}</p>}
+          {ev.nomeArquivo && <p className="break-all text-foreground/85">Arquivo: {ev.nomeArquivo}</p>}
+          {ev.justificativa && <p className="break-words text-foreground/80">Justificativa: {ev.justificativa}</p>}
+          <p className="text-foreground/65">{new Date(ev.ocorridoEm).toLocaleString('pt-BR')}
+            {ev.ator ? ` · ${ev.ator.nome} (${ev.ator.email})` : ' · usuário não identificado'}</p>
+        </li>)}
+      </ol> : <p className="text-xs text-foreground/65">Não existem eventos específicos disponíveis nesta consulta.</p>}
+      {dados.versoes.length > 1 && <details className="rounded-lg border border-brand-green/20 p-3">
+        <summary className="cursor-pointer text-sm font-semibold text-brand-neon">Versões anteriores preservadas · {dados.versoes.length - 1}</summary>
+        <ul className="mt-3 space-y-2">{dados.versoes.slice(1).map(v => <li key={v.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-brand-green/15 pt-2 text-xs">
+          <div className="min-w-0"><p className="break-all font-semibold">{nomeArquivoLegivel(v.nomeOriginal)}</p>
+            <p className="text-foreground/60">{new Date(v.criadoEm).toLocaleString('pt-BR')} · {ROTULO_STATUS[v.status]}</p></div>
+          <button type="button" onClick={() => void baixar(v)} className="rounded-lg border border-brand-green/40 px-3 py-1.5">Baixar versão</button>
+        </li>)}</ul>
+      </details>}
+      </div>
+    </details>
     <section aria-label="Comprovação da evidência" className="space-y-2">
       <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-brand-green/20 bg-brand-darkgreen/5 p-3">
         {anexoInline && arquivoEdicao && !ultima && podeEnviar && !arquivada ?
-          <form aria-label="Anexar comprovante" onSubmit={e => void enviarPrimeiroComprovante(e)}
+          <form data-tec08-formulario-contextual aria-label="Anexar comprovante" onSubmit={e => void enviarPrimeiroComprovante(e)}
             className="flex min-w-0 w-full flex-wrap items-center gap-2">
             <IconeEvidencia nome={arquivoEdicao.name} tipo={dados.tipoEvidencia} />
             <span aria-live="polite" className="min-w-0 flex-1 break-words text-sm font-semibold text-foreground"
@@ -346,32 +373,7 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
           onChange={e => void alterarObrigatoriedade(e.target.checked)} /> Evidência obrigatória
       </label>}
     </section>
-    <details aria-label="Histórico da evidência" className="group rounded-xl border border-brand-green/20 bg-brand-darkgreen/5 p-3 sm:p-4">
-      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 focus-visible:outline-2 focus-visible:outline-brand-neon [&::-webkit-details-marker]:hidden">
-        <span className="inline-flex items-center gap-2 text-sm font-semibold text-brand-neon"><svg aria-hidden="true" className="h-4 w-4 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 5 7 7-7 7"/></svg>Rastreabilidade da evidência</span>
-        <span className="text-xs text-foreground/60">{dados.historico?.length ?? 0} eventos · expandir histórico</span>
-      </summary>
-      <div className="mt-3 border-t border-brand-green/15 pt-3">
-      {dados.historico?.length ? <ol className="space-y-2 border-l-2 border-brand-green/20 pl-3 text-xs">
-        {dados.historico.map(ev => <li key={ev.id} className="relative space-y-1 before:absolute before:-left-[18px] before:top-1.5 before:h-2 before:w-2 before:rounded-full before:bg-brand-green">
-          <p className="font-semibold">{ev.descricao}</p>
-          {ev.nomeAnterior && ev.nomeAtual && <p className="break-words text-foreground/80">Nome anterior: {ev.nomeAnterior} · Novo nome: {ev.nomeAtual}</p>}
-          {ev.nomeArquivo && <p className="break-all text-foreground/85">Arquivo: {ev.nomeArquivo}</p>}
-          {ev.justificativa && <p className="break-words text-foreground/80">Justificativa: {ev.justificativa}</p>}
-          <p className="text-foreground/65">{new Date(ev.ocorridoEm).toLocaleString('pt-BR')}
-            {ev.ator ? ` · ${ev.ator.nome} (${ev.ator.email})` : ' · usuário não identificado'}</p>
-        </li>)}
-      </ol> : <p className="text-xs text-foreground/65">Não existem eventos específicos disponíveis nesta consulta.</p>}
-      {dados.versoes.length > 1 && <details className="rounded-lg border border-brand-green/20 p-3">
-        <summary className="cursor-pointer text-sm font-semibold text-brand-neon">Versões anteriores preservadas · {dados.versoes.length - 1}</summary>
-        <ul className="mt-3 space-y-2">{dados.versoes.slice(1).map(v => <li key={v.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-brand-green/15 pt-2 text-xs">
-          <div className="min-w-0"><p className="break-all font-semibold">{nomeArquivoLegivel(v.nomeOriginal)}</p>
-            <p className="text-foreground/60">{new Date(v.criadoEm).toLocaleString('pt-BR')} · {ROTULO_STATUS[v.status]}</p></div>
-          <button type="button" onClick={() => void baixar(v)} className="rounded-lg border border-brand-green/40 px-3 py-1.5">Baixar versão</button>
-        </li>)}</ul>
-      </details>}
-      </div>
-    </details>
+
     {erro && <p role="alert" className="rounded-lg border border-red-500/35 p-3 text-sm text-error-text">{erro}</p>}
   </div>
   {editorArquivo}

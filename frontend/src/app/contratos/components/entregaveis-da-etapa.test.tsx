@@ -3,6 +3,10 @@ jest.mock('@/app/contratos/components/painel-comprovacao-evidencia', () => ({
 }));
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { EntregaveisDaEtapa } from './entregaveis-da-etapa';
+// Teste isolado do modal: a consulta de atividades é coberta por testes próprios.
+jest.mock('@/hooks/use-atividades', () => ({ useAtividades: () => ({
+  atividades: [], total: 0, loading: false, atualizando: false, erro: null, atualizar: jest.fn(),
+}) }));
 import { alterarArquivoEntregavel, excluirEntregavelArquivado, consultarHistoricoEntregavel, listarEntregaveisArquivados, ErroEntregavel, type Entregavel } from '@/lib/entregaveis';
 jest.mock('@/lib/entregaveis', () => ({
   ...jest.requireActual('@/lib/entregaveis'),
@@ -394,4 +398,16 @@ test('aba Concluídos exige status operacional persistido, independente do check
   render(<EntregaveisDaEtapa {...props} dados={[{ ...e, statusExecucao: 'CONCLUIDO' as const }]} />);
   fireEvent.click(screen.getByRole('tab', { name: 'Entregáveis concluídos' }));
   expect(screen.getByRole('link', { name: e.nome })).toHaveTextContent('Concluído');
+});
+
+
+test('arquivamento da etapa bloqueia ações, mas não recolore entregável concluído', () => {
+  render(<EntregaveisDaEtapa {...props} dados={[{ ...e, statusExecucao: 'CONCLUIDO' }]}
+    paiArquivado estadoProprioEtapa="arquivado" podeEditar />);
+  fireEvent.click(screen.getByRole('tab', { name: 'Entregáveis concluídos' }));
+  const card = screen.getByRole('link', { name: 'Relatório de instalação' });
+  expect(card.closest('[data-entregavel-estado]')).toHaveAttribute('data-entregavel-estado', 'concluido');
+  expect(card).toHaveClass('border-violet-500/65');
+  expect(card).not.toHaveClass('border-amber-500/60');
+  expect(screen.getByRole('button', { name: `Editar entregável ${e.nome}` })).toBeDisabled();
 });
