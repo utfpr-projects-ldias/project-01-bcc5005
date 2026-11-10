@@ -207,3 +207,33 @@ test('evidência opcional verificada continua violeta mesmo com etapa arquivada'
   expect(contexto).toHaveAttribute('data-tec08-estado', 'concluido');
   expect(screen.queryByRole('button', { name: 'Nova evidência' })).not.toBeInTheDocument();
 });
+
+
+test('navegação do entregável separa evidências e atividades sem duplicar as seções', () => {
+  render(<ConteudoEntregavel item={item} />);
+  const evidencia = screen.getByRole('tab', { name: 'Evidências' });
+  const atividade = screen.getByRole('tab', { name: 'Atividades' });
+  expect(evidencia).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByRole('tabpanel', { name: 'Evidências' })).toBeInTheDocument();
+  expect(screen.getByRole('tab', { name: 'Todas' })).toBeInTheDocument();
+  fireEvent.click(atividade);
+  expect(atividade).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByRole('tabpanel', { name: 'Atividades' })).toBeInTheDocument();
+  expect(screen.queryByRole('tabpanel', { name: 'Evidências' })).not.toBeInTheDocument();
+  fireEvent.click(evidencia);
+  expect(screen.getByRole('tab', { name: 'Todas' })).toBeInTheDocument();
+});
+
+test('Todas as evidências ativas mantém verificadas e pendentes na mesma lista', async () => {
+  consultar.mockImplementation((_c: string, _e: string, id: string) => Promise.resolve({
+    id, contratoId: 'contrato-qa', entregavelId: 'entregavel-qa',
+    status: id === 'e1' ? 'VERIFICADA' : 'SEM_ENVIO', versoes: [],
+  }));
+  render(<ConteudoEntregavel item={{ ...item, evidenciasEsperadas: [
+    { id: 'e1', tipoEvidencia: 'Relatório', descricao: null, obrigatoria: true },
+    { id: 'e2', tipoEvidencia: 'Foto', descricao: null, obrigatoria: false },
+  ] }} />);
+  expect(await screen.findByText('1/2 evidências esperadas')).toBeInTheDocument();
+  expect(screen.getByRole('list', { name: 'Evidências obrigatórias' })).toBeInTheDocument();
+  expect(screen.getByRole('list', { name: 'Evidências opcionais' })).toBeInTheDocument();
+});

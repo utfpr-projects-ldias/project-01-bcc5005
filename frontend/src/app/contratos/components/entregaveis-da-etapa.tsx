@@ -201,7 +201,7 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, da
   const concluidos = visiveis.filter(e => e.statusExecucao === 'CONCLUIDO' && !e.reabertoEm);
   const exibidos = abaEntregaveis === 'comprovados' ? concluidos :
     abaEntregaveis === 'revisao' ? visiveis.filter(e => Boolean(e.reabertoEm)) :
-    visiveis.filter(e => !e.reabertoEm && !concluidos.some(c => c.id === e.id));
+    visiveis; // Todas reúne planejamento, revisão/reabertura e concluídos; arquivados ficam em aba própria.
   const protegido = erro && typeof erro === 'object' && 'status' in erro &&
     [401, 403, 404].includes((erro as { status?: number }).status ?? -1);
   return <section data-tec08-contexto-operacional data-tec08-estado={contextoVisualEtapa} aria-label="Entregáveis da etapa" className={`mt-4 min-h-[min(42dvh,400px)] min-w-0 rounded-xl border p-3 sm:p-4 ${contextoVisualEtapa === 'arquivado' ? 'border-amber-500/45 bg-amber-500/[0.04]' : contextoVisualEtapa === 'revisao' ? 'border-teal-700/40 bg-teal-900/[0.05]' : contextoVisualEtapa === 'concluido' ? 'border-violet-500/40 bg-violet-500/[0.04]' : contextoVisualEtapa === 'encerrado' ? 'border-slate-500/40 bg-slate-500/[0.04]' : 'border-brand-green/20 bg-brand-darkgreen/10'}`}>
@@ -209,7 +209,7 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, da
       <AbasRolaveis className="min-w-0 flex-1"><div role="tablist" aria-label="Entregáveis da etapa" className={`inline-flex items-center gap-1 rounded-xl border bg-background/70 p-1 ${contextoVisualEtapa === 'arquivado' ? 'border-amber-500/40' : contextoVisualEtapa === 'revisao' ? 'border-teal-700/45' : contextoVisualEtapa === 'concluido' ? 'border-violet-500/40' : contextoVisualEtapa === 'encerrado' ? 'border-slate-500/40' : 'border-brand-green/25'}`}>
         <button type="button" role="tab" aria-selected={abaEntregaveis === 'ativos'} onClick={() => setAbaEntregaveis('ativos')}
           className={`rounded-lg px-4 py-2 text-sm font-semibold transition-none ${abaEntregaveis === 'ativos' ? classeAbaAtiva : 'text-foreground/70 hover:bg-brand-green/10 hover:text-foreground'}`}>
-          Entregáveis
+          Todas
         </button>
         <button type="button" role="tab" aria-selected={abaEntregaveis === 'revisao'} onClick={() => setAbaEntregaveis('revisao')}
           className={`rounded-lg px-3 py-2 text-xs font-semibold transition-none ${abaEntregaveis === 'revisao' ? classeAbaAtiva : 'text-foreground/65 hover:bg-teal-700/10'}`}>Em revisão</button>
@@ -296,7 +296,7 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, da
             </span>
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                <p className="min-w-0 break-words text-base font-semibold text-foreground ">{e.nome}</p>
+                <p className={`min-w-0 break-words text-base font-semibold ${e.arquivadoEm ? 'text-amber-300' : e.reabertoEm ? 'text-teal-300' : concluidoVisual ? 'text-violet-300' : 'text-brand-neon'}`}>{e.nome}</p>
                 <span className="shrink-0 font-mono text-xs text-foreground/60">{rotuloCodigoPublico(e.codigoPublico)}</span>
               </div>
               {intervaloPrevisto(e.inicioPrevisto, e.terminoPrevisto) &&

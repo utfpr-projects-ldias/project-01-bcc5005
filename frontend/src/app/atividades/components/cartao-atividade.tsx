@@ -52,7 +52,7 @@ const COR_ENTREGAVEL: Record<EstadoVisualEntregavel, string> = {
   concluido: 'border-violet-400/45 bg-violet-500/[0.045] text-violet-300',
   arquivado: 'border-amber-500/45 bg-amber-500/[0.045] text-amber-300',
 };
-const BOTAO = 'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50';
+const BOTAO = 'pointer-events-auto inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50';
 
 /** Mesmo ícone de contrato utilizado na navegação lateral. */
 export function IconeContrato({ tamanho = 18 }: { tamanho?: number }) {
@@ -162,13 +162,21 @@ export function CartaoAtividade({ atividade, contratoId, permissoes, compacto = 
   }
   function solicitar(acao: Acao, elemento: HTMLButtonElement) { setGatilho(elemento); setPendente(acao); setMotivo(''); setErro(''); }
   return <article data-tec08-item-clicavel data-tec08-card-carregando={carregandoCard || undefined} data-atividade-id={atividade.id} data-atividade-estado={estado}
-    role="button" tabIndex={0} aria-label={`Abrir cartão da atividade ${atividade.titulo}`}
-    onKeyDown={e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); abrirDetalheCard(); } }} onClick={e => {
-    if (!(e.target instanceof Element) || !e.currentTarget.contains(e.target) || e.target.closest('button,a,input,textarea,select,[role="dialog"]')) return;
+    onClick={e => {
+    if (!(e.target instanceof Element) || e.target.closest('button,a,input,textarea,select,[role="dialog"]')) return;
     abrirDetalheCard();
-  }} className={`group min-w-0 rounded-xl border ${cores.borda} ${cores.fundo} transition-colors duration-200 ${compacto ? 'p-3 sm:p-4' : 'p-4 sm:p-5'} cursor-pointer hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2`}>
+  }} className={`group relative min-w-0 rounded-xl border ${cores.borda} ${cores.fundo} transition-colors duration-200 ${compacto ? 'p-3 sm:p-4' : 'p-4 sm:p-5'} cursor-pointer hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2`}>
+    <button type="button" aria-label={`Abrir cartão da atividade ${atividade.titulo}`} aria-haspopup="dialog"
+      onClick={e => { e.stopPropagation(); abrirDetalheCard(); }}
+      onKeyDown={e => {
+        // No navegador, Enter ativa um botão nativo; impedir o padrão evita abrir duas vezes.
+        // No teste, fireEvent.keyDown não sintetiza esse clique, então tratamos Enter explicitamente.
+        if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); abrirDetalheCard(); }
+      }}
+      className="absolute inset-0 z-[1] cursor-pointer rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2" />
+    <div className="pointer-events-none relative z-[2]">
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div className="min-w-0 flex-1 space-y-1"><button type="button" aria-label={`Ver detalhes da atividade ${atividade.titulo}`} onClick={abrirDetalheCard} className={`inline-flex max-w-full break-words text-left font-semibold ${cores.texto} hover:underline focus-visible:outline-2`}>{atividade.titulo}</button>
+      <div className="min-w-0 flex-1 space-y-1"><button type="button" aria-label={`Ver detalhes da atividade ${atividade.titulo}`} onClick={abrirDetalheCard} className={`pointer-events-auto inline-flex max-w-full break-words text-left font-semibold ${cores.texto} hover:underline focus-visible:outline-2`}>{atividade.titulo}</button>
         <p className="text-xs text-foreground/65"><time dateTime={atividade.dataHora}>{new Date(atividade.dataHora).toLocaleString('pt-BR')}</time> · {atividade.tipo}</p></div>
       <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${situacao.estilo}`}>{situacao.titulo}</span>
     </div>
@@ -184,7 +192,7 @@ export function CartaoAtividade({ atividade, contratoId, permissoes, compacto = 
         className={`inline-flex shrink-0 items-center rounded-md border px-2.5 py-1 text-xs ${cores.borda} ${cores.texto}`}>…</span>}
     </div>}
     <div className={`mt-3 flex flex-wrap items-center gap-2 border-t pt-3 ${cores.linha}`} aria-label={`Ações de ${atividade.titulo}`}>
-      <button type="button" className={`mr-auto text-xs font-semibold underline underline-offset-4 hover:text-foreground ${cores.texto}`} onClick={abrirDetalheCard}>Ver detalhes</button>
+      <button type="button" className={`pointer-events-auto mr-auto text-xs font-semibold underline underline-offset-4 hover:text-foreground ${cores.texto}`} onClick={abrirDetalheCard}>Ver detalhes</button>
       {estado === 'REGISTRADA' && permissoes?.editarAtividades && (onEditar
         ? <button type="button" title="Editar atividade" aria-label="Editar" className={`${BOTAO} ${cores.botao}`} onClick={e => onEditar(atividade, e.currentTarget)}><Icone nome="editar" /></button>
         : <button type="button" title="Editar atividade" aria-label="Editar" className={`${BOTAO} ${cores.botao}`} onClick={e => { setGatilhoEdicao(e.currentTarget); setEdicaoAberta(true); }}><Icone nome="editar" /></button>)}
@@ -192,6 +200,7 @@ export function CartaoAtividade({ atividade, contratoId, permissoes, compacto = 
         <button key={acao} type="button" title={`${ROTULO[acao]} atividade`} aria-label={ROTULO[acao]}
           className={`${BOTAO} ${acao === 'excluir' ? 'border-error-text/45 text-error-text hover:bg-error-text/10' : cores.botao}`}
           onClick={e => solicitar(acao, e.currentTarget)}><Icone nome={acao} /></button>)}
+    </div>
     </div>
     {detalheAberto && !listaEntregaveisAberta && createPortal(<ModalEtapa titulo={atividade.titulo} contexto="Detalhes da atividade" estadoContextual={estadoModal} camada={dentroEntregavel ? "evidencia" : "principal"} compacto
       ocupado={false} onFechar={() => setDetalheAberto(false)} rotuloFechar="Fechar detalhes da atividade">

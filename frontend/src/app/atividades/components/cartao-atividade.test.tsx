@@ -192,3 +192,13 @@ test('edição no cartão da aba do entregável abre modal, não navega para /at
   expect(within(modal).getByRole('textbox', { name: 'Descrição *' })).toHaveValue('Relato da equipe');
   expect(screen.queryByRole('link', { name: 'Editar' })).not.toBeInTheDocument();
 });
+
+
+test('área de abertura sobreposta cobre o cartão mas não captura botões de ação', () => {
+  render(<CartaoAtividade atividade={atividade} contratoId={atividade.contratoId} permissoes={{ verificarAtividades: true }} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Abrir cartão da atividade Reunião semanal' }));
+  expect(screen.getByRole('dialog', { name: 'Reunião semanal' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Fechar detalhes da atividade' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Verificar' }));
+  expect(screen.getByRole('dialog', { name: 'Verificar atividade' })).toBeInTheDocument();
+});

@@ -15,7 +15,7 @@ const vazio = (): Filtro => ({ dataInicio: '', dataFim: '', etapaId: '', entrega
 const campo = 'min-w-0 w-full rounded-lg border border-brand-green/25 bg-background px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-brand-green/30';
 
 /** Diário de um contrato ou de um entregável: consulta com filtros imediatos e paginação no backend. */
-function ListaAtividadesVinculadas({ contratoId, entregavelId, somenteLeitura = false }: { contratoId: string; entregavelId?: string; somenteLeitura?: boolean }) {
+function ListaAtividadesVinculadas({ contratoId, entregavelId, somenteLeitura = false, estadoContextual }: { contratoId: string; entregavelId?: string; somenteLeitura?: boolean; estadoContextual?: EstadoVisualEntregavel }) {
   const [filtros, setFiltros] = useState<Filtro>(vazio);
   const [pagina, setPagina] = useState(1);
   const [cadastroAberto, setCadastroAberto] = useState(false);
@@ -26,7 +26,7 @@ function ListaAtividadesVinculadas({ contratoId, entregavelId, somenteLeitura = 
   const etapas = (etapasConsulta.dados ?? []).filter(e => !e.arquivadoEm);
   const estadoPorEntregavel: Record<string, EstadoVisualEntregavel> = Object.fromEntries(
     (entregaveisConsulta.dados ?? []).map((item: Entregavel) => [item.id, statusVisualEntregavel(item)]));
-  const estadoPai = entregavelId ? estadoPorEntregavel[entregavelId] ?? 'normal' : 'normal';
+  const estadoPai = estadoContextual ?? (entregavelId ? estadoPorEntregavel[entregavelId] ?? 'normal' : 'normal');
   const corContexto = { normal: 'border-brand-green/20 bg-card', revisao: 'border-teal-600/45 bg-teal-700/[0.035]',
     concluido: 'border-violet-500/40 bg-violet-500/[0.03]', arquivado: 'border-amber-500/40 bg-amber-500/[0.03]' }[estadoPai];
   const entregaveis = (entregaveisConsulta.dados ?? [])
@@ -59,10 +59,17 @@ function ListaAtividadesVinculadas({ contratoId, entregavelId, somenteLeitura = 
       <option value="ARQUIVADA">Arquivadas</option><option value="">Todas</option>
     </select>
   </label>;
+  const abasSituacaoEntregavel = <div role="tablist" aria-label="Situação das atividades" className="inline-flex max-w-full items-center gap-1 rounded-lg border border-current/20 bg-background/50 p-1">
+    {([['ATIVAS', 'Registradas'], ['VERIFICADA', 'Verificadas'], ['ARQUIVADA', 'Arquivadas']] as const).map(([chave, rotulo]) =>
+      <button key={chave} type="button" role="tab" aria-selected={filtros.status === chave}
+        onClick={() => { setPagina(1); setFiltros(v => ({ ...v, status: chave })); }}
+        className={`min-w-0 rounded-md px-3 py-2 text-xs font-semibold transition-colors duration-200 ${filtros.status === chave
+          ? 'bg-current/10 underline underline-offset-4' : 'text-foreground/65 hover:bg-foreground/5'}`}>{rotulo}</button>)}
+  </div>;
   return <section aria-label={fixo ? 'Atividades vinculadas ao entregável' : 'Atividades do contrato'}
     data-tec08-atividades-contrato data-tec08-contexto-operacional data-tec08-estado={estadoPai} className={`space-y-4 rounded-xl border p-4 sm:p-5 ${corContexto}`}>
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h3 className="text-lg font-semibold text-foreground">{fixo ? 'Atividades vinculadas' : 'Linha do tempo de atividades'}</h3>
+      <div><h3 data-tec08-titulo-secao-atividades className="text-lg font-semibold">{fixo ? 'Atividades vinculadas' : 'Linha do tempo de atividades'}</h3>
         <p className="mt-1 text-xs text-foreground/65">Diário operacional — {intervaloInvalido ? 'intervalo inválido' : `${total} ${total === 1 ? 'registro' : 'registros'}`}</p></div>
       {podeRegistrar && podeAbrirCadastro && <button type="button" onClick={e => { setGatilhoCadastro(e.currentTarget); setCadastroAberto(true); }} className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-brand-green px-3 py-2 text-xs font-semibold text-on-brand-green hover:brightness-105" aria-label="Nova atividade neste contexto">
         <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 5h16v14H4zM7 9h10M7 13h6"/><path d="M17 14v6M14 17h6"/></svg> Nova atividade
@@ -87,7 +94,7 @@ function ListaAtividadesVinculadas({ contratoId, entregavelId, somenteLeitura = 
       </label>
       {filtroStatus}
       {intervaloInvalido && <p role="alert" className="text-xs text-error-text sm:col-span-2 xl:col-span-5">A data inicial não pode ser posterior à data final.</p>}
-    </div> : <div className="max-w-xs">{filtroStatus}</div>}
+    </div> : <div className="min-w-0 max-w-full">{abasSituacaoEntregavel}</div>}
     {intervaloInvalido ? <p role="status" className="rounded-lg border border-dashed border-brand-green/20 p-5 text-sm text-foreground/65">Corrija o intervalo para consultar as atividades.</p>
       : loading ? <p role="status" className="text-sm text-foreground/70">Carregando atividades...</p>
       : erro ? <p role="alert" className="text-sm text-error-text">Não foi possível consultar as atividades deste contrato.</p>
@@ -111,9 +118,9 @@ function ListaAtividadesVinculadas({ contratoId, entregavelId, somenteLeitura = 
 }
 
 /** Preserva testes isolados sem provider, sem ativar consultas privadas no contexto inexistente. */
-export function AtividadesVinculadas({ contratoId, entregavelId, somenteLeitura = false, ocultarAcessoDiario: _ocultarAcessoDiario = false }: { contratoId: string; entregavelId?: string; somenteLeitura?: boolean; ocultarAcessoDiario?: boolean }) {
+export function AtividadesVinculadas({ contratoId, entregavelId, somenteLeitura = false, ocultarAcessoDiario: _ocultarAcessoDiario = false, estadoContextual }: { contratoId: string; entregavelId?: string; somenteLeitura?: boolean; ocultarAcessoDiario?: boolean; estadoContextual?: EstadoVisualEntregavel }) {
   void _ocultarAcessoDiario;
   const repositorio = useRepositorioConsultasOpcional();
   if (!repositorio) return null;
-  return <ListaAtividadesVinculadas key={`${contratoId}:${entregavelId ?? ''}`} contratoId={contratoId} entregavelId={entregavelId} somenteLeitura={somenteLeitura} />;
+  return <ListaAtividadesVinculadas key={`${contratoId}:${entregavelId ?? ''}`} contratoId={contratoId} entregavelId={entregavelId} somenteLeitura={somenteLeitura} estadoContextual={estadoContextual} />;
 }

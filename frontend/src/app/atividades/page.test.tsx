@@ -69,9 +69,15 @@ test('diário tem etapa e filtros automáticos sem Aplicar filtros', () => {
 });
 
 
-test('filtro Registradas inclui verificadas pelo status agregado do backend', () => {
+test('situação inicia em Registradas, inclui verificadas e não oferece Todas', () => {
   render(<AtividadesPage />);
-  fireEvent.change(screen.getByLabelText('Situação'), { target: { value: 'ATIVAS' } });
-  expect(screen.getByLabelText('Situação')).toHaveValue('ATIVAS');
+  const seletor = screen.getByRole('combobox', { name: 'Situação' });
+  expect(seletor).toHaveValue('ATIVAS');
+  expect(screen.getByRole('option', { name: 'Registradas' })).toBeInTheDocument();
+  expect(screen.queryByRole('option', { name: /^Todas$/ })).not.toBeInTheDocument();
+  expect(diario).toHaveBeenLastCalledWith('', expect.objectContaining({ status: 'ATIVAS' }));
+  fireEvent.change(seletor, { target: { value: 'VERIFICADA' } });
+  expect(diario).toHaveBeenLastCalledWith('', expect.objectContaining({ status: 'VERIFICADA' }));
+  fireEvent.change(seletor, { target: { value: 'ATIVAS' } });
   expect(diario).toHaveBeenLastCalledWith('', expect.objectContaining({ status: 'ATIVAS' }));
 });

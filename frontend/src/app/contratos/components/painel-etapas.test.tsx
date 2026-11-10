@@ -505,7 +505,7 @@ test('abas: Etapas mantém concluídas em ordem e arquivadas aparecem somente em
   const arquivo = within(screen.getByRole('list', { name: 'Etapas arquivadas' })).getAllByRole('listitem');
   expect(arquivo).toHaveLength(1);
   expect(arquivo[0]).toHaveTextContent('Planejamento encerrado');
-  fireEvent.click(screen.getByRole('tab', { name: 'Etapas do contrato' }));
+  fireEvent.click(screen.getByRole('tab', { name: 'Todas' }));
   expect(screen.getByRole('list', { name: 'Etapas em ordem de execução' })).toBeInTheDocument();
 });
 
@@ -530,7 +530,7 @@ test('cadeado e Nova etapa são exclusivos da aba de etapas, sem remover conclu�
   expect(screen.queryByRole('button', { name: 'Nova etapa' })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('tab', { name: 'Etapas arquivadas' }));
   expect(screen.queryByRole('button', { name: 'Nova etapa' })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('tab', { name: 'Etapas do contrato' }));
+  fireEvent.click(screen.getByRole('tab', { name: 'Todas' }));
   expect(screen.getByRole('button', { name: 'Nova etapa' })).toBeInTheDocument();
 });
 

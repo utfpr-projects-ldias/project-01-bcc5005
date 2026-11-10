@@ -46,7 +46,7 @@ export default function AtividadesPage() {
   const entregaveisDaEtapa = entregaveis.filter(e => !etapaEscolhida || e.etapaId === etapaEscolhida);
   const [inicio, setInicio] = useState('');
   const [fim, setFim] = useState('');
-  const [statusSelecionado, setStatusSelecionado] = useState<FiltroEstadoAtividade>('');
+  const [statusSelecionado, setStatusSelecionado] = useState<FiltroEstadoAtividade>('ATIVAS');
   const [pagina, setPagina] = useState(1);
   const [entregavelEscolhido, setEntregavelEscolhido] = useState(() => typeof window === 'undefined' ? '' : new URLSearchParams(window.location.search).get('entregavelId') ?? '');
 
@@ -163,7 +163,7 @@ export default function AtividadesPage() {
           </select></div>
         <div><label htmlFor="atividades-status" className="block text-xs font-medium">Situação</label>
           <select id="atividades-status" value={statusSelecionado} onChange={e => { setStatusSelecionado(e.target.value as FiltroEstadoAtividade); setPagina(1); }} className={CAMPO}>
-            <option value="">Todas</option><option value="ATIVAS">Registradas</option><option value="VERIFICADA">Verificadas</option><option value="ARQUIVADA">Arquivadas</option>
+            <option value="ATIVAS">Registradas</option><option value="VERIFICADA">Verificadas</option><option value="ARQUIVADA">Arquivadas</option>
           </select></div>
       </div>
       {intervaloInvalido && <p role="alert" className="text-xs text-error-text">A data inicial não pode ser posterior à data final.</p>}

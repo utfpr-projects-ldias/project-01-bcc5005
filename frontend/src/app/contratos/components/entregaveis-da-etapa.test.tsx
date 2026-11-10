@@ -266,7 +266,7 @@ test('comprovação completa sem conclusão operacional não coloca entregável 
   expect(cartao).not.toHaveClass('opacity-85');
   fireEvent.click(screen.getByRole('tab', { name: 'Entregáveis concluídos' }));
   expect(screen.queryByRole('link', { name: e.nome })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('tab', { name: /^Entregáveis$/ }));
+  fireEvent.click(screen.getByRole('tab', { name: /^Todas$/ }));
   expect(within(cartao).getByLabelText('Entregável com comprovação documental completa')).toHaveClass('h-8');
   expect(cartao).toHaveTextContent('Comprovação documental completa');
   // O marcador já foi localizado acima. Uma nova consulta após o filtro pode
@@ -285,7 +285,7 @@ test('abas de entregáveis não movem a geometria quando arquivados estiver vazi
   await waitFor(() => expect(screen.getByText('Nenhum entregável arquivado nesta etapa.')).toBeInTheDocument());
   expect(caixa).toHaveClass('min-h-[min(42dvh,400px)]');
   expect(screen.queryByRole('button', { name: 'Novo entregável' })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('tab', { name: /^Entregáveis$/ }));
+  fireEvent.click(screen.getByRole('tab', { name: /^Todas$/ }));
   expect(screen.getByRole('list', { name: 'Entregáveis planejados da etapa' })).toBeInTheDocument();
   consultaArquivo.mockReset();
 });
@@ -410,4 +410,17 @@ test('arquivamento da etapa bloqueia ações, mas não recolore entregável conc
   expect(card).toHaveClass('border-violet-500/65');
   expect(card).not.toHaveClass('border-amber-500/60');
   expect(screen.getByRole('button', { name: `Editar entregável ${e.nome}` })).toBeDisabled();
+});
+
+
+test('Todas reúne entregáveis em revisão e concluídos sem misturar os arquivados', () => {
+  render(<EntregaveisDaEtapa {...props} dados={[
+    { ...e, id: 'reaberto', nome: 'Entrega reaberta', reabertoEm: '2026-11-09T10:00:00Z', statusExecucao: 'EM_ANDAMENTO' },
+    { ...e, id: 'concluido', nome: 'Entrega concluída', statusExecucao: 'CONCLUIDO' },
+    { ...e, id: 'arquivado', nome: 'Entrega arquivada', arquivadoEm: '2026-11-09T11:00:00Z' },
+  ]} />);
+  expect(screen.getByRole('tab', { name: 'Todas' })).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByRole('link', { name: 'Entrega reaberta' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Entrega concluída' })).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Entrega arquivada' })).not.toBeInTheDocument();
 });

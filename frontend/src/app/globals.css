@@ -1392,3 +1392,21 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
   [data-tec08-item-clicavel] { transition: none !important; }
   [data-tec08-item-clicavel][data-tec08-card-carregando="true"]::after { animation: none; }
 }
+
+
+/* TEC08-05-01 / Patch 18 — títulos das duas seções seguem o entregável;
+   cada cartão de atividade e de evidência preserva seu estado próprio. */
+[data-tec08-contexto-operacional][data-tec08-estado] [data-tec08-titulo-secao-evidencias],
+[data-tec08-atividades-contrato][data-tec08-estado] [data-tec08-titulo-secao-atividades] {
+  color: var(--tec08-status-heading) !important;
+}
+[data-tec08-atividades-contrato] [aria-label="Situação das atividades"] [role="tab"][aria-selected="true"] {
+  background-color: color-mix(in srgb, var(--tec08-status-border, #5fd34a) 18%, transparent);
+  color: var(--tec08-status-heading, var(--accent-neon));
+  text-decoration: none;
+}
+[data-tec08-atividades-contrato] [aria-label="Situação das atividades"] [role="tab"]:focus-visible,
+[aria-label="Conteúdo do entregável"] [role="tab"]:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}

@@ -12,7 +12,9 @@ jest.mock('@/app/atividades/components/cartao-atividade', () => ({ CartaoAtivida
 test('modal de entregável oferece filtro por situação sem link circular', () => {
   render(<AtividadesVinculadas contratoId="contrato-qa" entregavelId="entregavel-qa" ocultarAcessoDiario />);
   expect(screen.getByRole('region', { name: 'Atividades vinculadas ao entregável' })).toBeInTheDocument();
-  expect(screen.getByLabelText('Situação')).toHaveValue('ATIVAS');
+  expect(screen.getByRole('tab', { name: 'Registradas' })).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByRole('tab', { name: 'Verificadas' })).toBeInTheDocument();
+  expect(screen.getByRole('tab', { name: 'Arquivadas' })).toBeInTheDocument();
   expect(screen.queryByRole('link', { name: 'Abrir diário' })).not.toBeInTheDocument();
 });
 
