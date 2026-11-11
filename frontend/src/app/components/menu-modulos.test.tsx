@@ -41,3 +41,15 @@ test('menu lateral mantém nomes acessíveis quando visualmente compacto', async
   expect(screen.getByRole('complementary', { name: 'Navegação principal' })).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Contratos' })).toHaveAttribute('title', 'Contratos');
 });
+
+test('Ocorrências segue Atividades no menu e fica disponível para usuários autorizados ao aplicativo', async () => {
+  perfil.mockResolvedValue({ id: 'u', nome: 'Usuário', email: 'teste@example.com', perfil: 'COLABORADOR', ativo: true });
+  await act(async () => { renderComConsultas(<MenuMobile />); });
+  const barra = screen.getByRole('navigation', { name: 'Navegação móvel' });
+  const links = Array.from(barra.querySelectorAll('a'));
+  const atividades = links.findIndex(link => link.getAttribute('href') === '/atividades');
+  expect(atividades).toBeGreaterThan(-1);
+  expect(links[atividades + 1]).toHaveAttribute('href', '/ocorrencias');
+  expect(screen.getByRole('link', { name: 'Ocorrências' })).toBeInTheDocument();
+  expect(barra.closest('.tec08-abas-rolagem')).toBeInTheDocument();
+});

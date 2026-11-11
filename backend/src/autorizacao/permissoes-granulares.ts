@@ -8,6 +8,7 @@ export const CHAVES_PERMISSOES = [
   'criarEntregaveis', 'editarEntregaveis', 'arquivarEntregaveis', 'reativarEntregaveis', 'reabrirEntregaveis', 'excluirEntregaveisArquivados',
   'criarEvidencias', 'editarEvidencias', 'arquivarEvidencias', 'reativarEvidencias', 'reabrirEvidencias', 'excluirEvidenciasArquivadas',
   'alterarObrigatoriedade', 'enviarComprovantes', 'verificarComprovantes',
+  'registrarAtividades', 'editarAtividades', 'verificarAtividades', 'reabrirAtividades', 'arquivarAtividades', 'reativarAtividades', 'excluirAtividadesArquivadas',
   'editarContrato', 'concluirContrato', 'encerrarContrato', 'reabrirContrato', 'cancelarContrato', 'reverterCancelamentoContrato', 'suspenderContrato', 'retomarContrato', 'verificarDocumentos', 'reabrirDocumentos', 'concluirEtapas', 'concluirEntregaveis', 'anexarDocumentos', 'editarDocumentos', 'arquivarDocumentos', 'reativarDocumentos', 'excluirDocumentosArquivados', 'verificarDocumentoPrincipal', 'reabrirDocumentoPrincipal', 'arquivarDocumentoPrincipal', 'reativarDocumentoPrincipal', 'excluirDocumentoPrincipal', 'administrarDocumentoPrincipal',
 ] as const;
 export type ChavePermissao = typeof CHAVES_PERMISSOES[number];
@@ -38,6 +39,13 @@ export const ACAO_PERMISSAO: Readonly<Record<string, ChavePermissao>> = {
   'evidencias:excluiresperada': 'excluirEvidenciasArquivadas',
   'evidencias:anexar': 'enviarComprovantes',
   'evidencias:verificar': 'verificarComprovantes',
+  'atividades:registrar': 'registrarAtividades',
+  'atividades:editar': 'editarAtividades',
+  'atividades:verificar': 'verificarAtividades',
+  'atividades:reabrir': 'reabrirAtividades',
+  'atividades:arquivar': 'arquivarAtividades',
+  'atividades:reativar': 'reativarAtividades',
+  'atividades:excluir': 'excluirAtividadesArquivadas',
   'documentos:verificar': 'verificarDocumentos',
   'documentos:reabrir': 'reabrirDocumentos',
   'documentos:anexar': 'anexarDocumentos',
@@ -58,7 +66,8 @@ export function permissoesEfetivas(perfil: PerfilUsuario | string, podeEditar: b
   const gestorEditor = perfil === 'GESTOR' && podeEditar;
   const base = {} as Record<ChavePermissao, boolean>;
   for (const chave of CHAVES_PERMISSOES) {
-    const padrao = (chave === 'verificarDocumentos' || chave === 'reabrirDocumentos' || chave === 'alterarObrigatoriedade' || chave === 'encerrarContrato' || chave === 'encerrarEtapas' || chave === 'cancelarContrato' || chave === 'reverterCancelamentoContrato' || chave === 'suspenderContrato' || chave === 'retomarContrato' || chave === 'administrarDocumentoPrincipal' || chave.endsWith('DocumentoPrincipal') || chave === 'bloquearOrdemEtapas' || chave.startsWith('excluir') || chave.startsWith('reativar') || chave.startsWith('reabrir') || chave === 'arquivarEtapas' || chave.startsWith('concluir')) ? false
+    const padrao = (chave === 'verificarAtividades' || chave === 'arquivarAtividades' || chave === 'verificarDocumentos' || chave === 'reabrirDocumentos' || chave === 'alterarObrigatoriedade' || chave === 'encerrarContrato' || chave === 'encerrarEtapas' || chave === 'cancelarContrato' || chave === 'reverterCancelamentoContrato' || chave === 'suspenderContrato' || chave === 'retomarContrato' || chave === 'administrarDocumentoPrincipal' || chave.endsWith('DocumentoPrincipal') || chave === 'bloquearOrdemEtapas' || chave.startsWith('excluir') || chave.startsWith('reativar') || chave.startsWith('reabrir') || chave === 'arquivarEtapas' || chave.startsWith('concluir')) ? false
+      : chave === 'registrarAtividades' || chave === 'editarAtividades' ? podeEditar
       : chave === 'enviarComprovantes' ? true
       : chave === 'verificarComprovantes' ? true // serviço exige verificador distinto e autorizado
       : gestorEditor;

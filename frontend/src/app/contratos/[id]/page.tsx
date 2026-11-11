@@ -26,6 +26,9 @@ import { PainelEtapas } from '../components/painel-etapas';
 import { PainelDocumentos } from '../components/painel-documentos';
 import { ResumoPlanejamentoContrato } from '../components/resumo-planejamento-contrato';
 import { HistoricoContrato } from '../components/historico-contrato';
+import { AtividadesVinculadas } from '../components/atividades-vinculadas';
+import { PainelOcorrencias } from '@/app/ocorrencias/components/painel-ocorrencias';
+import { IconeAtividades, IconeOcorrencias } from '@/app/components/icones-operacionais';
 import { FormularioContrato } from '../components/formulario-contrato';
 import { ModalEtapa } from '../components/modal-etapa';
 
@@ -37,7 +40,7 @@ function dataBR(valor: string | null | undefined): string {
 export default function DetalheContratoPage() {
   const { id } = useParams<{ id: string }>();
   const cache = useRepositorioConsultas();
-  const [abaContrato, setAbaContrato] = useState<'visao' | 'etapas' | 'documentos'>('visao');
+  const [abaContrato, setAbaContrato] = useState<'visao' | 'etapas' | 'atividades' | 'ocorrencias' | 'documentos'>('visao');
   // Pós-cadastro: revelar a seção documental antes de abrir o modal solicitado.
   // Leitura apenas após montar evita divergência entre SSR e hidratação.
   useEffect(() => {
@@ -436,7 +439,7 @@ export default function DetalheContratoPage() {
     {erroArquivo && <Aviso erro>{erroArquivo}</Aviso>}
     {carregando ? <Aviso>Carregando contrato...</Aviso> : erro ? <Aviso erro>{erro}</Aviso> : contrato ? <>
       <header className="flex min-w-0 items-center gap-3 py-1">
-        <Link href="/contratos" aria-label="Voltar aos contratos" title="Voltar aos contratos"
+        <Link href="/contratos" data-tec08-voltar-contratos aria-label="Voltar aos contratos" title="Voltar aos contratos"
           className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-green/10 text-brand-neon transition-colors hover:bg-brand-green/20 focus-visible:outline-2 focus-visible:outline-brand-neon">
           <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
         </Link>
@@ -445,17 +448,26 @@ export default function DetalheContratoPage() {
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           {emRevisao && <><span className="rounded-full border border-teal-500/55 bg-teal-500/10 px-3 py-1 text-xs font-semibold text-foreground">Em revisão</span><span className="rounded-full border border-foreground/20 bg-background px-2.5 py-1 text-xs text-foreground/80">{faseEmRevisao(contrato.status)}</span></>}
           {pendenteConclusao && <span className="rounded-full border border-violet-400/50 bg-violet-500/15 px-3 py-1 text-xs font-medium text-foreground">Pendente de conclusão</span>}
-          <span className="hidden rounded-full bg-brand-green/10 px-3 py-1 text-xs font-medium sm:inline-flex">{MODOS[contrato.modoCalculo]}</span>
+          <span data-tec08-modo-contrato className="hidden rounded-full bg-brand-green/10 px-3 py-1 text-xs font-medium sm:inline-flex">{MODOS[contrato.modoCalculo]}</span>
         </div>
       </header>
       <div data-testid="barra-navegacao-contrato" className={`sticky top-2 z-30 flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border bg-background/95 p-1 shadow-sm backdrop-blur-sm ${contrato.arquivadoEm ? 'border-amber-500/50' : suspenso ? 'border-amber-500/50' : encerrado ? 'border-slate-500/50' : emRevisao ? 'border-teal-700/45' : (concluido || pendenteConclusao) ? 'border-violet-400/45' : 'border-brand-green/25'}`}>
-        <AbasRolaveis className="w-full sm:w-auto sm:flex-1"><div role="tablist" data-tec08-abas-contrato aria-label="Seções do contrato" className="flex max-w-full gap-1">
-          <button role="tab" type="button" id="tab-visao" aria-controls="painel-visao" aria-selected={abaContrato === 'visao'} onClick={() => setAbaContrato('visao')}
-            className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${abaContrato === 'visao' ? 'bg-brand-green text-on-brand-green' : 'text-foreground/70 hover:bg-brand-green/10'}`}>Visão geral</button>
-          <button role="tab" type="button" id="tab-etapas" aria-controls="painel-etapas" aria-selected={abaContrato === 'etapas'} onClick={() => setAbaContrato('etapas')}
-            className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${abaContrato === 'etapas' ? 'bg-brand-green text-on-brand-green' : 'text-foreground/70 hover:bg-brand-green/10'}`}>Etapas</button>
-          <button role="tab" type="button" id="tab-documentos" aria-controls="painel-documentos" aria-selected={abaContrato === 'documentos'} onClick={() => setAbaContrato('documentos')}
-            className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${abaContrato === 'documentos' ? 'bg-brand-green text-on-brand-green' : 'text-foreground/70 hover:bg-brand-green/10'}`}>Documentos</button>
+        <AbasRolaveis className="w-full sm:w-auto sm:flex-1"><div role="tablist" data-tec08-abas-contrato aria-label="Seções do contrato" className="flex max-w-full items-center gap-1">
+          {([
+            { id: 'visao', nome: 'Visão geral', icon: <><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></> },
+            { id: 'etapas', nome: 'Etapas', icon: <><path d="M5 4v16M9 6h11M9 12h11M9 18h11"/></> },
+            { id: 'atividades', nome: 'Atividades', icon: <IconeAtividades tamanho={16} /> },
+            { id: 'ocorrencias', nome: 'Ocorrências', icon: <IconeOcorrencias tamanho={16} /> },
+            { id: 'documentos', nome: 'Documentos', icon: <><path d="M6 3h8l5 5v13H6zM14 3v6h5M9 14h7m-7 4h7"/></> },
+          ] as const).map(aba => <button key={aba.id} role="tab" type="button" id={`tab-${aba.id}`}
+            aria-controls={`painel-${aba.id}`} aria-selected={abaContrato === aba.id} onClick={() => setAbaContrato(aba.id)}
+            className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${abaContrato === aba.id ? 'text-foreground' : 'text-foreground/70 hover:bg-brand-green/10'}`}>
+            <span aria-hidden="true" className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
+              {aba.id === 'visao' || aba.id === 'etapas' || aba.id === 'documentos'
+                ? <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{aba.icon}</svg>
+                : aba.icon}
+            </span>
+            {aba.nome}</button>)}
         </div></AbasRolaveis>
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           {pendenteConclusao && podeDeliberar ? <>
@@ -492,7 +504,7 @@ export default function DetalheContratoPage() {
           {!contrato.arquivadoEm && podeAbrirEdicao &&
             <button type="button" onClick={abrirEdicao} disabled={alterandoArquivo} aria-haspopup="dialog"
               aria-label={podeEditar ? 'Editar contrato' : 'Alterar situação autorizada'}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-brand-green/45 bg-brand-green/10 px-3 text-xs font-semibold text-foreground hover:bg-brand-green/20 disabled:opacity-50">
+              data-tec08-editar-entidade className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-brand-green/45 bg-brand-green/10 px-3 text-xs font-semibold text-foreground hover:bg-brand-green/20 disabled:opacity-50">
               <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4 shrink-0"><path d="M12 20h9M16 4l4 4-11 11H5v-4L16 4Z"/></svg>{podeEditar ? 'Editar' : 'Alterar situação'}
             </button>}
 
@@ -511,21 +523,21 @@ export default function DetalheContratoPage() {
         </div>}
       <div className="min-w-0">
         <div className="min-w-0 space-y-4">
-          <section role="tabpanel" id="painel-visao" aria-labelledby="tab-visao" hidden={abaContrato !== 'visao'} className={abaContrato !== 'visao' ? 'hidden' : 'space-y-4'}>
+          <section data-tec08-aba-contrato role="tabpanel" id="painel-visao" aria-labelledby="tab-visao" hidden={abaContrato !== 'visao'} className={abaContrato !== 'visao' ? 'hidden' : 'space-y-4'}>
             {!pendenteConclusao && !principalQuery.carregando && !principalVerificado && (documentalmenteConcluido || etapasDocumentais.dados?.some(etapa => etapa.status === 'CONCLUIDA')) &&
               <div role="status" data-testid="aviso-pdf-principal-visao" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/45 bg-amber-500/10 p-3 text-sm text-foreground">
                 <p className="min-w-0 flex-1">{principalAtivo ? 'Falta verificar o PDF principal.' : 'Falta anexar e verificar o PDF principal.'}</p>
                 <button type="button" onClick={() => setAbaContrato('documentos')} className="shrink-0 rounded-lg border border-amber-500/60 px-3 py-2 font-semibold text-foreground hover:bg-amber-500/15">Ir para Documentos</button>
               </div>}
-            <section className="space-y-3" aria-label="Planejamento do contrato">
-              <h3 className={`text-sm font-semibold ${contrato.arquivadoEm ? "text-amber-200" : encerrado ? "text-slate-200" : emRevisao ? "text-teal-200" : (concluido || pendenteConclusao) ? "text-violet-200" : "text-brand-neon"}`}>Planejamento do contrato</h3>
-              <ResumoPlanejamentoContrato contratoId={contrato.id} variante="detalhe" contratoArquivado={Boolean(contrato.arquivadoEm)} contratoSuspenso={suspenso} contratoEmRevisao={emRevisao} contratoEncerrado={encerrado} />
+            <section data-tec08-secao-contrato className="space-y-3" aria-label="Planejamento do contrato">
+              <h3 className={`text-sm font-semibold ${contrato.arquivadoEm ? "text-amber-200" : cancelado ? "text-red-300" : suspenso ? "text-yellow-200" : encerrado ? "text-slate-200" : emRevisao ? "text-teal-200" : (concluido || pendenteConclusao) ? "text-violet-200" : "text-brand-neon"}`}>Planejamento do contrato</h3>
+              <ResumoPlanejamentoContrato contratoId={contrato.id} variante="detalhe" contratoArquivado={Boolean(contrato.arquivadoEm)} contratoSuspenso={suspenso} contratoEmRevisao={emRevisao} contratoEncerrado={encerrado} contratoConcluido={concluido || pendenteConclusao} contratoCancelado={cancelado} />
             </section>
 
-            <section aria-label="Informações do contrato" className="rounded-xl border border-brand-green/20 bg-brand-darkgreen/5 px-4 py-2">
-              <h3 className="py-2 text-sm font-semibold text-brand-neon">Informações do contrato</h3>
+            <section data-tec08-secao-contrato aria-label="Informações do contrato" className="rounded-xl border border-brand-green/20 bg-brand-darkgreen/5 px-4 py-2">
+              <h3 data-tec08-acento-contrato className="py-2 text-sm font-semibold text-brand-neon">Informações do contrato</h3>
               <details role="region" aria-label="Identificação do contrato" className="group border-t border-brand-green/15 py-2" open>
-                <summary className="cursor-pointer py-1 text-sm font-semibold transition-colors hover:text-brand-neon">Identificação</summary>
+                <summary data-tec08-acento-hover-contrato className="cursor-pointer py-1 text-sm font-semibold transition-colors hover:text-brand-neon">Identificação</summary>
                 <dl className="mt-3 grid min-w-0 gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
                   {([['Objeto contratual', contrato.objeto], ['Número', contrato.numeroContrato], ['Código', rotuloCodigoPublico(contrato.codigoPublico)], ['Órgão contratante', contrato.orgaoContratante],
                     ['Processo administrativo', contrato.processoAdministrativo], ['Unidade responsável', contrato.unidadeResponsavel]] as Par[])
@@ -536,37 +548,44 @@ export default function DetalheContratoPage() {
                 </dl>
               </details>
               <details className="border-t border-brand-green/15 py-2" open>
-                <summary className="cursor-pointer py-1 text-sm font-semibold transition-colors hover:text-brand-neon">Vigência e execução</summary>
+                <summary data-tec08-acento-hover-contrato className="cursor-pointer py-1 text-sm font-semibold transition-colors hover:text-brand-neon">Vigência e execução</summary>
                 <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">{([['Início', dataBR(contrato.inicioVigencia)], ['Término', dataBR(contrato.terminoVigencia)], ['Assinatura', dataBR(contrato.dataAssinatura)], ['Status', contrato.arquivadoEm ? 'Arquivado' : encerrado ? 'Encerrado' : emRevisao ? `Em revisão · ${faseEmRevisao(contrato.status)}` : pendenteConclusao ? 'Pendente de conclusão' : STATUS[contrato.status]], ['Cálculo', MODOS[contrato.modoCalculo]]] as Par[]).map(([rotulo, valor]) => <div key={rotulo}><dt className="text-xs text-foreground/55">{rotulo}</dt><dd className="mt-0.5 break-words">{valor || 'Não informado'}</dd></div>)}</dl>
               </details>
               <details className="border-t border-brand-green/15 py-2" open>
-                <summary className="cursor-pointer py-1 text-sm font-semibold transition-colors hover:text-brand-neon">Responsáveis</summary>
+                <summary data-tec08-acento-hover-contrato className="cursor-pointer py-1 text-sm font-semibold transition-colors hover:text-brand-neon">Responsáveis</summary>
                 <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">{([['Responsável interno', responsavelVisivel], ['Fiscal/gestor público', contrato.fiscalGestor]] as Par[]).map(([rotulo, valor]) => <div key={rotulo}><dt className="text-xs text-foreground/55">{rotulo}</dt><dd className="mt-0.5 break-words">{valor || 'Não informado'}</dd></div>)}</dl>
               </details>
             </section>
 
-            <section aria-label="Descrição e observações" className="space-y-2 rounded-xl border border-brand-green/15 bg-brand-darkgreen/5 p-3 text-sm">
+            <HistoricoContrato estado={contrato.arquivadoEm ? "arquivado" : cancelado ? "cancelado" : suspenso ? "suspenso" : encerrado ? "encerrado" : concluido || pendenteConclusao ? "concluido" : emRevisao ? "revisao" : "normal"} contratoId={contrato.id} versao={`${contrato.status}:${contrato.reabertoEm ?? ''}:${contratoQuery.dados?.numeroContrato ?? ''}:${abaContrato}:${versaoHistorico}`} />
+            <section data-tec08-secao-contrato aria-label="Descrição e observações" className="space-y-2 rounded-xl border border-brand-green/15 bg-brand-darkgreen/5 p-3 text-sm">
               <details className="group/descricao" open={!contrato.descricao || contrato.descricao.length < 240}>
-                <summary className="cursor-pointer py-1 text-sm font-semibold text-brand-neon">Descrição</summary>
+                <summary data-tec08-acento-contrato className="cursor-pointer py-1 text-sm font-semibold text-brand-neon">Descrição</summary>
                 <p className="mt-2 max-h-52 overflow-y-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-foreground/85">{contrato.descricao || 'Não informada'}</p>
               </details>
               <details className="group/observacoes" open={!contrato.observacoes || contrato.observacoes.length < 180}>
-                <summary className="cursor-pointer border-t border-brand-green/10 pt-3 text-sm font-semibold text-brand-neon">Observações</summary>
+                <summary data-tec08-acento-contrato className="cursor-pointer border-t border-brand-green/10 pt-3 text-sm font-semibold text-brand-neon">Observações</summary>
                 <p className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-foreground/70">{contrato.observacoes || 'Nenhuma observação'}</p>
               </details>
             </section>
-            <HistoricoContrato estado={contrato.arquivadoEm ? "arquivado" : encerrado ? "encerrado" : concluido || pendenteConclusao ? "concluido" : emRevisao ? "revisao" : "normal"} contratoId={contrato.id} versao={`${contrato.status}:${contrato.reabertoEm ?? ''}:${contratoQuery.dados?.numeroContrato ?? ''}:${abaContrato}:${versaoHistorico}`} />
+
 
           </section>
-          <section role="tabpanel" id="painel-etapas" aria-labelledby="tab-etapas" hidden={abaContrato !== 'etapas'} className={abaContrato !== 'etapas' ? 'hidden' : 'space-y-4'}>
+          <section data-tec08-aba-contrato role="tabpanel" id="painel-atividades" aria-labelledby="tab-atividades" hidden={abaContrato !== 'atividades'} className={abaContrato !== 'atividades' ? 'hidden' : 'space-y-4'}>
+            <AtividadesVinculadas contratoId={contrato.id} estadoContextual={contrato.arquivadoEm ? 'arquivado' : cancelado ? 'cancelado' : suspenso ? 'suspenso' : encerrado ? 'encerrado' : emRevisao ? 'revisao' : (concluido || pendenteConclusao) ? 'concluido' : 'normal'} visivel={abaContrato === 'atividades'} somenteLeitura={Boolean(contrato.arquivadoEm || cancelado || encerrado || suspenso || concluido || contrato.status === 'EM_ENCERRAMENTO')} ocultarAcessoDiario />
+          </section>
+          <section data-tec08-aba-contrato role="tabpanel" id="painel-ocorrencias" aria-labelledby="tab-ocorrencias" hidden={abaContrato !== 'ocorrencias'} className={abaContrato !== 'ocorrencias' ? 'hidden' : 'space-y-4'}>
+            {abaContrato === 'ocorrencias' && <PainelOcorrencias contratoId={contrato.id} estadoContextual={contrato.arquivadoEm ? 'arquivado' : cancelado ? 'cancelado' : suspenso ? 'suspenso' : encerrado ? 'encerrado' : emRevisao ? 'revisao' : (concluido || pendenteConclusao) ? 'concluido' : 'normal'} somenteLeitura={Boolean(contrato.arquivadoEm || cancelado || encerrado || suspenso || concluido || contrato.status === 'EM_ENCERRAMENTO')} embutido />}
+          </section>
+          <section data-tec08-aba-contrato role="tabpanel" id="painel-etapas" aria-labelledby="tab-etapas" hidden={abaContrato !== 'etapas'} className={abaContrato !== 'etapas' ? 'hidden' : 'space-y-4'}>
             <PainelEtapas key={`etapas:${contrato.id}`} contratoId={contrato.id} habilitado={!!perfil?.ativo}
               podeGerenciar={podeEditar} permissoes={acessoQuery.dados?.permissoes} contratoArquivado={Boolean(contrato.arquivadoEm)} contratoConcluido={concluido} contratoPendenteConclusao={pendenteConclusao} contratoEmRevisao={emRevisao} contratoEncerrado={encerrado}
               ordemEtapasBloqueada={Boolean(contrato.ordemEtapasBloqueada)} contratoSuspenso={suspenso} contratoCancelado={cancelado}
               onAuditoriaAlterada={registrarAtualizacaoHistorico}
               onOrdemAlterada={async () => { registrarAtualizacaoHistorico(); await contratoQuery.atualizar(); }} />
           </section>
-          <section role="tabpanel" id="painel-documentos" aria-labelledby="tab-documentos" hidden={abaContrato !== 'documentos'} className={abaContrato !== 'documentos' ? 'hidden' : 'space-y-4'}>
-            <PainelDocumentos key={`documentos:${contrato.id}`} contratoId={contrato.id} onDocumentoAlterado={registrarAtualizacaoHistorico} habilitado={!!perfil?.ativo} somenteLeitura={Boolean(contrato.arquivadoEm || bloqueioOperacional)} permitirRegularizarPrincipal={Boolean(pendenteConclusao && !principalVerificado)}
+          <section data-tec08-aba-contrato role="tabpanel" id="painel-documentos" aria-labelledby="tab-documentos" hidden={abaContrato !== 'documentos'} className={abaContrato !== 'documentos' ? 'hidden' : 'space-y-4'}>
+            <PainelDocumentos key={`documentos:${contrato.id}`} contratoId={contrato.id} estadoContextual={contrato.arquivadoEm ? 'arquivado' : cancelado ? 'cancelado' : suspenso ? 'suspenso' : encerrado ? 'encerrado' : emRevisao ? 'revisao' : (concluido || pendenteConclusao) ? 'concluido' : 'normal'} onDocumentoAlterado={registrarAtualizacaoHistorico} habilitado={!!perfil?.ativo} somenteLeitura={Boolean(contrato.arquivadoEm || bloqueioOperacional)} permitirRegularizarPrincipal={Boolean(pendenteConclusao && !principalVerificado)}
               podeAnexar={Boolean((administrador || acessoQuery.dados?.permissoes?.anexarDocumentos))}
               podeEditarMetadados={Boolean((administrador || acessoQuery.dados?.permissoes?.editarDocumentos))}
               podeArquivarDocumentos={Boolean((administrador || acessoQuery.dados?.permissoes?.arquivarDocumentos))}
@@ -585,9 +604,10 @@ export default function DetalheContratoPage() {
       </div>
     </> : <Aviso erro>Contrato não encontrado.</Aviso>}
     {editarAberto && contrato && podeAbrirEdicao && <ModalEtapa titulo={`Editar contrato · ${contrato.numeroContrato}`}
+      estadoContextual={contrato.arquivadoEm ? "arquivado" : cancelado ? "cancelado" : suspenso ? "suspenso" : encerrado ? "encerrado" : emRevisao ? "revisao" : (concluido || pendenteConclusao) ? "concluido" : "normal"}
       contexto="Dados administrativos do contrato" textoFechar="Fechar ×" rotuloFechar="Fechar edição do contrato"
       bloqueadoPorSubmodal={confirmarArquivo} ocupado={salvandoEdicao || alterandoArquivo} onFechar={fecharEdicao}>
-      <div className="space-y-4" data-testid="modal-edicao-contrato">
+      <div data-tec08-formulario-contextual className="space-y-4" data-testid="modal-edicao-contrato">
         {erroEdicao && <Aviso erro>{erroEdicao}</Aviso>}
         {administrador && responsaveisQuery.carregando && <p role="status" className="text-sm text-foreground/70">Carregando responsáveis...</p>}
         {Boolean(responsaveisQuery.erro) && <Aviso erro>Não foi possível consultar os responsáveis. Nenhuma atribuição será alterada automaticamente.</Aviso>}

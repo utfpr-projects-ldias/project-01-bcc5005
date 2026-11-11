@@ -11,6 +11,7 @@ import type { PermissoesContrato } from '@/lib/contratos';
 import { toastSucesso } from '@/app/components/toast-notificacoes';
 import { comprovacaoDocumentalCompleta } from '@/lib/situacao-documental-etapa';
 import { ConfirmacaoSimples } from '@/app/components/confirmacao-simples';
+import { useAtividades } from '@/hooks/use-atividades';
 
 /** Consulta o detalhe real no backend, sem confiar só na listagem em cache. */
 export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, itemInicial, podeEditar, focoRetorno, onFechar, atualizar, permissoes, dentroModal = false, iniciarEditando = false, paiArquivado = false, paiConcluido = false, paiEmRevisao = false, verificado = false, resumoInicial }: {
@@ -20,6 +21,9 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, item
   permissoes?: PermissoesContrato; dentroModal?: boolean; iniciarEditando?: boolean; paiArquivado?: boolean; paiConcluido?: boolean; paiEmRevisao?: boolean; verificado?: boolean; resumoInicial?: ResumoDocumentalEntregavel;
 }) {
   const consulta = useDetalheEntregavel(contratoId, entregavelId);
+  // Verificação documental isolada não basta: o backend também exige que as
+  // atividades vinculadas estejam verificadas. Consultar sem paginação total.
+  const pendenciasAtividades = useAtividades(contratoId, { entregavelId, status: 'REGISTRADA', page: 1, limit: 1 });
   const [editando, setEditando] = useState(iniciarEditando && !paiArquivado);
   const marcadorEdicaoEntregavel = useRef<string | null>(null);
   function voltarDaEdicaoEntregavel() {
@@ -107,8 +111,9 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, item
     void atualizar().catch(() => {});
   }
   const podeConcluir = Boolean(item && consulta.dados && !bloqueioEdicao && (item.reabertoEm || item.statusExecucao !== 'CONCLUIDO') && !editando &&
-    permissoes?.concluirEntregaveis && comprovacaoDocumentalCompleta(resumoInicial) &&
-    item.evidenciasEsperadas.filter(ev => !ev.arquivadoEm).every(ev => !ev.reabertoEm));
+    permissoes?.concluirEntregaveis && !pendenciasAtividades.loading && !pendenciasAtividades.atualizando && !pendenciasAtividades.erro &&
+    pendenciasAtividades.total === 0 && comprovacaoDocumentalCompleta(resumoInicial) &&
+    item.evidenciasEsperadas.filter(ev => !ev.arquivadoEm && ev.obrigatoria).every(ev => !ev.reabertoEm));
   async function concluir() {
     if (!podeConcluir || salvando) return;
     setSalvando(true); setErroConclusao('');
@@ -122,7 +127,7 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, item
   }
   return createPortal(<ModalEtapa camada={dentroModal ? "aninhada" : "principal"} contexto="Entregável do contrato" titulo={item?.nome ?? 'Detalhes do entregável'} codigoPublico={item?.codigoPublico}
     retornoEsquerda={!editando} alturaEstavel formularioLongo={editando}
-    arquivado={bloqueioArquivo} revisao={Boolean(item?.reabertoEm && !bloqueioArquivo)} concluido={!bloqueioArquivo && !item?.reabertoEm && !editando && item?.statusExecucao === 'CONCLUIDO'} estadoContextual={paiEmRevisao ? 'revisao' : 'normal'}
+    arquivado={Boolean(item?.arquivadoEm)} revisao={Boolean(item?.reabertoEm && !item?.arquivadoEm)} concluido={!item?.arquivadoEm && !item?.reabertoEm && !editando && item?.statusExecucao === 'CONCLUIDO'} estadoContextual={item?.arquivadoEm ? 'arquivado' : item?.reabertoEm ? 'revisao' : item?.statusExecucao === 'CONCLUIDO' ? 'concluido' : 'normal'}
 
     ocultarFechar={editando}
     rotuloFechar={nivel !== 'entregavel' || editando ? 'Voltar ao nível anterior' : 'Voltar à etapa'}
@@ -139,7 +144,7 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, item
       {!consulta.carregando && !erro && !item && <p role="alert">Entregável não encontrado ou sem acesso neste contrato.</p>}
       {erroConclusao && <p role="alert" className="text-error-text">{erroConclusao}</p>}
       {item && <>
-        {bloqueioArquivo && <span className="inline-flex rounded-full border border-amber-400/50 bg-amber-500/15 px-3 py-1 text-xs font-semibold text-amber-100">Arquivado — somente leitura</span>}
+        {item.arquivadoEm ? <span className="inline-flex rounded-full border border-amber-400/50 bg-amber-500/15 px-3 py-1 text-xs font-semibold text-amber-100">Arquivado — somente leitura</span> : paiArquivado ? <span className="inline-flex rounded-full border border-slate-500/40 bg-slate-500/10 px-3 py-1 text-xs font-semibold text-foreground/70">Etapa ou contrato arquivado · somente leitura</span> : null}
         {!editando && (item.reabertoEm || verificado) && <div className="flex flex-wrap gap-2">
           {item.reabertoEm && <span className="rounded-full border border-teal-600/55 bg-teal-900/20 px-3 py-1 text-xs font-semibold text-teal-200">Em revisão</span>}
           {verificado && !item.reabertoEm && <span className="rounded-full border border-violet-400/50 bg-violet-500/15 px-3 py-1 text-xs font-semibold text-violet-100">{item.statusExecucao === "CONCLUIDO" ? "Concluído" : "Comprovação verificada"}</span>}
@@ -148,15 +153,15 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, item
           onSalvar={salvar} onCancelar={voltarDaEdicaoEntregavel}
           onSalvandoMudou={setSalvando}
           podeAlterarObrigatoriedade={permissoes?.alterarObrigatoriedade ?? false} />
-          : <ConteudoEntregavel item={item} resumoInicial={resumoInicial} podeEditarEsperada={!bloqueioEdicao && !verificado && item.statusExecucao !== 'CONCLUIDO' && (permissoes?.editarEvidencias ?? podeEditar)}
+          : <ConteudoEntregavel item={item} resumoInicial={resumoInicial} contextoModal podeEditarEsperada={!bloqueioEdicao && !verificado && item.statusExecucao !== 'CONCLUIDO' && (permissoes?.editarEvidencias ?? podeEditar)}
               podeCriarEvidencia={!bloqueioEdicao && !verificado && item.statusExecucao !== 'CONCLUIDO' && (permissoes?.criarEvidencias ?? podeEditar)}
               podeArquivarEvidencia={(permissoes?.arquivarEvidencias ?? podeEditar) && !bloqueioEdicao}
               podeReativarEvidencia={Boolean(permissoes?.reativarEvidencias) && !bloqueioEdicao}
               podeReabrirEvidencia={Boolean(permissoes?.reabrirEvidencias) && !bloqueioEdicao}
               podeExcluirEvidenciaArquivada={!bloqueioEdicao && (permissoes?.excluirEvidenciasArquivadas ?? false)}
               podeAlterarObrigatoriedade={!bloqueioEdicao && (permissoes?.alterarObrigatoriedade ?? false)}
-              podeEnviarComprovantes={!bloqueioEdicao && (permissoes?.enviarComprovantes ?? podeEditar)} podeVerHistorico={podeEditar}
-              paiArquivado={bloqueioArquivo} paiConcluido={!bloqueioArquivo && item.statusExecucao === 'CONCLUIDO'} paiEmRevisao={paiEmRevisao} bloqueadoPorPai={bloqueioEdicao || verificado || item.statusExecucao === 'CONCLUIDO'}
+              podeEnviarComprovantes={!bloqueioEdicao && !verificado && item.statusExecucao !== 'CONCLUIDO' && (permissoes?.enviarComprovantes ?? podeEditar)} podeVerHistorico
+              paiArquivado={bloqueioArquivo} paiConcluido={item.statusExecucao === 'CONCLUIDO' && !item.reabertoEm && !item.arquivadoEm} paiEmRevisao={paiEmRevisao} bloqueadoPorPai={bloqueioEdicao || verificado || item.statusExecucao === 'CONCLUIDO'}
               registrarVoltaEvidencia={registrarEvidencia} registrarVoltaEdicao={registrarEdicaoEvidencia}
               aoAtualizarEsperada={() => { void consulta.atualizar().catch(() => {}); void atualizar().catch(() => {}); }} />}
       </>}

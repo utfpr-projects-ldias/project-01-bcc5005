@@ -56,3 +56,10 @@ describe('cascata segura e auditável', () => {
     expect(a.salvar).not.toHaveBeenCalled();
   });
 });
+
+test('SQL de conclusão ignora opcionais, preserva obrigatórias e não conclui por 0/0', async () => {
+  const sql: string[] = [];
+  const m = { query: async (q: string) => { sql.push(q); return [{ etapas:1, entregaveis:1, evidencias:1, verificadas:1, etapas_sem_entregavel:0, entregaveis_sem_evidencia:0 }]; } } as unknown as EntityManager;
+  expect(await documentacaoVerificada(m, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')).toBe(true);
+  expect(sql[0]).toContain('ev.obrigatoria IS TRUE');
+});

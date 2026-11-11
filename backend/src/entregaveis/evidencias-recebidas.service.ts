@@ -10,7 +10,7 @@ import { ARMAZENAMENTO_ARQUIVOS, type ArmazenamentoArquivos } from '../armazenam
 import { ArmazenamentoIndisponivelError } from '../armazenamento/armazenamento-local.js';
 import { ArquivoInvalidoError, LimiteArmazenamentoError } from '../armazenamento/politica-arquivos.js';
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
-import { documentacaoVerificada, filhosEmRevisao, concluirEtapaAposFilhos } from './conclusao-documental.js';
+import { documentacaoVerificada, filhosEmRevisao, concluirEtapaAposFilhos, atividadesPendentesDeVerificacao } from './conclusao-documental.js';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import { EventoAuditoria } from '../auditoria/evento-auditoria.entity.js';
 import { PermissaoContrato } from '../autorizacao/permissao-contrato.entity.js';
@@ -327,7 +327,8 @@ export class EvidenciasRecebidasService {
     // Reabrir sem verificar nada não dispara esta função: exige Concluir explícito.
     if (!entregavel.arquivadoEm &&
         (entregavel.statusExecucao !== StatusExecucaoEntregavel.CONCLUIDO || entregavel.reabertoEm) &&
-        await documentacaoVerificada(m, contratoId, entregavel.etapaId, entregavel.id)) {
+        await documentacaoVerificada(m, contratoId, entregavel.etapaId, entregavel.id) &&
+        !await atividadesPendentesDeVerificacao(m, contratoId, null, entregavel.id)) {
       const anterior = entregavel.statusExecucao;
       const reabertoAntes = entregavel.reabertoEm ?? null;
       entregavel.statusExecucao = StatusExecucaoEntregavel.CONCLUIDO;

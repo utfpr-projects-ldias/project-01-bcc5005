@@ -8,7 +8,7 @@ import { useEntregaveis, useResumoDocumentalContrato } from '@/hooks/use-entrega
 import type { Contrato } from '@/lib/contratos';
 
 jest.mock('next/navigation', () => ({ useParams: () => ({ id: 'contrato-real' }) }));
-jest.mock('@/app/components/provedor-consultas', () => ({ useConsulta: jest.fn(), useRepositorioConsultas: () => ({ invalidar: jest.fn() }) }));
+jest.mock('@/app/components/provedor-consultas', () => ({ useConsulta: jest.fn(), useRepositorioConsultas: () => ({ invalidar: jest.fn() }), useRepositorioConsultasOpcional: () => null }));
 jest.mock('@/hooks/use-meu-perfil', () => ({ useMeuPerfil: jest.fn() }));
 jest.mock('@/hooks/use-contratos', () => ({ useContrato: jest.fn(), useAcessoContrato: jest.fn(), useResponsaveis: jest.fn(), useMutacoesContrato: jest.fn(), usePendentesConclusao: jest.fn() }));
 jest.mock('@/hooks/use-etapas', () => ({ useEtapas: jest.fn() }));
@@ -21,6 +21,10 @@ jest.mock('../components/resumo-planejamento-contrato', () => ({ ResumoPlanejame
 jest.mock('../components/painel-etapas', () => ({
   PainelEtapas: ({ contratoId, podeGerenciar, permissoes }: { contratoId: string; podeGerenciar: boolean; permissoes?: { reordenarEtapas?: boolean } }) =>
     <section data-testid="painel-etapas">{contratoId} {podeGerenciar ? 'gerencia' : 'consulta'} {permissoes?.reordenarEtapas ? 'reordena' : 'sem reordenação'}</section>,
+}));
+jest.mock('@/app/ocorrencias/components/painel-ocorrencias', () => ({
+  PainelOcorrencias: ({ contratoId, somenteLeitura }: { contratoId: string; somenteLeitura: boolean }) =>
+    <section data-testid="painel-ocorrencias">{contratoId} {somenteLeitura ? 'consulta' : 'acesso'}</section>,
 }));
 const perfil = useMeuPerfil as jest.Mock;
 const contratoQuery = useContrato as jest.Mock;
@@ -269,4 +273,35 @@ test('TEC08-03: reabertura substitui ações bloqueadas do contrato concluído',
   expect(within(faixa).getByRole('button', { name: 'Reabrir contrato concluído' })).toBeInTheDocument();
   expect(within(faixa).queryByRole('button', { name: 'Editar contrato' })).not.toBeInTheDocument();
   expect(within(faixa).queryByRole('button', { name: 'Arquivar contrato' })).not.toBeInTheDocument();
+});
+
+
+test('contrato encerrado informa ao design system estado cinza nas abas e ações contextuais', () => {
+  contratoQuery.mockReturnValue(retorno({ ...contrato, status: 'ENCERRADO', reabertoEm: null }));
+  render(<DetalheContratoPage />);
+  const aba = screen.getByRole('tab', { name: 'Documentos' });
+  fireEvent.click(aba);
+  expect(aba).toHaveAttribute('aria-selected', 'true');
+  expect(aba.closest('.contrato-detalhe-documental')).toHaveAttribute('data-tec08-estado', 'encerrado');
+});
+
+test('aba Ocorrências fica imediatamente após Atividades e mantém escopo do contrato', () => {
+  render(<DetalheContratoPage />);
+  const abas = Array.from(screen.getByRole('tablist', { name: 'Seções do contrato' }).querySelectorAll('[role="tab"]'));
+  const atividades = abas.findIndex(aba => aba.textContent?.includes('Atividades'));
+  expect(atividades).toBeGreaterThan(-1);
+  expect(abas[atividades + 1]).toHaveTextContent('Ocorrências');
+  fireEvent.click(screen.getByRole('tab', { name: 'Ocorrências' }));
+  expect(screen.getByTestId('painel-ocorrencias')).toHaveTextContent('contrato-real');
+});
+
+
+test('ícones das cinco abas do contrato nunca renderizam rect/path fora de SVG', () => {
+  render(<DetalheContratoPage />);
+  const abas = screen.getByRole('tablist', { name: 'Seções do contrato' });
+  expect(within(abas).getAllByRole('tab')).toHaveLength(5);
+  abas.querySelectorAll('rect, path').forEach(el => {
+    expect(el.closest('svg')).not.toBeNull();
+    expect(el.namespaceURI).toBe('http://www.w3.org/2000/svg');
+  });
 });

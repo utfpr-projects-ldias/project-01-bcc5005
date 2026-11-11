@@ -68,7 +68,11 @@ describe('HU09-01 — migration aditiva de ocorrências', () => {
 
     expect(ddl).toContain('ON UPDATE RESTRICT');
 
-    expect(ddl).toContain('"uq_entregaveis_id_contrato"');
+    expect(ddl).toContain("c.conname = 'uq_entregaveis_id_contrato'");
+    expect(ddl).toContain('pg_constraint');
+    expect(ddl).toContain("c.contype = 'u'");
+    expect(ddl).toContain("ARRAY['id', 'contrato_id']::name[]");
+    expect(ddl).not.toContain('CREATE UNIQUE INDEX "uq_entregaveis_id_contrato"');
 
     expect(ddl).toContain('"uq_ocorrencias_id_contrato"');
   });
@@ -242,7 +246,7 @@ describe('HU09-01 — migration aditiva de ocorrências', () => {
 
     expect(ddl).toContain('DROP TYPE "ocorrencias_origem_enum"');
 
-    expect(sql).toHaveLength(15);
+    expect(sql).toHaveLength(14);
   });
 
   it('reverte objetos na ordem de dependência', async () => {
@@ -266,9 +270,9 @@ describe('HU09-01 — migration aditiva de ocorrências', () => {
       comando.includes('DROP TYPE "ocorrencias_status_enum"'),
     );
 
-    const indiceIndiceEntregaveis = sql.findIndex((comando) =>
-      comando.includes('DROP INDEX "uq_entregaveis_id_contrato"'),
-    );
+    // A constraint preexistente é compartilhada com comprovantes documentais.
+    // O down() da HU09 jamais deve eliminar sua chave de referência.
+    expect(sql.join('\n')).not.toContain('DROP INDEX "uq_entregaveis_id_contrato"');
 
     expect(indiceFkAtividade).toBeGreaterThan(0);
 
@@ -277,7 +281,5 @@ describe('HU09-01 — migration aditiva de ocorrências', () => {
     expect(indiceTabelaOcorrencias).toBeGreaterThan(indiceColunaAtividade);
 
     expect(indiceTipoStatus).toBeGreaterThan(indiceTabelaOcorrencias);
-
-    expect(indiceIndiceEntregaveis).toBeGreaterThan(indiceTipoStatus);
   });
 });

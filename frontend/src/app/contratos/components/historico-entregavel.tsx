@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import { consultarHistoricoEntregavel, type EventoHistoricoEntregavel } from "@/lib/entregaveis";
 
 /** Leitura somente do contrato autorizado, com eventos ordenados pelo servidor. */
-export function HistoricoEntregavel({ contratoId, entregavelId, versao }: {
-  contratoId: string; entregavelId: string; versao: number;
+export function HistoricoEntregavel({ contratoId, entregavelId, versao, ocultarTitulo = false }: {
+  contratoId: string; entregavelId: string; versao: number; ocultarTitulo?: boolean;
 }) {
   const chave = `${contratoId}:${entregavelId}:${versao}`;
   const [consulta, setConsulta] = useState<{ chave: string; eventos: EventoHistoricoEntregavel[]; erro?: string } | null>(null);
@@ -20,8 +20,8 @@ export function HistoricoEntregavel({ contratoId, entregavelId, versao }: {
   const eventos = atual?.eventos ?? [];
   const visiveis = expandido ? eventos : eventos.slice(0, 5);
   return <section aria-label="Histórico do entregável" className="space-y-3 border-t border-brand-green/20 pt-4">
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <h2 className="text-sm font-semibold text-brand-neon">Rastreabilidade do entregável</h2>
+    <div className={`flex flex-wrap items-center gap-2 ${ocultarTitulo ? 'justify-end' : 'justify-between'}`}>
+      {!ocultarTitulo && <h2 className="text-sm font-semibold text-brand-neon">Rastreabilidade do entregável</h2>}
       <span className="text-xs text-foreground/60">{atual ? `${eventos.length}${eventos.length === 100 ? '+' : ''} eventos consultados` : 'Carregando histórico…'}</span>
     </div>
     {atual?.erro ? <p role="status" className="text-xs text-foreground/70">{atual.erro}</p> :

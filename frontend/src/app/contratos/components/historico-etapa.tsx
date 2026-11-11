@@ -17,7 +17,7 @@ export function HistoricoEtapa({ contratoId, etapaId }: { contratoId: string; et
     return () => c.abort();
   }, [aberto, chave, contratoId, etapaId]);
   const atual = dados?.chave === chave ? dados : null;
-  return <section aria-label="Rastreabilidade da etapa" className="rounded-xl border border-brand-green/25 p-3 text-sm">
+  return <section data-tec08-historico-entidade aria-label="Rastreabilidade da etapa" className="rounded-xl border border-brand-green/25 p-3 text-sm">
     <button type="button" aria-expanded={aberto} onClick={() => setAberto(v => !v)} className="flex w-full items-center justify-between gap-3 text-left font-semibold text-brand-neon">
       <span>Rastreabilidade da etapa</span><span aria-hidden="true">{aberto ? '−' : '+'}</span>
     </button>

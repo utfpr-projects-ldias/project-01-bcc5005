@@ -60,3 +60,25 @@ test('encerramento de etapa existente exige permissão e justificativa de 15 a 2
   await act(async () => { fireEvent.click(confirmar); });
   expect(encerrar).toHaveBeenCalledWith('Encerramento administrativo autorizado.');
 });
+
+
+test('editar etapa usa identidade visual do registro e sinaliza envio em andamento', async () => {
+  const etapa = {
+    id: '11111111-1111-4111-8111-111111111111', contratoId: '22222222-2222-4222-8222-222222222222',
+    nome: 'Etapa reaberta', codigo: null, descricao: null, sequencia: 1,
+    inicioPrevisto: null, terminoPrevisto: null, status: 'EM_ANDAMENTO' as const, observacoes: null,
+    reabertoEm: '2026-11-09T10:00:00Z',
+    vigenciaContrato: { inicioVigencia: '2026-01-01', terminoVigencia: '2026-12-31' }, avisoVigencia: false,
+  };
+  let finalizar!: () => void;
+  const pendente = new Promise<void>(resolve => { finalizar = resolve; });
+  const salvar = jest.fn().mockReturnValue(pendente);
+  render(<FormularioEtapa inicial={etapa} onSalvar={salvar} onCancelar={jest.fn()} />);
+  const form = screen.getByRole('form', { name: 'Editar etapa Etapa reaberta' });
+  expect(form).toHaveAttribute('data-tec08-edicao', 'true');
+  expect(form).not.toHaveAttribute('data-tec08-criacao');
+  fireEvent.submit(form);
+  expect(screen.getByRole('button', { name: /Salvando etapa/ })).toHaveAttribute('aria-busy', 'true');
+  await act(async () => { finalizar(); await pendente; });
+  expect(screen.getByRole('button', { name: 'Salvar etapa' })).toHaveAttribute('aria-busy', 'false');
+});

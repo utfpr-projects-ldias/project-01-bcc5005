@@ -29,14 +29,38 @@ export class CriarOcorrenciasHU091795300000000
     /**
      * 1. Índice composto de entregáveis.
      *
-     * O ID já é PK, mas a FK composta precisa de uma chave
-     * única explícita em (id, contrato_id).
-     *
-     * Não altera os registros existentes.
+     * A FK composta requer UNIQUE (id, contrato_id), já criada
+     * pela migration 1794100000000 para os comprovantes.
+     * Esta migration só valida sua presença e composição.
      */
+    // A migration 1794100000000 já criou essa chave como UNIQUE CONSTRAINT.
+    // Seu índice é propriedade dessa constraint: nunca recriar nem remover aqui.
+    // Verificar a estrutura, sem modificar objetos preexistentes.
     await queryRunner.query(`
-      CREATE UNIQUE INDEX "uq_entregaveis_id_contrato"
-      ON "entregaveis" ("id", "contrato_id")
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint c
+          JOIN pg_class t ON t.oid = c.conrelid
+          JOIN pg_namespace n ON n.oid = t.relnamespace
+          WHERE n.nspname = current_schema()
+            AND t.relname = 'entregaveis'
+            AND c.conname = 'uq_entregaveis_id_contrato'
+            AND c.contype = 'u'
+            AND (
+              SELECT array_agg(a.attname ORDER BY k.ord)
+              FROM unnest(c.conkey) WITH ORDINALITY AS k(attnum, ord)
+              JOIN pg_attribute a ON a.attrelid = c.conrelid
+                                  AND a.attnum = k.attnum
+            ) = ARRAY['id', 'contrato_id']::name[]
+        ) THEN
+          RAISE EXCEPTION
+            'HU09 requer UNIQUE(id, contrato_id) da migration 1794100000000'
+            USING ERRCODE = '23514';
+        END IF;
+      END;
+      $$
     `);
 
     /**
@@ -413,8 +437,7 @@ export class CriarOcorrenciasHU091795300000000
       DROP TYPE "ocorrencias_origem_enum"
     `);
 
-    await queryRunner.query(`
-      DROP INDEX "uq_entregaveis_id_contrato"
-    `);
+    // Não remover a UNIQUE CONSTRAINT de entregáveis: ela pertence à
+    // migration 1794100000000 e é usada por comprovantes documentais.
   }
 }

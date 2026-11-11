@@ -55,3 +55,17 @@ test('permissões são editadas em modal: fechar por Escape não persiste altera
   fireEvent.click(screen.getByRole('tab', { name: 'Evidências' }));
   expect(screen.getByRole('checkbox', { name: 'Alterar obrigatoriedade de evidências' })).not.toBeChecked();
 });
+
+
+test('HU08 mostra seis permissões independentes de atividades', () => {
+  render(<EditorPermissoesContrato perfil="GESTOR" vinculo={{ contratoId: 'contrato-x', podeEditar: true }}
+    salvando={false} onSalvar={async () => undefined} />);
+  fireEvent.click(screen.getByText('Ver permissões completas'));
+  fireEvent.click(screen.getByRole('tab', { name: 'Atividades' }));
+  expect(screen.getByRole('checkbox', { name: 'Registrar atividades no diário' })).toBeChecked();
+  fireEvent.click(screen.getByRole('tab', { name: /Conferência e reabertura/ }));
+  expect(screen.getByRole('checkbox', { name: 'Verificar atividades (especial)' })).not.toBeChecked();
+  fireEvent.click(screen.getByRole('tab', { name: /Arquivamento, reativação e exclusão/ }));
+  expect(screen.getByRole('checkbox', { name: 'Arquivar atividades verificadas (especial)' })).not.toBeChecked();
+  expect(screen.getByRole('checkbox', { name: 'Reativar atividades arquivadas (especial)' })).not.toBeChecked();
+});

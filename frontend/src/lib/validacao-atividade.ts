@@ -1,0 +1,24 @@
+import { z } from 'zod';
+
+/** Alinhado ao CreateAtividadeDto (class-validator) e às regras HU08 no backend. */
+export const TIPOS_ATIVIDADE = ['Reunião', 'Visita técnica', 'Entrega parcial', 'Vistoria', 'Outro'] as const;
+const obrigatorio = (nome: string, max: number) => z.string().trim().min(1, `${nome} é obrigatório.`)
+  .max(max, `${nome} aceita no máximo ${max} caracteres.`);
+const opcional = (nome: string, max: number) => z.string().trim()
+  .max(max, `${nome} aceita no máximo ${max} caracteres.`);
+export const atividadeSchema = z.object({
+  titulo: obrigatorio('Título', 255),
+  dataHora: z.string().min(1, 'Informe data e hora.').refine(s => Number.isFinite(new Date(s).getTime()), 'Data e hora inválidas.'),
+  tipo: z.enum(TIPOS_ATIVIDADE),
+  descricao: obrigatorio('Descrição', 5000),
+  responsavel: opcional('Responsável', 255),
+  duracao: opcional('Duração', 80),
+  participantes: opcional('Participantes', 2000),
+  local: opcional('Local', 255),
+  observacoes: opcional('Observações', 5000),
+  entregavelIds: z.array(z.string().uuid()).min(1, 'Selecione pelo menos um entregável.')
+    .refine(ids => new Set(ids.map(id => id.toLowerCase())).size === ids.length, 'Entregáveis repetidos.'),
+});
+export type FormularioAtividade = z.input<typeof atividadeSchema>;
+export const justificativaAtividadeSchema = z.string().trim().min(15, 'Justificativa deve ter no mínimo 15 caracteres.')
+  .max(200, 'Justificativa aceita no máximo 200 caracteres.');

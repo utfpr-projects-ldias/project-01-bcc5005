@@ -2,14 +2,15 @@ import type { Etapa, StatusEtapa } from './etapas';
 import type { Entregavel, ResumoDocumentalEntregavel } from './entregaveis';
 
 /** Retorna confirmação DOCUMENTAL, não conclusão física.
- * Evidências opcionais também contam quando existirem; zero evidências nunca
- * constitui comprovação completa. Em fixtures legados sem total, usar os campos
- * de obrigatórias para manter a compatibilidade com as consultas antigas. */
+ * O aceite documental depende apenas das OBRIGATÓRIAS; evidências opcionais
+ * permanecem visíveis, mas não bloqueiam. Exige ao menos uma obrigatória para
+ * evitar conclusão automática por 0/0. */
 export function comprovacaoDocumentalCompleta(registro: ResumoDocumentalEntregavel | undefined): boolean {
   if (!registro) return false;
-  if (registro.total !== undefined && registro.verificadasTotal !== undefined)
-    return registro.total > 0 && registro.verificadasTotal === registro.total;
-  return registro.obrigatorias > 0 && registro.verificadas === registro.obrigatorias;
+  if (typeof registro.obrigatorias === 'number' && typeof registro.verificadas === 'number')
+    return registro.obrigatorias > 0 && registro.verificadas === registro.obrigatorias;
+  // Legado de fixtures anteriores à exposição de obrigatórias pela API.
+  return (registro.total ?? 0) > 0 && registro.verificadasTotal === registro.total;
 }
 
 /** Conclusão visível exige que a entidade não esteja explicitamente reaberta. */
@@ -62,7 +63,7 @@ export function etapaPodeSerConcluida(
   return ativos.length > 0 && ativos.every(e =>
     e.statusExecucao === 'CONCLUIDO' && !e.reabertoEm &&
     comprovacaoDocumentalCompleta(resumo[e.id]) &&
-    e.evidenciasEsperadas.filter(ev => !ev.arquivadoEm).length > 0 &&
-    e.evidenciasEsperadas.filter(ev => !ev.arquivadoEm).every(ev => !ev.reabertoEm)
+    e.evidenciasEsperadas.filter(ev => !ev.arquivadoEm && ev.obrigatoria !== false).length > 0 &&
+    e.evidenciasEsperadas.filter(ev => !ev.arquivadoEm && ev.obrigatoria !== false).every(ev => !ev.reabertoEm)
   );
 }

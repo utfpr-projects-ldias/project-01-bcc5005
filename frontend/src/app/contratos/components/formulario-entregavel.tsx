@@ -96,7 +96,7 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
     catch (erro) { setErroGeral(erro instanceof ErroEntregavel ? erro.message : 'Não foi possível salvar. O formulário foi preservado.'); }
     finally { enviando.current = false; setSalvando(false); onSalvandoMudou?.(false); }
   }
-  return <form noValidate aria-label={inicial ? `Editar entregável ${inicial.nome}` : 'Cadastrar entregável'} onSubmit={(e) => void enviar(e)}
+  return <form data-tec08-formulario-contextual data-tec08-edicao={inicial ? "true" : undefined} data-tec08-criacao={inicial ? undefined : "true"} noValidate aria-label={inicial ? `Editar entregável ${inicial.nome}` : 'Cadastrar entregável'} onSubmit={(e) => void enviar(e)}
     className="min-w-0 space-y-5 rounded-2xl border border-brand-green/40 bg-brand-darkgreen/10 p-4 md:p-6">
     <div><h3 className="text-lg font-semibold text-brand-neon">{inicial ? 'Editar entregável' : 'Novo entregável'}</h3>
       {!inicial && <p className="mt-1 text-sm text-foreground/70">Defina o entregável e suas evidências iniciais.</p>}</div>
@@ -266,7 +266,7 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
         className="inline-flex min-h-9 items-center rounded-lg border border-amber-500/45 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-500/10 disabled:opacity-50">Arquivar entregável</button> : <span aria-hidden="true" />}
       <div className="ml-auto flex flex-wrap items-center gap-2">
         <button type="button" className="rounded-lg border border-brand-green/40 px-3 py-1.5 text-xs disabled:opacity-50" disabled={salvando} onClick={onCancelar}>Cancelar</button>
-        <button type="submit" disabled={salvando}
+        <button type="submit" aria-busy={salvando} disabled={salvando}
           className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-brand-green px-3 py-1.5 text-xs font-semibold text-on-brand-green disabled:opacity-50">
           {!salvando && <Seta />}{salvando ? 'Salvando...' : inicial ? 'Salvar alterações' : 'Cadastrar entregável'}
         </button>

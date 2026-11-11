@@ -349,15 +349,13 @@ test('TEC08: o filtro de conclusão fica apenas em Todos e não contradiz Ativos
 });
 
 
-test('abas da carteira permitem rolagem horizontal sem transformar Suspensos em aba amarela', async () => {
+test('abas da carteira mantêm rolagem e suspensão disponível no filtro, não em aba', async () => {
   listar.mockResolvedValue([]);
   await act(async () => { renderComConsultas(<ContratosListPage />); });
   const tabs = screen.getByRole('tablist', { name: 'Situação dos contratos' });
-  const suspensos = screen.getByRole('tab', { name: 'Contratos suspensos' });
-  fireEvent.click(suspensos);
-  expect(suspensos).toHaveAttribute('aria-selected', 'true');
-  expect(suspensos).toHaveClass('bg-slate-700/75');
+  expect(screen.queryByRole('tab', { name: 'Contratos suspensos' })).not.toBeInTheDocument();
   expect(tabs.closest('.tec08-abas-rolagem')).not.toBeNull();
+  expect(screen.getByRole('option', { name: 'Suspenso' })).toHaveValue('SUSPENSO');
 });
 
 
@@ -368,7 +366,7 @@ test('TEC08-03: suspensão exibe selo amarelo e não oferece Retomar nos cartõe
   } as Awaited<ReturnType<typeof listarContratos>>[number]]);
   renderComConsultas(<ContratosListPage />);
   await screen.findByRole('link', { name: 'Abrir contrato SUSP-UI' });
-  fireEvent.click(screen.getByRole('tab', { name: 'Contratos suspensos' }));
+  fireEvent.change(screen.getByLabelText('Filtrar por situação'), { target: { value: 'SUSPENSO' } });
   const link = screen.getByRole('link', { name: 'Abrir contrato SUSP-UI' });
   expect(link).toHaveAttribute('data-situacao', 'suspensos');
   expect(within(link).getByText('Suspenso')).toHaveClass('text-yellow-200');
@@ -391,4 +389,21 @@ test('TEC08-03: ações de contrato arquivado permanecem no topo e fora do link 
   expect(reativar.parentElement).toHaveTextContent('Arquivado');
   expect(link).not.toContainElement(reativar);
   expect(link).not.toContainElement(excluir);
+});
+
+
+test.each([
+  ['ENCERRADO', 'encerrado'],
+  ['CONCLUIDO', 'concluido'],
+  ['SUSPENSO', 'suspenso'],
+  ['CANCELADO', 'cancelado'],
+] as const)('carteira sinaliza %s com estado semântico %s sem depender do agrupamento da aba', async (status, estado) => {
+  listar.mockResolvedValue([{
+    id: '11111111-1111-4111-8111-111111111111', codigoPublico: '00427',
+    numeroContrato: 'CONTRATO-ESTADO-2026', orgaoContratante: 'UTFPR', objeto: 'Serviços',
+    status, modoCalculo: 'SIMPLES', inicioVigencia: '2026-01-01', terminoVigencia: '2026-12-31',
+  } as Awaited<ReturnType<typeof listarContratos>>[number]]);
+  await act(async () => { renderComConsultas(<ContratosListPage />); });
+  expect(screen.getByRole('link', { name: /Abrir contrato CONTRATO-ESTADO-2026/ }))
+    .toHaveAttribute('data-tec08-estado', estado);
 });

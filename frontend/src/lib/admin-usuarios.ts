@@ -30,10 +30,18 @@ export type OperacaoPermissao =
   'criarEntregaveis' | 'editarEntregaveis' | 'arquivarEntregaveis' | 'reativarEntregaveis' | 'reabrirEntregaveis' | 'concluirEntregaveis' | 'excluirEntregaveisArquivados' |
   'criarEvidencias' | 'editarEvidencias' | 'arquivarEvidencias' | 'reativarEvidencias' | 'reabrirEvidencias' | 'excluirEvidenciasArquivadas' |
   'alterarObrigatoriedade' | 'enviarComprovantes' | 'verificarComprovantes' |
+  'registrarAtividades' | 'editarAtividades' | 'verificarAtividades' | 'reabrirAtividades' | 'arquivarAtividades' | 'reativarAtividades' | 'excluirAtividadesArquivadas' |
   'editarContrato' | 'concluirContrato' | 'encerrarContrato' | 'reabrirContrato' | 'cancelarContrato' | 'reverterCancelamentoContrato' | 'suspenderContrato' | 'retomarContrato' | 'verificarDocumentos' | 'reabrirDocumentos' | 'verificarDocumentoPrincipal' | 'reabrirDocumentoPrincipal' | 'anexarDocumentos' | 'editarDocumentos' | 'arquivarDocumentos' | 'reativarDocumentos' | 'excluirDocumentosArquivados' | 'arquivarDocumentoPrincipal' | 'reativarDocumentoPrincipal' | 'excluirDocumentoPrincipal';
 export type PermissaoFuncionario = { contratoId: string; podeEditar: boolean;
   permissoesDetalhadas?: Partial<Record<OperacaoPermissao, boolean>> | null };
 export const OPERACOES_CONTRATO: ReadonlyArray<{ chave: OperacaoPermissao; rotulo: string }> = [
+  { chave: 'registrarAtividades', rotulo: 'Registrar atividades no diário' },
+  { chave: 'editarAtividades', rotulo: 'Editar atividades registradas' },
+  { chave: 'verificarAtividades', rotulo: 'Verificar atividades (especial)' },
+  { chave: 'reabrirAtividades', rotulo: 'Reabrir atividades verificadas (especial)' },
+  { chave: 'arquivarAtividades', rotulo: 'Arquivar atividades verificadas (especial)' },
+  { chave: 'reativarAtividades', rotulo: 'Reativar atividades arquivadas (especial)' },
+  { chave: 'excluirAtividadesArquivadas', rotulo: 'Excluir logicamente atividades arquivadas (especial)' },
   { chave: 'criarEtapas', rotulo: 'Criar etapas' },
   { chave: 'editarEtapas', rotulo: 'Editar etapas' },
   { chave: 'reordenarEtapas', rotulo: 'Reordenar etapas' },
@@ -86,7 +94,8 @@ export function obterPermissoesIniciais(perfil: PerfilFuncionario, vinculo: Perm
   const resultado = {} as Record<OperacaoPermissao, boolean>;
   for (const { chave } of OPERACOES_CONTRATO) {
     resultado[chave] = vinculo.permissoesDetalhadas?.[chave] ?? (
-      (chave.startsWith('concluir') || chave === 'encerrarContrato' || chave === 'encerrarEtapas' || chave === 'suspenderContrato' || chave === 'retomarContrato' || chave === 'cancelarContrato' || chave === 'reverterCancelamentoContrato' || chave === 'alterarObrigatoriedade' || chave === 'verificarDocumentos' || chave === 'reabrirDocumentos' || chave.endsWith('DocumentoPrincipal') || chave === 'bloquearOrdemEtapas' || chave === 'arquivarEtapas' || chave.startsWith('reativar') || chave.startsWith('reabrir') || chave.startsWith('excluir')) ? false :
+      (chave.startsWith('concluir') || chave === 'encerrarContrato' || chave === 'encerrarEtapas' || chave === 'suspenderContrato' || chave === 'retomarContrato' || chave === 'cancelarContrato' || chave === 'reverterCancelamentoContrato' || chave === 'alterarObrigatoriedade' || chave === 'verificarAtividades' || chave === 'arquivarAtividades' || chave === 'verificarDocumentos' || chave === 'reabrirDocumentos' || chave.endsWith('DocumentoPrincipal') || chave === 'bloquearOrdemEtapas' || chave === 'arquivarEtapas' || chave.startsWith('reativar') || chave.startsWith('reabrir') || chave.startsWith('excluir')) ? false :
+      chave === 'registrarAtividades' || chave === 'editarAtividades' ? vinculo.podeEditar :
       chave === 'enviarComprovantes' || chave === 'verificarComprovantes' ? true :
       perfil === 'GESTOR' && vinculo.podeEditar);
   }
@@ -109,6 +118,7 @@ export function permissoesPadraoVinculo(
   // Acesso de edição padrão: planejar, ordenar e arquivar. Reativação, exclusão,
   // bloqueio da ordem e gestão do documento principal requerem delegação especial.
   const operacoesBasicas: OperacaoPermissao[] = [
+    'registrarAtividades', 'editarAtividades',
     'criarEtapas', 'editarEtapas', 'reordenarEtapas', 'arquivarEtapas',
     'criarEntregaveis', 'editarEntregaveis', 'arquivarEntregaveis',
     'criarEvidencias', 'editarEvidencias', 'arquivarEvidencias',

@@ -5,7 +5,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, ILike, In, IsNull, Not, QueryFailedError, Repository } from 'typeorm';
 
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
-import { documentacaoVerificada, filhosEmRevisao, concluirEtapaAposFilhos } from './conclusao-documental.js';
+import { documentacaoVerificada, filhosEmRevisao, concluirEtapaAposFilhos, atividadesPendentesDeVerificacao } from './conclusao-documental.js';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import { EventoAuditoria } from '../auditoria/evento-auditoria.entity.js';
 import { ResolverEscopoContratoService } from '../autorizacao/resolver-escopo-contrato.service.js';
@@ -431,6 +431,8 @@ export class EntregaveisService implements OnModuleInit {
         throw new ConflictException('Entregável já concluído');
       if (!await documentacaoVerificada(m, contratoId, e.etapaId, id))
         throw new ConflictException('Existem evidências pendentes de verificação');
+      if (await atividadesPendentesDeVerificacao(m, contratoId, null, id))
+        throw new ConflictException('Verifique as atividades registradas neste entregável antes de concluí-lo');
       const revisoes = await m.query(`SELECT EXISTS (
         SELECT 1 FROM evidencias_esperadas WHERE entregavel_id = $1
           AND arquivado_em IS NULL AND reaberto_em IS NOT NULL

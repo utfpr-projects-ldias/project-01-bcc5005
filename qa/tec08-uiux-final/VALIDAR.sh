@@ -11,7 +11,7 @@ OK=0; ERRO=0
 
 verificar_origem() {
   case "$(git branch --show-current 2>/dev/null)" in
-    tec-08|tec-08-04-05|tec-08--04-05) ;;
+    tec-08|tec-08-04-05|tec-08--04-05|tec-08-05--01-ajustes) ;;
     *) echo 'BLOQUEIO: branch nao autorizada para este QA.' >&2; return 3 ;;
   esac
   if ! git merge-base --is-ancestor '3eeed69ccb1af2b069cb38ef0563c7b45354072b' HEAD; then
@@ -73,6 +73,8 @@ case "$MODO" in
     abrir_logs
     passo 'Frontend Jest: entregáveis / evidências / navegação / contratos' 'frontend-jest-focal' \
       docker compose exec -T frontend npm test -- --runInBand --runTestsByPath \
+      src/app/atividades/page.test.tsx \
+      src/lib/validacao-atividade.test.ts \
       src/app/contratos/components/formulario-entregavel.test.tsx \
       src/lib/entregaveis.datas.test.ts \
       src/app/contratos/components/resumo-planejamento-contrato.test.tsx \
@@ -99,6 +101,8 @@ case "$MODO" in
       python3 qa/tec08-04-05/testar_roteiros.py
     passo 'Backend Jest: eventos, comprovantes e arquivamento' 'backend-jest-focal' \
       docker compose exec -T backend npm test -- --runInBand --runTestsByPath \
+      src/atividades/atividades.hu08.spec.ts \
+      src/atividades/atividades-ciclo-vida.spec.ts \
       src/entregaveis/evidencias-recebidas.service.spec.ts \
       src/entregaveis/entregaveis.service.spec.ts \
       src/entregaveis/resumo-documental.spec.ts \

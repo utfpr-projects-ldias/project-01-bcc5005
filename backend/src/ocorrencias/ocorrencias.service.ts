@@ -1,7 +1,9 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
+  OnModuleInit,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -10,10 +12,13 @@ import { DataSource, EntityManager, Repository } from 'typeorm';
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import { PermissaoContrato } from '../autorizacao/permissao-contrato.entity.js';
+import { ResolverEscopoContratoService } from '../autorizacao/resolver-escopo-contrato.service.js';
 import { permissoesEfetivas } from '../autorizacao/permissoes-granulares.js';
 import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
 import { Entregavel } from '../entregaveis/entregavel.entity.js';
+import { Contrato } from '../contratos/contrato.entity.js';
+import { Etapa } from '../etapas/etapa.entity.js';
 import { PeriodicidadeEntregavel } from '../entregaveis/periodicidade-entregavel.enum.js';
 import { TipoEntregavel } from '../entregaveis/tipo-entregavel.enum.js';
 import { Ocorrencia } from './ocorrencia.entity.js';
@@ -34,34 +39,52 @@ function addMeses(dataStr: string, meses: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-function calcularPeriodosRecorrentes(
+export function calcularPeriodosRecorrentes(
   inicio: string,
   termino: string,
   periodicidade: PeriodicidadeEntregavel,
 ): Array<{ inicio: string; fim: string; titulo: string }> {
   const periodos: Array<{ inicio: string; fim: string; titulo: string }> = [];
+  // PQ-09/10: não presumir interpretação de calendário para dias 29–31
+  // nem gerar um último período parcial sem regra formal homologada.
+  const civil = (valor: string): boolean => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false;
+    const data = new Date(`${valor}T00:00:00Z`);
+    return !Number.isNaN(data.getTime()) && data.toISOString().slice(0, 10) === valor;
+  };
+  if (!civil(inicio) || !civil(termino) || inicio > termino) {
+    throw new BadRequestException('Período civil inválido');
+  }
+  if ([PeriodicidadeEntregavel.MENSAL, PeriodicidadeEntregavel.TRIMESTRAL,
+    PeriodicidadeEntregavel.SEMESTRAL, PeriodicidadeEntregavel.ANUAL].includes(periodicidade)
+    && Number(inicio.slice(8)) > 28) {
+    throw new BadRequestException('Início nos dias 29–31 exige regra de calendário homologada');
+  }
   let atual = inicio;
   let contador = 1;
 
   while (atual <= termino) {
+    if (periodos.length >= 500) {
+      throw new BadRequestException('Geração excede o limite de 500 períodos; nenhuma ocorrência foi criada');
+    }
     let proximo = termino;
     if (periodicidade === PeriodicidadeEntregavel.DIARIA) {
       proximo = atual;
     } else if (periodicidade === PeriodicidadeEntregavel.SEMANAL) {
       proximo = addDias(atual, 6);
-      if (proximo > termino) proximo = termino;
+      if (proximo > termino) throw new BadRequestException('Período parcial não homologado (PQ-09/10)');
     } else if (periodicidade === PeriodicidadeEntregavel.MENSAL) {
       proximo = addDias(addMeses(atual, 1), -1);
-      if (proximo > termino) proximo = termino;
+      if (proximo > termino) throw new BadRequestException('Período parcial não homologado (PQ-09/10)');
     } else if (periodicidade === PeriodicidadeEntregavel.TRIMESTRAL) {
       proximo = addDias(addMeses(atual, 3), -1);
-      if (proximo > termino) proximo = termino;
+      if (proximo > termino) throw new BadRequestException('Período parcial não homologado (PQ-09/10)');
     } else if (periodicidade === PeriodicidadeEntregavel.SEMESTRAL) {
       proximo = addDias(addMeses(atual, 6), -1);
-      if (proximo > termino) proximo = termino;
+      if (proximo > termino) throw new BadRequestException('Período parcial não homologado (PQ-09/10)');
     } else if (periodicidade === PeriodicidadeEntregavel.ANUAL) {
       proximo = addDias(addMeses(atual, 12), -1);
-      if (proximo > termino) proximo = termino;
+      if (proximo > termino) throw new BadRequestException('Período parcial não homologado (PQ-09/10)');
     } else {
       throw new BadRequestException(
         'Periodicidade não homologada para geração automática',
@@ -76,13 +99,13 @@ function calcularPeriodosRecorrentes(
 
     contador++;
     atual = addDias(proximo, 1);
-    if (periodos.length > 500) break;
+
   }
   return periodos;
 }
 
 @Injectable()
-export class OcorrenciasService {
+export class OcorrenciasService implements OnModuleInit {
   constructor(
     @InjectRepository(Ocorrencia)
     private readonly ocorrenciasRepo: Repository<Ocorrencia>,
@@ -90,7 +113,25 @@ export class OcorrenciasService {
     private readonly entregaveisRepo: Repository<Entregavel>,
     private readonly dataSource: DataSource,
     private readonly auditoria: AuditoriaService,
+    private readonly escopos: ResolverEscopoContratoService,
   ) {}
+
+  onModuleInit(): void {
+    // O guard da HU09 obtém o contrato da ocorrência persistida, nunca da URL.
+    this.escopos.registrarAdaptador('ocorrencia', async (id) => {
+      const item = await this.ocorrenciasRepo.findOne({
+        where: { id }, select: { contratoId: true },
+      });
+      return item?.contratoId ?? null;
+    });
+    // Contexto de auditoria da ocorrência precisa ter o mesmo contrato raiz.
+    this.auditoria.registrarResolvedorContexto('OCORRENCIA', async (manager, id) => {
+      const item = await manager.getRepository(Ocorrencia).findOne({
+        where: { id }, select: { contratoId: true },
+      });
+      return item?.contratoId ?? null;
+    });
+  }
 
   private async validarPermissaoContrato(
     m: EntityManager,
@@ -120,19 +161,47 @@ export class OcorrenciasService {
     }
   }
 
+  // Mesmo lock raiz da HU08: uma mutação não pode atravessar uma conclusão
+  // concorrente do contrato, da etapa ou do entregável.
+  private async bloquearContratoAberto(m: EntityManager, contratoId: string) {
+    const contrato = await m.findOne(Contrato, {
+      where: { id: contratoId }, lock: { mode: 'pessimistic_write' },
+    });
+    if (!contrato || contrato.arquivadoEm || !['PLANEJAMENTO', 'EM_EXECUCAO'].includes(contrato.status)) {
+      throw new ConflictException('Reabra ou retome o contrato antes de alterar ocorrências');
+    }
+  }
+
+  private async exigirEntregavelAberto(m: EntityManager, entregavel: Entregavel) {
+    if (entregavel.arquivadoEm || entregavel.statusExecucao === 'CONCLUIDO') {
+      throw new ConflictException('Reabra o entregável antes de alterar ocorrências');
+    }
+    const etapa = await m.findOne(Etapa, { where: { id: entregavel.etapaId, contratoId: entregavel.contratoId } });
+    if (!etapa || etapa.arquivadoEm || etapa.status === 'CONCLUIDA' || etapa.status === 'ENCERRADA') {
+      throw new ConflictException('Reabra a etapa antes de alterar ocorrências');
+    }
+  }
+
   async gerarRecorrentes(
     contratoId: string,
     entregavelId: string,
     forcar: boolean,
     ator: UsuarioAutenticado,
   ) {
+    // Não simular regeneração de períodos futuros: depende de versão/impacto
+    // e confirmação conforme HU09-02, ainda não implementados.
+    if (forcar) {
+      throw new BadRequestException('Regeneração futura requer análise de impacto e confirmação (HU09-02 pendente)');
+    }
     return this.dataSource.transaction(async (m) => {
       await this.validarPermissaoContrato(m, contratoId, ator, 'criar');
+      await this.bloquearContratoAberto(m, contratoId);
       const entregavel = await m
         .getRepository(Entregavel)
-        .findOneBy({ id: entregavelId, contratoId });
+        .findOne({ where: { id: entregavelId, contratoId }, lock: { mode: 'pessimistic_write' } });
       if (!entregavel)
         throw new NotFoundException('Entregável não encontrado neste contrato');
+      await this.exigirEntregavelAberto(m, entregavel);
       if (entregavel.tipo !== TipoEntregavel.RECORRENTE) {
         throw new BadRequestException(
           'Geração automática de ocorrências é exclusiva para entregáveis recorrentes',
@@ -185,25 +254,23 @@ export class OcorrenciasService {
           origem: OrigemOcorrencia.RECORRENTE,
         });
 
-        try {
-          const salva = await repo.save(nova);
-          geradas++;
-          await this.auditoria.registrarNaTransacao(m, ator, {
-            acao: AcaoAuditoria.OCORRENCIA_GERADA,
-            entidadeTipo: 'OCORRENCIA',
-            entidadeId: salva.id,
-            dadosPosteriores: {
-              titulo: salva.titulo,
-              periodoInicio: p.inicio,
-              periodoFim: p.fim,
-              origem: salva.origem,
-            },
-          });
-        } catch (e: any) {
-          // Trata violação de unicidade concorrente (23505) de forma idempotente
-          if (e?.code === '23505') continue;
-          throw e;
-        }
+        // A linha do entregável foi bloqueada nesta transação; duas gerações
+        // da mesma série não intercalam a verificação e a escrita.
+        // Não engolir 23505 dentro da transação PG: após erro SQL a
+        // transação já está abortada e deve ocorrer rollback integral.
+        const salva = await repo.save(nova);
+        geradas++;
+        await this.auditoria.registrarNaTransacao(m, ator, {
+          acao: AcaoAuditoria.OCORRENCIA_GERADA,
+          entidadeTipo: 'OCORRENCIA',
+          entidadeId: salva.id,
+          dadosPosteriores: {
+            titulo: salva.titulo,
+            periodoInicio: p.inicio,
+            periodoFim: p.fim,
+            origem: salva.origem,
+          },
+        });
       }
 
       return {
@@ -222,11 +289,13 @@ export class OcorrenciasService {
   ) {
     return this.dataSource.transaction(async (m) => {
       await this.validarPermissaoContrato(m, contratoId, ator, 'criar');
+      await this.bloquearContratoAberto(m, contratoId);
       const entregavel = await m
         .getRepository(Entregavel)
         .findOneBy({ id: entregavelId, contratoId });
       if (!entregavel)
         throw new NotFoundException('Entregável não encontrado neste contrato');
+      await this.exigirEntregavelAberto(m, entregavel);
       if (entregavel.tipo !== TipoEntregavel.QUANTITATIVO) {
         throw new BadRequestException(
           'Ocorrência manual quantitativa exige entregável do tipo QUANTITATIVO',
@@ -286,12 +355,16 @@ export class OcorrenciasService {
   ) {
     return this.dataSource.transaction(async (m) => {
       await this.validarPermissaoContrato(m, contratoId, ator, 'editar');
+      await this.bloquearContratoAberto(m, contratoId);
       const repo = m.getRepository(Ocorrencia);
       const o = await repo.findOne({
         where: { id, contratoId },
         lock: { mode: 'pessimistic_write' },
       });
       if (!o) throw new NotFoundException('Ocorrência não encontrada');
+      const entregavel = await m.getRepository(Entregavel).findOneBy({ id: o.entregavelId, contratoId });
+      if (!entregavel) throw new NotFoundException('Entregável não encontrado neste contrato');
+      await this.exigirEntregavelAberto(m, entregavel);
 
       const antes = {
         titulo: o.titulo,

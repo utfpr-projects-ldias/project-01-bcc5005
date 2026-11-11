@@ -75,7 +75,7 @@ export default function ContratosListPage() {
   const [preferenciasIniciais] = useState(() => lerEstadoCarteira());
   const [busca, setBusca] = useState(preferenciasIniciais?.busca ?? '');
   const [campoBusca, setCampoBusca] = useState<'todos' | 'numero' | 'codigo' | 'orgao' | 'objeto'>(preferenciasIniciais?.campo ?? 'todos');
-  const [filtroArquivo, setFiltroArquivo] = useState<AbaCarteira>(preferenciasIniciais?.aba ?? 'todos');
+  const [filtroArquivo, setFiltroArquivo] = useState<AbaCarteira>(preferenciasIniciais?.aba === 'suspensos' || preferenciasIniciais?.aba === 'cancelados' ? 'todos' : preferenciasIniciais?.aba ?? 'todos');
   const [filtro, setFiltro] = useState<StatusContrato | 'ARQUIVADO' | 'EM_REVISAO' | 'PENDENTE_CONCLUSAO' | ''>((preferenciasIniciais?.status ?? '') as StatusContrato | 'ARQUIVADO' | 'EM_REVISAO' | 'PENDENTE_CONCLUSAO' | '');
   const estadoRestaurado = useSyncExternalStore(observarCliente, snapshotCliente, snapshotServidor);
   const rolagemPendente = useRef<number | null>(preferenciasIniciais?.rolagem ?? null);
@@ -152,16 +152,16 @@ export default function ContratosListPage() {
       <div className="flex min-w-0 flex-wrap items-center gap-3">
         <h2 className="text-lg font-semibold text-foreground">Contratos</h2>
         {estadoRestaurado ? <AbasRolaveis className="w-full sm:w-auto sm:flex-1"><div role="tablist" aria-label="Situação dos contratos" className="flex max-w-full flex-wrap items-center gap-1 rounded-xl border border-brand-green/20 bg-background/70 p-1">
-          {(['todos', 'ativos', 'pendentes', 'revisao', 'concluidos', 'suspensos', 'cancelados', 'arquivados'] as const).map(opcao => <button key={opcao} type="button" role="tab"
-            aria-selected={filtroArquivo === opcao} aria-label={opcao === 'todos' ? 'Todos os contratos' : opcao === 'ativos' ? 'Contratos ativos' : opcao === 'concluidos' ? 'Contratos concluídos' : opcao === 'pendentes' ? 'Contratos pendentes de conclusão' : opcao === 'revisao' ? 'Contratos em revisão' : opcao === 'cancelados' ? 'Contratos cancelados' : opcao === 'suspensos' ? 'Contratos suspensos' : 'Contratos arquivados'}
+          {(['todos', 'ativos', 'pendentes', 'revisao', 'concluidos', 'arquivados'] as const).map(opcao => <button key={opcao} type="button" role="tab"
+            aria-selected={filtroArquivo === opcao} aria-label={opcao === 'todos' ? 'Todos os contratos' : opcao === 'ativos' ? 'Contratos ativos' : opcao === 'concluidos' ? 'Contratos concluídos' : opcao === 'pendentes' ? 'Contratos pendentes de conclusão' : opcao === 'revisao' ? 'Contratos em revisão' : 'Contratos arquivados'}
             onClick={() => { setFiltroArquivo(opcao); setFiltro(''); }}
             className={`min-h-9 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${filtroArquivo === opcao ? (opcao === 'arquivados' ? 'bg-amber-500/20 text-amber-200' : 'bg-slate-700/75 text-white') : 'text-foreground/65 hover:bg-slate-700/35 hover:text-foreground'}`}>
-            {opcao === 'arquivados' ? <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v12h14V8M9 13h6"/></svg> : opcao === 'todos' ? 'Todos' : opcao === 'ativos' ? 'Ativos' : opcao === 'concluidos' ? '◉ Concluídos' : opcao === 'pendentes' ? 'Pendente de conclusão' : opcao === 'revisao' ? 'Em revisão' : opcao === 'cancelados' ? 'Cancelados' : 'Suspensos'}
+            {opcao === 'arquivados' ? <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v12h14V8M9 13h6"/></svg> : opcao === 'todos' ? 'Todos' : opcao === 'ativos' ? 'Ativos' : opcao === 'concluidos' ? '◉ Concluídos' : opcao === 'pendentes' ? 'Pendente de conclusão' : opcao === 'revisao' ? 'Em revisão' : 'Em revisão'}
           </button>)}
         </div></AbasRolaveis> : <div aria-hidden="true" data-testid="abas-aguardando-restauracao"
           className="h-9 min-w-[240px] rounded-xl border border-transparent opacity-0" />}
       </div>
-      {perfil?.perfil === 'ADMINISTRADOR' && <Link href="/contratos/novo"
+      {perfil?.perfil === 'ADMINISTRADOR' && <Link href="/contratos/novo" data-tec08-acao-criar="contrato"
         className="inline-flex h-10 items-center gap-2 rounded-lg bg-brand-green px-3 text-xs font-semibold text-on-brand-green transition hover:brightness-110">
         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><rect x="4" y="3" width="15" height="18" rx="2"/><path d="M8 8h7M8 12h4M16 14v6m-3-3h6"/></svg>
         Cadastrar contrato
@@ -216,6 +216,7 @@ export default function ContratosListPage() {
           <Link href={`/contratos/${encodeURIComponent(c.id)}`} aria-label={`Abrir contrato ${c.numeroContrato}`}
             onClick={preservarRetorno}
             data-arquivado={Boolean(c.arquivadoEm)} data-situacao={situacao}
+            data-tec08-estado={c.arquivadoEm ? 'arquivado' : situacao === 'suspensos' ? 'suspenso' : situacao === 'cancelados' ? 'cancelado' : situacao === 'revisao' ? 'revisao' : encerrado ? 'encerrado' : realceVioleta ? 'concluido' : 'normal'}
             className={`contrato-card-documental group block h-full min-w-0 cursor-pointer rounded-2xl border p-4 text-left ${c.arquivadoEm && perfil?.perfil === 'ADMINISTRADOR' ? 'pt-14 sm:pt-4' : ''}  transition-opacity duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 ${c.arquivadoEm ? 'border-amber-500/50 bg-background text-foreground hover:border-amber-400/75 focus-visible:outline-amber-400' : situacao === 'suspensos' ? 'border-yellow-300/85 bg-background hover:border-yellow-200 focus-visible:outline-yellow-200' : situacao === 'cancelados' ? 'border-red-500/55 bg-background hover:border-red-400/70 focus-visible:outline-red-400' : encerrado ? 'border-slate-500/55 bg-background hover:border-slate-400/70 focus-visible:outline-slate-400' : realceVioleta ? 'border-violet-500/45 bg-background hover:border-violet-400/70 focus-visible:outline-violet-400' : situacao === 'revisao' ? 'border-teal-700/55 bg-background hover:border-teal-600/70 focus-visible:outline-teal-600' : 'border-brand-green/25 bg-background hover:border-brand-green/60 focus-visible:outline-brand-neon'}`}>
             <div className={`flex min-w-0 flex-wrap items-start justify-between gap-2 ${c.arquivadoEm && perfil?.perfil === 'ADMINISTRADOR' ? 'sm:pr-[20.5rem]' : ''}`}>
               <div className="min-w-0 flex-1 basis-[12rem]"><h3 title={c.numeroContrato} className={`contrato-card-titulo line-clamp-2 max-w-full break-all [overflow-wrap:anywhere] text-base font-bold group-hover:underline group-hover:underline-offset-4 ${c.arquivadoEm ? 'text-foreground' : situacao === 'suspensos' ? 'text-yellow-300' : situacao === 'cancelados' ? 'text-red-300' : encerrado ? 'text-slate-200' : realceVioleta ? 'text-violet-300' : situacao === 'revisao' ? 'text-teal-200' : 'text-brand-neon'}`}>{c.numeroContrato}</h3>
@@ -225,7 +226,7 @@ export default function ContratosListPage() {
             </div>
             <p title={c.orgaoContratante} className={`mt-2 line-clamp-1 break-all text-sm font-medium ${c.arquivadoEm ? 'text-foreground' : 'text-foreground/85'}`}>{c.orgaoContratante}</p>
             <p title={c.objeto} className={`mt-1 line-clamp-1 break-all text-xs ${c.arquivadoEm ? 'text-foreground/75' : 'text-foreground/65'}`}>{c.objeto}</p>
-            <ResumoPlanejamentoContrato contratoId={c.id} contratoArquivado={Boolean(c.arquivadoEm)} contratoSuspenso={situacao === 'suspensos'} contratoEmRevisao={situacao === 'revisao'} contratoEncerrado={encerrado} compactoNaLista={Boolean(c.arquivadoEm && perfil?.perfil === 'ADMINISTRADOR')} />
+            <ResumoPlanejamentoContrato contratoId={c.id} contratoArquivado={Boolean(c.arquivadoEm)} contratoSuspenso={situacao === 'suspensos'} contratoEmRevisao={situacao === 'revisao'} contratoEncerrado={encerrado} contratoConcluido={realceVioleta && !encerrado} contratoCancelado={situacao === 'cancelados'} compactoNaLista={Boolean(c.arquivadoEm && perfil?.perfil === 'ADMINISTRADOR')} />
           </Link>
           {c.arquivadoEm && perfil?.perfil === 'ADMINISTRADOR' && <div className="absolute right-3 top-3 z-[2] flex max-w-[calc(100%-1.5rem)] flex-nowrap items-center justify-end gap-1.5">
             <span className="rounded-full border border-amber-400/50 bg-amber-500/15 px-2 py-1 text-[11px] text-amber-100">Arquivado</span>

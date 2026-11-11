@@ -115,12 +115,15 @@ export class AuditoriaService {
    */
   async executarComAuditoria<T>(
     ator: UsuarioAutenticado,
-    operacao: (manager: EntityManager) => Promise<{ resultado: T; evento: AlteracaoAuditavel }>,
+    operacao: (manager: EntityManager) => Promise<{ resultado: T; evento: AlteracaoAuditavel; aposEvento?: (manager: EntityManager) => Promise<void> }>,
   ): Promise<T> {
     this.validarAtor(ator);
     return this.dataSource.transaction(async (manager) => {
-      const { resultado, evento } = await operacao(manager);
+      const { resultado, evento, aposEvento } = await operacao(manager);
       await this.registrarNaTransacao(manager, ator, evento);
+      // Operações dependentes podem ocorrer após o registro principal e ainda
+      // dentro da mesma transação; uma falha reverte ambos e a trilha auditável.
+      if (aposEvento) await aposEvento(manager);
       return resultado;
     });
   }
