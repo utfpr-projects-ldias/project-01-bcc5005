@@ -6,7 +6,8 @@ import { StatusExecucaoEntregavel } from './status-execucao-entregavel.enum.js';
 import { StatusEtapa } from '../etapas/status-etapa.enum.js';
 /**
  * True somente quando cada nível ativo contém pelo menos um filho e cada
- * evidência ativa possui versão mais recente verificada. Sem conclusão por 0/0.
+ * evidência OBRIGATÓRIA ativa possui versão mais recente verificada.
+ * Evidências opcionais jamais bloqueiam o aceite. Sem conclusão por 0/0.
  * Reaberturas explícitas são verificadas separadamente nas entidades.
  */
 export async function documentacaoVerificada(m: EntityManager, contratoId: string, etapaId: string | null = null,
@@ -20,7 +21,7 @@ export async function documentacaoVerificada(m: EntityManager, contratoId: strin
            COUNT(DISTINCT en.id) FILTER (WHERE ev.id IS NULL)::int AS entregaveis_sem_evidencia
       FROM etapas et
       LEFT JOIN entregaveis en ON en.etapa_id = et.id AND en.arquivado_em IS NULL
-      LEFT JOIN evidencias_esperadas ev ON ev.entregavel_id = en.id AND ev.arquivado_em IS NULL
+      LEFT JOIN evidencias_esperadas ev ON ev.entregavel_id = en.id AND ev.arquivado_em IS NULL AND ev.obrigatoria IS TRUE
       LEFT JOIN LATERAL (
         SELECT ce.status FROM comprovantes_evidencia ce
           WHERE ce.evidencia_esperada_id = ev.id
@@ -54,7 +55,7 @@ export async function filhosEmRevisao(m: EntityManager, contratoId: string,
       SELECT 1 FROM evidencias_esperadas ev
         INNER JOIN entregaveis en ON en.id = ev.entregavel_id
         WHERE en.contrato_id = $1 AND en.arquivado_em IS NULL
-          AND ev.arquivado_em IS NULL AND ev.reaberto_em IS NOT NULL
+          AND ev.arquivado_em IS NULL AND ev.obrigatoria IS TRUE AND ev.reaberto_em IS NOT NULL
           AND ($2::uuid IS NULL OR en.etapa_id = $2::uuid)
     ) AS possui_revisao`, [contratoId, etapaId]) as Array<{ possui_revisao: boolean }>;
   return Boolean(linhas[0]?.possui_revisao);
@@ -74,7 +75,7 @@ export async function filhosPendentesDeConclusao(m: EntityManager, contratoId: s
     SELECT 1 FROM evidencias_esperadas ev
       JOIN entregaveis en ON en.id = ev.entregavel_id
      WHERE en.contrato_id = $1 AND en.etapa_id = $2 AND en.arquivado_em IS NULL
-       AND ev.arquivado_em IS NULL AND ev.reaberto_em IS NOT NULL
+       AND ev.arquivado_em IS NULL AND ev.obrigatoria IS TRUE AND ev.reaberto_em IS NOT NULL
   ) OR EXISTS (
     -- Uma atividade REGISTRADA vinculada a qualquer entregável desta etapa
     -- impede a conclusão; VERIFICADA e ARQUIVADA (verificada antes) não impedem.
@@ -149,7 +150,7 @@ export async function concluirEntregavelAposAtividade(
       await atividadesPendentesDeVerificacao(m, contratoId, null, entregavelId)) return null;
   const linhas = await m.query(`SELECT EXISTS (
     SELECT 1 FROM evidencias_esperadas
-      WHERE entregavel_id = $1 AND arquivado_em IS NULL AND reaberto_em IS NOT NULL
+      WHERE entregavel_id = $1 AND arquivado_em IS NULL AND obrigatoria IS TRUE AND reaberto_em IS NOT NULL
   ) AS pendentes`, [entregavelId]) as Array<{ pendentes: boolean }>;
   if (linhas[0]?.pendentes) return null;
   const anterior = { statusExecucao: e.statusExecucao, reabertoEm: e.reabertoEm ?? null };

@@ -96,8 +96,8 @@ test('barra da comprovação preenche da esquerda para a direita por contagem, n
     status: id === 'evidencia-1' ? 'VERIFICADA' : 'SEM_ENVIO', versoes: [],
   }));
   render(<ConteudoEntregavel item={{ ...item, evidenciasEsperadas: evidencias }} podeCriarEvidencia />);
-  const barra = await screen.findByRole('img', { name: '1 de 4 evidências previstas verificadas' });
-  await waitFor(() => expect(screen.getByText('1/4 evidências esperadas')).toBeInTheDocument());
+  const barra = await screen.findByRole('img', { name: '1 de 4 evidências obrigatórias verificadas' });
+  await waitFor(() => expect(screen.getByText('1/4 evidências obrigatórias verificadas')).toBeInTheDocument());
   const segmentos = Array.from(barra.children);
   expect(segmentos).toHaveLength(4);
   expect(segmentos[0]).toHaveClass('bg-violet-500');
@@ -233,7 +233,8 @@ test('Todas as evidências ativas mantém verificadas e pendentes na mesma lista
     { id: 'e1', tipoEvidencia: 'Relatório', descricao: null, obrigatoria: true },
     { id: 'e2', tipoEvidencia: 'Foto', descricao: null, obrigatoria: false },
   ] }} />);
-  expect(await screen.findByText('1/2 evidências esperadas')).toBeInTheDocument();
+  expect(await screen.findByText('1/1 evidências obrigatórias verificadas')).toBeInTheDocument();
+  expect(screen.getByText('0/1 opcionais verificadas · não bloqueiam a conclusão')).toBeInTheDocument();
   expect(screen.getByRole('list', { name: 'Evidências obrigatórias' })).toBeInTheDocument();
   expect(screen.getByRole('list', { name: 'Evidências opcionais' })).toBeInTheDocument();
 });

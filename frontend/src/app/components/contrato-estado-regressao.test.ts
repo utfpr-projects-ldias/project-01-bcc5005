@@ -17,5 +17,9 @@ test('a aba de atividades do contrato não cria navegação circular', () => {
 
 test('o botão de anexar está marcado como ação contextual sem mudar sua permissão', () => {
   const docs = src('src/app/contratos/components/painel-documentos.tsx');
-  expect(docs).toContain('podeEscrever && <button data-tec08-acao="anexar-documento" data-tec08-contextual');
+  // Confere a condição de permissão e os atributos do mesmo botão, sem depender da ordem JSX.
+  const botao = docs.match(/podeEscrever\s*&&\s*<button\b[^>]*data-tec08-acao="anexar-documento"[^>]*>/)?.[0];
+  expect(botao).toBeDefined();
+  expect(botao).toMatch(/\sdata-tec08-contextual(?:\s|>)/);
+  expect(botao).toContain('data-pi-acao="primaria"');
 });

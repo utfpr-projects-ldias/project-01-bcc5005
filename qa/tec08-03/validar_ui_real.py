@@ -475,7 +475,7 @@ def executar(contas, visivel=False):
             # Nao aceitar "Status indisponivel" ou conteudo inventado como prova.
             status_evidencia = modal_item.get_by_label('Status da evidência Relatório')
             status_evidencia.get_by_text('Aguardando envio', exact=True).wait_for(state='visible', timeout=20000)
-            modal_item.get_by_text('0/1 evidências esperadas', exact=True).wait_for(state='visible', timeout=10000)
+            modal_item.get_by_text('0/1 evidências obrigatórias verificadas', exact=True).wait_for(state='visible', timeout=10000)
             area_modal = modal_item.locator('[data-tec08-corpo-modal]').first
             botao_evidencia = modal_item.get_by_role('button', name='Ver detalhes da evidência esperada Relatório')
             # Scroll so deve ser >0 se a propria area permitir rolar.
@@ -626,12 +626,12 @@ def executar(contas, visivel=False):
             resumo.scroll_into_view_if_needed()
             # Indicadores atuais usam role=img/aria-label. Não existe mais
             # <progress>, nem o rótulo legado de entregas não medidas.
-            # Houve 1 etapa, 1 entregável e 1 evidência esperada neste cenário,
+            # Houve 1 etapa, 1 entregável e 1 evidência obrigatória neste cenário,
             # mas nenhum comprovante foi enviado: os três numeradores são zero.
             esperados = (
                 '0 de 1 etapas concluídas e comprovadas',
                 '0 de 1 entregáveis documentalmente comprovados',
-                '0 de 1 evidências verificadas',
+                '0 de 1 evidências obrigatórias verificadas',
             )
             for rotulo in esperados:
                 try:

@@ -62,8 +62,8 @@ export function ModalEdicaoAtividade({ atividade, contratoId, origem, onFechar, 
       <label className="block text-sm font-medium">Título *
         <input required maxLength={255} className={CAMPO} value={form.titulo} onChange={e => campo('titulo', e.target.value)} aria-invalid={Boolean(errosCampos.titulo)} /></label>
       {errosCampos.titulo && <p className="text-xs text-error-text">{errosCampos.titulo}</p>}
-      <div className="grid gap-3 sm:grid-cols-2"><label className="block text-sm font-medium">Data e hora *
-        <input required type="datetime-local" className={CAMPO} value={form.dataHora} onChange={e => campo('dataHora', e.target.value)} aria-invalid={Boolean(errosCampos.dataHora)} /></label>
+      <div className="grid gap-3 lg:grid-cols-2"><label className="block min-w-0 text-sm font-medium">Data e hora *
+        <input required type="datetime-local" lang="pt-BR" className={`${CAMPO} tec08-data-hora`} value={form.dataHora} onChange={e => campo('dataHora', e.target.value)} aria-invalid={Boolean(errosCampos.dataHora)} /></label>
         <label className="block text-sm font-medium">Tipo *
           <select className={CAMPO} value={form.tipo} onChange={e => campo('tipo', e.target.value as FormularioAtividade['tipo'])}>
             {TIPOS_ATIVIDADE.map(x => <option key={x}>{x}</option>)}</select></label></div>

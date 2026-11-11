@@ -27,6 +27,8 @@ import { PainelDocumentos } from '../components/painel-documentos';
 import { ResumoPlanejamentoContrato } from '../components/resumo-planejamento-contrato';
 import { HistoricoContrato } from '../components/historico-contrato';
 import { AtividadesVinculadas } from '../components/atividades-vinculadas';
+import { PainelOcorrencias } from '@/app/ocorrencias/components/painel-ocorrencias';
+import { IconeAtividades, IconeOcorrencias } from '@/app/components/icones-operacionais';
 import { FormularioContrato } from '../components/formulario-contrato';
 import { ModalEtapa } from '../components/modal-etapa';
 
@@ -38,7 +40,7 @@ function dataBR(valor: string | null | undefined): string {
 export default function DetalheContratoPage() {
   const { id } = useParams<{ id: string }>();
   const cache = useRepositorioConsultas();
-  const [abaContrato, setAbaContrato] = useState<'visao' | 'etapas' | 'atividades' | 'documentos'>('visao');
+  const [abaContrato, setAbaContrato] = useState<'visao' | 'etapas' | 'atividades' | 'ocorrencias' | 'documentos'>('visao');
   // Pós-cadastro: revelar a seção documental antes de abrir o modal solicitado.
   // Leitura apenas após montar evita divergência entre SSR e hidratação.
   useEffect(() => {
@@ -454,12 +456,17 @@ export default function DetalheContratoPage() {
           {([
             { id: 'visao', nome: 'Visão geral', icon: <><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></> },
             { id: 'etapas', nome: 'Etapas', icon: <><path d="M5 4v16M9 6h11M9 12h11M9 18h11"/></> },
-            { id: 'atividades', nome: 'Atividades', icon: <><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4m8-4v4M8 12h8M8 16h5"/></> },
+            { id: 'atividades', nome: 'Atividades', icon: <IconeAtividades tamanho={16} /> },
+            { id: 'ocorrencias', nome: 'Ocorrências', icon: <IconeOcorrencias tamanho={16} /> },
             { id: 'documentos', nome: 'Documentos', icon: <><path d="M6 3h8l5 5v13H6zM14 3v6h5M9 14h7m-7 4h7"/></> },
           ] as const).map(aba => <button key={aba.id} role="tab" type="button" id={`tab-${aba.id}`}
             aria-controls={`painel-${aba.id}`} aria-selected={abaContrato === aba.id} onClick={() => setAbaContrato(aba.id)}
             className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${abaContrato === aba.id ? 'text-foreground' : 'text-foreground/70 hover:bg-brand-green/10'}`}>
-            <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round">{aba.icon}</svg>
+            <span aria-hidden="true" className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
+              {aba.id === 'visao' || aba.id === 'etapas' || aba.id === 'documentos'
+                ? <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{aba.icon}</svg>
+                : aba.icon}
+            </span>
             {aba.nome}</button>)}
         </div></AbasRolaveis>
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
@@ -516,14 +523,14 @@ export default function DetalheContratoPage() {
         </div>}
       <div className="min-w-0">
         <div className="min-w-0 space-y-4">
-          <section role="tabpanel" id="painel-visao" aria-labelledby="tab-visao" hidden={abaContrato !== 'visao'} className={abaContrato !== 'visao' ? 'hidden' : 'space-y-4'}>
+          <section data-tec08-aba-contrato role="tabpanel" id="painel-visao" aria-labelledby="tab-visao" hidden={abaContrato !== 'visao'} className={abaContrato !== 'visao' ? 'hidden' : 'space-y-4'}>
             {!pendenteConclusao && !principalQuery.carregando && !principalVerificado && (documentalmenteConcluido || etapasDocumentais.dados?.some(etapa => etapa.status === 'CONCLUIDA')) &&
               <div role="status" data-testid="aviso-pdf-principal-visao" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/45 bg-amber-500/10 p-3 text-sm text-foreground">
                 <p className="min-w-0 flex-1">{principalAtivo ? 'Falta verificar o PDF principal.' : 'Falta anexar e verificar o PDF principal.'}</p>
                 <button type="button" onClick={() => setAbaContrato('documentos')} className="shrink-0 rounded-lg border border-amber-500/60 px-3 py-2 font-semibold text-foreground hover:bg-amber-500/15">Ir para Documentos</button>
               </div>}
             <section data-tec08-secao-contrato className="space-y-3" aria-label="Planejamento do contrato">
-              <h3 className={`text-sm font-semibold ${contrato.arquivadoEm ? "text-amber-200" : encerrado ? "text-slate-200" : emRevisao ? "text-teal-200" : (concluido || pendenteConclusao) ? "text-violet-200" : "text-brand-neon"}`}>Planejamento do contrato</h3>
+              <h3 className={`text-sm font-semibold ${contrato.arquivadoEm ? "text-amber-200" : cancelado ? "text-red-300" : suspenso ? "text-yellow-200" : encerrado ? "text-slate-200" : emRevisao ? "text-teal-200" : (concluido || pendenteConclusao) ? "text-violet-200" : "text-brand-neon"}`}>Planejamento do contrato</h3>
               <ResumoPlanejamentoContrato contratoId={contrato.id} variante="detalhe" contratoArquivado={Boolean(contrato.arquivadoEm)} contratoSuspenso={suspenso} contratoEmRevisao={emRevisao} contratoEncerrado={encerrado} contratoConcluido={concluido || pendenteConclusao} contratoCancelado={cancelado} />
             </section>
 
@@ -564,18 +571,21 @@ export default function DetalheContratoPage() {
 
 
           </section>
-          <section role="tabpanel" id="painel-atividades" aria-labelledby="tab-atividades" hidden={abaContrato !== 'atividades'} className={abaContrato !== 'atividades' ? 'hidden' : 'space-y-4'}>
-            <AtividadesVinculadas contratoId={contrato.id} somenteLeitura={Boolean(contrato.arquivadoEm || cancelado || encerrado || suspenso || concluido || contrato.status === 'EM_ENCERRAMENTO')} ocultarAcessoDiario />
+          <section data-tec08-aba-contrato role="tabpanel" id="painel-atividades" aria-labelledby="tab-atividades" hidden={abaContrato !== 'atividades'} className={abaContrato !== 'atividades' ? 'hidden' : 'space-y-4'}>
+            <AtividadesVinculadas contratoId={contrato.id} estadoContextual={contrato.arquivadoEm ? 'arquivado' : cancelado ? 'cancelado' : suspenso ? 'suspenso' : encerrado ? 'encerrado' : emRevisao ? 'revisao' : (concluido || pendenteConclusao) ? 'concluido' : 'normal'} visivel={abaContrato === 'atividades'} somenteLeitura={Boolean(contrato.arquivadoEm || cancelado || encerrado || suspenso || concluido || contrato.status === 'EM_ENCERRAMENTO')} ocultarAcessoDiario />
           </section>
-          <section role="tabpanel" id="painel-etapas" aria-labelledby="tab-etapas" hidden={abaContrato !== 'etapas'} className={abaContrato !== 'etapas' ? 'hidden' : 'space-y-4'}>
+          <section data-tec08-aba-contrato role="tabpanel" id="painel-ocorrencias" aria-labelledby="tab-ocorrencias" hidden={abaContrato !== 'ocorrencias'} className={abaContrato !== 'ocorrencias' ? 'hidden' : 'space-y-4'}>
+            {abaContrato === 'ocorrencias' && <PainelOcorrencias contratoId={contrato.id} estadoContextual={contrato.arquivadoEm ? 'arquivado' : cancelado ? 'cancelado' : suspenso ? 'suspenso' : encerrado ? 'encerrado' : emRevisao ? 'revisao' : (concluido || pendenteConclusao) ? 'concluido' : 'normal'} somenteLeitura={Boolean(contrato.arquivadoEm || cancelado || encerrado || suspenso || concluido || contrato.status === 'EM_ENCERRAMENTO')} embutido />}
+          </section>
+          <section data-tec08-aba-contrato role="tabpanel" id="painel-etapas" aria-labelledby="tab-etapas" hidden={abaContrato !== 'etapas'} className={abaContrato !== 'etapas' ? 'hidden' : 'space-y-4'}>
             <PainelEtapas key={`etapas:${contrato.id}`} contratoId={contrato.id} habilitado={!!perfil?.ativo}
               podeGerenciar={podeEditar} permissoes={acessoQuery.dados?.permissoes} contratoArquivado={Boolean(contrato.arquivadoEm)} contratoConcluido={concluido} contratoPendenteConclusao={pendenteConclusao} contratoEmRevisao={emRevisao} contratoEncerrado={encerrado}
               ordemEtapasBloqueada={Boolean(contrato.ordemEtapasBloqueada)} contratoSuspenso={suspenso} contratoCancelado={cancelado}
               onAuditoriaAlterada={registrarAtualizacaoHistorico}
               onOrdemAlterada={async () => { registrarAtualizacaoHistorico(); await contratoQuery.atualizar(); }} />
           </section>
-          <section role="tabpanel" id="painel-documentos" aria-labelledby="tab-documentos" hidden={abaContrato !== 'documentos'} className={abaContrato !== 'documentos' ? 'hidden' : 'space-y-4'}>
-            <PainelDocumentos key={`documentos:${contrato.id}`} contratoId={contrato.id} onDocumentoAlterado={registrarAtualizacaoHistorico} habilitado={!!perfil?.ativo} somenteLeitura={Boolean(contrato.arquivadoEm || bloqueioOperacional)} permitirRegularizarPrincipal={Boolean(pendenteConclusao && !principalVerificado)}
+          <section data-tec08-aba-contrato role="tabpanel" id="painel-documentos" aria-labelledby="tab-documentos" hidden={abaContrato !== 'documentos'} className={abaContrato !== 'documentos' ? 'hidden' : 'space-y-4'}>
+            <PainelDocumentos key={`documentos:${contrato.id}`} contratoId={contrato.id} estadoContextual={contrato.arquivadoEm ? 'arquivado' : cancelado ? 'cancelado' : suspenso ? 'suspenso' : encerrado ? 'encerrado' : emRevisao ? 'revisao' : (concluido || pendenteConclusao) ? 'concluido' : 'normal'} onDocumentoAlterado={registrarAtualizacaoHistorico} habilitado={!!perfil?.ativo} somenteLeitura={Boolean(contrato.arquivadoEm || bloqueioOperacional)} permitirRegularizarPrincipal={Boolean(pendenteConclusao && !principalVerificado)}
               podeAnexar={Boolean((administrador || acessoQuery.dados?.permissoes?.anexarDocumentos))}
               podeEditarMetadados={Boolean((administrador || acessoQuery.dados?.permissoes?.editarDocumentos))}
               podeArquivarDocumentos={Boolean((administrador || acessoQuery.dados?.permissoes?.arquivarDocumentos))}

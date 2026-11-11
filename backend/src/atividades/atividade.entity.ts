@@ -1,5 +1,6 @@
-import { Column, CreateDateColumn, Entity, JoinTable, ManyToMany, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, JoinColumn, JoinTable, ManyToMany, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { Entregavel } from '../entregaveis/entregavel.entity.js';
+import { Ocorrencia } from '../ocorrencias/ocorrencia.entity.js';
 
 export type EstadoAtividade = 'REGISTRADA' | 'VERIFICADA' | 'ARQUIVADA';
 
@@ -8,6 +9,16 @@ export type EstadoAtividade = 'REGISTRADA' | 'VERIFICADA' | 'ARQUIVADA';
 export class AtividadeEntity {
   @PrimaryGeneratedColumn('uuid') id!: string;
   @Column({ type: 'uuid' }) contratoId!: string;
+  /** HU09: vínculo opcional, com FK composta garantindo mesmo contrato. */
+  @Column({ name: 'ocorrenciaId', type: 'uuid', nullable: true })
+  ocorrenciaId!: string | null;
+
+  @ManyToOne(() => Ocorrencia, { nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn([
+    { name: 'ocorrenciaId', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_atividades_ocorrencia_contrato' },
+    { name: 'contratoId', referencedColumnName: 'contratoId', foreignKeyConstraintName: 'fk_atividades_ocorrencia_contrato' },
+  ])
+  ocorrencia!: Ocorrencia | null;
   @Column({ type: 'uuid', nullable: true }) responsavelId!: string | null;
   @Column({ type: 'varchar' }) titulo!: string;
   @Column({ type: 'timestamptz' }) dataHora!: Date;

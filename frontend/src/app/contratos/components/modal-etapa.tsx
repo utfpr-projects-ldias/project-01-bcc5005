@@ -1,11 +1,12 @@
 'use client';
+import type { EstadoContextual } from '@/lib/estado-visivel-contrato';
 import { useEffect, useLayoutEffect, useId, useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { bloquearRolagemDocumento } from '@/lib/bloqueio-rolagem-modal';
 import { rotuloCodigoPublico } from '@/lib/codigos-publicos';
 
 /** Edição/criação em sobreposição: sem rolagem para o rodapé, foco contido e retorno ao gatilho. */
 export function ModalEtapa({ titulo, ocupado, onFechar, focoRetorno, contexto = 'Planejamento do contrato', rotuloFechar = 'Fechar edição da etapa', textoFechar = 'Fechar ×', camada = 'principal', bloqueadoPorSubmodal = false, compacto = false, retornoEsquerda = false, somenteIconeFechar = false, ocultarFechar = false, alturaEstavel = false, formularioLongo = false, concluido = false, arquivado = false, revisao = false, estadoContextual = 'normal', acoes, codigoPublico, children }: {
-  titulo: string; ocupado: boolean; onFechar: () => void; focoRetorno?: HTMLElement | null; contexto?: string; rotuloFechar?: string; textoFechar?: string; camada?: 'principal' | 'aninhada' | 'evidencia' | 'edicao'; bloqueadoPorSubmodal?: boolean; compacto?: boolean; retornoEsquerda?: boolean; somenteIconeFechar?: boolean; ocultarFechar?: boolean; alturaEstavel?: boolean; formularioLongo?: boolean; concluido?: boolean; arquivado?: boolean; revisao?: boolean; estadoContextual?: 'normal' | 'pendente' | 'revisao' | 'concluido' | 'arquivado' | 'suspenso' | 'encerrado' | 'cancelado'; acoes?: ReactNode; codigoPublico?: number | null; children: ReactNode;
+  titulo: string; ocupado: boolean; onFechar: () => void; focoRetorno?: HTMLElement | null; contexto?: string; rotuloFechar?: string; textoFechar?: string; camada?: 'principal' | 'aninhada' | 'evidencia' | 'edicao'; bloqueadoPorSubmodal?: boolean; compacto?: boolean; retornoEsquerda?: boolean; somenteIconeFechar?: boolean; ocultarFechar?: boolean; alturaEstavel?: boolean; formularioLongo?: boolean; concluido?: boolean; arquivado?: boolean; revisao?: boolean; estadoContextual?: EstadoContextual; acoes?: ReactNode; codigoPublico?: number | null; children: ReactNode;
 }) {
   const tituloId = useId();
   const painel = useRef<HTMLDivElement>(null);
@@ -80,8 +81,8 @@ export function ModalEtapa({ titulo, ocupado, onFechar, focoRetorno, contexto = 
     : compacto ? 'max-w-2xl' : 'max-w-3xl';
   // Cada janela tem uma única identidade: estado próprio prevalece sobre o pai.
   const estadoModal = arquivado ? 'arquivado' : concluido ? 'concluido' : revisao ? 'revisao' : estadoContextual;
-  const corConclusao = estadoModal === 'arquivado' ? 'border-amber-500/50' : estadoModal === 'concluido' ? 'border-violet-500/45' : estadoModal === 'revisao' ? 'border-teal-600/50' : estadoModal === 'pendente' ? 'border-yellow-400/50' : estadoModal === 'suspenso' ? 'border-yellow-500/50' : estadoModal === 'encerrado' ? 'border-slate-500/45' : estadoModal === 'cancelado' ? 'border-red-500/45' : 'border-brand-green/40';
-  const corTitulo = estadoModal === 'arquivado' ? 'text-amber-200' : estadoModal === 'concluido' ? 'text-violet-300' : estadoModal === 'revisao' ? 'text-teal-200' : estadoModal === 'pendente' ? 'text-yellow-200' : estadoModal === 'suspenso' ? 'text-yellow-200' : estadoModal === 'encerrado' ? 'text-foreground' : estadoModal === 'cancelado' ? 'text-red-300' : 'text-brand-neon';
+  const corConclusao = estadoModal === 'arquivado' ? 'border-amber-500/50' : estadoModal === 'concluido' ? 'border-violet-500/45' : estadoModal === 'nao-iniciado' ? 'border-neutral-400/50' : estadoModal === 'andamento' ? 'border-[#65813b]/70' : estadoModal === 'revisao' ? 'border-teal-600/50' : estadoModal === 'pendente' ? 'border-yellow-400/50' : estadoModal === 'suspenso' ? 'border-yellow-500/50' : estadoModal === 'encerrado' ? 'border-slate-500/45' : estadoModal === 'cancelado' ? 'border-red-500/45' : 'border-brand-green/40';
+  const corTitulo = estadoModal === 'arquivado' ? 'text-amber-200' : estadoModal === 'concluido' ? 'text-violet-300' : estadoModal === 'nao-iniciado' ? 'text-neutral-700 dark:text-neutral-100' : estadoModal === 'andamento' ? 'text-[#b8d28a]' : estadoModal === 'revisao' ? 'text-teal-200' : estadoModal === 'pendente' ? 'text-yellow-200' : estadoModal === 'suspenso' ? 'text-yellow-200' : estadoModal === 'encerrado' ? 'text-foreground' : estadoModal === 'cancelado' ? 'text-red-300' : 'text-brand-neon';
   const alturaPainel = formularioLongo ? 'h-[min(88dvh,850px)]' : camada === 'evidencia' ? 'max-h-[min(64dvh,590px)]'
     : camada === 'aninhada' ? 'h-[min(82dvh,730px)]'
     : alturaEstavel ? 'h-[min(82dvh,730px)]' : 'max-h-[min(88dvh,850px)]';
@@ -101,7 +102,7 @@ export function ModalEtapa({ titulo, ocupado, onFechar, focoRetorno, contexto = 
       className={`flex w-full ${larguraPainel} ${alturaPainel} min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border ${corConclusao} bg-background text-foreground shadow-[0_18px_65px_rgba(0,0,0,0.3)] ${bloqueadoPorSubmodal ? 'pointer-events-none' : ''}`}>
       <header className={`flex shrink-0 flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-5 ${corConclusao}`}>
         {retornoEsquerda && <button ref={fecharRef} type="button" onClick={fechar} disabled={ocupado}
-          data-tec08-fechar-modal aria-label={rotuloFechar} title={rotuloFechar}
+          data-tec08-fechar-modal data-pi-acao="secundaria" aria-label={rotuloFechar} title={rotuloFechar}
           className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-500/40 text-foreground transition-colors hover:border-slate-400/65 hover:bg-slate-500/10 focus-visible:outline-2 focus-visible:outline-brand-neon disabled:opacity-50">
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><path d="m14 6-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>}
@@ -110,7 +111,7 @@ export function ModalEtapa({ titulo, ocupado, onFechar, focoRetorno, contexto = 
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
         {acoes}
         {!retornoEsquerda && !ocultarFechar && <button ref={fecharRef} type="button" onClick={fechar} disabled={ocupado}
-          data-tec08-fechar-modal aria-label={rotuloFechar} title={rotuloFechar}
+          data-tec08-fechar-modal data-pi-acao="secundaria" aria-label={rotuloFechar} title={rotuloFechar}
           className={`${somenteIconeFechar ? 'inline-flex h-9 w-9 items-center justify-center rounded-lg text-lg' : 'rounded-lg px-3 py-2 text-sm'} border border-slate-500/40 font-semibold text-foreground transition-colors hover:bg-slate-500/10 focus-visible:outline-2 focus-visible:outline-brand-neon disabled:opacity-50`}>
           {somenteIconeFechar ? <span aria-hidden="true">×</span> : textoFechar}</button>}
         </div>

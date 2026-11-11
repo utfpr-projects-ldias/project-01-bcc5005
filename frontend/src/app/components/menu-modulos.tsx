@@ -2,6 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef } from "react";
+import { AbasRolaveis } from "./abas-rolaveis";
+import { IconeAtividades, IconeOcorrencias } from "./icones-operacionais";
 import { useMeuPerfil } from '@/hooks/use-meu-perfil';
 
 type Item = { nome: string; href?: string; aviso?: string; icone: string };
@@ -10,7 +13,8 @@ function useItens(): Item[] {
   return [
     { nome: 'Dashboard', href: '/dashboard', icone: 'inicio' },
     { nome: 'Contratos', href: '/contratos', icone: 'arquivo' },
-    { nome: 'Atividades', href: '/atividades', icone: 'lista' },
+    { nome: 'Atividades', href: '/atividades', icone: 'atividades' },
+    { nome: 'Ocorrências', href: '/ocorrencias', icone: 'ocorrencias' },
     { nome: 'Evidências', aviso: 'Indisponível', icone: 'evidencia' },
     { nome: 'Relatórios', aviso: 'Indisponível', icone: 'relatorio' },
     ...(perfil?.ativo && perfil.perfil === 'ADMINISTRADOR'
@@ -18,6 +22,8 @@ function useItens(): Item[] {
   ];
 }
 function IconeMenu({ tipo }: { tipo: string }) {
+  if (tipo === 'atividades') return <IconeAtividades />;
+  if (tipo === 'ocorrencias') return <IconeOcorrencias />;
   return <svg aria-hidden="true" className="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
     {tipo === 'inicio' ? <><path d="m3 10 9-7 9 7v10H3Z"/><path d="M9 20v-7h6v7"/></> :
       tipo === 'arquivo' ? <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 5V3h8v2M7 10h10M7 14h7"/></> :
@@ -32,7 +38,7 @@ function Itens({ compactos = false, soIcones = false }: { compactos?: boolean; s
   const itens = useItens();
   const path = usePathname();
   const ativo = (href: string) => path === href ||
-    ((href === '/contratos' || href === '/admin/usuarios') && path.startsWith(`${href}/`));
+    ((href === '/contratos' || href === '/atividades' || href === '/admin/usuarios') && path.startsWith(`${href}/`));
   return <>{itens.map(item => {
     const selecionado = item.href ? ativo(item.href) : false;
     const classes = `${soIcones ? 'h-11 w-11 shrink-0 justify-center p-2' : compactos ? 'gap-2 px-3 py-2' : 'gap-3 px-3 py-3'} flex min-h-10 items-center rounded-xl transition-all duration-200 motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-brand-green ${selecionado
@@ -53,5 +59,29 @@ export function MenuLateral() {
   </aside>;
 }
 export function MenuMobile() {
-  return <nav aria-label="Navegação móvel" className="flex w-full flex-nowrap items-center justify-between gap-1 overflow-x-auto border-b border-brand-green/20 px-2 py-2 md:hidden"><Itens compactos soIcones /></nav>;
+  const rota = usePathname();
+  const barra = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const faixa = barra.current?.querySelector<HTMLElement>('.tec08-abas-rolagem');
+    const selecionado = faixa?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!faixa || !selecionado) return;
+    const ajustar = () => {
+      if (faixa.scrollWidth <= faixa.clientWidth) return;
+      const limites = selecionado.getBoundingClientRect();
+      const janela = faixa.getBoundingClientRect();
+      const esquerda = Math.max(0, faixa.scrollLeft + limites.left - janela.left + limites.width / 2 - faixa.clientWidth / 2);
+      if (typeof faixa.scrollTo === 'function') faixa.scrollTo({ left: esquerda, behavior: 'smooth' });
+      else faixa.scrollLeft = esquerda;
+    };
+    if (typeof window.requestAnimationFrame !== 'function') { ajustar(); return; }
+    const id = window.requestAnimationFrame(ajustar);
+    return () => window.cancelAnimationFrame(id);
+  }, [rota]);
+  return <div ref={barra} className="border-b border-brand-green/20 md:hidden">
+    <AbasRolaveis>
+      <nav aria-label="Navegação móvel" className="flex w-max min-w-max flex-nowrap items-center gap-1 px-2 py-2">
+        <Itens compactos soIcones />
+      </nav>
+    </AbasRolaveis>
+  </div>;
 }

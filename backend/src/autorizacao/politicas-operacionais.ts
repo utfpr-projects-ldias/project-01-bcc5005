@@ -36,6 +36,8 @@ export const POLITICAS_OPERACIONAIS = {
   'ocorrencias:listar': { recurso: 'ocorrencia', classe: 'leitura', escopo: 'contrato' },
   'ocorrencias:visualizar': { recurso: 'ocorrencia', classe: 'leitura', escopo: 'recurso' },
   'ocorrencias:gerar': { recurso: 'ocorrencia', classe: 'planejamento', escopo: 'contrato' },
+  'ocorrencias:criar': { recurso: 'ocorrencia', classe: 'planejamento', escopo: 'contrato' },
+  'ocorrencias:editar': { recurso: 'ocorrencia', classe: 'planejamento', escopo: 'recurso' },
   'ocorrencias:registrar': { recurso: 'ocorrencia', classe: 'operacional', escopo: 'recurso' },
   'atividades:listar': { recurso: 'atividade', classe: 'leitura', escopo: 'contrato' },
   'atividades:visualizar': { recurso: 'atividade', classe: 'leitura', escopo: 'recurso' },

@@ -65,3 +65,20 @@ test('Patch 8: evidência pendente é amarela no card e no painel de comprovante
   expect(css).toContain('[data-tec08-painel-evidencia][data-evidencia-estado]');
   expect(css).toContain('[data-tec08-modal][data-tec08-camada="edicao"]');
 });
+
+
+test('Patch 26: superfícies e ações usam tokens do próprio contexto, incluindo não iniciada e verde-musgo', () => {
+  expect(css).toContain('[data-tec08-estado="nao-iniciado"]');
+  expect(css).toContain('[data-pi-painel-contextual]');
+  expect(css).toContain('[data-pi-acao="secundaria"]');
+  expect(css).toContain('[data-pi-acao="primaria"]');
+  expect(css).toContain('--pi-acao-bg: #486129');
+  expect(css).toContain('background-color: var(--pi-acao-bg) !important');
+});
+
+
+test('Patch 27: barra de filtros das etapas usa tokens de contexto', () => {
+  expect(css).toContain('[data-pi-painel-contextual][data-tec08-estado] [data-pi-etapas-filtros][role="tablist"]');
+  expect(css).toContain('border-color: color-mix(in srgb, var(--pi-cor-propria) 48%, transparent) !important');
+  expect(css).toContain('[data-pi-etapas-filtros][role="tablist"] > button[role="tab"][aria-selected="true"]');
+});

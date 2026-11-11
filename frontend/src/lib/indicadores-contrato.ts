@@ -27,7 +27,7 @@ export function calcularIndicadoresContrato(
     const filhos = entregaveisAtivos.filter(e => e.etapaId === etapa.id);
     return filhos.length > 0 && filhos.every(entregavelComprovado);
   }).length;
-  const evidenciasEsperadas = entregaveisAtivos.reduce((s, e) => s + e.evidenciasEsperadas.filter(ev => !ev.arquivadoEm).length, 0);
+  const evidenciasEsperadas = entregaveisAtivos.reduce((s, e) => s + e.evidenciasEsperadas.filter(ev => !ev.arquivadoEm && ev.obrigatoria !== false).length, 0);
   const documentacaoCompleta = etapasAtivas.length > 0 && entregaveisAtivos.length > 0 && evidenciasEsperadas > 0 &&
     etapasConcluidas === etapasAtivas.length && entregaveisConcluidos === entregaveisAtivos.length &&
     entregaveisAtivos.every(entregavelConcluido);

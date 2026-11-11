@@ -1,5 +1,6 @@
 'use client';
 
+import { estadoContextualContrato } from '@/lib/estado-visivel-contrato';
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
@@ -38,6 +39,7 @@ export default function AtividadesPage() {
   const etapasConsulta = useEtapas(contratoId);
   const etapas = (etapasConsulta.dados ?? []).filter(e => !e.arquivadoEm);
   const contratoAtual = contratos.find(c => c.id === contratoId);
+  const contextoContrato = estadoContextualContrato(contratoAtual);
   const contratoAberto = Boolean(contratoId && contratoAtual && !contratoAtual.arquivadoEm &&
     (contratoAtual.status === undefined || ['PLANEJAMENTO', 'EM_EXECUCAO'].includes(contratoAtual.status)));
   const etapasAbertas = new Set(etapas.filter(e => e.status !== 'CONCLUIDA' && e.status !== 'ENCERRADA').map(e => e.id));
@@ -142,7 +144,7 @@ export default function AtividadesPage() {
         <h2 className="text-2xl font-bold text-foreground">Diário de execução</h2>
         <p className="text-sm text-foreground/65">Registre acontecimentos e acompanhe seus vínculos com os entregáveis.</p>
       </div>
-      {pode('registrarAtividades') && contratoAberto && entregaveisAbertos.length > 0 && <button type="button" onClick={abrirCriacao} className={PRIMARIO}><IconeNova /> Nova atividade</button>}
+      {pode('registrarAtividades') && contratoAberto && entregaveisAbertos.length > 0 && <button type="button" onClick={abrirCriacao} data-tec08-contexto-operacional data-tec08-estado={contextoContrato} data-pi-acao="primaria" className={PRIMARIO}><IconeNova /> Nova atividade</button>}
     </header>
     <section aria-label="Consulta do diário" className="space-y-4 rounded-xl border border-brand-green/20 bg-card p-4 sm:p-5">
       <SeletorContrato contratos={contratos} valor={contratoId} onChange={selecionarContrato} carregando={lista.carregando} />
@@ -197,7 +199,7 @@ export default function AtividadesPage() {
       </nav>}
     </section>
     {focoPreviaContrato && contratoId && <PreviaContrato contratoId={contratoId} foco={focoPreviaContrato} fechar={() => setFocoPreviaContrato(null)} />}
-    {aberto && !editandoId && contratoId && <ModalCadastroAtividade contratoId={contratoId} origem={origemModal}
+    {aberto && !editandoId && contratoId && <ModalCadastroAtividade estadoContextual={contextoContrato} contratoId={contratoId} origem={origemModal}
       onFechar={fecharFormulario} onSalvo={async () => { setMensagem('Atividade registrada com sucesso.'); await diario.atualizar(); }} />}
     {aberto && Boolean(editandoId) && createPortal(<ModalEtapa titulo={editandoId ? 'Editar atividade' : 'Nova atividade'} contexto="Diário de execução"
       ocupado={salvando} formularioLongo focoRetorno={origemModal} onFechar={fecharFormulario} rotuloFechar="Fechar formulário de atividade">
@@ -207,9 +209,9 @@ export default function AtividadesPage() {
         <div><label htmlFor="atividade-titulo" className="block text-sm font-medium">Título *</label>
           <input id="atividade-titulo" required maxLength={255} value={form.titulo} onChange={e => setForm(p => ({ ...p, titulo: e.target.value }))} className={CAMPO} aria-invalid={Boolean(errosCampos.titulo)} />
           {errosCampos.titulo && <p className="mt-1 text-xs text-error-text">{errosCampos.titulo}</p>}</div>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 lg:grid-cols-2">
           <div><label htmlFor="atividade-data" className="block text-sm font-medium">Data e hora *</label>
-            <input id="atividade-data" required type="datetime-local" value={form.dataHora} onChange={e => setForm(p => ({ ...p, dataHora: e.target.value }))} className={CAMPO} aria-invalid={Boolean(errosCampos.dataHora)} />
+            <input id="atividade-data" required type="datetime-local" lang="pt-BR" value={form.dataHora} onChange={e => setForm(p => ({ ...p, dataHora: e.target.value }))} className={`${CAMPO} tec08-data-hora`} aria-invalid={Boolean(errosCampos.dataHora)} />
             {errosCampos.dataHora && <p className="mt-1 text-xs text-error-text">{errosCampos.dataHora}</p>}</div>
           <div><label htmlFor="atividade-tipo" className="block text-sm font-medium">Tipo *</label>
             <select id="atividade-tipo" value={form.tipo} onChange={e => setForm(p => ({ ...p, tipo: e.target.value as FormularioAtividade['tipo'] }))} className={CAMPO}>

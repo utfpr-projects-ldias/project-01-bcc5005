@@ -294,7 +294,7 @@ test('abas de entregáveis não movem a geometria quando arquivados estiver vazi
 test('card usa checklist esperado imediatamente, mesmo antes de carregar o resumo documental', () => {
   const checklist = [{ id: 'qa-prevista', tipoEvidencia: 'Relatório', descricao: 'Checklist', obrigatoria: true }];
   render(<EntregaveisDaEtapa {...props} dados={[{ ...e, evidenciasEsperadas: checklist }]} />);
-  expect(screen.getByRole('link', { name: 'Relatório de instalação' })).toHaveTextContent('0/1 evidência esperada');
+  expect(screen.getByRole('link', { name: 'Relatório de instalação' })).toHaveTextContent('0/1 evidência obrigatória');
   expect(screen.queryByText('Consultando comprovação...')).not.toBeInTheDocument();
 });
 
@@ -388,7 +388,7 @@ test('evidência opcional verificada não promove status operacional nem modal a
     documental={{ [e.id]: { obrigatorias: 0, verificadas: 0, total: 1, verificadasTotal: 1 } }} />);
   const link = screen.getByRole('link', { name: e.nome });
   expect(link).not.toHaveClass('border-violet-500/65');
-  expect(link).toHaveTextContent('Comprovação documental completa');
+  expect(link).not.toHaveTextContent('Comprovação documental completa');
   fireEvent.click(link);
   expect(screen.getByRole('dialog', { name: e.nome })).not.toHaveClass('border-violet-500/45');
 });

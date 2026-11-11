@@ -212,6 +212,7 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
   if (!dados) return <p role="alert" className="text-sm text-error-text">{erro || 'Evidência indisponível.'}</p>;
   const ultima = dados.versoes[0];
   const arquivada = Boolean(dados.arquivadoEm || dados.entregavelArquivadoEm);
+  const estadoProprio = estadoVisualEvidencia(dados.status, dados.reabertoEm, arquivada);
   const confirmacaoArquivo = confirmandoArquivo && <div role="alertdialog" aria-label="Confirmar arquivamento da evidência"
     className="space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
     <p>Arquivar esta evidência? Os comprovantes enviados serão preservados. Você poderá reativá-la em Arquivadas.</p>
@@ -246,7 +247,7 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
       </form>
     </section>
   </ModalEtapa>, document.body);
-  return <><div className="space-y-3" data-testid="painel-comprovacao-evidencia" data-evidencia-estado={estadoVisualEvidencia(dados.status, dados.reabertoEm, arquivada)} data-tec08-painel-evidencia>
+  return <><div className="space-y-3" data-testid="painel-comprovacao-evidencia" data-evidencia-estado={estadoProprio} data-tec08-painel-evidencia>
     <div className="flex items-center gap-2">
       <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${CLASSE_STATUS[dados.status]}`}
         data-testid="status-verificacao">{ROTULO_STATUS[dados.status]}</span>
@@ -300,7 +301,7 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
     </div>
     {!editando && confirmacaoArquivo}
     {arquivada && <p role="status" className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-200">Evidência arquivada. Arquivos e histórico disponíveis para consulta.</p>}
-    <details data-tec08-historico-evidencia aria-label="Histórico da evidência" className="group rounded-xl border border-brand-green/20 bg-brand-darkgreen/5 p-3 sm:p-4">
+    <details data-tec08-secao-filho data-tec08-estado={estadoProprio} data-tec08-historico-evidencia aria-label="Histórico da evidência" className="group rounded-xl border border-brand-green/20 bg-brand-darkgreen/5 p-3 sm:p-4">
       <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 focus-visible:outline-2 focus-visible:outline-brand-neon [&::-webkit-details-marker]:hidden">
         <span className="inline-flex items-center gap-2 text-sm font-semibold text-brand-neon"><svg aria-hidden="true" className="h-4 w-4 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 5 7 7-7 7"/></svg>Rastreabilidade da evidência</span>
         <span className="text-xs text-foreground/60">{dados.historico?.length ?? 0} eventos · expandir histórico</span>
@@ -321,13 +322,13 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
         <ul className="mt-3 space-y-2">{dados.versoes.slice(1).map(v => <li key={v.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-brand-green/15 pt-2 text-xs">
           <div className="min-w-0"><p className="break-all font-semibold">{nomeArquivoLegivel(v.nomeOriginal)}</p>
             <p className="text-foreground/60">{new Date(v.criadoEm).toLocaleString('pt-BR')} · {ROTULO_STATUS[v.status]}</p></div>
-          <button type="button" onClick={() => void baixar(v)} className="rounded-lg border border-brand-green/40 px-3 py-1.5">Baixar versão</button>
+          <button data-pi-acao="secundaria" type="button" onClick={() => void baixar(v)} className="rounded-lg border border-brand-green/40 px-3 py-1.5">Baixar versão</button>
         </li>)}</ul>
       </details>}
       </div>
     </details>
     <section aria-label="Comprovação da evidência" className="space-y-2">
-      <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-brand-green/20 bg-brand-darkgreen/5 p-3">
+      <div data-tec08-secao-filho data-tec08-estado={estadoProprio} className="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-brand-green/20 bg-brand-darkgreen/5 p-3">
         {anexoInline && arquivoEdicao && !ultima && podeEnviar && !arquivada ?
           <form data-tec08-formulario-contextual aria-label="Anexar comprovante" onSubmit={e => void enviarPrimeiroComprovante(e)}
             className="flex min-w-0 w-full flex-wrap items-center gap-2">
@@ -357,7 +358,7 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
               {ultima ? <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2 2 0 0 0-3-3l-11 11L4 20Z"/></svg> :
                 <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m20 11.5-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l9.9-9.9a3.7 3.7 0 0 1 5.3 5.3l-10 10a1.8 1.8 0 0 1-2.6-2.6l8.8-8.8"/></svg>}
             </button>}
-            {ultima && <button type="button" aria-label="Baixar comprovante" title="Baixar comprovante" onClick={() => void baixar(ultima)}
+            {ultima && <button data-pi-acao="secundaria" type="button" aria-label="Baixar comprovante" title="Baixar comprovante" onClick={() => void baixar(ultima)}
               className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-brand-green/30 hover:bg-brand-green/10 focus-visible:outline-2 focus-visible:outline-brand-neon">
               <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 17v3h14v-3"/></svg>
             </button>}

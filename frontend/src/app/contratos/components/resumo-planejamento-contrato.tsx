@@ -37,13 +37,13 @@ export function ResumoPlanejamentoContrato({ contratoId, variante = 'carteira', 
   const pronto = habilitado && !erro && Array.isArray(etapas.dados) && Array.isArray(entregaveis.dados) && Boolean(documental.dados);
   const indicadores = pronto ? calcularIndicadoresContrato(contratoId, etapas.dados!, entregaveis.dados!, documental.dados!) : null;
   const evidenciaAtiva = pronto ? entregaveis.dados!.filter(e => e.contratoId === contratoId && !e.arquivadoEm && etapas.dados!.some(et => et.id === e.etapaId && !et.arquivadoEm)) : [];
-  const evidenciasEsperadas = evidenciaAtiva.reduce((s, e) => s + e.evidenciasEsperadas.filter(ev => !ev.arquivadoEm).length, 0);
-  const evidenciasVerificadas = evidenciaAtiva.reduce((s, e) => s + (documental.dados?.[e.id]?.verificadasTotal ?? 0), 0);
+  const evidenciasEsperadas = evidenciaAtiva.reduce((s, e) => s + e.evidenciasEsperadas.filter(ev => !ev.arquivadoEm && ev.obrigatoria !== false).length, 0);
+  const evidenciasVerificadas = evidenciaAtiva.reduce((s, e) => s + (documental.dados?.[e.id]?.verificadas ?? 0), 0);
   const detalhe = variante === 'detalhe';
   const progresso = [
     { nome: 'Etapas', valor: indicadores?.etapas.concluidas ?? 0, total: indicadores?.etapas.total ?? 0, rotulo: `${indicadores?.etapas.concluidas ?? 0} de ${indicadores?.etapas.total ?? 0} etapas concluídas e comprovadas` },
     { nome: 'Entregáveis', valor: indicadores?.entregaveis.concluidos ?? 0, total: indicadores?.entregaveis.total ?? 0, rotulo: `${indicadores?.entregaveis.concluidos ?? 0} de ${indicadores?.entregaveis.total ?? 0} entregáveis documentalmente comprovados` },
-    { nome: 'Evidências', valor: evidenciasVerificadas, total: evidenciasEsperadas, rotulo: `${evidenciasVerificadas} de ${evidenciasEsperadas} evidências verificadas` },
+    { nome: 'Evidências', valor: evidenciasVerificadas, total: evidenciasEsperadas, rotulo: `${evidenciasVerificadas} de ${evidenciasEsperadas} evidências obrigatórias verificadas` },
   ];
   const borda = contratoArquivado ? 'border-amber-500/35' : contratoCancelado ? 'border-red-500/45' : contratoSuspenso ? 'border-amber-500/45' : contratoEncerrado ? 'border-slate-500/45' : contratoConcluido ? 'border-violet-500/45' : contratoEmRevisao ? 'border-teal-700/45' : 'border-brand-green/25';
   const cor = contratoArquivado ? '#fbbf24' : contratoCancelado ? '#ef4444' : contratoSuspenso ? '#ca8a04' : contratoEncerrado ? '#94a3b8' : contratoConcluido ? '#a78bfa' : contratoEmRevisao ? '#0d9488' : '#5fd34a';

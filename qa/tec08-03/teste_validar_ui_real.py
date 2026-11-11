@@ -28,7 +28,7 @@ class TesteQATec0803(unittest.TestCase):
         self.assertIn('role="img" aria-label={rotulo}', resumo)
         self.assertIn('etapas concluídas e comprovadas', resumo)
         self.assertIn('entregáveis documentalmente comprovados', resumo)
-        self.assertIn('evidências verificadas', resumo)
+        self.assertIn('evidências obrigatórias verificadas', resumo)
         self.assertIn("get_by_role('tab', name='Todos os contratos')", qa)
         self.assertIn("locator('#campo-busca').select_option('todos')", qa)
         self.assertIn("get_by_role('searchbox', name='Pesquisar contrato')", qa)
@@ -37,7 +37,7 @@ class TesteQATec0803(unittest.TestCase):
         self.assertIn("get_by_role('img', name=rotulo, exact=True)", qa)
         for rotulo in ('0 de 1 etapas concluídas e comprovadas',
                        '0 de 1 entregáveis documentalmente comprovados',
-                       '0 de 1 evidências verificadas'):
+                       '0 de 1 evidências obrigatórias verificadas'):
             self.assertIn(rotulo, qa)
         for obsoleto in ('Buscar por código, número, órgão ou objeto',
                          'ul.space-y-4 > li', 'progress[aria-label',
@@ -201,7 +201,7 @@ class TesteQATec0803(unittest.TestCase):
         self.assertLess(bloco.index(visivel), bloco.index(filtro))
         # A preferencia por categoria persiste, mas nao muda a aba da UI.
         pagina = (ui.RAIZ / 'frontend/src/app/contratos/[id]/page.tsx').read_text(encoding='utf-8')
-        self.assertIn("useState<'visao' | 'etapas' | 'atividades' | 'documentos'>('visao')", pagina)
+        self.assertIn("useState<'visao' | 'etapas' | 'atividades' | 'ocorrencias' | 'documentos'>('visao')", pagina)
 
     def test_qa_ativa_abas_de_etapas_e_documentos_por_perfil(self):
         codigo = Path(ui.__file__).read_text(encoding='utf-8')
@@ -235,7 +235,7 @@ class TesteQATec0803(unittest.TestCase):
         self.assertIn('modal_item.wait_for', fonte)
         self.assertIn("get_by_role('region', name='Detalhe da evidência esperada')", fonte)
         self.assertIn("get_by_text('Aguardando envio', exact=True)", fonte)
-        self.assertIn("get_by_text('0/1 evidências esperadas', exact=True)", fonte)
+        self.assertIn("get_by_text('0/1 evidências obrigatórias verificadas', exact=True)", fonte)
         self.assertIn('HU07: etapa/entregável criados por UI', fonte)
         componente = ui.RAIZ / 'frontend/src/app/contratos/components/entregaveis-da-etapa.tsx'
         self.assertIn('__modalEntregavel', componente.read_text(encoding='utf-8'))

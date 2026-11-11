@@ -1354,7 +1354,7 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
   :is(#conteudo-principal,[data-tec08-modal]) button[aria-busy="true"]::after { animation: none; border-right-color: #fff; }
 }
 /* Os filtros do diario incorporado herdam a identidade do contrato/entregavel.
-   A acao "Nova atividade" e criacao: conserva o verde primario independente do pai. */
+   A ação de criação recebe a identidade contextual no Patch 26. */
 [data-tec08-atividades-contrato] {
   border-color: color-mix(in srgb, var(--tec08-status-border, #5fd34a) 25%, transparent);
 }
@@ -1408,5 +1408,441 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
 [data-tec08-atividades-contrato] [aria-label="Situação das atividades"] [role="tab"]:focus-visible,
 [aria-label="Conteúdo do entregável"] [role="tab"]:focus-visible {
   outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+/* Patch 25 — cores SEMÂNTICAS por objeto. Cada registro informa seu próprio
+   estado; não reutilizar o estado do contrato para os filhos. O esquema usa
+   borda, fundo, texto, foco e hover com o mesmo token. */
+:is(.contrato-detalhe-documental, [data-tec08-entidade="modal"],
+  [data-tec08-contexto-operacional], [data-tec08-secao-filho],
+  [data-tec08-secao-contextual])[data-tec08-estado="normal"],
+[data-etapa-estado="normal"], [data-entregavel-estado="normal"],
+[data-evidencia-estado="normal"], [data-atividade-estado="REGISTRADA"] {
+  --pi-cor-propria: #5fd34a;
+  --pi-texto-proprio: #86ef73;
+}
+:is(.contrato-detalhe-documental, [data-tec08-entidade="modal"],
+  [data-tec08-contexto-operacional], [data-tec08-secao-filho],
+  [data-tec08-secao-contextual])[data-tec08-estado="andamento"],
+[data-ocorrencia-estado="EM_ANDAMENTO"] {
+  --pi-cor-propria: #789446;
+  --pi-texto-proprio: #b8d28a;
+}
+:is(.contrato-detalhe-documental, [data-tec08-entidade="modal"],
+  [data-tec08-contexto-operacional], [data-tec08-secao-filho],
+  [data-tec08-secao-contextual])[data-tec08-estado="revisao"],
+[data-etapa-estado="reaberta"], [data-entregavel-estado="revisao"],
+[data-evidencia-estado="revisao"] {
+  --pi-cor-propria: #14b8a6;
+  --pi-texto-proprio: #99f6e4;
+}
+:is(.contrato-detalhe-documental, [data-tec08-entidade="modal"],
+  [data-tec08-contexto-operacional], [data-tec08-secao-filho],
+  [data-tec08-secao-contextual])[data-tec08-estado="concluido"],
+[data-etapa-estado="concluida"], [data-entregavel-estado="concluido"],
+[data-evidencia-estado="concluido"], [data-atividade-estado="VERIFICADA"],
+[data-ocorrencia-estado="CONCLUIDO"] {
+  --pi-cor-propria: #a78bfa;
+  --pi-texto-proprio: #c4b5fd;
+}
+:is(.contrato-detalhe-documental, [data-tec08-entidade="modal"],
+  [data-tec08-contexto-operacional], [data-tec08-secao-filho],
+  [data-tec08-secao-contextual])[data-tec08-estado="pendente"],
+:is(.contrato-detalhe-documental, [data-tec08-entidade="modal"],
+  [data-tec08-contexto-operacional], [data-tec08-secao-filho],
+  [data-tec08-secao-contextual])[data-tec08-estado="suspenso"],
+[data-evidencia-estado="pendente"] {
+  --pi-cor-propria: #eab308;
+  --pi-texto-proprio: #fde047;
+}
+:is(.contrato-detalhe-documental, [data-tec08-entidade="modal"],
+  [data-tec08-contexto-operacional], [data-tec08-secao-filho],
+  [data-tec08-secao-contextual])[data-tec08-estado="arquivado"],
+[data-etapa-estado="arquivada"], [data-entregavel-estado="arquivado"],
+[data-evidencia-estado="arquivado"], [data-atividade-estado="ARQUIVADA"] {
+  --pi-cor-propria: #d97706;
+  --pi-texto-proprio: #fcd34d;
+}
+:is(.contrato-detalhe-documental, [data-tec08-entidade="modal"],
+  [data-tec08-contexto-operacional], [data-tec08-secao-filho],
+  [data-tec08-secao-contextual])[data-tec08-estado="cancelado"] {
+  --pi-cor-propria: #ef4444;
+  --pi-texto-proprio: #fca5a5;
+}
+:is(.contrato-detalhe-documental, [data-tec08-entidade="modal"],
+  [data-tec08-contexto-operacional], [data-tec08-secao-filho],
+  [data-tec08-secao-contextual])[data-tec08-estado="encerrado"],
+[data-etapa-estado="encerrada"] {
+  --pi-cor-propria: #64748b;
+  --pi-texto-proprio: #cbd5e1;
+}
+/* Fundos das cinco abas e seções do contrato: estado do contrato, não do filho. */
+.contrato-detalhe-documental[data-tec08-estado] [data-tec08-aba-contrato],
+.contrato-detalhe-documental[data-tec08-estado] [data-tec08-secao-contrato] {
+  border: 1px solid color-mix(in srgb, var(--pi-cor-propria) 38%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria) 5%, var(--bg-primary)) !important;
+  border-radius: .85rem;
+}
+.contrato-detalhe-documental[data-tec08-estado] [data-tec08-secao-contrato] {
+  padding: .75rem;
+}
+.contrato-detalhe-documental[data-tec08-estado] [data-tec08-secao-contrato] > :is(h2,h3),
+.contrato-detalhe-documental[data-tec08-estado] [data-tec08-secao-contrato] > details > summary {
+  color: var(--pi-texto-proprio) !important;
+}
+/* Títulos e superfícies das abas permanecem no estado do contrato;
+   filhos com data-tec08-estado recalculam suas variáveis semanticamente. */
+.contrato-detalhe-documental[data-tec08-estado] [data-tec08-aba-contrato] {
+  min-width: 0;
+  padding: clamp(.7rem, 1.5vw, 1.15rem);
+}
+.contrato-detalhe-documental[data-tec08-estado] [data-tec08-aba-contrato] > :is(h2,h3),
+.contrato-detalhe-documental[data-tec08-estado] [data-tec08-aba-contrato] > section:not([data-tec08-estado]) > :is(h2,h3) {
+  color: var(--pi-texto-proprio);
+}
+/* Stage, deliverable, evidence and diary card override the parent status. */
+[data-etapa-estado], [data-entregavel-estado] > a,
+[data-evidencia-estado][data-tec08-card-evidencia],
+[data-atividade-estado], [data-ocorrencia-estado] > button {
+  border-color: color-mix(in srgb, var(--pi-cor-propria) 64%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria) 7%, var(--bg-primary)) !important;
+  box-shadow: none;
+}
+[data-etapa-estado]:hover, [data-entregavel-estado] > a:hover,
+[data-evidencia-estado][data-tec08-card-evidencia]:hover,
+[data-atividade-estado]:hover, [data-atividade-estado]:focus-within,
+[data-ocorrencia-estado] > button:hover, [data-ocorrencia-estado] > button:focus-visible {
+  border-color: var(--pi-cor-propria) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria) 11%, var(--bg-primary)) !important;
+  outline-color: var(--pi-cor-propria) !important;
+}
+[data-etapa-estado] button[aria-label^="Abrir detalhes da etapa"] > span:first-child > span:first-child {
+  color: var(--pi-texto-proprio) !important;
+}
+/* Provas e histórico de cada evidência seguem seu estado, inclusive verificada. */
+[data-tec08-painel-evidencia][data-evidencia-estado] [data-tec08-secao-filho] {
+  border-color: color-mix(in srgb, var(--pi-cor-propria) 48%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria) 6%, var(--bg-primary)) !important;
+}
+[data-tec08-painel-evidencia][data-evidencia-estado] [data-tec08-secao-filho] > :is(summary,h2,h3),
+[data-tec08-painel-evidencia][data-evidencia-estado] [data-tec08-secao-filho] > summary > span:first-child,
+[data-tec08-painel-evidencia][data-evidencia-estado] [data-tec08-secao-filho] :is(button,a):not([data-tec08-decisao]):not(.text-error-text):hover {
+  color: var(--pi-texto-proprio) !important;
+}
+/* Seções dentro do modal: o estado do modal rege sua própria moldura, porém
+   uma seção filha com estado declarado prevalece sobre a cor do modal-pai. */
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado] {
+  border-color: color-mix(in srgb, var(--pi-cor-propria) 74%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria) 3%, var(--bg-primary)) !important;
+}
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado] > header {
+  border-color: color-mix(in srgb, var(--pi-cor-propria) 42%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria) 7%, var(--bg-primary)) !important;
+}
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado] > header h2 {
+  color: var(--pi-texto-proprio) !important;
+}
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado] [data-tec08-secao-contextual] {
+  border-color: color-mix(in srgb, var(--pi-cor-propria) 45%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria) 6%, var(--bg-primary)) !important;
+}
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado] [data-tec08-secao-contextual][data-tec08-estado] {
+  border-color: color-mix(in srgb, var(--pi-cor-propria) 58%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria) 7%, var(--bg-primary)) !important;
+}
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado] [data-tec08-secao-contextual][data-tec08-estado] > :is(h2,h3) {
+  color: var(--pi-texto-proprio) !important;
+}
+/* A base do input de data/hora deve admitir o relógio em 12h do Firefox
+   sem cortar AM/PM nem deslocar o ícone do calendário. */
+.tec08-data-hora {
+  box-sizing: border-box;
+  display: block;
+  min-width: 0;
+  width: 100%;
+  min-height: 2.8rem;
+  padding-inline: .6rem;
+  font-variant-numeric: tabular-nums;
+}
+@media (min-width: 640px) and (max-width: 899px) {
+  .tec08-data-hora { font-size: .8125rem; padding-inline: .35rem; }
+  .tec08-data-hora::-webkit-calendar-picker-indicator { margin-inline-start: 0; }
+}
+@media (prefers-color-scheme: light) {
+  :is([data-atividade-estado="VERIFICADA"], [data-etapa-estado="concluida"], [data-evidencia-estado="concluido"], [data-entregavel-estado="concluido"]) {
+    --pi-texto-proprio: #5b21b6;
+  }
+  :is([data-atividade-estado="ARQUIVADA"], [data-etapa-estado="arquivada"], [data-evidencia-estado="arquivado"], [data-entregavel-estado="arquivado"]) {
+    --pi-texto-proprio: #854d0e;
+  }
+  :is(.contrato-detalhe-documental, [data-tec08-entidade="modal"], [data-tec08-secao-contextual])[data-tec08-estado="suspenso"] { --pi-texto-proprio: #854d0e; }
+  :is(.contrato-detalhe-documental, [data-tec08-entidade="modal"], [data-tec08-secao-contextual])[data-tec08-estado="revisao"] { --pi-texto-proprio: #0f766e; }
+  :is(.contrato-detalhe-documental, [data-tec08-entidade="modal"], [data-tec08-secao-contextual])[data-tec08-estado="concluido"] { --pi-texto-proprio: #5b21b6; }
+}
+
+
+/* Patch 26 — superfícies e ações neutras seguem o estado local, nunca o ancestral.
+   Ações semânticas (verificar, reabrir, arquivar, excluir) não são marcadas aqui. */
+[data-tec08-estado="normal"],
+[data-etapa-estado="normal"],
+[data-entregavel-estado="normal"],
+[data-evidencia-estado="normal"],
+[data-atividade-estado="REGISTRADA"],
+:root {
+  --pi-cor-propria: #5fd34a !important;
+  --pi-texto-proprio: #166534 !important;
+  --pi-acao-bg: #166534;
+  --pi-acao-fg: #ffffff;
+  --pi-acao-hover: #15803d;
+  --tec08-status-heading: var(--pi-texto-proprio) !important;
+  --tec08-status-border: var(--pi-cor-propria) !important;
+  --tec08-status-bg: var(--pi-acao-bg) !important;
+  --tec08-status-fg: var(--pi-acao-fg) !important;
+  --tec08-status-hover: var(--pi-acao-hover) !important;
+}
+@media (prefers-color-scheme: dark) {
+[data-tec08-estado="normal"],
+[data-etapa-estado="normal"],
+[data-entregavel-estado="normal"],
+[data-evidencia-estado="normal"],
+[data-atividade-estado="REGISTRADA"],
+:root { --pi-texto-proprio: #86ef73 !important; }
+}
+[data-tec08-estado="nao-iniciado"],
+[data-ocorrencia-estado="NAO_INICIADO"] {
+  --pi-cor-propria: #a3a3a3 !important;
+  --pi-texto-proprio: #404040 !important;
+  --pi-acao-bg: #e5e5e5;
+  --pi-acao-fg: #171717;
+  --pi-acao-hover: #f5f5f5;
+  --tec08-status-heading: var(--pi-texto-proprio) !important;
+  --tec08-status-border: var(--pi-cor-propria) !important;
+  --tec08-status-bg: var(--pi-acao-bg) !important;
+  --tec08-status-fg: var(--pi-acao-fg) !important;
+  --tec08-status-hover: var(--pi-acao-hover) !important;
+}
+@media (prefers-color-scheme: dark) {
+[data-tec08-estado="nao-iniciado"],
+[data-ocorrencia-estado="NAO_INICIADO"] { --pi-texto-proprio: #f5f5f5 !important; }
+}
+[data-tec08-estado="andamento"],
+[data-ocorrencia-estado="EM_ANDAMENTO"] {
+  --pi-cor-propria: #789446 !important;
+  --pi-texto-proprio: #486129 !important;
+  --pi-acao-bg: #486129;
+  --pi-acao-fg: #ffffff;
+  --pi-acao-hover: #587337;
+  --tec08-status-heading: var(--pi-texto-proprio) !important;
+  --tec08-status-border: var(--pi-cor-propria) !important;
+  --tec08-status-bg: var(--pi-acao-bg) !important;
+  --tec08-status-fg: var(--pi-acao-fg) !important;
+  --tec08-status-hover: var(--pi-acao-hover) !important;
+}
+@media (prefers-color-scheme: dark) {
+[data-tec08-estado="andamento"],
+[data-ocorrencia-estado="EM_ANDAMENTO"] { --pi-texto-proprio: #b8d28a !important; }
+}
+[data-tec08-estado="revisao"],
+[data-etapa-estado="reaberta"],
+[data-entregavel-estado="revisao"],
+[data-evidencia-estado="revisao"] {
+  --pi-cor-propria: #14b8a6 !important;
+  --pi-texto-proprio: #0f766e !important;
+  --pi-acao-bg: #0f766e;
+  --pi-acao-fg: #ffffff;
+  --pi-acao-hover: #0d9488;
+  --tec08-status-heading: var(--pi-texto-proprio) !important;
+  --tec08-status-border: var(--pi-cor-propria) !important;
+  --tec08-status-bg: var(--pi-acao-bg) !important;
+  --tec08-status-fg: var(--pi-acao-fg) !important;
+  --tec08-status-hover: var(--pi-acao-hover) !important;
+}
+@media (prefers-color-scheme: dark) {
+[data-tec08-estado="revisao"],
+[data-etapa-estado="reaberta"],
+[data-entregavel-estado="revisao"],
+[data-evidencia-estado="revisao"] { --pi-texto-proprio: #99f6e4 !important; }
+}
+[data-tec08-estado="concluido"],
+[data-etapa-estado="concluida"],
+[data-entregavel-estado="concluido"],
+[data-evidencia-estado="concluido"],
+[data-atividade-estado="VERIFICADA"],
+[data-ocorrencia-estado="CONCLUIDO"] {
+  --pi-cor-propria: #a78bfa !important;
+  --pi-texto-proprio: #5b21b6 !important;
+  --pi-acao-bg: #6d28d9;
+  --pi-acao-fg: #ffffff;
+  --pi-acao-hover: #7c3aed;
+  --tec08-status-heading: var(--pi-texto-proprio) !important;
+  --tec08-status-border: var(--pi-cor-propria) !important;
+  --tec08-status-bg: var(--pi-acao-bg) !important;
+  --tec08-status-fg: var(--pi-acao-fg) !important;
+  --tec08-status-hover: var(--pi-acao-hover) !important;
+}
+@media (prefers-color-scheme: dark) {
+[data-tec08-estado="concluido"],
+[data-etapa-estado="concluida"],
+[data-entregavel-estado="concluido"],
+[data-evidencia-estado="concluido"],
+[data-atividade-estado="VERIFICADA"],
+[data-ocorrencia-estado="CONCLUIDO"] { --pi-texto-proprio: #c4b5fd !important; }
+}
+[data-tec08-estado="pendente"],
+[data-evidencia-estado="pendente"],
+[data-tec08-estado="suspenso"] {
+  --pi-cor-propria: #eab308 !important;
+  --pi-texto-proprio: #854d0e !important;
+  --pi-acao-bg: #854d0e;
+  --pi-acao-fg: #ffffff;
+  --pi-acao-hover: #a16207;
+  --tec08-status-heading: var(--pi-texto-proprio) !important;
+  --tec08-status-border: var(--pi-cor-propria) !important;
+  --tec08-status-bg: var(--pi-acao-bg) !important;
+  --tec08-status-fg: var(--pi-acao-fg) !important;
+  --tec08-status-hover: var(--pi-acao-hover) !important;
+}
+@media (prefers-color-scheme: dark) {
+[data-tec08-estado="pendente"],
+[data-evidencia-estado="pendente"],
+[data-tec08-estado="suspenso"] { --pi-texto-proprio: #fde047 !important; }
+}
+[data-tec08-estado="arquivado"],
+[data-etapa-estado="arquivada"],
+[data-entregavel-estado="arquivado"],
+[data-evidencia-estado="arquivado"],
+[data-atividade-estado="ARQUIVADA"] {
+  --pi-cor-propria: #d97706 !important;
+  --pi-texto-proprio: #854d0e !important;
+  --pi-acao-bg: #92400e;
+  --pi-acao-fg: #ffffff;
+  --pi-acao-hover: #b45309;
+  --tec08-status-heading: var(--pi-texto-proprio) !important;
+  --tec08-status-border: var(--pi-cor-propria) !important;
+  --tec08-status-bg: var(--pi-acao-bg) !important;
+  --tec08-status-fg: var(--pi-acao-fg) !important;
+  --tec08-status-hover: var(--pi-acao-hover) !important;
+}
+@media (prefers-color-scheme: dark) {
+[data-tec08-estado="arquivado"],
+[data-etapa-estado="arquivada"],
+[data-entregavel-estado="arquivado"],
+[data-evidencia-estado="arquivado"],
+[data-atividade-estado="ARQUIVADA"] { --pi-texto-proprio: #fcd34d !important; }
+}
+[data-tec08-estado="cancelado"] {
+  --pi-cor-propria: #ef4444 !important;
+  --pi-texto-proprio: #991b1b !important;
+  --pi-acao-bg: #991b1b;
+  --pi-acao-fg: #ffffff;
+  --pi-acao-hover: #b91c1c;
+  --tec08-status-heading: var(--pi-texto-proprio) !important;
+  --tec08-status-border: var(--pi-cor-propria) !important;
+  --tec08-status-bg: var(--pi-acao-bg) !important;
+  --tec08-status-fg: var(--pi-acao-fg) !important;
+  --tec08-status-hover: var(--pi-acao-hover) !important;
+}
+@media (prefers-color-scheme: dark) {
+[data-tec08-estado="cancelado"] { --pi-texto-proprio: #fca5a5 !important; }
+}
+[data-tec08-estado="encerrado"],
+[data-etapa-estado="encerrada"] {
+  --pi-cor-propria: #64748b !important;
+  --pi-texto-proprio: #334155 !important;
+  --pi-acao-bg: #334155;
+  --pi-acao-fg: #ffffff;
+  --pi-acao-hover: #475569;
+  --tec08-status-heading: var(--pi-texto-proprio) !important;
+  --tec08-status-border: var(--pi-cor-propria) !important;
+  --tec08-status-bg: var(--pi-acao-bg) !important;
+  --tec08-status-fg: var(--pi-acao-fg) !important;
+  --tec08-status-hover: var(--pi-acao-hover) !important;
+}
+@media (prefers-color-scheme: dark) {
+[data-tec08-estado="encerrado"],
+[data-etapa-estado="encerrada"] { --pi-texto-proprio: #cbd5e1 !important; }
+}
+
+[data-pi-painel-contextual], [data-pi-superficie], [data-pi-documento] {
+  border-color: color-mix(in srgb, var(--pi-cor-propria) 48%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria) 5%, var(--bg-primary)) !important;
+}
+[data-pi-documento]:hover, [data-pi-documento]:focus-within {
+  border-color: var(--pi-cor-propria) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria) 9%, var(--bg-primary)) !important;
+}
+[data-pi-titulo], [data-pi-painel-contextual] [data-tec08-titulo-secao-atividades] {
+  color: var(--pi-texto-proprio) !important;
+}
+:is([data-pi-painel-contextual], [data-pi-formulario]) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, fieldset) {
+  border-color: color-mix(in srgb, var(--pi-cor-propria) 50%, transparent) !important;
+}
+:is([data-pi-painel-contextual], [data-pi-formulario]) :is(input, select, textarea):focus-visible {
+  outline-color: var(--pi-cor-propria) !important;
+  --tw-ring-color: var(--pi-cor-propria) !important;
+}
+[data-pi-linha-tempo] { border-color: var(--pi-cor-propria) !important; }
+[data-pi-linha-tempo]::before { background-color: var(--pi-cor-propria) !important; }
+[data-pi-linha-tempo] > li::before { border-color: var(--pi-cor-propria) !important; }
+/* Especificidade deliberada: estes botões são marcados explicitamente e não
+   devem receber o verde fixo de regras anteriores de modais ou contratos. */
+[data-pi-acao="primaria"][data-pi-acao="primaria"]:not(:disabled),
+:is([data-tec08-estado], [data-evidencia-estado]) [data-pi-acao="primaria"]:not(:disabled) {
+  background-color: var(--pi-acao-bg) !important;
+  border-color: var(--pi-cor-propria) !important;
+  color: var(--pi-acao-fg) !important;
+  outline-color: var(--pi-cor-propria) !important;
+  box-shadow: none;
+}
+[data-pi-acao="primaria"][data-pi-acao="primaria"]:not(:disabled):hover,
+:is([data-tec08-estado], [data-evidencia-estado]) [data-pi-acao="primaria"]:not(:disabled):hover {
+  background-color: var(--pi-acao-hover) !important;
+}
+[data-pi-acao="secundaria"][data-pi-acao="secundaria"]:not(:disabled),
+:is([data-tec08-estado], [data-evidencia-estado]) [data-pi-acao="secundaria"]:not(:disabled) {
+  background-color: color-mix(in srgb, var(--pi-cor-propria) 4%, var(--bg-primary)) !important;
+  border-color: color-mix(in srgb, var(--pi-cor-propria) 60%, transparent) !important;
+  color: var(--pi-texto-proprio) !important;
+  outline-color: var(--pi-cor-propria) !important;
+  box-shadow: none;
+}
+[data-pi-acao="secundaria"][data-pi-acao="secundaria"]:not(:disabled):hover,
+:is([data-tec08-estado], [data-evidencia-estado]) [data-pi-acao="secundaria"]:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--pi-cor-propria) 14%, var(--bg-primary)) !important;
+  border-color: var(--pi-cor-propria) !important;
+}
+[data-ocorrencia-estado] > button > span:first-child > span,
+[data-ocorrencia-estado] > button > span:last-child {
+  color: var(--pi-texto-proprio) !important;
+}
+[data-ocorrencia-estado] > button > span:first-child > span:last-child {
+  border-color: color-mix(in srgb, var(--pi-cor-propria) 55%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria) 12%, var(--bg-primary)) !important;
+}
+
+/* O botão de fechar também usa o estado local, sem o cinza fixo anterior. */
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado] > header button[data-pi-acao="secundaria"]:not(:disabled) {
+  border-color: color-mix(in srgb, var(--pi-cor-propria) 60%, transparent) !important;
+  color: var(--pi-texto-proprio) !important;
+}
+
+
+/* Patch 27: filtros das etapas seguem o contrato, não uma borda verde fixa.
+ * Os cartões e modais filhos continuam com seus próprios tokens. */
+[data-pi-painel-contextual][data-tec08-estado] [data-pi-etapas-filtros][role="tablist"] {
+  border-color: color-mix(in srgb, var(--pi-cor-propria) 48%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria) 5%, var(--bg-primary)) !important;
+}
+[data-pi-etapas-filtros][role="tablist"] > button[role="tab"][aria-selected="true"]:not([aria-label*="arquivad"]) {
+  background-color: var(--pi-acao-bg) !important;
+  color: var(--pi-acao-fg) !important;
+  border-color: var(--pi-cor-propria) !important;
+}
+[data-pi-etapas-filtros][role="tablist"] > button[role="tab"][aria-selected="false"]:not([aria-label*="arquivad"]):hover {
+  background-color: color-mix(in srgb, var(--pi-cor-propria) 12%, transparent) !important;
+}
+[data-pi-etapas-filtros][role="tablist"] > button[role="tab"]:focus-visible {
+  outline: 2px solid var(--pi-cor-propria) !important;
   outline-offset: 2px;
 }

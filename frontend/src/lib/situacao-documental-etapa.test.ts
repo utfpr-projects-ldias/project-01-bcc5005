@@ -20,14 +20,14 @@ test('nao transforma ausencia de consulta em falta de comprovacao', () => {
   expect(situacaoDocumentalEtapa(etapa, [], {})).toBe('EM_ANDAMENTO');
 });
 
-test('evidência opcional também conclui a APRESENTAÇÃO documental quando todas estiverem verificadas', () => {
+test('evidência opcional isolada não conclui comprovação documental', () => {
   const opcionalVerificada = { entregavel: { obrigatorias: 0, verificadas: 0, total: 1, verificadasTotal: 1 } };
   expect(situacaoDocumentalEtapa(etapa, [entregavel], opcionalVerificada)).toBe('EM_ANDAMENTO');
   const opcionalPendente = { entregavel: { obrigatorias: 0, verificadas: 0, total: 1, verificadasTotal: 0 } };
   expect(situacaoDocumentalEtapa(etapa, [entregavel], opcionalPendente)).toBe('EM_ANDAMENTO');
 });
 
-test('todas as evidências ativas contam: obrigatória verificada com opcional pendente ainda não é completa', () => {
+test('obrigatória verificada permite conclusão documental mesmo com opcional pendente', () => {
   expect(situacaoDocumentalEtapa(etapa, [entregavel], {
     entregavel: { obrigatorias: 1, verificadas: 1, total: 2, verificadasTotal: 1 },
   })).toBe('EM_ANDAMENTO');
@@ -49,7 +49,7 @@ test('entregável reaberto não é considerado documentalmente concluído', () =
 test('reabrir etapa não reabre entregável e contrato continua documentalmente pendente', () => {
   const e = { ...entregavel, etapaId:'etapa', arquivadoEm:null, reabertoEm:null } as Entregavel;
   const etapaReaberta = { ...etapa, arquivadoEm:null, reabertoEm:'2026-11-06T15:00:00Z' } as Etapa;
-  expect(entregavelDocumentalmenteConcluido(e, { total:1, verificadasTotal:1 } as never)).toBe(true);
+  expect(entregavelDocumentalmenteConcluido(e, { obrigatorias:1, verificadas:1, total:1, verificadasTotal:1 } as never)).toBe(true);
   expect(contratoDocumentalmenteConcluido({reabertoEm:null}, [etapaReaberta], [e],
     { [e.id]: { total:1, verificadasTotal:1 } as never })).toBe(false);
 });
@@ -69,7 +69,7 @@ import { etapaPodeSerConcluida } from './situacao-documental-etapa';
 test('etapa não oferece Concluir quando entregável está em revisão, mesmo com 100% das evidências', () => {
   const filho = { ...entregavel, etapaId: etapa.id, statusExecucao:'EM_ANDAMENTO',
     reabertoEm:'2026-11-07T01:00:00Z', arquivadoEm:null,
-    evidenciasEsperadas:[{id:'e1', arquivadoEm:null, reabertoEm:null}] } as Entregavel;
+    evidenciasEsperadas:[{id:'e1', arquivadoEm:null, reabertoEm:null, obrigatoria:true}] } as Entregavel;
   expect(etapaPodeSerConcluida(etapa, [filho], {
     [filho.id]: {total:1,verificadasTotal:1,obrigatorias:1,verificadas:1},
   })).toBe(false);
@@ -77,7 +77,7 @@ test('etapa não oferece Concluir quando entregável está em revisão, mesmo co
 
 test('etapa só oferece Concluir se os filhos foram reconcluídos e nenhuma evidência continua em revisão', () => {
   const filho = { ...entregavel, etapaId: etapa.id, statusExecucao:'CONCLUIDO', reabertoEm:null,
-    arquivadoEm:null, evidenciasEsperadas:[{id:'e1', arquivadoEm:null, reabertoEm:null}] } as Entregavel;
+    arquivadoEm:null, evidenciasEsperadas:[{id:'e1', arquivadoEm:null, reabertoEm:null, obrigatoria:true}] } as Entregavel;
   const resumo = { [filho.id]: {total:1,verificadasTotal:1,obrigatorias:1,verificadas:1} };
   expect(etapaPodeSerConcluida(etapa, [filho], resumo)).toBe(true);
   expect(etapaPodeSerConcluida(etapa, [{ ...filho, evidenciasEsperadas:[{...filho.evidenciasEsperadas[0], reabertoEm:'2026-11-07T01:20:00Z'}] }], resumo)).toBe(false);
@@ -90,4 +90,21 @@ test('etapa só exibe Concluída quando cada entregável ativo está concluído,
   const concluida = { ...etapa, status: 'CONCLUIDA' as const };
   expect(situacaoDocumentalEtapa(concluida, [ativa, arquivada], resumoCompleto)).toBe('CONCLUIDA');
   expect(situacaoDocumentalEtapa(concluida, [{ ...ativa, statusExecucao: 'EM_ANDAMENTO' }], resumoCompleto)).toBe('EM_ANDAMENTO');
+});
+
+test('opcional sem comprovante não bloqueia obrigatória já verificada', () => {
+  expect(entregavelDocumentalmenteConcluido({ reabertoEm: null }, { obrigatorias: 1, verificadas: 1, total: 2, verificadasTotal: 1 })).toBe(true);
+  expect(entregavelDocumentalmenteConcluido({ reabertoEm: null }, { obrigatorias: 1, verificadas: 0, total: 2, verificadasTotal: 1 })).toBe(false);
+});
+
+
+test('conclusão da etapa exige obrigatória verificada, mas ignora opcional reaberta', () => {
+  const filho = { ...entregavel, etapaId: etapa.id, statusExecucao: 'CONCLUIDO', reabertoEm: null,
+    arquivadoEm: null, evidenciasEsperadas: [
+      { id: 'req', arquivadoEm: null, reabertoEm: null, obrigatoria: true },
+      { id: 'opc', arquivadoEm: null, reabertoEm: '2026-11-11T02:00:00Z', obrigatoria: false },
+    ] } as Entregavel;
+  expect(etapaPodeSerConcluida(etapa, [filho], { [filho.id]: {
+    obrigatorias: 1, verificadas: 1, total: 2, verificadasTotal: 1,
+  } })).toBe(true);
 });

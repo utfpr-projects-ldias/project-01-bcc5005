@@ -311,13 +311,13 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, da
           </div>
           {(() => {
             const resumo = documental?.[e.id];
-            const total = resumo?.total ?? e.evidenciasEsperadas.length;
-            const verificadas = resumo?.verificadasTotal ?? 0;
+            const total = resumo?.obrigatorias ?? e.evidenciasEsperadas.filter(ev => !ev.arquivadoEm && ev.obrigatoria !== false).length;
+            const verificadas = resumo?.verificadas ?? 0;
             return <div className="mt-2 space-y-1.5">
               <div className={`flex flex-wrap items-center justify-between gap-2 text-xs ${e.reabertoEm ? 'text-teal-200/85' : completo ? 'text-foreground/80' : 'text-foreground/65'}`}>
-                <span>{`${verificadas}/${total} ${total === 1 ? 'evidência esperada' : 'evidências esperadas'}`}{comprovacaoSemConclusao ? ' · Comprovação documental completa' : ''}</span>
+                <span>{`${verificadas}/${total} ${total === 1 ? 'evidência obrigatória' : 'evidências obrigatórias'}`}{comprovacaoSemConclusao ? ' · Comprovação documental completa' : ''}</span>
               </div>
-              {total > 0 && <div role="img" aria-label={`${verificadas} de ${total} evidências previstas verificadas; não representa execução física`}
+              {total > 0 && <div role="img" aria-label={`${verificadas} de ${total} evidências obrigatórias verificadas; não representa execução física`}
                 className="flex h-1.5 max-w-56 gap-0.5 overflow-hidden rounded-full">
                 {Array.from({ length: total }, (_, index) => <span key={index} data-tec08-progresso-preenchido={index < verificadas ? "true" : "false"}
                   className={`min-w-0 flex-1 rounded-sm ${index < verificadas ? e.reabertoEm || (paiEmRevisao && !completo) ? 'tec08-progresso-comprovacao bg-teal-600' : 'bg-violet-500' : e.reabertoEm ? 'bg-teal-900/30' : 'bg-violet-500/15'}`} />)}
