@@ -201,7 +201,9 @@ class TesteQATec0803(unittest.TestCase):
         self.assertLess(bloco.index(visivel), bloco.index(filtro))
         # A preferencia por categoria persiste, mas nao muda a aba da UI.
         pagina = (ui.RAIZ / 'frontend/src/app/contratos/[id]/page.tsx').read_text(encoding='utf-8')
-        self.assertIn("useState<'visao' | 'etapas' | 'atividades' | 'ocorrencias' | 'documentos'>('visao')", pagina)
+        self.assertIn("useState<'visao' | 'execucao' | 'etapas' | 'atividades' | 'documentos'>('visao')", pagina)
+        self.assertIn('id="painel-execucao"', pagina)
+        self.assertIn('id="painel-documentos"', pagina)
 
     def test_qa_ativa_abas_de_etapas_e_documentos_por_perfil(self):
         codigo = Path(ui.__file__).read_text(encoding='utf-8')

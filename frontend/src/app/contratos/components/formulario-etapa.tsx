@@ -72,7 +72,7 @@ export function FormularioEtapa({ inicial, onSalvar, onCancelar, onSalvandoMudou
           onChange={(e) => mudar('nome', e.target.value)} />{mensagem('nome')}</div>
     </div>
     <div><label htmlFor="etapa-descricao" className="mb-1 block text-sm font-medium">Descrição</label>
-      <textarea id="etapa-descricao" rows={3} className={campoClasse} value={dados.descricao ?? ''}
+      <textarea id="etapa-descricao" maxLength={3000} rows={3} className={campoClasse} value={dados.descricao ?? ''}
         onChange={(e) => mudar('descricao', e.target.value || null)} />{mensagem('descricao')}</div>
     <div className="grid gap-4 md:grid-cols-3">
       <div><label htmlFor="etapa-inicioPrevisto" className="mb-1 block text-sm font-medium">Início previsto</label>
@@ -89,7 +89,7 @@ export function FormularioEtapa({ inicial, onSalvar, onCancelar, onSalvandoMudou
         </select>{mensagem('status')}</div>
     </div>
     <div><label htmlFor="etapa-observacoes" className="mb-1 block text-sm font-medium">Observações</label>
-      <textarea id="etapa-observacoes" rows={2} className={campoClasse} value={dados.observacoes ?? ''}
+      <textarea id="etapa-observacoes" maxLength={3000} rows={2} className={campoClasse} value={dados.observacoes ?? ''}
         onChange={(e) => mudar('observacoes', e.target.value || null)} />{mensagem('observacoes')}</div>
     {erroGeral && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-error-text">{erroGeral}</p>}
     <div className="flex flex-wrap justify-end gap-2">

@@ -37,6 +37,11 @@ export class AtualizarOcorrenciaDto {
 
   @IsOptional()
   @IsString()
+  @Matches(/^\d{1,15}(?:\.\d{1,3})?$/)
+  metaQuantidade?: string | null;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(3000)
   observacoes?: string | null;
 }

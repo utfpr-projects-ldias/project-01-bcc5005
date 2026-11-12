@@ -134,3 +134,28 @@ test('vínculo sem acesso de edição não herda escrita no diário, mas aceita 
   expect(delegado.registrarAtividades).toBe(true);
   expect(delegado.editarAtividades).toBe(false);
 });
+
+
+describe('Patch24 — competências independentes de planejamento, peso e recorrência', () => {
+  it('editar entregável não libera peso nem replanejamento quando negados explicitamente', () => {
+    const p = permissoesEfetivas('GESTOR', true, {
+      editarEntregaveis: true, configurarPesos: false,
+      configurarAgendaOcorrencias: false, editarOcorrencias: false,
+    });
+    expect(p.editarEntregaveis).toBe(true);
+    expect(p.configurarPesos).toBe(false);
+    expect(p.configurarAgendaOcorrencias).toBe(false);
+    expect(p.editarOcorrencias).toBe(false);
+  });
+  it('concede editar uma ocorrência sem conferir direito de configurar a agenda', () => {
+    const p = permissoesEfetivas('COLABORADOR', false, {
+      editarOcorrencias: true, editarEntregaveis: false,
+      configurarAgendaOcorrencias: false, configurarPesos: false,
+    });
+    expect(p.editarOcorrencias).toBe(true);
+    expect(p.configurarAgendaOcorrencias).toBe(false);
+    expect(p.editarEntregaveis).toBe(false);
+    expect(ACAO_PERMISSAO['ocorrencias:replanejar']).toBe('configurarAgendaOcorrencias');
+    expect(ACAO_PERMISSAO['pesos:atualizar']).toBe('configurarPesos');
+  });
+});

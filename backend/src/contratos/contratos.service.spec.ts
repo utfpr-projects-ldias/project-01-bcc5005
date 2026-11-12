@@ -108,7 +108,7 @@ function montarCenario() {
 
   const manager = {
     getRepository: jest.fn(() => repositorio),
-    query: jest.fn(async () => [{ numero: 428 }]),
+    query: jest.fn(async (sql: string) => /FROM ocorrencias o|FROM entregaveis e JOIN etapas et/.test(sql) ? [] : [{ numero: 428 }]),
   } as unknown as EntityManager;
 
   const auditoria = {

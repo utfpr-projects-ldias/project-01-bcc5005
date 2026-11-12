@@ -1,3 +1,4 @@
+import { aptidaoFisicaParaConclusao } from './conclusao-fisica.js';
 import { normalizarNomeArquivo } from '../armazenamento/nome-arquivo.js';
 import { createHash } from 'node:crypto';
 import {
@@ -55,7 +56,7 @@ export class EvidenciasRecebidasService {
 
   }
   private validarPlanejamentoAtivo(entregavel: Entregavel, esperada: EvidenciaEsperada): void {
-    if (entregavel.statusExecucao === 'CONCLUIDO') throw new ConflictException('Entregável concluído: reabra antes de alterar evidências');
+    if (['CONCLUIDO','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(entregavel.statusExecucao ?? '')) throw new ConflictException('Entregável concluído: reabra antes de alterar evidências');
     if (entregavel.arquivadoEm || esperada.arquivadoEm)
       throw new ConflictException('Item arquivado: reative-o antes de enviar, editar ou verificar comprovantes');
   }
@@ -190,8 +191,10 @@ export class EvidenciasRecebidasService {
       if (!e) throw new NotFoundException('Entregável não encontrado neste contrato');
       if (e.arquivadoEm) throw new ConflictException('Entregável arquivado');
       await this.etapaAtiva(m, e);
-      if (e.reabertoEm === null && await documentacaoVerificada(m, contratoId, e.etapaId, entregavelId))
-        throw new ConflictException('Entregável verificado: reabra antes de cadastrar outra evidência');
+      // Evidências previamente verificadas não fecham automaticamente o planejamento.
+      // Apenas o estado explícito CONCLUIDO/FINALIZADO bloqueia uma nova exigência.
+      if (['CONCLUIDO', 'FINALIZADO', 'PENDENTE_CONCLUSAO', 'PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? ''))
+        throw new ConflictException('Entregável fechado ou aguardando aprovação: reabra antes de cadastrar outra evidência');
       if (dto.obrigatoria === false && !await this.alterarObrigatoriedadePermitido(m, contratoId, ator))
         throw new ForbiddenException('Somente Administrador ou usuário delegado pode cadastrar evidência opcional');
       const repo = m.getRepository(EvidenciaEsperada);
@@ -328,7 +331,8 @@ export class EvidenciasRecebidasService {
     if (!entregavel.arquivadoEm &&
         (entregavel.statusExecucao !== StatusExecucaoEntregavel.CONCLUIDO || entregavel.reabertoEm) &&
         await documentacaoVerificada(m, contratoId, entregavel.etapaId, entregavel.id) &&
-        !await atividadesPendentesDeVerificacao(m, contratoId, null, entregavel.id)) {
+        !await atividadesPendentesDeVerificacao(m, contratoId, null, entregavel.id) &&
+        (await aptidaoFisicaParaConclusao(m, entregavel)).apto) {
       const anterior = entregavel.statusExecucao;
       const reabertoAntes = entregavel.reabertoEm ?? null;
       entregavel.statusExecucao = StatusExecucaoEntregavel.CONCLUIDO;

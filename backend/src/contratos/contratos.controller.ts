@@ -73,6 +73,11 @@ export class ContratosController {
     return this.contratos.consultarAcesso(id, req.usuarioDominio!);
   }
 
+  @Post(':id/impacto-vigencia')
+  @ExigirPolitica('contratos:editar', 'id')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
+  impacto(@Param('id') id: string, @Body() dto: AtualizarContratoDto) { return this.contratos.consultarImpactoVigencia(id, dto); }
+
   @Patch(':id')
   @ExigirPolitica('contratos:editar', 'id')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
@@ -94,6 +99,13 @@ export class ContratosController {
   @ExigirPolitica('contratos:concluir', 'id')
   concluir(@Param('id') id: string, @Req() req: RequisicaoAutorizada) {
     return this.contratos.concluir(id, req.usuarioDominio!);
+  }
+
+  @Patch(':id/finalizar')
+  @ExigirPolitica('contratos:concluir', 'id')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
+  finalizar(@Param('id') id: string, @Body() dto: JustificativaDecisaoDto, @Req() req: RequisicaoAutorizada) {
+    return this.contratos.finalizar(id, dto.motivo, req.usuarioDominio!);
   }
 
   /** Encerramento excepcional com pendências preservadas e justificativa auditável. */

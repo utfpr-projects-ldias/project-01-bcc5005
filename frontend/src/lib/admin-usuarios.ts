@@ -30,11 +30,19 @@ export type OperacaoPermissao =
   'criarEntregaveis' | 'editarEntregaveis' | 'arquivarEntregaveis' | 'reativarEntregaveis' | 'reabrirEntregaveis' | 'concluirEntregaveis' | 'excluirEntregaveisArquivados' |
   'criarEvidencias' | 'editarEvidencias' | 'arquivarEvidencias' | 'reativarEvidencias' | 'reabrirEvidencias' | 'excluirEvidenciasArquivadas' |
   'alterarObrigatoriedade' | 'enviarComprovantes' | 'verificarComprovantes' |
+  'criarOcorrencias' | 'editarOcorrencias' | 'concluirOcorrencias' | 'reabrirOcorrencias' | 'configurarAgendaOcorrencias' | 'editarExecucaoFisica' | 'configurarPesos' |
   'registrarAtividades' | 'editarAtividades' | 'verificarAtividades' | 'reabrirAtividades' | 'arquivarAtividades' | 'reativarAtividades' | 'excluirAtividadesArquivadas' |
   'editarContrato' | 'concluirContrato' | 'encerrarContrato' | 'reabrirContrato' | 'cancelarContrato' | 'reverterCancelamentoContrato' | 'suspenderContrato' | 'retomarContrato' | 'verificarDocumentos' | 'reabrirDocumentos' | 'verificarDocumentoPrincipal' | 'reabrirDocumentoPrincipal' | 'anexarDocumentos' | 'editarDocumentos' | 'arquivarDocumentos' | 'reativarDocumentos' | 'excluirDocumentosArquivados' | 'arquivarDocumentoPrincipal' | 'reativarDocumentoPrincipal' | 'excluirDocumentoPrincipal';
 export type PermissaoFuncionario = { contratoId: string; podeEditar: boolean;
   permissoesDetalhadas?: Partial<Record<OperacaoPermissao, boolean>> | null };
 export const OPERACOES_CONTRATO: ReadonlyArray<{ chave: OperacaoPermissao; rotulo: string }> = [
+  { chave: 'criarOcorrencias', rotulo: 'Cadastrar ocorrências' },
+  { chave: 'editarOcorrencias', rotulo: 'Editar ocorrências abertas' },
+  { chave: 'concluirOcorrencias', rotulo: 'Aprovar conclusão de ocorrências (especial)' },
+  { chave: 'reabrirOcorrencias', rotulo: 'Reabrir ocorrências aprovadas ou pendentes (especial)' },
+  { chave: 'configurarAgendaOcorrencias', rotulo: 'Gerar e replanejar agenda recorrente' },
+  { chave: 'editarExecucaoFisica', rotulo: 'Editar valores de execução física' },
+  { chave: 'configurarPesos', rotulo: 'Configurar pesos operacionais' },
   { chave: 'registrarAtividades', rotulo: 'Registrar atividades no diário' },
   { chave: 'editarAtividades', rotulo: 'Editar atividades registradas' },
   { chave: 'verificarAtividades', rotulo: 'Verificar atividades (especial)' },
@@ -118,6 +126,7 @@ export function permissoesPadraoVinculo(
   // Acesso de edição padrão: planejar, ordenar e arquivar. Reativação, exclusão,
   // bloqueio da ordem e gestão do documento principal requerem delegação especial.
   const operacoesBasicas: OperacaoPermissao[] = [
+    'criarOcorrencias', 'editarOcorrencias', 'configurarAgendaOcorrencias', 'editarExecucaoFisica',
     'registrarAtividades', 'editarAtividades',
     'criarEtapas', 'editarEtapas', 'reordenarEtapas', 'arquivarEtapas',
     'criarEntregaveis', 'editarEntregaveis', 'arquivarEntregaveis',

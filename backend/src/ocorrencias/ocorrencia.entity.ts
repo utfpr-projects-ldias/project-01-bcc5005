@@ -60,7 +60,7 @@ import { StatusOcorrencia } from './status-ocorrencia.enum.js';
   ['entregavelId', 'periodoInicio', 'periodoFim'],
   {
     unique: true,
-    where: `"origem" = 'RECORRENTE'`,
+    where: `"origem" = 'RECORRENTE' AND "substituida_em" IS NULL`,
   },
 )
 @Check('ck_ocorrencias_titulo_nao_vazio', 'length(btrim("titulo")) > 0')
@@ -207,6 +207,28 @@ export class Ocorrencia {
   })
   quantidadeRealizada!: string | null;
 
+  /** Encerramento administrativo não representa realização física ou aprovação de quantidade. */
+  @Column({ name: 'motivo_encerramento', type: 'text', nullable: true })
+  motivoEncerramento!: string | null;
+
+  @Column({ name: 'encerrada_em', type: 'timestamptz', nullable: true })
+  encerradaEm!: Date | null;
+
+  @Column({ name: 'encerrada_por', type: 'uuid', nullable: true })
+  encerradaPor!: string | null;
+
+  /** Meta quantitativa fixada no planejamento; execução das atividades não sobrescreve a meta. */
+  @Column({ name: 'meta_quantidade', type: 'numeric', precision: 18, scale: 3, nullable: true })
+  metaQuantidade!: string | null;
+
+  /** Registro mensurável por quantidade ou execução apenas descritiva. */
+  @Column({ name: 'modo_registro', type: 'varchar', length: 16, default: 'DESCRITIVO' })
+  modoRegistro!: 'QUANTITATIVO' | 'DESCRITIVO';
+
+  /** Snapshot da quantidade aprovada; histórico protegido de edições comuns. */
+  @Column({ name: 'quantidade_aprovada', type: 'numeric', precision: 18, scale: 3, nullable: true })
+  quantidadeAprovada!: string | null;
+
   /**
    * Observações operacionais da ocorrência.
    */
@@ -215,6 +237,9 @@ export class Ocorrencia {
     nullable: true,
   })
   observacoes!: string | null;
+
+  @Column({ name: 'substituida_em', type: 'timestamptz', nullable: true })
+  substituidaEm!: Date | null;
 
   /**
    * Identifica a origem da ocorrência.

@@ -13,9 +13,16 @@ export const atividadeSchema = z.object({
   descricao: obrigatorio('Descrição', 5000),
   responsavel: opcional('Responsável', 255),
   duracao: opcional('Duração', 80),
-  participantes: opcional('Participantes', 2000),
+  participantes: opcional('Participantes', 2000).superRefine((valor, ctx) => {
+    const pessoas = valor.split(',').map(p => p.trim()).filter(Boolean);
+    if (pessoas.length > 20) ctx.addIssue({ code: 'custom', message: 'Informe no máximo 20 participantes.' });
+    if (pessoas.some(p => p.length > 100)) ctx.addIssue({ code: 'custom', message: 'Cada participante pode ter até 100 caracteres.' });
+  }),
   local: opcional('Local', 255),
   observacoes: opcional('Observações', 5000),
+  ocorrenciaId: z.string().uuid().nullable().optional(),
+  ocorrenciaIds: z.array(z.string().uuid()).refine(ids => new Set(ids).size === ids.length, 'Ocorrências repetidas.').optional(),
+  quantidadeExecucao: z.string().regex(/^\d{1,15}(?:\.\d{1,3})?$/, 'Informe uma quantidade válida.').nullable().optional(),
   entregavelIds: z.array(z.string().uuid()).min(1, 'Selecione pelo menos um entregável.')
     .refine(ids => new Set(ids.map(id => id.toLowerCase())).size === ids.length, 'Entregáveis repetidos.'),
 });

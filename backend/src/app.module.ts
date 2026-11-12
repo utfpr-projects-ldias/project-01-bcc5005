@@ -13,6 +13,7 @@ import { EtapasModule } from './etapas/etapas.module.js';
 import { EntregaveisModule } from './entregaveis/entregaveis.module.js';
 import { DocumentosModule } from './documentos/documentos.module.js';
 import { AtividadesModule } from './atividades/atividades.module.js';
+import { ExecucaoModule } from './execucao/execucao.module.js';
 import { OcorrenciasModule } from './ocorrencias/ocorrencias.module.js';
 
 @Module({
@@ -31,6 +32,7 @@ import { OcorrenciasModule } from './ocorrencias/ocorrencias.module.js';
     EtapasModule,
     EntregaveisModule,
     OcorrenciasModule,
+    ExecucaoModule,
     DocumentosModule,
     AtividadesModule,
   ],

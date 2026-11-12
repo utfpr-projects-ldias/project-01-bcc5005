@@ -43,6 +43,27 @@ export class AtividadesController {
     return this.atividades.update(contratoId, id, dto, req.usuarioDominio!);
   }
 
+  @Post(':id/solicitar-conclusao')
+  @ExigirPoliticaOperacional('atividades:editar', { tipo: 'recurso', recurso: 'atividade', parametro: 'id', parametroContratoPai: 'contratoId' })
+  solicitarConclusao(@Param('contratoId') contratoId: string, @Param('id') id: string,
+    @Req() req: RequisicaoAutorizada) {
+    return this.atividades.solicitarConclusao(contratoId, id, req.usuarioDominio!);
+  }
+
+  @Post(':id/cancelar-solicitacao')
+  @ExigirPoliticaOperacional('atividades:editar', { tipo: 'recurso', recurso: 'atividade', parametro: 'id', parametroContratoPai: 'contratoId' })
+  cancelarSolicitacao(@Param('contratoId') contratoId: string, @Param('id') id: string,
+    @Body() dto: TransicaoAtividadeDto, @Req() req: RequisicaoAutorizada) {
+    return this.atividades.cancelarSolicitacao(contratoId, id, req.usuarioDominio!, dto.justificativa ?? '');
+  }
+
+  @Post(':id/aprovar-conclusao')
+  @ExigirPoliticaOperacional('atividades:verificar', { tipo: 'recurso', recurso: 'atividade', parametro: 'id', parametroContratoPai: 'contratoId' })
+  aprovarConclusao(@Param('contratoId') contratoId: string, @Param('id') id: string,
+    @Body() dto: TransicaoAtividadeDto, @Req() req: RequisicaoAutorizada) {
+    return this.atividades.verificar(contratoId, id, req.usuarioDominio!, dto.justificativa ?? '');
+  }
+
   @Post(':id/verificar')
   @ExigirPoliticaOperacional('atividades:verificar', { tipo: 'recurso', recurso: 'atividade', parametro: 'id', parametroContratoPai: 'contratoId' })
   verificar(@Param('contratoId') contratoId: string, @Param('id') id: string,

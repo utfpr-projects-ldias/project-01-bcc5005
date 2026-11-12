@@ -285,21 +285,21 @@ test('contrato encerrado informa ao design system estado cinza nas abas e açõe
   expect(aba.closest('.contrato-detalhe-documental')).toHaveAttribute('data-tec08-estado', 'encerrado');
 });
 
-test('aba Ocorrências fica imediatamente após Atividades e mantém escopo do contrato', () => {
+test('aba Execução reúne Geral e Ocorrências mantendo o escopo do contrato', () => {
   render(<DetalheContratoPage />);
   const abas = Array.from(screen.getByRole('tablist', { name: 'Seções do contrato' }).querySelectorAll('[role="tab"]'));
-  const atividades = abas.findIndex(aba => aba.textContent?.includes('Atividades'));
-  expect(atividades).toBeGreaterThan(-1);
-  expect(abas[atividades + 1]).toHaveTextContent('Ocorrências');
+  expect(abas.some(aba => aba.textContent?.includes('Execução'))).toBe(true);
+  expect(abas.some(aba => aba.textContent?.includes('Ocorrências'))).toBe(false);
+  fireEvent.click(screen.getByRole('tab', { name: 'Execução' }));
   fireEvent.click(screen.getByRole('tab', { name: 'Ocorrências' }));
   expect(screen.getByTestId('painel-ocorrencias')).toHaveTextContent('contrato-real');
 });
 
-
-test('ícones das cinco abas do contrato nunca renderizam rect/path fora de SVG', () => {
+test('ícones das abas do contrato nunca renderizam rect/path fora de SVG', () => {
   render(<DetalheContratoPage />);
   const abas = screen.getByRole('tablist', { name: 'Seções do contrato' });
   expect(within(abas).getAllByRole('tab')).toHaveLength(5);
+  expect(within(abas).getByRole('tab', { name: 'Execução' })).toBeInTheDocument();
   abas.querySelectorAll('rect, path').forEach(el => {
     expect(el.closest('svg')).not.toBeNull();
     expect(el.namespaceURI).toBe('http://www.w3.org/2000/svg');

@@ -24,8 +24,8 @@ export type Entregavel = {
   unidadeMedida: string | null; periodicidade: PeriodicidadeEntregavel | null;
   configuracaoPeriodicidade: { versao: 1 } | null;
   peso: string | null; criterioConclusao: string | null;
-  statusExecucao: 'NAO_INICIADO' | 'EM_ANDAMENTO' | 'CONCLUIDO' | null;
-  percentualExecucao: string | null;
+  statusExecucao: 'NAO_INICIADO' | 'EM_ANDAMENTO' | 'PENDENTE_CONCLUSAO' | 'PENDENTE_ENCERRAMENTO' | 'CONCLUIDO' | 'FINALIZADO' | null;
+  motivoFinalizacao?: string | null; percentualExecucao: string | null;
   situacaoComprovacao: 'SEM_EVIDENCIA' | 'EVIDENCIA_PARCIAL' | 'COMPROVADO' | null;
   observacoes: string | null; arquivadoEm?: string | null; reabertoEm?: string | null; evidenciasEsperadas: EvidenciaEsperada[];
 };
@@ -126,6 +126,18 @@ export const editarEntregavel = (contratoId: string, id: string, dados: Partial<
   alterarEntregavel<Entregavel>(`${base(contratoId)}/${encodeURIComponent(id)}`, 'PATCH', dados);
 
 /** Conclusão explícita de entregável, validada pelo backend e auditada na transação. */
+/** Solicitação e aprovação de encerramento administrativo não alteram o avanço físico. */
+export async function transicaoAdministrativaEntregavel(c: string, id: string,
+  acao: 'solicitar-conclusao' | 'solicitar-encerramento' | 'aprovar-encerramento', motivo?: string): Promise<Entregavel> {
+  const resposta = await fetch(`${API}${base(c)}/${encodeURIComponent(id)}/${acao}`, {
+    method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(motivo ? { motivo } : {}),
+  });
+  if (!resposta.ok) { const texto = await resposta.json().catch(() => null);
+    throw new ErroEntregavel(resposta.status, typeof texto?.message === 'string' ? texto.message : 'A operação não foi autorizada ou os requisitos ainda não foram cumpridos.'); }
+  return await resposta.json() as Entregavel;
+}
+
 export async function concluirEntregavel(contratoId: string, id: string): Promise<Entregavel> {
   let resposta: Response;
   try {

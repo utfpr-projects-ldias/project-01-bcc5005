@@ -11,7 +11,7 @@ OK=0; ERRO=0
 
 verificar_origem() {
   case "$(git branch --show-current 2>/dev/null)" in
-    tec-08|tec-08-04-05|tec-08--04-05|tec-08-05--01-ajustes) ;;
+    tec-08|tec-08-04-05|tec-08--04-05|tec-08-05--01-ajustes|hu09-tec09-ajustes) ;;
     *) echo 'BLOQUEIO: branch nao autorizada para este QA.' >&2; return 3 ;;
   esac
   if ! git merge-base --is-ancestor '3eeed69ccb1af2b069cb38ef0563c7b45354072b' HEAD; then
@@ -99,6 +99,11 @@ case "$MODO" in
       python3 -m unittest discover -s qa/tec08-03 -p 'teste_validar_ui_real.py' -v
     passo 'Regressões Python dos roteiros QA históricos e atuais' 'qa-regressoes-historicas' \
       python3 qa/tec08-04-05/testar_roteiros.py
+    passo 'HU09/TEC09: motor, replanejamento e vínculos' 'hu09-tec09-jest' \
+      docker compose exec -T backend npm test -- --runInBand --runTestsByPath \
+      src/execucao/motor-progresso.spec.ts src/execucao/execucao.service.spec.ts \
+      src/ocorrencias/replanejamento.service.spec.ts src/atividades/atividade-ocorrencia.spec.ts \
+      src/ocorrencias/ocorrencias-integracao-hu09.spec.ts src/database/1795600000000-ExecucaoFisicaTEC09.spec.ts
     passo 'Backend Jest: eventos, comprovantes e arquivamento' 'backend-jest-focal' \
       docker compose exec -T backend npm test -- --runInBand --runTestsByPath \
       src/atividades/atividades.hu08.spec.ts \

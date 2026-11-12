@@ -68,6 +68,13 @@ describe('HU09 — escopo persistido e limites seguros da recorrência', () => {
       .toThrow(BadRequestException);
   });
 
+  it('explica as datas do período incompleto sem alterar a política PQ-09/10', () => {
+    expect(() => calcularPeriodosRecorrentes('2026-01-01', '2026-01-10', PeriodicidadeEntregavel.SEMANAL))
+      .toThrow('08/01/2026 a 14/01/2026');
+    expect(() => calcularPeriodosRecorrentes('2026-01-01', '2026-01-10', PeriodicidadeEntregavel.SEMANAL))
+      .toThrow('10/01/2026');
+  });
+
   it('não produz períodos mensais ambíguos a partir de 29, 30 ou 31', () => {
     expect(() => calcularPeriodosRecorrentes('2026-01-31', '2026-04-30', PeriodicidadeEntregavel.MENSAL))
       .toThrow(BadRequestException);

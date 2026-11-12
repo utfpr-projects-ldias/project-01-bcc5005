@@ -16,7 +16,7 @@ function Progresso({ total, feitos, rotulo, amplo = false, arquivado = false, su
 }
 
 export function ResumoPlanejamentoContrato({ contratoId, variante = 'carteira', compactoNaLista = false, contratoArquivado = false, contratoSuspenso = false, contratoEmRevisao = false, contratoEncerrado = false, contratoConcluido = false, contratoCancelado = false }: {
-  contratoId: string; variante?: 'carteira' | 'detalhe'; compactoNaLista?: boolean; contratoArquivado?: boolean; contratoSuspenso?: boolean; contratoEmRevisao?: boolean; contratoEncerrado?: boolean; contratoConcluido?: boolean; contratoCancelado?: boolean;
+  contratoId: string; variante?: 'carteira' | 'detalhe' | 'lateral'; compactoNaLista?: boolean; contratoArquivado?: boolean; contratoSuspenso?: boolean; contratoEmRevisao?: boolean; contratoEncerrado?: boolean; contratoConcluido?: boolean; contratoCancelado?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [visivel, setVisivel] = useState(false);
@@ -39,7 +39,7 @@ export function ResumoPlanejamentoContrato({ contratoId, variante = 'carteira', 
   const evidenciaAtiva = pronto ? entregaveis.dados!.filter(e => e.contratoId === contratoId && !e.arquivadoEm && etapas.dados!.some(et => et.id === e.etapaId && !et.arquivadoEm)) : [];
   const evidenciasEsperadas = evidenciaAtiva.reduce((s, e) => s + e.evidenciasEsperadas.filter(ev => !ev.arquivadoEm && ev.obrigatoria !== false).length, 0);
   const evidenciasVerificadas = evidenciaAtiva.reduce((s, e) => s + (documental.dados?.[e.id]?.verificadas ?? 0), 0);
-  const detalhe = variante === 'detalhe';
+  const detalhe = variante !== 'carteira';
   const progresso = [
     { nome: 'Etapas', valor: indicadores?.etapas.concluidas ?? 0, total: indicadores?.etapas.total ?? 0, rotulo: `${indicadores?.etapas.concluidas ?? 0} de ${indicadores?.etapas.total ?? 0} etapas concluídas e comprovadas` },
     { nome: 'Entregáveis', valor: indicadores?.entregaveis.concluidos ?? 0, total: indicadores?.entregaveis.total ?? 0, rotulo: `${indicadores?.entregaveis.concluidos ?? 0} de ${indicadores?.entregaveis.total ?? 0} entregáveis documentalmente comprovados` },
@@ -58,7 +58,7 @@ export function ResumoPlanejamentoContrato({ contratoId, variante = 'carteira', 
   };
   return <div ref={ref} data-testid="resumo-planejamento-contrato"
     data-documental-completo={indicadores?.documentacaoCompleta ? 'true' : 'false'}
-    className={detalhe ? 'grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3' :
+    className={detalhe ? variante === 'lateral' ? 'grid min-w-0 grid-cols-1 gap-3' : 'grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3' :
       `mt-3 grid w-full max-w-[740px] min-w-0 grid-cols-3 items-start justify-start gap-2 border-t border-brand-green/15 pt-3 text-xs sm:gap-3 ${compactoNaLista ? 'lg:max-w-[650px]' : ''}`}>
     {erro ? <p role="status" className="col-span-full text-foreground/65">Indicadores indisponíveis.</p> :
     !indicadores ? <p role="status" className="col-span-full text-foreground/60">Consultando planejamento...</p> : detalhe ? <>

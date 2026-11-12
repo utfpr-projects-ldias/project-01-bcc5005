@@ -2,7 +2,7 @@ import { jest } from '@jest/globals';
 
 import type { QueryRunner } from 'typeorm';
 
-import { CriarOcorrenciasHU091795300000000 } from './migrations/1795300000000-CriarOcorrenciasHU09.js';
+import { CriarOcorrenciasHU091795300000000 } from './migrations/1795300000000-CriarOcorrencias.js';
 
 function capturar() {
   const sql: string[] = [];

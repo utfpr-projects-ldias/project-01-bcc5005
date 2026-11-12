@@ -1,3 +1,4 @@
+import { impactoVigencia } from '../ocorrencias/impacto-vigencia.js';
 import {
   BadRequestException,
   ForbiddenException,
@@ -376,7 +377,7 @@ export class ContratosService {
       if (!contrato) throw new NotFoundException('Contrato não encontrado');
       if (contrato.status === 'CANCELADO') throw new ConflictException('Contrato cancelado requer reversão específica antes de arquivar');
       if (contrato.status === 'SUSPENSO') throw new ConflictException('Retome o contrato suspenso antes de arquivar');
-      if (arquivar && ((contrato.status === 'CONCLUIDO' || contrato.status === 'ENCERRADO') ||
+      if (arquivar && ((['CONCLUIDO','ENCERRADO','FINALIZADO'].includes(contrato.status)) ||
         (contrato.reabertoEm === null && await documentacaoVerificada(manager, id))))
         throw new ConflictException('Contrato concluído: reabra antes de arquivar.');
       if (Boolean(contrato.arquivadoEm) === arquivar) {
@@ -403,7 +404,7 @@ export class ContratosService {
       const contrato = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!contrato) throw new NotFoundException('Contrato não encontrado');
       if (contrato.arquivadoEm) throw new ConflictException('Reative o contrato arquivado antes de concluir');
-      if (['CONCLUIDO', 'ENCERRADO'].includes(contrato.status) && !contrato.reabertoEm) throw new ConflictException('Contrato já possui decisão final');
+      if (['CONCLUIDO', 'ENCERRADO', 'FINALIZADO'].includes(contrato.status) && !contrato.reabertoEm) throw new ConflictException('Contrato já possui decisão final');
       if (contrato.reabertoEm) throw new ConflictException('Encerre a revisão antes de concluir o contrato');
       if (contrato.status === 'SUSPENSO' || contrato.status === 'CANCELADO')
         throw new ConflictException('Contrato suspenso ou cancelado não pode ser concluído');
@@ -439,6 +440,49 @@ export class ContratosService {
         entidadeId: id, dadosAnteriores: anterior,
         dadosPosteriores: { status: salvo.status, reabertoEm: null, motivo: 'CONCLUSAO_EXPLICITA' },
       }};
+    });
+  }
+
+  /** Fechamento administrativo após resolver todos os filhos.
+   * Status FINALIZADO não altera o avanço físico real, obtido pela TEC09. */
+  async finalizar(id: string, motivo: string, ator: UsuarioAutenticado): Promise<Contrato> {
+    const justificativa = motivo?.trim() ?? '';
+    if (justificativa.length < 15 || justificativa.length > 200)
+      throw new BadRequestException('Justifique a finalização parcial (15 a 200 caracteres)');
+    return this.auditoria.executarComAuditoria(ator, async manager => {
+      const contrato = await manager.findOne(Contrato, { where: { id }, lock: { mode: 'pessimistic_write' } });
+      if (!contrato || contrato.arquivadoEm) throw new NotFoundException('Contrato indisponível');
+      if (!['PLANEJAMENTO','EM_EXECUCAO','EM_ENCERRAMENTO'].includes(contrato.status))
+        throw new ConflictException('Contrato já encerrado, suspenso ou cancelado');
+      if (ator.perfil !== PerfilUsuario.ADMINISTRADOR) {
+        const v = await manager.findOneBy(PermissaoContrato, { contratoId: id, usuarioId: ator.id });
+        if (!v || !permissoesEfetivas(ator.perfil, v.podeEditar, v.permissoesDetalhadas).concluirContrato)
+          throw new ForbiddenException('Sem permissão para finalizar contrato');
+      }
+      const pendencias = await manager.query(`
+        SELECT
+          EXISTS(SELECT 1 FROM etapas WHERE contrato_id=$1 AND arquivado_em IS NULL
+                 AND status NOT IN ('CONCLUIDA','FINALIZADA')) AS etapa_pendente,
+          EXISTS(SELECT 1 FROM entregaveis WHERE contrato_id=$1 AND arquivado_em IS NULL
+                 AND status_execucao NOT IN ('CONCLUIDO','FINALIZADO')) AS entregavel_pendente,
+          EXISTS(SELECT 1 FROM entregaveis WHERE contrato_id=$1 AND arquivado_em IS NULL
+                 AND status_execucao='FINALIZADO') AS parcialmente_finalizado,
+          EXISTS(SELECT 1 FROM entregaveis WHERE contrato_id=$1 AND arquivado_em IS NULL) AS tem_entregaveis`, [id]) as Array<{
+            etapa_pendente: boolean; entregavel_pendente: boolean; parcialmente_finalizado: boolean; tem_entregaveis: boolean;
+          }>;
+      const p = pendencias[0];
+      if (!p?.tem_entregaveis || p.etapa_pendente || p.entregavel_pendente)
+        throw new ConflictException('Conclua ou finalize todas as etapas e entregáveis antes de finalizar o contrato');
+      if (!p.parcialmente_finalizado) throw new ConflictException('Todas as entregas foram concluídas; utilize Concluir contrato');
+      const anterior = { status: contrato.status };
+      contrato.status = 'FINALIZADO' as Contrato['status'];
+      contrato.encerradoEm = new Date(); contrato.encerradoPor = ator.id;
+      contrato.motivoEncerramento = justificativa;
+      const salvo = await manager.save(Contrato, contrato);
+      return { resultado: salvo, evento: { acao: AcaoAuditoria.CONTRATO_STATUS_ALTERADO,
+        entidadeTipo: 'CONTRATO' as const, entidadeId: id,
+        dadosAnteriores: anterior, dadosPosteriores: { status: salvo.status, justificativa,
+          finalizadoPor: ator.id, encerradoEm: contrato.encerradoEm } } };
     });
   }
 
@@ -579,7 +623,7 @@ export class ContratosService {
       const repo = manager.getRepository(Contrato);
       const contrato = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!contrato) throw new NotFoundException('Contrato não encontrado');
-      if (contrato.arquivadoEm || (contrato.status === 'CONCLUIDO' || contrato.status === 'ENCERRADO') || !contrato.reabertoEm)
+      if (contrato.arquivadoEm || (['CONCLUIDO','ENCERRADO','FINALIZADO'].includes(contrato.status)) || !contrato.reabertoEm)
         throw new ConflictException('Somente contratos em revisão podem encerrar a revisão');
       if (contrato.status === 'SUSPENSO' || contrato.status === 'CANCELADO')
         throw new ConflictException('Contrato suspenso ou cancelado não permite encerrar revisão');
@@ -700,6 +744,17 @@ export class ContratosService {
     });
   }
 
+  async consultarImpactoVigencia(id: string, dto: AtualizarContratoDto) {
+    return this.contratos.manager.transaction('REPEATABLE READ', async m => {
+      const c = await m.findOneBy(Contrato, { id });
+      if (!c) throw new NotFoundException('Contrato não encontrado');
+      const inicio = dto.inicioVigencia ?? c.inicioVigencia;
+      const fim = dto.terminoVigencia ?? c.terminoVigencia;
+      this.validarVigencia(inicio, fim);
+      return impactoVigencia(m, c, inicio, fim);
+    });
+  }
+
   async atualizar(
     id: string,
     dto: AtualizarContratoDto,
@@ -707,6 +762,8 @@ export class ContratosService {
   ): Promise<Contrato> {
     return this.auditoria.executarComAuditoria(ator, async (manager) => {
       const repo = manager.getRepository(Contrato);
+      // Mesmo lock raiz usado por alterações de pesos, ocorrências e entregáveis.
+      await manager.query('SELECT id FROM contratos WHERE id = $1 FOR UPDATE', [id]);
       const existente = await repo.findOneBy({ id });
       if (!existente) throw new NotFoundException('Contrato não encontrado');
       if (existente.arquivadoEm) throw new ConflictException('Contrato arquivado. Reative antes de editar.');
@@ -731,6 +788,11 @@ export class ContratosService {
       const inicioVigencia = dto.inicioVigencia ?? inicioAnterior;
       const terminoVigencia = dto.terminoVigencia ?? terminoAnterior;
       this.validarVigencia(inicioVigencia, terminoVigencia);
+      if (inicioVigencia !== inicioAnterior || terminoVigencia !== terminoAnterior) {
+        const impacto = await impactoVigencia(manager, existente, inicioVigencia, terminoVigencia);
+        if ((impacto.total || impacto.planos) && dto.confirmacaoVigencia !== impacto.confirmacao) throw new ConflictException('Confirme o impacto da vigência na agenda recorrente.');
+        if (impacto.bloqueado) throw new ConflictException('Vigência atinge planejamento recorrente futuro. Replaneje a agenda antes de alterar o contrato.');
+      }
 
       const antes = serializarContrato(existente);
       if (dto.status !== undefined && dto.status !== 'PLANEJAMENTO' && dto.status !== 'EM_EXECUCAO')

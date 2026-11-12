@@ -2,6 +2,7 @@
 import { AbasRolaveis } from '@/app/components/abas-rolaveis';
 
 import Link from 'next/link';
+import { PreviaContrato } from '@/app/atividades/components/cartao-atividade';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { ConfirmacaoSimples } from '@/app/components/confirmacao-simples';
 import { toastSucesso, toastAviso } from '@/app/components/toast-notificacoes';
@@ -12,6 +13,7 @@ import { useListaContratos, usePendentesConclusao } from '@/hooks/use-contratos'
 import { STATUS, rotuloCodigoPublico, reativarContrato, retomarContrato, excluirContratoArquivado, type Contrato, type StatusContrato } from '@/lib/contratos';
 import { AreaContratos, Aviso } from './components/area-contratos';
 import { ResumoPlanejamentoContrato } from './components/resumo-planejamento-contrato';
+import { IndicadorAvancoFinalizado } from './components/indicador-avanco-finalizado';
 import { lerEstadoCarteira, salvarEstadoCarteira, type AbaCarteira } from '@/lib/estado-lista-contratos';
 import { faseEmRevisao, situacaoVisivelContrato } from '@/lib/estado-visivel-contrato';
 
@@ -26,6 +28,7 @@ export default function ContratosListPage() {
   const cache = useRepositorioConsultas();
   const [confirmacao, setConfirmacao] = useState<{ id: string; numero: string; tipo: 'reativar' | 'excluir' | 'retomar' } | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  const [contratoModal, setContratoModal] = useState<{ id: string; foco: HTMLElement | null } | null>(null);
   const [erroOperacao, setErroOperacao] = useState('');
   const [motivoDecisao, setMotivoDecisao] = useState('');
   const [excluidos, setExcluidos] = useState<string[]>([]);
@@ -153,10 +156,10 @@ export default function ContratosListPage() {
         <h2 className="text-lg font-semibold text-foreground">Contratos</h2>
         {estadoRestaurado ? <AbasRolaveis className="w-full sm:w-auto sm:flex-1"><div role="tablist" aria-label="Situação dos contratos" className="flex max-w-full flex-wrap items-center gap-1 rounded-xl border border-brand-green/20 bg-background/70 p-1">
           {(['todos', 'ativos', 'pendentes', 'revisao', 'concluidos', 'arquivados'] as const).map(opcao => <button key={opcao} type="button" role="tab"
-            aria-selected={filtroArquivo === opcao} aria-label={opcao === 'todos' ? 'Todos os contratos' : opcao === 'ativos' ? 'Contratos ativos' : opcao === 'concluidos' ? 'Contratos concluídos' : opcao === 'pendentes' ? 'Contratos pendentes de conclusão' : opcao === 'revisao' ? 'Contratos em revisão' : 'Contratos arquivados'}
+            aria-selected={filtroArquivo === opcao} title={opcao === 'concluidos' ? 'Inclui contratos concluídos e encerrados' : undefined} aria-label={opcao === 'todos' ? 'Todos os contratos' : opcao === 'ativos' ? 'Contratos ativos' : opcao === 'concluidos' ? 'Contratos finalizados' : opcao === 'pendentes' ? 'Contratos pendentes de conclusão' : opcao === 'revisao' ? 'Contratos em revisão' : 'Contratos arquivados'}
             onClick={() => { setFiltroArquivo(opcao); setFiltro(''); }}
             className={`min-h-9 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${filtroArquivo === opcao ? (opcao === 'arquivados' ? 'bg-amber-500/20 text-amber-200' : 'bg-slate-700/75 text-white') : 'text-foreground/65 hover:bg-slate-700/35 hover:text-foreground'}`}>
-            {opcao === 'arquivados' ? <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v12h14V8M9 13h6"/></svg> : opcao === 'todos' ? 'Todos' : opcao === 'ativos' ? 'Ativos' : opcao === 'concluidos' ? '◉ Concluídos' : opcao === 'pendentes' ? 'Pendente de conclusão' : opcao === 'revisao' ? 'Em revisão' : 'Em revisão'}
+            {opcao === 'arquivados' ? <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v12h14V8M9 13h6"/></svg> : opcao === 'todos' ? 'Todos' : opcao === 'ativos' ? 'Ativos' : opcao === 'concluidos' ? '◉ Finalizados' : opcao === 'pendentes' ? 'Pendente de conclusão' : opcao === 'revisao' ? 'Em revisão' : 'Em revisão'}
           </button>)}
         </div></AbasRolaveis> : <div aria-hidden="true" data-testid="abas-aguardando-restauracao"
           className="h-9 min-w-[240px] rounded-xl border border-transparent opacity-0" />}
@@ -178,10 +181,7 @@ export default function ContratosListPage() {
               value={filtro} onChange={e => setFiltro(e.target.value as typeof filtro)}>
               <option value="">Todos os status</option>
               {(['PLANEJAMENTO','EM_EXECUCAO'] as const).map(k => <option key={k} value={k}>{STATUS[k]}</option>)}
-              <option value="PENDENTE_CONCLUSAO">Pendente de conclusão</option>
-              <option value="EM_REVISAO">Em revisão</option>
-              {(['CONCLUIDO','ENCERRADO','SUSPENSO','CANCELADO'] as const).map(k => <option key={k} value={k}>{STATUS[k]}</option>)}
-              <option value="ARQUIVADO">Arquivado</option>
+              {(['SUSPENSO','CANCELADO'] as const).map(k => <option key={k} value={k}>{STATUS[k]}</option>)}
             </select>
           </div>
           <div className="min-w-0 order-3 min-[500px]:order-3">
@@ -206,28 +206,31 @@ export default function ContratosListPage() {
             className="order-5 h-10 shrink-0 rounded-lg border border-brand-green/20 px-3 text-xs text-foreground/70 hover:bg-brand-green/10">Limpar filtros</button>}
         </div>
       </div>}
-      <p className="text-sm text-foreground/60">{visiveis.length} contrato(s) {filtroArquivo === 'arquivados' ? 'arquivado(s)' : filtroArquivo === 'concluidos' ? 'concluído(s)' : filtroArquivo === 'pendentes' ? 'pendente(s) de conclusão' : filtroArquivo === 'revisao' ? 'em revisão' : filtroArquivo === 'cancelados' ? 'cancelado(s)' : filtroArquivo === 'suspensos' ? 'suspenso(s)' : filtroArquivo === 'todos' ? 'no total' : 'ativos'}</p>
+      <p className="text-sm text-foreground/60">{visiveis.length} contrato(s) {filtroArquivo === 'arquivados' ? 'arquivado(s)' : filtroArquivo === 'concluidos' ? 'finalizado(s)' : filtroArquivo === 'pendentes' ? 'pendente(s) de conclusão' : filtroArquivo === 'revisao' ? 'em revisão' : filtroArquivo === 'cancelados' ? 'cancelado(s)' : filtroArquivo === 'suspensos' ? 'suspenso(s)' : filtroArquivo === 'todos' ? 'no total' : 'ativos'}</p>
       {filtroArquivo === 'pendentes' && (buscandoPendentes || pendentesQuery.erro) ? <Aviso>{buscandoPendentes ? 'Consultando pendências de conclusão...' : 'Não foi possível consultar os contratos pendentes. Atualize a página.'}</Aviso> : !contratos.length ? <Aviso>Nenhum contrato cadastrado ou atribuído à sua conta.</Aviso> : !visiveis.length ? <Aviso>Nenhum resultado para os filtros escolhidos.</Aviso> :
         <ul className="grid grid-cols-1 gap-3 xl:grid-cols-2">{visiveis.map(c => {
           const situacao = situacaoVisivelContrato(c, idsPendentes.includes(c.id));
           const encerrado = c.status === 'ENCERRADO' && !c.reabertoEm;
+          const finalizado = c.status === 'FINALIZADO' && !c.reabertoEm;
           const realceVioleta = !encerrado && (situacao === 'concluidos' || situacao === 'pendentes');
           return <li key={c.id} className="relative min-w-0">
-          <Link href={`/contratos/${encodeURIComponent(c.id)}`} aria-label={`Abrir contrato ${c.numeroContrato}`}
-            onClick={preservarRetorno}
+          <div role="button" tabIndex={0} aria-label={`Abrir detalhes do contrato ${c.numeroContrato}`}
+            onClick={e => { preservarRetorno(); setContratoModal({ id: c.id, foco: e.currentTarget }); }}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); preservarRetorno(); setContratoModal({ id: c.id, foco: e.currentTarget }); } }}
             data-arquivado={Boolean(c.arquivadoEm)} data-situacao={situacao}
-            data-tec08-estado={c.arquivadoEm ? 'arquivado' : situacao === 'suspensos' ? 'suspenso' : situacao === 'cancelados' ? 'cancelado' : situacao === 'revisao' ? 'revisao' : encerrado ? 'encerrado' : realceVioleta ? 'concluido' : 'normal'}
-            className={`contrato-card-documental group block h-full min-w-0 cursor-pointer rounded-2xl border p-4 text-left ${c.arquivadoEm && perfil?.perfil === 'ADMINISTRADOR' ? 'pt-14 sm:pt-4' : ''}  transition-opacity duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 ${c.arquivadoEm ? 'border-amber-500/50 bg-background text-foreground hover:border-amber-400/75 focus-visible:outline-amber-400' : situacao === 'suspensos' ? 'border-yellow-300/85 bg-background hover:border-yellow-200 focus-visible:outline-yellow-200' : situacao === 'cancelados' ? 'border-red-500/55 bg-background hover:border-red-400/70 focus-visible:outline-red-400' : encerrado ? 'border-slate-500/55 bg-background hover:border-slate-400/70 focus-visible:outline-slate-400' : realceVioleta ? 'border-violet-500/45 bg-background hover:border-violet-400/70 focus-visible:outline-violet-400' : situacao === 'revisao' ? 'border-teal-700/55 bg-background hover:border-teal-600/70 focus-visible:outline-teal-600' : 'border-brand-green/25 bg-background hover:border-brand-green/60 focus-visible:outline-brand-neon'}`}>
+            data-tec08-estado={c.arquivadoEm ? 'arquivado' : situacao === 'suspensos' ? 'suspenso' : situacao === 'cancelados' ? 'cancelado' : situacao === 'revisao' ? 'revisao' : encerrado ? 'encerrado' : finalizado ? 'finalizado' : realceVioleta ? 'concluido' : 'normal'}
+            className={`contrato-card-documental group block h-full min-w-0 cursor-pointer rounded-2xl border p-4 text-left ${c.arquivadoEm && perfil?.perfil === 'ADMINISTRADOR' ? 'pt-14 sm:pt-4' : ''}  transition-opacity duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 ${c.arquivadoEm ? 'border-amber-500/50 bg-background text-foreground hover:border-amber-400/75 focus-visible:outline-amber-400' : situacao === 'suspensos' ? 'border-yellow-300/85 bg-background hover:border-yellow-200 focus-visible:outline-yellow-200' : situacao === 'cancelados' ? 'border-red-500/55 bg-background hover:border-red-400/70 focus-visible:outline-red-400' : encerrado ? 'border-slate-500/55 bg-background hover:border-slate-400/70 focus-visible:outline-slate-400' : finalizado ? 'border-purple-500/60 bg-purple-500/[0.10] hover:border-purple-400 focus-visible:outline-purple-400' : realceVioleta ? 'border-violet-500/45 bg-background hover:border-violet-400/70 focus-visible:outline-violet-400' : situacao === 'revisao' ? 'border-teal-700/55 bg-background hover:border-teal-600/70 focus-visible:outline-teal-600' : 'border-brand-green/25 bg-background hover:border-brand-green/60 focus-visible:outline-brand-neon'}`}>
             <div className={`flex min-w-0 flex-wrap items-start justify-between gap-2 ${c.arquivadoEm && perfil?.perfil === 'ADMINISTRADOR' ? 'sm:pr-[20.5rem]' : ''}`}>
-              <div className="min-w-0 flex-1 basis-[12rem]"><h3 title={c.numeroContrato} className={`contrato-card-titulo line-clamp-2 max-w-full break-all [overflow-wrap:anywhere] text-base font-bold group-hover:underline group-hover:underline-offset-4 ${c.arquivadoEm ? 'text-foreground' : situacao === 'suspensos' ? 'text-yellow-300' : situacao === 'cancelados' ? 'text-red-300' : encerrado ? 'text-slate-200' : realceVioleta ? 'text-violet-300' : situacao === 'revisao' ? 'text-teal-200' : 'text-brand-neon'}`}>{c.numeroContrato}</h3>
+              <div className="min-w-0 flex-1 basis-[12rem]"><h3 title={c.numeroContrato} className={`contrato-card-titulo line-clamp-2 max-w-full break-all [overflow-wrap:anywhere] text-base font-bold group-hover:underline group-hover:underline-offset-4 ${c.arquivadoEm ? 'text-foreground' : situacao === 'suspensos' ? 'text-yellow-300' : situacao === 'cancelados' ? 'text-red-300' : encerrado ? 'text-slate-200' : finalizado ? 'text-purple-300' : realceVioleta ? 'text-violet-300' : situacao === 'revisao' ? 'text-teal-200' : 'text-brand-neon'}`}>{c.numeroContrato}</h3>
                 <p className={`mt-1 text-xs ${c.arquivadoEm ? 'text-foreground/75' : 'text-foreground/65'}`}>Código {rotuloCodigoPublico(c.codigoPublico)}</p></div>
-              {!c.arquivadoEm && <span className={`shrink-0 rounded-full border px-2 py-1 text-[11px] ${c.arquivadoEm ? 'border-amber-400/50 bg-amber-500/15 text-amber-900 dark:text-amber-100' : situacao === 'suspensos' ? 'border-yellow-300/80 bg-yellow-300/10 text-yellow-200' : situacao === 'cancelados' ? 'border-red-400/60 bg-red-900/20 text-red-200' : encerrado ? 'border-slate-500/60 bg-slate-500/15 text-slate-200' : realceVioleta ? 'border-violet-400/50 bg-violet-500/15 text-violet-100' : situacao === 'revisao' ? 'border-teal-600/50 bg-teal-900/20 text-teal-200' : 'border-brand-green/25 bg-brand-green/5'}`}>{situacao === 'arquivados' ? 'Arquivado' : situacao === 'revisao' ? 'Em revisão' : situacao === 'pendentes' ? 'Pendente de conclusão' : STATUS[c.status]}</span>}
+              {!c.arquivadoEm && <span className={`shrink-0 rounded-full border px-2 py-1 text-[11px] ${c.arquivadoEm ? 'border-amber-400/50 bg-amber-500/15 text-amber-900 dark:text-amber-100' : situacao === 'suspensos' ? 'border-yellow-300/80 bg-yellow-300/10 text-yellow-200' : situacao === 'cancelados' ? 'border-red-400/60 bg-red-900/20 text-red-200' : encerrado ? 'border-slate-500/60 bg-slate-500/15 text-slate-200' : finalizado ? 'border-purple-500/60 bg-purple-500/20 text-purple-300' : situacao === 'pendentes' ? 'border-yellow-400/60 bg-yellow-500/10 text-yellow-700 dark:text-yellow-200' : realceVioleta ? 'border-violet-400/50 bg-violet-500/15 text-violet-100' : situacao === 'revisao' ? 'border-teal-600/50 bg-teal-900/20 text-teal-200' : 'border-brand-green/25 bg-brand-green/5'}`}>{situacao === 'arquivados' ? 'Arquivado' : situacao === 'revisao' ? 'Em revisão' : situacao === 'pendentes' ? 'Pendente de conclusão' : STATUS[c.status]}</span>}
+              {finalizado && <IndicadorAvancoFinalizado contratoId={c.id} />}
               {situacao === 'revisao' && <span className="shrink-0 rounded-full border border-foreground/20 bg-background px-2 py-1 text-[11px] text-foreground/80">{faseEmRevisao(c.status)}</span>}
             </div>
             <p title={c.orgaoContratante} className={`mt-2 line-clamp-1 break-all text-sm font-medium ${c.arquivadoEm ? 'text-foreground' : 'text-foreground/85'}`}>{c.orgaoContratante}</p>
             <p title={c.objeto} className={`mt-1 line-clamp-1 break-all text-xs ${c.arquivadoEm ? 'text-foreground/75' : 'text-foreground/65'}`}>{c.objeto}</p>
             <ResumoPlanejamentoContrato contratoId={c.id} contratoArquivado={Boolean(c.arquivadoEm)} contratoSuspenso={situacao === 'suspensos'} contratoEmRevisao={situacao === 'revisao'} contratoEncerrado={encerrado} contratoConcluido={realceVioleta && !encerrado} contratoCancelado={situacao === 'cancelados'} compactoNaLista={Boolean(c.arquivadoEm && perfil?.perfil === 'ADMINISTRADOR')} />
-          </Link>
+          </div>
           {c.arquivadoEm && perfil?.perfil === 'ADMINISTRADOR' && <div className="absolute right-3 top-3 z-[2] flex max-w-[calc(100%-1.5rem)] flex-nowrap items-center justify-end gap-1.5">
             <span className="rounded-full border border-amber-400/50 bg-amber-500/15 px-2 py-1 text-[11px] text-amber-100">Arquivado</span>
             <button type="button" aria-label={`Reativar contrato ${c.numeroContrato}`} title="Reativar contrato"
@@ -242,6 +245,7 @@ export default function ContratosListPage() {
             </button>
           </div>}
         </li>; })}</ul>}
+      {contratoModal && <PreviaContrato contratoId={contratoModal.id} foco={contratoModal.foco} fechar={() => setContratoModal(null)} />}
       {confirmacao && <ConfirmacaoSimples
         titulo={confirmacao.tipo === 'excluir' ? 'Excluir contrato arquivado?' : confirmacao.tipo === 'retomar' ? 'Retomar contrato suspenso?' : 'Reativar contrato?'}
         descricao={confirmacao.tipo === 'excluir'

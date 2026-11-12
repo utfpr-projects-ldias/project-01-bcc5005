@@ -53,9 +53,8 @@ test('cadastro vazio mostra erro da aplicação em vez do balão de validação 
 test('limites de caracteres e mensagens explicativas de modo de cálculo', () => {
   render(<FormularioContrato responsaveis={[]} onSalvar={jest.fn()} />);
   expect(screen.getByLabelText('Objeto *')).toHaveAttribute('maxLength', '500');
-  expect(screen.getByText(/média dos percentuais de execução/)).toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText('Modo de cálculo físico *'), { target: { value: 'PONDERADO' } });
-  expect(screen.getByText(/pesos válidos deverão somar 100%/)).toBeInTheDocument();
+  expect(screen.queryByLabelText('Modo de cálculo físico *')).not.toBeInTheDocument();
+  expect(screen.getByText(/é configurado na aba Execução/)).toBeInTheDocument();
   fireEvent.click(screen.getByText(/Informações complementares/));
   expect(screen.getByLabelText('Descrição')).toHaveAttribute('maxLength', '1500');
   expect(screen.getByLabelText('Observações')).toHaveAttribute('maxLength', '1000');

@@ -165,7 +165,7 @@ export default function AtividadesPage() {
           </select></div>
         <div><label htmlFor="atividades-status" className="block text-xs font-medium">Situação</label>
           <select id="atividades-status" value={statusSelecionado} onChange={e => { setStatusSelecionado(e.target.value as FiltroEstadoAtividade); setPagina(1); }} className={CAMPO}>
-            <option value="ATIVAS">Registradas</option><option value="VERIFICADA">Verificadas</option><option value="ARQUIVADA">Arquivadas</option>
+            <option value="ATIVAS">Ativas</option><option value="PENDENTE_CONCLUSAO">Pendentes de conclusão</option><option value="VERIFICADA">Finalizadas</option><option value="ARQUIVADA">▣ Arquivadas</option>
           </select></div>
       </div>
       {intervaloInvalido && <p role="alert" className="text-xs text-error-text">A data inicial não pode ser posterior à data final.</p>}

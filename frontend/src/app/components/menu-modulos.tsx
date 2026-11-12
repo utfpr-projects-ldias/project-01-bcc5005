@@ -13,8 +13,8 @@ function useItens(): Item[] {
   return [
     { nome: 'Dashboard', href: '/dashboard', icone: 'inicio' },
     { nome: 'Contratos', href: '/contratos', icone: 'arquivo' },
-    { nome: 'Atividades', href: '/atividades', icone: 'atividades' },
     { nome: 'Ocorrências', href: '/ocorrencias', icone: 'ocorrencias' },
+    { nome: 'Atividades', href: '/atividades', icone: 'atividades' },
     { nome: 'Evidências', aviso: 'Indisponível', icone: 'evidencia' },
     { nome: 'Relatórios', aviso: 'Indisponível', icone: 'relatorio' },
     ...(perfil?.ativo && perfil.perfil === 'ADMINISTRADOR'

@@ -24,6 +24,9 @@ describe('HU08-01/02 — API autorizada e DTO', () => {
     for (const [metodo, acao, escopo] of [
       ['criar', 'atividades:registrar', 'contrato'], ['listar', 'atividades:listar', 'contrato'],
       ['detalhar', 'atividades:visualizar', 'recurso'], ['editar', 'atividades:editar', 'recurso'],
+      ['solicitarConclusao', 'atividades:editar', 'recurso'],
+      ['cancelarSolicitacao', 'atividades:editar', 'recurso'],
+      ['aprovarConclusao', 'atividades:verificar', 'recurso'],
       ['verificar', 'atividades:verificar', 'recurso'], ['reabrir', 'atividades:reabrir', 'recurso'],
       ['arquivar', 'atividades:arquivar', 'recurso'], ['reativar', 'atividades:reativar', 'recurso'],
       ['excluir', 'atividades:excluir', 'recurso'],
@@ -40,8 +43,9 @@ describe('HU08-01/02 — API autorizada e DTO', () => {
     expect(await validate(plainToInstance(CreateAtividadeDto, vazio))).not.toHaveLength(0);
     const duplicado = { ...exemplo(), entregavelIds: [itemId, itemId] };
     expect(await validate(plainToInstance(CreateAtividadeDto, duplicado))).not.toHaveLength(0);
-    const ocorrenciaPrematura = { ...exemplo(), ocorrenciaId: itemId };
-    expect(await validate(plainToInstance(CreateAtividadeDto, ocorrenciaPrematura), { whitelist: true, forbidNonWhitelisted: true })).not.toHaveLength(0);
+    const ocorrenciaOpcional = { ...exemplo(), ocorrenciaId: itemId };
+    expect(await validate(plainToInstance(CreateAtividadeDto, ocorrenciaOpcional), { whitelist: true, forbidNonWhitelisted: true })).toHaveLength(0);
+    expect(await validate(plainToInstance(CreateAtividadeDto, { ...exemplo(), ocorrenciaId: 'invalido' }))).not.toHaveLength(0);
   });
   it('não aceita contrato do corpo divergente mesmo quando a rota está autorizada', async () => {
     const repo = {};
@@ -78,11 +82,10 @@ describe('HU08 — consulta por etapa e vínculo N:N sem recortar os entregávei
     expect(query.leftJoinAndSelect).toHaveBeenCalledWith('atividade.entregaveis', 'entregaveis');
     expect(query.orderBy).toHaveBeenCalledWith('atividade.dataHora', 'DESC');
   });
-  it('ATIVAS inclui Registrada e Verificada com paginação no banco, não Arquivada', async () => {
+  it('ATIVAS inclui somente Registrada; pendentes de conclusão possuem filtro separado', async () => {
     query.andWhere.mockClear();
     await service.findAllPaginated(contratoId, { status: 'ATIVAS', page: '2', limit: '5' });
-    expect(query.andWhere).toHaveBeenCalledWith('atividade.status IN (:...statusAtivos)',
-      { statusAtivos: ['REGISTRADA', 'VERIFICADA'] });
+    expect(query.andWhere).toHaveBeenCalledWith('atividade.status = :statusAtivo', { statusAtivo: 'REGISTRADA' });
     expect(query.skip).toHaveBeenCalledWith(5);
     expect(query.take).toHaveBeenCalledWith(5);
   });

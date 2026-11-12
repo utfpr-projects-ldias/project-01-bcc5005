@@ -1,3 +1,4 @@
+jest.mock('@/hooks/use-progresso', () => ({ useProgresso: () => ({ progresso: null, loading: false, erro: null, atualizar: jest.fn() }) }));
 jest.mock('@/hooks/use-entregaveis', () => ({
   useEntregaveis: jest.fn(),
   useResumoDocumentalContrato: jest.fn(),
@@ -517,7 +518,7 @@ test('abas: Etapas mantém concluídas em ordem e arquivadas aparecem somente em
   const arquivo = within(screen.getByRole('list', { name: 'Etapas arquivadas' })).getAllByRole('listitem');
   expect(arquivo).toHaveLength(1);
   expect(arquivo[0]).toHaveTextContent('Planejamento encerrado');
-  fireEvent.click(screen.getByRole('tab', { name: 'Todas' }));
+  fireEvent.click(screen.getByRole('tab', { name: 'Ativas' }));
   expect(screen.getByRole('list', { name: 'Etapas em ordem de execução' })).toBeInTheDocument();
 });
 
@@ -538,11 +539,11 @@ test('arquivar etapa exige confirmação, com cancelamento sem mutação', async
 test('cadeado e Nova etapa são exclusivos da aba de etapas, sem remover concluídas da ordem', () => {
   render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
   expect(screen.getByRole('button', { name: 'Nova etapa' })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('tab', { name: /Concluídas/ }));
+  fireEvent.click(screen.getByRole('tab', { name: /Finalizadas/ }));
   expect(screen.queryByRole('button', { name: 'Nova etapa' })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('tab', { name: 'Etapas arquivadas' }));
   expect(screen.queryByRole('button', { name: 'Nova etapa' })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('tab', { name: 'Todas' }));
+  fireEvent.click(screen.getByRole('tab', { name: 'Ativas' }));
   expect(screen.getByRole('button', { name: 'Nova etapa' })).toBeInTheDocument();
 });
 
@@ -559,7 +560,7 @@ test('etapa encerrada usa situação cinza, mas aparece na aba de finalizadas se
   render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
   expect(screen.getByText('Encerrada')).toBeInTheDocument();
   expect(document.querySelector('[data-etapa-estado="encerrada"]')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('tab', { name: /Concluídas/ }));
+  fireEvent.click(screen.getByRole('tab', { name: /Finalizadas/ }));
   expect(screen.getByText('Planejamento')).toBeInTheDocument();
 });
 
@@ -588,5 +589,5 @@ test.each([
   const filtros = screen.getByRole('tablist', { name: 'Visualizações das etapas' });
   expect(filtros).toHaveAttribute('data-pi-etapas-filtros');
   expect(filtros.closest('[data-pi-painel-contextual]')).toHaveAttribute('data-tec08-estado', esperado);
-  expect(within(filtros).getByRole('tab', { name: 'Todas' })).toHaveAttribute('aria-selected', 'true');
+  expect(within(filtros).getByRole('tab', { name: 'Ativas' })).toHaveAttribute('aria-selected', 'true');
 });

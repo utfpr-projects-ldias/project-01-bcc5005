@@ -19,8 +19,8 @@ export function HistoricoEntregavel({ contratoId, entregavelId, versao, ocultarT
   const atual = consulta?.chave === chave ? consulta : null;
   const eventos = atual?.eventos ?? [];
   const visiveis = expandido ? eventos : eventos.slice(0, 5);
-  return <section aria-label="Histórico do entregável" className="space-y-3 border-t border-brand-green/20 pt-4">
-    <div className={`flex flex-wrap items-center gap-2 ${ocultarTitulo ? 'justify-end' : 'justify-between'}`}>
+  return <section aria-label="Histórico do entregável" className={`space-y-3 ${ocultarTitulo ? "pt-2" : "border-t border-brand-green/20 pt-4"}`}>
+    <div className={`flex flex-wrap items-center gap-2 ${ocultarTitulo ? 'justify-start' : 'justify-between'}`}>
       {!ocultarTitulo && <h2 className="text-sm font-semibold text-brand-neon">Rastreabilidade do entregável</h2>}
       <span className="text-xs text-foreground/60">{atual ? `${eventos.length}${eventos.length === 100 ? '+' : ''} eventos consultados` : 'Carregando histórico…'}</span>
     </div>

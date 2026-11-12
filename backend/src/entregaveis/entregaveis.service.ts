@@ -21,12 +21,17 @@ import type {
   CriarEntregavelDto, EditarEntregavelDto, SubstituirChecklistDto,
 } from './dto/planejamento-entregavel.dto.js';
 import { Entregavel } from './entregavel.entity.js';
+import { Ocorrencia } from '../ocorrencias/ocorrencia.entity.js';
+import { calcularPeriodosRecorrentes } from '../ocorrencias/ocorrencias.service.js';
+import { avaliarAgendaRecorrente } from '../ocorrencias/avaliar-agenda-recorrente.js';
+import { ConfiguracaoOcorrencias } from '../ocorrencias/configuracao-ocorrencias.entity.js';
 import { EvidenciaEsperada } from './evidencia-esperada.entity.js';
 import { ComprovanteEvidencia } from './comprovante-evidencia.entity.js';
 import { TipoEntregavel } from './tipo-entregavel.enum.js';
+import { aptidaoFisicaParaConclusao } from './conclusao-fisica.js';
 
 const CAMPOS_MUTAVEIS = [
-  'etapaId', 'nome', 'tipo', 'codigo', 'descricao', 'responsavelId',
+  'etapaId', 'nome', 'codigo', 'descricao', 'responsavelId',
   'inicioPrevisto', 'terminoPrevisto', 'quantidadePrevista', 'unidadeMedida',
   'periodicidade', 'configuracaoPeriodicidade', 'peso', 'criterioConclusao', 'observacoes',
 ] as const;
@@ -59,6 +64,9 @@ export function validarPlanejamento(e: Entregavel): void {
       throw new BadRequestException(`${campo} não pode ser vazio e deve respeitar o limite`);
     }
   }
+  if (!e.inicioPrevisto) throw new BadRequestException('Início previsto é obrigatório para todos os entregáveis');
+  if (e.tipo === TipoEntregavel.CONTINUO && !e.terminoPrevisto)
+    throw new BadRequestException('Entregável contínuo exige término previsto');
   for (const data of [e.inicioPrevisto, e.terminoPrevisto]) {
     if (data !== null && !dataCivilValida(data)) throw new BadRequestException('Data civil inválida');
   }
@@ -69,17 +77,19 @@ export function validarPlanejamento(e: Entregavel): void {
       (!decimalValido(e.quantidadePrevista, 15, 3) || Number(e.quantidadePrevista) < 0)) {
     throw new BadRequestException('Quantidade prevista inválida: decimal positivo com até três casas');
   }
-  if (e.peso !== null && (!decimalValido(e.peso, 3, 4) || Number(e.peso) > 100)) {
+  if (e.peso === null || !decimalValido(e.peso, 3, 4) || Number(e.peso) > 100) {
     throw new BadRequestException('Peso operacional individual deve estar entre 0 e 100');
   }
   if (!Object.values(TipoEntregavel).includes(e.tipo)) throw new BadRequestException('Tipo de entregável inválido');
   if (e.tipo === TipoEntregavel.QUANTITATIVO &&
-    (e.quantidadePrevista === null || Number(e.quantidadePrevista) <= 0 || !textoObrigatorio(e.unidadeMedida, 80))) {
-    throw new BadRequestException('Quantitativo exige quantidade prevista maior que zero e unidade');
+      (e.quantidadePrevista === null || Number(e.quantidadePrevista) <= 0 ||
+       !textoObrigatorio(e.unidadeMedida, 80))) {
+    throw new BadRequestException('Entregável quantitativo exige quantidade prevista positiva e unidade de medida');
   }
   if (e.tipo === TipoEntregavel.RECORRENTE) {
-    if (!e.periodicidade || !configuracaoPeriodicidadeV1Valida(e.configuracaoPeriodicidade)) {
-      throw new BadRequestException('Recorrente exige periodicidade fixa e configuração {versao:1}');
+    if (!e.periodicidade || !configuracaoPeriodicidadeV1Valida(e.configuracaoPeriodicidade) ||
+        !e.inicioPrevisto || !e.terminoPrevisto) {
+      throw new BadRequestException('Entregável recorrente exige periodicidade e intervalo previsto');
     }
   } else if (e.periodicidade !== null || e.configuracaoPeriodicidade !== null) {
     throw new BadRequestException('Periodicidade somente é permitida para entregável recorrente');
@@ -101,7 +111,7 @@ function visao(e: Entregavel, itens: EvidenciaEsperada[], incluirArquivadas = fa
     quantidadePrevista: e.quantidadePrevista, quantidadeRealizada: e.quantidadeRealizada,
     unidadeMedida: e.unidadeMedida, periodicidade: e.periodicidade,
     configuracaoPeriodicidade: e.configuracaoPeriodicidade, peso: e.peso,
-    criterioConclusao: e.criterioConclusao, statusExecucao: e.statusExecucao,
+    criterioConclusao: e.criterioConclusao, statusExecucao: e.statusExecucao, motivoFinalizacao: e.motivoFinalizacao ?? null,
     percentualExecucao: e.percentualExecucao, situacaoComprovacao: e.situacaoComprovacao,
     observacoes: e.observacoes, arquivadoEm: e.arquivadoEm ?? null, reabertoEm: e.reabertoEm ?? null,
     evidenciasEsperadas: itens.filter((item) => incluirArquivadas || !item.arquivadoEm).map((item) => ({
@@ -372,6 +382,18 @@ export class EntregaveisService implements OnModuleInit {
     return visao(e, await this.itens(this.dataSource.manager, id), Boolean(e.arquivadoEm));
   }
 
+  /** Evita que a soma de participações operacionais ativas ultrapasse 100%,
+   * mesmo para requisições que não passam pelo formulário React. */
+  private async validarPesoNoContrato(m: EntityManager, contratoId: string, peso: string | null | undefined, excetoId?: string) {
+    if (peso == null) return;
+    const linhas = await m.query(`SELECT COALESCE(SUM(peso), 0)::text AS soma FROM "entregaveis"
+      WHERE "contrato_id" = $1 AND "arquivado_em" IS NULL AND ($2::uuid IS NULL OR "id" <> $2::uuid)`,
+      [contratoId, excetoId ?? null]) as Array<{ soma: string }>;
+    const disponivel = Math.max(0, 100 - Number(linhas[0]?.soma ?? '0'));
+    if (Number(peso) > disponivel + 0.00001) throw new BadRequestException(
+      `Apenas ${disponivel.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% restante disponível para usar como peso deste entregável.`);
+  }
+
   async criar(contratoId: string, dto: CriarEntregavelDto, ator: UsuarioAutenticado) {
     try {
       return await this.dataSource.transaction(async (m) => {
@@ -381,7 +403,15 @@ export class EntregaveisService implements OnModuleInit {
         // concorrentes. Arquivados contam: arquivar não libera capacidade.
         const quantidade = await m.getRepository(Entregavel).count({ where: { contratoId } });
         if (quantidade >= 100) throw new ConflictException('Limite de 100 entregáveis por contrato atingido.');
+        // O peso operacional representa parcelas da realização contratual.
+        // Não permitir criar um entregável extra após todo o contrato estar alocado,
+        // mesmo que o cliente tente contornar a interface omitindo o campo peso.
+        const ocupacao = await m.query(`SELECT COALESCE(SUM(peso), 0)::numeric AS total FROM entregaveis
+          WHERE contrato_id=$1 AND arquivado_em IS NULL`, [contratoId]) as Array<{ total: string }>;
+        if (Number(ocupacao[0]?.total ?? 0) >= 99.99999)
+          throw new ConflictException('Os entregáveis existentes já representam 100% do contrato. Redistribua os pesos para cadastrar outro entregável.');
         await this.validarResponsavel(m, dto.responsavelId ?? null);
+        await this.validarPesoNoContrato(m, contratoId, dto.peso);
         if (dto.evidenciasEsperadas?.some((item) => item.id)) {
           throw new BadRequestException('Itens novos do checklist não podem informar ID');
         }
@@ -399,6 +429,8 @@ export class EntregaveisService implements OnModuleInit {
           quantidadeRealizada: null, statusExecucao: null, percentualExecucao: null, situacaoComprovacao: null,
         });
         validarPlanejamento(e);
+        // A agenda recorrente é criada apenas após confirmação explícita na HU09.
+        // Cadastrar o entregável não produz automaticamente instâncias de execução.
         const salvo = await m.getRepository(Entregavel).save(e);
         await this.auditoria.registrarNaTransacao(m, ator, {
           acao: AcaoAuditoria.ENTREGAVEL_CRIADO, entidadeTipo: 'ENTREGAVEL', entidadeId: salvo.id,
@@ -424,11 +456,14 @@ export class EntregaveisService implements OnModuleInit {
       const e = await repo.findOneBy({ id, contratoId });
       if (!e) throw new NotFoundException('Entregável não encontrado neste contrato');
       if (e.arquivadoEm) throw new ConflictException('Entregável arquivado');
+      if (e.statusExecucao !== 'PENDENTE_CONCLUSAO') throw new ConflictException('A conclusão deve ser solicitada antes da aprovação');
       const pai = await m.getRepository(Etapa).findOneBy({ id: e.etapaId, contratoId });
-      if (!pai || pai.arquivadoEm || ((pai.status === 'CONCLUIDA' || pai.status === 'ENCERRADA') && !pai.reabertoEm))
+      if (!pai || pai.arquivadoEm || ((['CONCLUIDA','ENCERRADA','FINALIZADA'].includes(pai.status)) && !pai.reabertoEm))
         throw new ConflictException('Reabra a etapa antes de alterar entregáveis');
-      if (e.statusExecucao === 'CONCLUIDO' && !e.reabertoEm)
+      if (['CONCLUIDO','FINALIZADO'].includes(e.statusExecucao ?? '') && !e.reabertoEm)
         throw new ConflictException('Entregável já concluído');
+      const fisico = await aptidaoFisicaParaConclusao(m, e);
+      if (!fisico.apto) throw new ConflictException(fisico.motivo);
       if (!await documentacaoVerificada(m, contratoId, e.etapaId, id))
         throw new ConflictException('Existem evidências pendentes de verificação');
       if (await atividadesPendentesDeVerificacao(m, contratoId, null, id))
@@ -461,6 +496,99 @@ export class EntregaveisService implements OnModuleInit {
     });
   }
 
+  private async validarPermissaoDecisao(m: EntityManager, contratoId: string, ator: UsuarioAutenticado) {
+    if (ator.perfil === PerfilUsuario.ADMINISTRADOR) return;
+    const vinculo = await m.findOneBy(PermissaoContrato, { contratoId, usuarioId: ator.id });
+    if (!vinculo || !permissoesEfetivas(ator.perfil, vinculo.podeEditar, vinculo.permissoesDetalhadas).concluirEntregaveis)
+      throw new ForbiddenException('Sem permissão para aprovar a finalização do entregável');
+  }
+
+  /** Solicitação não substitui a aprovação do Gestor/Administrador. */
+  async solicitarConclusao(contratoId: string, id: string, ator: UsuarioAutenticado) {
+    return this.dataSource.transaction(async m => {
+      await this.bloquearContrato(m, contratoId, true);
+      const e = await m.findOne(Entregavel, { where: { contratoId, id }, lock: { mode: 'pessimistic_write' } });
+      if (!e || e.arquivadoEm) throw new NotFoundException('Entregável indisponível');
+      if (['PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO','CONCLUIDO','FINALIZADO'].includes(e.statusExecucao ?? ''))
+        throw new ConflictException('Já existe uma solicitação ou decisão final');
+      const fisico = await aptidaoFisicaParaConclusao(m, e);
+      if (!fisico.apto) throw new ConflictException(fisico.motivo);
+      if (!await documentacaoVerificada(m, contratoId, e.etapaId, id))
+        throw new ConflictException('Existem evidências pendentes de verificação');
+      const anterior = { statusExecucao: e.statusExecucao };
+      e.statusExecucao = 'PENDENTE_CONCLUSAO' as Entregavel['statusExecucao'];
+      const salvo = await m.save(Entregavel, e);
+      await this.auditoria.registrarNaTransacao(m, ator, { acao: AcaoAuditoria.ENTREGAVEL_STATUS_ALTERADO,
+        entidadeTipo: 'ENTREGAVEL', entidadeId: id, dadosAnteriores: anterior,
+        dadosPosteriores: { statusExecucao: salvo.statusExecucao, solicitadoPor: ator.id } });
+      return { ...visao(salvo, await this.itens(m, id)) };
+    });
+  }
+
+  async solicitarEncerramento(contratoId: string, id: string, motivo: string, ator: UsuarioAutenticado) {
+    const justificativa = motivo?.trim() ?? '';
+    if (justificativa.length < 15 || justificativa.length > 200)
+      throw new BadRequestException('Justifique o encerramento com 15 a 200 caracteres');
+    return this.dataSource.transaction(async m => {
+      await this.bloquearContrato(m, contratoId, true);
+      const e = await m.findOne(Entregavel, { where: { contratoId, id }, lock: { mode: 'pessimistic_write' } });
+      if (!e || e.arquivadoEm) throw new NotFoundException('Entregável indisponível');
+      if (['PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO','CONCLUIDO','FINALIZADO'].includes(e.statusExecucao ?? ''))
+        throw new ConflictException('Já existe uma solicitação ou decisão final');
+      const fisico = await aptidaoFisicaParaConclusao(m, e);
+      if (fisico.apto && await documentacaoVerificada(m, contratoId, e.etapaId, id))
+        throw new ConflictException('A conclusão está disponível. Solicite conclusão em vez de encerramento.');
+      const ocorrencias = await m.findBy(Ocorrencia, { contratoId, entregavelId: id, substituidaEm: IsNull() });
+      if (e.tipo !== TipoEntregavel.UNICO && !ocorrencias.length)
+        throw new ConflictException('Cadastre as ocorrências obrigatórias para este tipo');
+      if (ocorrencias.some(o => !['CONCLUIDO','ENCERRADA'].includes(o.status)))
+        throw new ConflictException('Resolva as ocorrências antes de solicitar encerramento');
+      if (e.tipo === TipoEntregavel.RECORRENTE && e.inicioPrevisto && e.terminoPrevisto && e.periodicidade) {
+        const inicioAgenda = e.agendaInicioFuturo ?? e.inicioPrevisto;
+        const configuracao = await m.findOneBy(ConfiguracaoOcorrencias, { entregavelId: id, contratoId });
+        const fimAgenda = e.agendaInicioFuturo ? configuracao?.terminoPrevisto ?? e.terminoPrevisto : e.terminoPrevisto;
+        if (!fimAgenda) throw new ConflictException('Agenda recorrente sem término definido');
+        let periodos: ReturnType<typeof calcularPeriodosRecorrentes>;
+        try { periodos = calcularPeriodosRecorrentes(inicioAgenda, fimAgenda, e.periodicidade); }
+        catch { throw new ConflictException('A agenda recorrente precisa ser regularizada'); }
+        if (!avaliarAgendaRecorrente(ocorrencias, periodos, inicioAgenda).completa)
+          throw new ConflictException('Gere a agenda recorrente completa antes de encerrar');
+      }
+      const anterior = { statusExecucao: e.statusExecucao };
+      e.statusExecucao = 'PENDENTE_ENCERRAMENTO' as Entregavel['statusExecucao'];
+      e.motivoFinalizacao = justificativa;
+      const salvo = await m.save(Entregavel, e);
+      await this.auditoria.registrarNaTransacao(m, ator, { acao: AcaoAuditoria.ENTREGAVEL_STATUS_ALTERADO,
+        entidadeTipo: 'ENTREGAVEL', entidadeId: id, dadosAnteriores: anterior,
+        dadosPosteriores: { statusExecucao: salvo.statusExecucao, justificativa, solicitadoPor: ator.id } });
+      return visao(salvo, await this.itens(m, id));
+    });
+  }
+
+  async aprovarEncerramento(contratoId: string, id: string, ator: UsuarioAutenticado) {
+    return this.dataSource.transaction(async m => {
+      await this.bloquearContrato(m, contratoId, true);
+      await this.validarPermissaoDecisao(m, contratoId, ator);
+      const e = await m.findOne(Entregavel, { where: { contratoId, id }, lock: { mode: 'pessimistic_write' } });
+      if (!e || e.arquivadoEm) throw new NotFoundException('Entregável indisponível');
+      if (e.statusExecucao !== 'PENDENTE_ENCERRAMENTO') throw new ConflictException('Não há encerramento aguardando aprovação');
+      const ocorrencias = await m.findBy(Ocorrencia, { contratoId, entregavelId: id, substituidaEm: IsNull() });
+      if (ocorrencias.some(o => !['CONCLUIDO','ENCERRADA'].includes(o.status)))
+        throw new ConflictException('Há ocorrências ainda não resolvidas');
+      const anterior = { statusExecucao: e.statusExecucao };
+      e.statusExecucao = 'FINALIZADO' as Entregavel['statusExecucao'];
+      e.finalizadoEm = new Date();
+      // Nunca escreve 100% fictício em percentualExecucao: TEC09 calcula a
+      // execução real com ocorrências concluídas / quantidades aprovadas.
+      const salvo = await m.save(Entregavel, e);
+      await this.auditoria.registrarNaTransacao(m, ator, { acao: AcaoAuditoria.ENTREGAVEL_STATUS_ALTERADO,
+        entidadeTipo: 'ENTREGAVEL', entidadeId: id, dadosAnteriores: anterior,
+        dadosPosteriores: { statusExecucao: salvo.statusExecucao, justificativa: e.motivoFinalizacao,
+          aprovadoPor: ator.id, finalizadoEm: e.finalizadoEm } });
+      return visao(salvo, await this.itens(m, id));
+    });
+  }
+
   async reabrir(contratoId: string, id: string, ator: UsuarioAutenticado, motivo?: string) {
     return this.dataSource.transaction(async m => {
       await this.bloquearContrato(m, contratoId);
@@ -473,11 +601,12 @@ export class EntregaveisService implements OnModuleInit {
         (etapaPai.reabertoEm === null && await documentacaoVerificada(m, contratoId, e.etapaId)))
         throw new ConflictException('Reabra a etapa antes de reabrir seu entregável');
       if (e.reabertoEm) throw new ConflictException('Entregável já foi reaberto');
-      const operacional = e.statusExecucao === 'CONCLUIDO';
+      const operacional = e.statusExecucao === 'CONCLUIDO' || e.statusExecucao === 'FINALIZADO';
       if (!operacional && !await documentacaoVerificada(m, contratoId, e.etapaId, id))
         throw new ConflictException('Entregável ainda não possui todas as evidências verificadas');
       const anterior = e.statusExecucao;
-      if (operacional) e.statusExecucao = 'EM_ANDAMENTO' as Entregavel['statusExecucao'];
+      if (operacional || e.statusExecucao === 'PENDENTE_CONCLUSAO' || e.statusExecucao === 'PENDENTE_ENCERRAMENTO') e.statusExecucao = 'EM_ANDAMENTO' as Entregavel['statusExecucao'];
+      e.motivoFinalizacao = null; e.finalizadoEm = null;
       e.reabertoEm = new Date();
       await repo.save(e);
       await this.auditoria.registrarNaTransacao(m, ator, {
@@ -503,9 +632,33 @@ export class EntregaveisService implements OnModuleInit {
       return await this.dataSource.transaction(async (m) => {
         await this.bloquearContrato(m, contratoId);
         const e = await this.registro(m, contratoId, id);
-        if (e.statusExecucao === 'CONCLUIDO' ||
+        if (['CONCLUIDO','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? '') ||
           (e.reabertoEm === null && await documentacaoVerificada(m, contratoId, e.etapaId, id)))
           throw new ConflictException('Entregável concluído: reabra antes de editar');
+        if (dto.tipo !== undefined && dto.tipo !== e.tipo)
+          throw new ConflictException('O tipo do entregável é imutável. Para utilizar outro tipo, crie um novo entregável.');
+        // A política entregaveis:editar NÃO delega pesos ou o replanejamento
+        // recorrente. Comparar contra o estado persistido antes de alterar.
+        const mudaPeso = dto.peso !== undefined && (
+          (dto.peso == null) !== (e.peso == null) ||
+          (dto.peso != null && e.peso != null && Number(dto.peso) !== Number(e.peso))
+        );
+        const mudaAgenda = e.tipo === TipoEntregavel.RECORRENTE && (
+          (dto.inicioPrevisto !== undefined && dto.inicioPrevisto !== e.inicioPrevisto) ||
+          (dto.terminoPrevisto !== undefined && dto.terminoPrevisto !== e.terminoPrevisto) ||
+          (dto.periodicidade !== undefined && dto.periodicidade !== e.periodicidade) ||
+          (dto.configuracaoPeriodicidade !== undefined && JSON.stringify(dto.configuracaoPeriodicidade) !== JSON.stringify(e.configuracaoPeriodicidade))
+        );
+        if (ator.perfil !== PerfilUsuario.ADMINISTRADOR) {
+          const vinculo = await m.getRepository(PermissaoContrato).findOneBy({ contratoId, usuarioId: ator.id });
+          const permissoes = permissoesEfetivas(ator.perfil, Boolean(vinculo?.podeEditar), vinculo?.permissoesDetalhadas);
+          if (!vinculo || !permissoes.editarEntregaveis)
+            throw new ForbiddenException('Sem permissão para editar entregáveis deste contrato.');
+          if (mudaPeso && !permissoes.configurarPesos)
+            throw new ForbiddenException('Sem permissão para alterar o peso operacional.');
+          if (mudaAgenda && !permissoes.configurarAgendaOcorrencias)
+            throw new ForbiddenException('Sem permissão para replanejar ocorrências recorrentes.');
+        }
         const anterior = snapshot(e);
         const antes = { tipo: e.tipo, etapaId: e.etapaId, periodicidade: e.periodicidade,
           configuracaoPeriodicidade: e.configuracaoPeriodicidade,
@@ -521,7 +674,9 @@ export class EntregaveisService implements OnModuleInit {
             }
           }
         }
+        if (e.tipo !== antes.tipo && (e.percentualExecucao != null || e.quantidadeRealizada != null || e.dataEfetivaMarco != null)) throw new ConflictException('Tipo não pode mudar após registrar execução física. Preserve o histórico.');
         validarPlanejamento(e);
+        await this.validarPesoNoContrato(m, contratoId, e.peso, id);
         await this.validarEtapa(m, contratoId, e.etapaId);
         await this.validarResponsavel(m, e.responsavelId);
         if (e.tipo !== antes.tipo || e.etapaId !== antes.etapaId ||

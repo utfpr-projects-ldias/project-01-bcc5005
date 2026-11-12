@@ -4,6 +4,7 @@ import { Entregavel } from './entregavel.entity.js';
 import { Contrato } from '../contratos/contrato.entity.js';
 import { StatusExecucaoEntregavel } from './status-execucao-entregavel.enum.js';
 import { StatusEtapa } from '../etapas/status-etapa.enum.js';
+import { aptidaoFisicaParaConclusao } from './conclusao-fisica.js';
 /**
  * True somente quando cada nível ativo contém pelo menos um filho e cada
  * evidência OBRIGATÓRIA ativa possui versão mais recente verificada.
@@ -77,13 +78,13 @@ export async function filhosPendentesDeConclusao(m: EntityManager, contratoId: s
      WHERE en.contrato_id = $1 AND en.etapa_id = $2 AND en.arquivado_em IS NULL
        AND ev.arquivado_em IS NULL AND ev.obrigatoria IS TRUE AND ev.reaberto_em IS NOT NULL
   ) OR EXISTS (
-    -- Uma atividade REGISTRADA vinculada a qualquer entregável desta etapa
+    -- Uma atividade não verificada (REGISTRADA ou PENDENTE_CONCLUSAO) vinculada a qualquer entregável desta etapa
     -- impede a conclusão; VERIFICADA e ARQUIVADA (verificada antes) não impedem.
     SELECT 1 FROM atividades at
       JOIN atividade_entregaveis ae ON ae."atividadeId" = at.id
       JOIN entregaveis en ON en.id = ae."entregavelId"
     WHERE at."contratoId" = $1 AND at."excluidaEm" IS NULL
-      AND at.status = 'REGISTRADA'
+      AND at.status IN ('REGISTRADA', 'PENDENTE_CONCLUSAO')
       AND en.contrato_id = $1 AND en.etapa_id = $2
   ) AS pendentes`, [contratoId, etapaId]) as Array<{ pendentes: boolean }>;
   return Boolean(linhas[0]?.pendentes);
@@ -112,7 +113,7 @@ export async function concluirEtapaAposFilhos(
 }
 
 /** Consulta transacional: sem atividades não há obrigação 0/X. Apenas atividades
- * ainda REGISTRADAS impedem a conclusão; arquivadas já foram verificadas. */
+ * ainda não verificadas impedem a conclusão; arquivadas já foram verificadas. */
 export async function atividadesPendentesDeVerificacao(m: EntityManager, contratoId: string,
   etapaId: string | null = null, entregavelId: string | null = null): Promise<boolean> {
   const rows = await m.query(`SELECT EXISTS (
@@ -120,7 +121,7 @@ export async function atividadesPendentesDeVerificacao(m: EntityManager, contrat
       JOIN atividade_entregaveis ae ON ae."atividadeId" = at.id
       JOIN entregaveis en ON en.id = ae."entregavelId"
     WHERE at."contratoId" = $1 AND at."excluidaEm" IS NULL
-      AND at.status = 'REGISTRADA' AND en.contrato_id = $1
+      AND at.status IN ('REGISTRADA', 'PENDENTE_CONCLUSAO') AND en.contrato_id = $1
       AND ($2::uuid IS NULL OR en.etapa_id = $2::uuid)
       AND ($3::uuid IS NULL OR en.id = $3::uuid)
   ) AS pendentes`, [contratoId, etapaId, entregavelId]) as Array<{ pendentes: boolean }>;
@@ -146,6 +147,7 @@ export async function concluirEntregavelAposAtividade(
   const etapa = await m.getRepository(Etapa).findOneBy({ id: e.etapaId, contratoId });
   if (!etapa || etapa.arquivadoEm || etapa.status === StatusEtapa.ENCERRADA ||
       (etapa.status === StatusEtapa.CONCLUIDA && !etapa.reabertoEm)) return null;
+  if (!(await aptidaoFisicaParaConclusao(m, e)).apto) return null;
   if (!await documentacaoVerificada(m, contratoId, e.etapaId, entregavelId) ||
       await atividadesPendentesDeVerificacao(m, contratoId, null, entregavelId)) return null;
   const linhas = await m.query(`SELECT EXISTS (

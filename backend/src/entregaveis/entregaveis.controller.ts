@@ -78,6 +78,24 @@ export class EntregaveisController {
     return this.service.editar(contratoId, entregavelId, dto, req.usuarioDominio!);
   }
 
+  @Patch(':entregavelId/solicitar-conclusao')
+  @ExigirPoliticaOperacional('entregaveis:editar', { tipo: 'recurso', recurso: 'entregavel', parametro: 'entregavelId', parametroContratoPai: 'contratoId' })
+  solicitarConclusao(@Param('contratoId') c: string, @Param('entregavelId') id: string, @Req() req: RequisicaoAutorizada) {
+    return this.service.solicitarConclusao(c, id, req.usuarioDominio!);
+  }
+
+  @Patch(':entregavelId/solicitar-encerramento')
+  @ExigirPoliticaOperacional('entregaveis:editar', { tipo: 'recurso', recurso: 'entregavel', parametro: 'entregavelId', parametroContratoPai: 'contratoId' })
+  solicitarEncerramento(@Param('contratoId') c: string, @Param('entregavelId') id: string, @Body() dto: JustificativaDecisaoDto, @Req() req: RequisicaoAutorizada) {
+    return this.service.solicitarEncerramento(c, id, dto.motivo, req.usuarioDominio!);
+  }
+
+  @Patch(':entregavelId/aprovar-encerramento')
+  @ExigirPoliticaOperacional('entregaveis:concluir', { tipo: 'recurso', recurso: 'entregavel', parametro: 'entregavelId', parametroContratoPai: 'contratoId' })
+  aprovarEncerramento(@Param('contratoId') c: string, @Param('entregavelId') id: string, @Req() req: RequisicaoAutorizada) {
+    return this.service.aprovarEncerramento(c, id, req.usuarioDominio!);
+  }
+
   @Patch(':entregavelId/concluir')
   @ExigirPoliticaOperacional('entregaveis:concluir', { tipo: 'recurso', recurso: 'entregavel', parametro: 'entregavelId', parametroContratoPai: 'contratoId' })
   concluir(@Param('contratoId') contratoId: string, @Param('entregavelId') entregavelId: string, @Req() req: RequisicaoAutorizada) {

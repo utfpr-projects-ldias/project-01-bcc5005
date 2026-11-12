@@ -11,6 +11,8 @@ jest.mock('@/hooks/use-contratos', () => ({ useListaContratos: jest.fn(), useAce
 jest.mock('@/hooks/use-entregaveis', () => ({ useEntregaveis: jest.fn() }));
 jest.mock('@/hooks/use-etapas', () => ({ useEtapas: jest.fn() }));
 jest.mock('@/hooks/use-atividades', () => ({ useAtividades: jest.fn() }));
+// O formulário agora consulta ocorrências para oferecer vínculo opcional.
+jest.mock('@/hooks/use-ocorrencias', () => ({ useOcorrencias: () => ({ ocorrencias: [], loading: false, erro: null }) }));
 const contratos = useListaContratos as jest.Mock;
 const acesso = useAcessoContrato as jest.Mock;
 const entregaveis = useEntregaveis as jest.Mock;

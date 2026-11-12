@@ -1,5 +1,6 @@
 import {
   IsNotEmpty,
+  IsIn,
   IsOptional,
   IsString,
   Matches,
@@ -33,9 +34,20 @@ export class CriarOcorrenciaManualDto {
   })
   dataPrevista?: string | null;
 
+  /** Nova interface declara explicitamente se a execução usa unidades ou somente descrição. */
+  @IsOptional()
+  @IsIn(['QUANTITATIVO', 'DESCRITIVO'])
+  modoRegistro?: 'QUANTITATIVO' | 'DESCRITIVO';
+
   @IsOptional()
   @IsString()
   quantidadeRealizada?: string | null;
+
+  /** Quantidade planejada para esta ocorrência, distinta da realizada. */
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{1,15}(?:\.\d{1,3})?$/)
+  metaQuantidade?: string | null;
 
   @IsOptional()
   @IsString()

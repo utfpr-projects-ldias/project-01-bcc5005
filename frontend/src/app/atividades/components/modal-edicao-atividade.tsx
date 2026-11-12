@@ -1,6 +1,8 @@
 'use client';
 import { useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
+import { SeletorOcorrencia } from './seletor-ocorrencia';
+import { useOcorrencias } from '@/hooks/use-ocorrencias';
 import { ModalEtapa } from '@/app/contratos/components/modal-etapa';
 import { useEntregaveis } from '@/hooks/use-entregaveis';
 import { editarAtividadeApi, type Atividade } from '@/hooks/use-atividades';
@@ -18,13 +20,16 @@ export function ModalEdicaoAtividade({ atividade, contratoId, origem, onFechar, 
   onFechar: () => void; onSalvo?: () => void;
 }) {
   const entregaveis = useEntregaveis(contratoId);
+  const agenda = useOcorrencias(contratoId);
   const [form, setForm] = useState<FormularioAtividade>(() => ({
     titulo: atividade.titulo, dataHora: dataLocal(atividade.dataHora), descricao: atividade.descricao,
     tipo: TIPOS_ATIVIDADE.find(x => x === atividade.tipo) ?? 'Outro',
     responsavel: atividade.responsavel ?? '', duracao: atividade.duracao ?? '',
     participantes: (atividade.participantes ?? []).join(', '), local: atividade.local ?? '',
-    observacoes: atividade.observacoes ?? '', entregavelIds: atividade.entregaveis.map(x => x.id),
+    observacoes: atividade.observacoes ?? '', ocorrenciaId: atividade.ocorrenciaId, ocorrenciaIds: atividade.ocorrencias?.map(o => o.id) ?? (atividade.ocorrenciaId ? [atividade.ocorrenciaId] : []), quantidadeExecucao: atividade.quantidadeExecucao ?? null, entregavelIds: atividade.entregaveis.map(x => x.id),
   }));
+  const selecionada = agenda.ocorrencias.find(o => o.id === form.ocorrenciaId);
+  const unidade = entregaveis.dados?.find(e => e.id === selecionada?.entregavelId)?.unidadeMedida || "unidades";
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
   const [errosCampos, setErrosCampos] = useState<Record<string, string>>({});
@@ -55,8 +60,8 @@ export function ModalEdicaoAtividade({ atividade, contratoId, origem, onFechar, 
     finally { setSalvando(false); }
   }
   return createPortal(<ModalEtapa titulo="Editar atividade" contexto={atividade.titulo} estadoContextual="normal"
-    ocupado={salvando} formularioLongo camada="edicao" focoRetorno={origem} onFechar={onFechar} rotuloFechar="Fechar edição da atividade">
-    <form aria-label="Formulário de edição da atividade" onSubmit={salvar} noValidate className="space-y-4">
+    ocupado={salvando} larguraAmpla camada="edicao" focoRetorno={origem} onFechar={onFechar} rotuloFechar="Fechar edição da atividade">
+    <form aria-label="Formulário de edição da atividade" onSubmit={salvar} noValidate className="space-y-2.5">
       <p className="text-xs text-foreground/70">Campos com * são obrigatórios. As alterações ficam registradas na rastreabilidade.</p>
       {erro && <p role="alert" className="rounded-lg border border-error-text/35 p-3 text-sm text-error-text">{erro}</p>}
       <label className="block text-sm font-medium">Título *
@@ -69,7 +74,7 @@ export function ModalEdicaoAtividade({ atividade, contratoId, origem, onFechar, 
             {TIPOS_ATIVIDADE.map(x => <option key={x}>{x}</option>)}</select></label></div>
       {errosCampos.dataHora && <p className="text-xs text-error-text">{errosCampos.dataHora}</p>}
       <label className="block text-sm font-medium">Descrição *
-        <textarea required rows={4} maxLength={5000} className={CAMPO} value={form.descricao} onChange={e => campo('descricao', e.target.value)} /></label>
+        <textarea required rows={2} maxLength={5000} className={CAMPO} value={form.descricao} onChange={e => campo('descricao', e.target.value)} /></label>
       {errosCampos.descricao && <p className="text-xs text-error-text">{errosCampos.descricao}</p>}
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-sm font-medium">Responsável
@@ -93,6 +98,16 @@ export function ModalEdicaoAtividade({ atividade, contratoId, origem, onFechar, 
               <span className="min-w-0 break-words">{e.nome}</span></label>)}</div>}
         {errosCampos.entregavelIds && <p className="text-xs text-error-text">{errosCampos.entregavelIds}</p>}
       </fieldset>
+      {selecionada && (selecionada.modoRegistro === 'DESCRITIVO' || selecionada.origem === 'RECORRENTE') && <p role="status" className="rounded-lg border border-current/20 bg-background/35 p-3 text-xs text-foreground/70">Esta ocorrência é descritiva: registre o que foi realizado no campo Descrição, sem informar uma quantidade.</p>}
+      <SeletorOcorrencia contratoId={contratoId} entregavelIds={form.entregavelIds}
+        valor={form.ocorrenciaId} valores={form.ocorrenciaIds ?? []}
+        onChangeMultiplas={ids => setForm(atual => ({ ...atual, ocorrenciaIds: ids,
+          ocorrenciaId: ids.includes(atual.ocorrenciaId ?? '') ? atual.ocorrenciaId : null,
+          quantidadeExecucao: ids.includes(atual.ocorrenciaId ?? '') ? atual.quantidadeExecucao : null }))}
+        onChange={v => { campo('ocorrenciaId', v); campo('quantidadeExecucao', null); }} />
+      {selecionada?.origem === 'MANUAL_QUANTITATIVA' && (selecionada.modoRegistro === 'QUANTITATIVO' || (!selecionada.modoRegistro && (selecionada.metaQuantidade != null || selecionada.quantidadeRealizada != null))) && <label className="block text-sm font-medium">Quantidade executada nesta atividade
+        <input type="number" min="0" step="0.001" inputMode="decimal" className={CAMPO} value={form.quantidadeExecucao ?? ''} onChange={e => campo('quantidadeExecucao', e.target.value || null)} placeholder="Ex.: 10" /><span className="ml-2 text-sm text-foreground/65">{unidade}</span>
+      </label>}
       <footer className="flex flex-wrap justify-end gap-2 border-t border-brand-green/20 pt-4">
         <button type="button" className="rounded-lg border border-brand-green/30 px-4 py-2 text-sm" onClick={onFechar} disabled={salvando}>Cancelar</button>
         <button type="submit" aria-busy={salvando} disabled={salvando || entregaveis.carregando || Boolean(entregaveis.erro)}

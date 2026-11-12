@@ -1,7 +1,7 @@
 /** Contrato real HU05-06: a API NestJS usa camelCase e enums de domínio. */
 import { consultarUsuariosPaginados, type UsuarioPublico, type OperacaoPermissao } from './admin-usuarios';
 
-export type StatusContrato = 'PLANEJAMENTO' | 'EM_EXECUCAO' | 'EM_ENCERRAMENTO' | 'CONCLUIDO' | 'ENCERRADO' | 'SUSPENSO' | 'CANCELADO';
+export type StatusContrato = 'PLANEJAMENTO' | 'EM_EXECUCAO' | 'EM_ENCERRAMENTO' | 'CONCLUIDO' | 'FINALIZADO' | 'ENCERRADO' | 'SUSPENSO' | 'CANCELADO';
 export type ModoCalculo = 'SIMPLES' | 'PONDERADO';
 export type Contrato = {
   id: string;
@@ -36,7 +36,7 @@ export type PermissoesContrato = Record<OperacaoPermissao, boolean>;
 export type AcessoContrato = { podeEditar: boolean; permissoes?: PermissoesContrato };
 export const STATUS: Record<StatusContrato, string> = {
   PLANEJAMENTO: 'Planejamento', EM_EXECUCAO: 'Em execução', EM_ENCERRAMENTO: 'Em encerramento',
-  CONCLUIDO: 'Concluído', ENCERRADO: 'Encerrado', SUSPENSO: 'Suspenso', CANCELADO: 'Cancelado',
+  CONCLUIDO: 'Concluído', FINALIZADO: 'Encerrado', ENCERRADO: 'Encerrado', SUSPENSO: 'Suspenso', CANCELADO: 'Cancelado',
 };
 /** Ordem única de apresentação: fluxo implementado primeiro, situações administrativas ao fim. */
 export const ORDEM_STATUS: readonly StatusContrato[] = [
@@ -48,6 +48,12 @@ const API = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001').replace
 export class ErroContrato extends Error {
   constructor(public status: number, message: string) { super(message); this.name = 'ErroContrato'; }
 }
+/** A interface React controla a confirmação da vigência; nenhuma janela nativa do navegador. */
+export class ConfirmacaoVigenciaNecessaria extends Error {
+  constructor(public impacto: { confirmacao: string; total: number; planos: number; preservadasFora: number; futurasFora: number },
+    public dados: Partial<DadosContrato>) { super('Confirme o impacto da alteração de vigência.'); this.name = 'ConfirmacaoVigenciaNecessaria'; }
+}
+
 
 async function requisitar<T>(path: string, init?: RequestInit): Promise<T> {
   let resp: Response;
@@ -109,6 +115,16 @@ export const retomarContrato = (id: string, motivo: string) =>
   requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/retomar`, { method: 'PATCH', body: JSON.stringify({ motivo }) });
 export const reverterCancelamentoContrato = (id: string, motivo: string) =>
   requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/reverter-cancelamento`, { method: 'PATCH', body: JSON.stringify({ motivo }) });
+/** Fechamento administrativo parcial: somente após resolver todas as obrigações. */
+export async function finalizarContrato(c: string, motivo: string): Promise<Contrato> {
+  const r = await fetch(`${API}/contratos/${encodeURIComponent(c)}/finalizar`, {
+    method:'PATCH', credentials:'include', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({motivo}),
+  });
+  if (!r.ok) { const corpo = await r.json().catch(() => null);
+    throw new Error(typeof corpo?.message === 'string' ? corpo.message : 'Finalização não autorizada: confira a situação das etapas e entregáveis.'); }
+  return await r.json() as Contrato;
+}
 export const concluirContrato = (id: string) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/concluir`, { method: 'PATCH' });
 export const encerrarContratoAntecipadamente = (id: string, motivo: string) =>
   requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/encerrar-antecipadamente`, {
@@ -120,7 +136,18 @@ export const reabrirContrato = (id: string, motivo: string) => requisitar<Contra
 export const reativarContrato = (id: string, motivo: string) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/reativar`, { method: 'PATCH', body: JSON.stringify({ motivo }) });
 
 export const excluirContratoArquivado = (id: string) => requisitar<{ excluido: true; arquivosPendentes: number }>(`/contratos/${encodeURIComponent(id)}`, { method: 'DELETE' });
-export const editarContrato = (id: string, dados: Partial<DadosContrato>) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(dados) });
+export async function editarContrato(id: string, dados: Partial<DadosContrato>, confirmacaoVigencia?: string) {
+  const base = `/contratos/${encodeURIComponent(id)}`;
+  const enviar = (corpo: object) => requisitar<Contrato>(base, { method: 'PATCH', body: JSON.stringify(corpo) });
+  if (confirmacaoVigencia) return enviar({ ...dados, confirmacaoVigencia });
+  try { return await enviar(dados); }
+  catch (erro) {
+    if (!(erro instanceof ErroContrato) || erro.status !== 409 || erro.message !== 'Confirme o impacto da vigência na agenda recorrente.') throw erro;
+    const impacto = await requisitar<{ confirmacao: string; total: number; planos: number; preservadasFora: number; futurasFora: number; bloqueado: boolean }>(`${base}/impacto-vigencia`, { method: 'POST', body: JSON.stringify({ inicioVigencia: dados.inicioVigencia, terminoVigencia: dados.terminoVigencia }) });
+    if (impacto.bloqueado) throw new ErroContrato(409, 'Replaneje a agenda futura antes de alterar a vigência.');
+    throw new ConfirmacaoVigenciaNecessaria(impacto, dados);
+  }
+}
 
 /** A consulta de usuários ativos é administrativa, nunca liberada a não-ADMIN. */
 export async function listarResponsaveis(): Promise<{ usuarios: UsuarioPublico[]; incompleta: boolean }> {

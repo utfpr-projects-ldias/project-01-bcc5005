@@ -5,8 +5,8 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import type { UsuarioPublico } from '@/lib/admin-usuarios';
 import { LIMITES_CONTRATO, duracaoMesesSchema, validarContrato, type ErrosContrato } from '@/lib/validacao-contrato';
 import {
-  dataCivil, MODOS, STATUS, terminoPorMeses,
-  type Contrato, type DadosContrato, type ModoCalculo, type StatusContrato,
+  dataCivil, STATUS, terminoPorMeses,
+  type Contrato, type DadosContrato, type StatusContrato,
 } from '@/lib/contratos';
 
 export const dadosIniciais: DadosContrato = {
@@ -184,14 +184,10 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
       <div className="grid gap-4 md:grid-cols-2">
         <Campo titulo="Status operacional" id="status" obrigatorio ajuda={emRevisao ? 'Fase operacional durante a revisão.' : inicial ? 'Situações especiais exigem autorização. Concluído depende de aprovação separada.' : 'O novo contrato começa em Planejamento ou Em execução.'} erro={erroDo('status')}>
           <select id="status" className={input} value={valorSelectStatus} onChange={e => selecionarStatus(e.target.value as StatusContrato)} {...acessibilidade('status', 'status', true)}>{statusDisponiveis.map(k => <option key={`contrato-status-${k}`} value={k}>{k === 'ENCERRADO' ? 'Encerrar' : STATUS[k]}</option>)}</select></Campo>
-        <Campo titulo="Modo de cálculo físico" id="modo-calculo" obrigatorio erro={erroDo('modoCalculo')} ajuda="Define como o avanço físico será calculado com os entregáveis, não um valor financeiro.">
-          <select id="modo-calculo" className={input} value={form.modoCalculo} onChange={e => atualizar('modoCalculo', e.target.value as ModoCalculo)} {...acessibilidade('modo-calculo', 'modoCalculo', true)}>{(Object.keys(MODOS) as ModoCalculo[]).map(k => <option key={k} value={k}>{MODOS[k]}</option>)}</select></Campo>
+
       </div>
       <p className="rounded-lg border border-brand-green/20 p-3 text-xs text-foreground/70">
-        {form.modoCalculo === 'SIMPLES'
-          ? 'Simples: o avanço do contrato será a média dos percentuais de execução dos entregáveis considerados.'
-          : 'Ponderado: o avanço será a soma dos percentuais de execução multiplicados pelos pesos operacionais dos entregáveis. Os pesos válidos deverão somar 100%.'}
-        {' '}O avanço físico será calculado a partir dos entregáveis quando essa funcionalidade estiver disponível.
+        O cálculo físico é configurado na aba Execução, conforme as permissões operacionais do contrato.
       </p>
     </div>
 

@@ -42,7 +42,7 @@ describe('HU07-02 — validações de planejamento independentes da execução',
   });
   it('quantitativo exige quantidade > 0 e unidade, sem arredondar decimal', () => {
     const e = exemplo(TipoEntregavel.QUANTITATIVO);
-    expect(() => validarPlanejamento(e)).toThrow(BadRequestException);
+    expect(() => validarPlanejamento(e)).toThrow(BadRequestException); // meta obrigatória no planejamento
     e.quantidadePrevista = '0'; e.unidadeMedida = 'un';
     expect(() => validarPlanejamento(e)).toThrow(BadRequestException);
     e.quantidadePrevista = '2.125';
@@ -52,6 +52,7 @@ describe('HU07-02 — validações de planejamento independentes da execução',
   });
   it('recorrente exige frequência fixa e versão 1 exata', () => {
     const e = exemplo(TipoEntregavel.RECORRENTE);
+    expect(() => validarPlanejamento(e)).toThrow(BadRequestException);
     e.periodicidade = PeriodicidadeEntregavel.MENSAL;
     expect(() => validarPlanejamento(e)).toThrow(BadRequestException);
     e.configuracaoPeriodicidade = { versao: 1 };
@@ -138,6 +139,7 @@ describe('HU07-02 — serviço integra escopo, auditoria e transações', () => 
   const auditoria = { registrarResolvedorContexto: jest.fn(), registrarNaTransacao: jest.fn(async () => undefined) };
   const escopos = { registrarAdaptador: jest.fn() };
   const ctx = {
+    query: jest.fn(async (sql: string) => sql.includes('AS total') ? [{ total: '0' }] : [{ soma: '0' }]),
     getRepository: jest.fn((entity: { name: string }) => entity.name === 'Entregavel' ? repositorio : ({
       findOneBy: jest.fn(async () => ({ id: etapa, ativo: true })),
       createQueryBuilder: jest.fn(() => ({ setLock: () => ({ where: () => ({ getOne: async () => ({ id: contrato }) }) }) })),
@@ -161,13 +163,20 @@ describe('HU07-02 — serviço integra escopo, auditoria e transações', () => 
     expect(await resolve(id)).toBe(contrato);
   });
   it('criação faz uma transação, exige etapa e registra ator na auditoria', async () => {
-    const dto = { etapaId: etapa, nome: 'Entrega teste', tipo: TipoEntregavel.UNICO } as CriarEntregavelDto;
+    const dto = { etapaId: etapa, nome: 'Entrega teste', tipo: TipoEntregavel.UNICO, inicioPrevisto: '2026-10-30', peso: '20' } as CriarEntregavelDto;
     const resultado = await service.criar(contrato, dto, ator);
     expect(resultado.id).toBe(id);
     expect(dataSource.transaction).toHaveBeenCalledTimes(1);
     expect(auditoria.registrarNaTransacao).toHaveBeenCalledWith(ctx, ator, expect.objectContaining({
       entidadeTipo: 'ENTREGAVEL', entidadeId: id,
     }));
+  });
+  it('rejeita mais um entregável quando os pesos ativos já somam 100%', async () => {
+    ctx.query.mockResolvedValueOnce([{ total: '100' }]);
+    const dto = { etapaId: etapa, nome: 'Entrega adicional', tipo: TipoEntregavel.UNICO,
+      inicioPrevisto: '2026-11-01', peso: '1' } as CriarEntregavelDto;
+    await expect(service.criar(contrato, dto, ator)).rejects.toThrow('100% do contrato');
+    expect(repositorio.save).not.toHaveBeenCalled();
   });
   it('bloqueia criação acima de 100 entregáveis, incluindo arquivados', async () => {
     repositorio.count.mockResolvedValueOnce(100);

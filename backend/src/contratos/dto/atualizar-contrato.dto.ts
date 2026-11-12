@@ -21,6 +21,8 @@ import { StatusContrato } from '../status-contrato.enum.js';
  * `termino >= inicio` deve virar 400, não inconsistência silenciosa.
  */
 export class AtualizarContratoDto {
+  @IsOptional() @IsString() @Matches(/^[a-f0-9]{64}$/) confirmacaoVigencia?: string;
+
   /** Legado: flag recusada; fechamento da revisão exige endpoint próprio. */
   @IsOptional()
   @IsBoolean()

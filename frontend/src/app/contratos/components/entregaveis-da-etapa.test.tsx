@@ -3,6 +3,8 @@ jest.mock('@/app/contratos/components/painel-comprovacao-evidencia', () => ({
 }));
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { EntregaveisDaEtapa } from './entregaveis-da-etapa';
+// Teste da lista de entregáveis: a agenda HU09 tem suíte própria e depende de ProviderConsultas.
+jest.mock('@/app/ocorrencias/components/painel-ocorrencias', () => ({ PainelOcorrencias: () => <section aria-label="Ocorrências do entregável" /> }));
 // Teste isolado do modal: a consulta de atividades é coberta por testes próprios.
 jest.mock('@/hooks/use-atividades', () => ({ useAtividades: () => ({
   atividades: [], total: 0, loading: false, atualizando: false, erro: null, atualizar: jest.fn(),
@@ -92,18 +94,14 @@ test('lista usa atualização de dados após mutação, sem botão redundante de
   expect(screen.queryByRole('button', { name: 'Atualizar entregáveis' })).not.toBeInTheDocument();
 });
 
-test('recolher e reabrir cadastro preserva rascunho sem animation; envio bem-sucedido reinicia', async () => {
-  const atualizar = jest.fn().mockResolvedValue(undefined);
-  const { rerender } = render(<EntregaveisDaEtapa contratoId="qa" etapaId="etapa" dados={[]} carregando={false} atualizar={atualizar} podeCriar />);
+test('cadastro acontece em modal sem inserir formulário na listagem', () => {
+  render(<EntregaveisDaEtapa {...props} dados={[]} podeCriar />);
   fireEvent.click(screen.getByRole('button', { name: 'Novo entregável' }));
-  fireEvent.change(screen.getByLabelText('Nome *'), { target: { value: 'Rascunho não enviado' } });
+  expect(screen.getByRole('dialog', { name: 'Novo entregável' })).toBeInTheDocument();
+  expect(screen.getByRole('form', { name: 'Cadastrar entregável' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Cadastrando entregável' }));
-  expect(screen.queryByLabelText('Nome *')).not.toBeVisible();
-  fireEvent.click(screen.getByRole('button', { name: 'Novo entregável' }));
-  expect(screen.getByLabelText('Nome *')).toHaveValue('Rascunho não enviado');
-  rerender(<EntregaveisDaEtapa contratoId="qa" etapaId="etapa" dados={[]} carregando={false} atualizar={atualizar} podeCriar />);
+  expect(screen.queryByRole('form', { name: 'Cadastrar entregável' })).not.toBeInTheDocument();
 });
-
 
 test('clique no título abre detalhe real em modal; Escape preserva contrato e scroll', () => {
   const view = render(<EntregaveisDaEtapa {...props} podeCriar podeEditar />);
@@ -128,6 +126,8 @@ test('modal de entregável: evidência planejada abre detalhe sem simular arquiv
   render(<EntregaveisDaEtapa {...props} dados={[itemComChecklist]} />);
   await act(async () => { fireEvent.click(screen.getByRole('link', { name: 'Relatório de instalação' })); });
   const modal = screen.getByRole('dialog', { name: 'Relatório de instalação' });
+  // Ocorrências é a aba inicial; abrir Evidências antes de procurar o checklist.
+  fireEvent.click(within(modal).getByRole('tab', { name: 'Evidências' }));
   const areaRolagem = modal.querySelector<HTMLElement>('.overflow-y-auto');
   expect(areaRolagem).not.toBeNull();
   // Simula o usuário tendo rolado o painel até as evidências antes do clique.
@@ -264,9 +264,9 @@ test('comprovação completa sem conclusão operacional não coloca entregável 
   const cartao = screen.getByRole('link', { name: e.nome });
   expect(cartao).toHaveClass('border-brand-green/40');
   expect(cartao).not.toHaveClass('opacity-85');
-  fireEvent.click(screen.getByRole('tab', { name: 'Entregáveis concluídos' }));
+  fireEvent.click(screen.getByRole('tab', { name: 'Entregáveis finalizados' }));
   expect(screen.queryByRole('link', { name: e.nome })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('tab', { name: /^Todas$/ }));
+  fireEvent.click(screen.getByRole('tab', { name: /^Ativas$/ }));
   expect(within(cartao).getByLabelText('Entregável com comprovação documental completa')).toHaveClass('h-8');
   expect(cartao).toHaveTextContent('Comprovação documental completa');
   // O marcador já foi localizado acima. Uma nova consulta após o filtro pode
@@ -285,7 +285,7 @@ test('abas de entregáveis não movem a geometria quando arquivados estiver vazi
   await waitFor(() => expect(screen.getByText('Nenhum entregável arquivado nesta etapa.')).toBeInTheDocument());
   expect(caixa).toHaveClass('min-h-[min(42dvh,400px)]');
   expect(screen.queryByRole('button', { name: 'Novo entregável' })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('tab', { name: /^Todas$/ }));
+  fireEvent.click(screen.getByRole('tab', { name: /^Ativas$/ }));
   expect(screen.getByRole('list', { name: 'Entregáveis planejados da etapa' })).toBeInTheDocument();
   consultaArquivo.mockReset();
 });
@@ -396,7 +396,7 @@ test('evidência opcional verificada não promove status operacional nem modal a
 
 test('aba Concluídos exige status operacional persistido, independente do checklist usado como filtro', () => {
   render(<EntregaveisDaEtapa {...props} dados={[{ ...e, statusExecucao: 'CONCLUIDO' as const }]} />);
-  fireEvent.click(screen.getByRole('tab', { name: 'Entregáveis concluídos' }));
+  fireEvent.click(screen.getByRole('tab', { name: 'Entregáveis finalizados' }));
   expect(screen.getByRole('link', { name: e.nome })).toHaveTextContent('Concluído');
 });
 
@@ -404,7 +404,7 @@ test('aba Concluídos exige status operacional persistido, independente do check
 test('arquivamento da etapa bloqueia ações, mas não recolore entregável concluído', () => {
   render(<EntregaveisDaEtapa {...props} dados={[{ ...e, statusExecucao: 'CONCLUIDO' }]}
     paiArquivado estadoProprioEtapa="arquivado" podeEditar />);
-  fireEvent.click(screen.getByRole('tab', { name: 'Entregáveis concluídos' }));
+  fireEvent.click(screen.getByRole('tab', { name: 'Entregáveis finalizados' }));
   const card = screen.getByRole('link', { name: 'Relatório de instalação' });
   expect(card.closest('[data-entregavel-estado]')).toHaveAttribute('data-entregavel-estado', 'concluido');
   expect(card).toHaveClass('border-violet-500/65');
@@ -413,14 +413,46 @@ test('arquivamento da etapa bloqueia ações, mas não recolore entregável conc
 });
 
 
-test('Todas reúne entregáveis em revisão e concluídos sem misturar os arquivados', () => {
+test('Ativas mostra pendentes e revisões, sem duplicar concluídos e arquivados', () => {
   render(<EntregaveisDaEtapa {...props} dados={[
     { ...e, id: 'reaberto', nome: 'Entrega reaberta', reabertoEm: '2026-11-09T10:00:00Z', statusExecucao: 'EM_ANDAMENTO' },
     { ...e, id: 'concluido', nome: 'Entrega concluída', statusExecucao: 'CONCLUIDO' },
     { ...e, id: 'arquivado', nome: 'Entrega arquivada', arquivadoEm: '2026-11-09T11:00:00Z' },
   ]} />);
-  expect(screen.getByRole('tab', { name: 'Todas' })).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByRole('tab', { name: 'Ativas' })).toHaveAttribute('aria-selected', 'true');
   expect(screen.getByRole('link', { name: 'Entrega reaberta' })).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: 'Entrega concluída' })).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Entrega concluída' })).not.toBeInTheDocument();
   expect(screen.queryByRole('link', { name: 'Entrega arquivada' })).not.toBeInTheDocument();
+});
+
+
+test('Finalizados reúne Concluído e Encerrado com cores próprias; Ativas não duplica nenhum dos dois', () => {
+  render(<EntregaveisDaEtapa {...props} dados={[
+    { ...e, id: 'completo', nome: 'Entrega concluída', statusExecucao: 'CONCLUIDO' },
+    { ...e, id: 'encerrado', nome: 'Entrega encerrada', statusExecucao: 'FINALIZADO', percentualExecucao: 83.33 },
+    { ...e, id: 'aberto', nome: 'Entrega em andamento', statusExecucao: 'EM_ANDAMENTO' },
+  ]} />);
+  expect(screen.queryByRole('link', { name: 'Entrega concluída' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Entrega encerrada' })).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Entrega em andamento' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab', { name: 'Entregáveis finalizados' }));
+  const concluida = screen.getByRole('link', { name: 'Entrega concluída' });
+  const encerrada = screen.getByRole('link', { name: 'Entrega encerrada' });
+  expect(concluida).toHaveClass('border-violet-500/65');
+  expect(encerrada).toHaveClass('border-purple-500/65');
+  expect(encerrada).toHaveTextContent('Encerrado');
+  expect(concluida).toHaveTextContent('Concluído');
+  expect(screen.queryByRole('link', { name: 'Entrega em andamento' })).not.toBeInTheDocument();
+});
+
+
+test('limite de 100% dos pesos informa sem abrir cadastro e inclui outras etapas do contrato', () => {
+  const outraEtapa = { ...e, id: 'outro-item', etapaId: 'etapa-b', peso: '80' };
+  const atual = { ...e, peso: '20' };
+  render(<EntregaveisDaEtapa {...props} dados={[atual, outraEtapa]} podeCriar />);
+  fireEvent.click(screen.getByRole('button', { name: 'Novo entregável' }));
+  expect(screen.getByRole('dialog', { name: 'Limite do peso operacional' })).toBeInTheDocument();
+  expect(screen.queryByRole('form', { name: 'Cadastrar entregável' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Entendi' }));
+  expect(screen.queryByRole('dialog', { name: 'Limite do peso operacional' })).not.toBeInTheDocument();
 });

@@ -1,3 +1,4 @@
+jest.mock('@/hooks/use-progresso', () => ({ useProgresso: () => ({ progresso: null, loading: false, erro: null, atualizar: jest.fn() }) }));
 jest.mock('@/hooks/use-entregaveis', () => ({
   useEntregaveis: () => ({ dados: [], carregando: false, erro: undefined, atualizar: jest.fn().mockResolvedValue([]) }),
   useResumoDocumentalContrato: () => ({ dados: {}, carregando: false, erro: undefined, atualizar: jest.fn().mockResolvedValue({}) }),

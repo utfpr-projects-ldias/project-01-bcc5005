@@ -21,8 +21,7 @@ export default function DetalheEntregavelPage() {
   const habilitado = Boolean(perfil.dados?.ativo && !perfil.erro);
   const consulta = useDetalheEntregavel(contratoId, entregavelId, habilitado);
   const acesso = useAcessoContrato(contratoId, habilitado);
-  const podeEditar = habilitado && !acesso.erro && !!acesso.dados?.podeEditar &&
-    ['ADMINISTRADOR', 'GESTOR'].includes(perfil.dados?.perfil ?? '');
+  const podeEditar = habilitado && !acesso.erro && Boolean(acesso.dados?.permissoes?.editarEntregaveis); 
   async function salvar(dados: DadosPlanejamentoEntregavel) {
     await editarEntregavel(contratoId, entregavelId, dados);
     setEditando(false); toastSucesso('Planejamento atualizado.');
@@ -49,7 +48,9 @@ export default function DetalheEntregavelPage() {
     </button></div>}
     {item && podeEditar && editando && <div id="edicao-entregavel" className="etapa-form-expandido">
       <FormularioEntregavel key={item.id} contratoId={contratoId} etapaId={item.etapaId} inicial={item} onSalvar={salvar}
-        onCancelar={() => setEditando(false)} onSalvandoMudou={setSalvando} />
+        onCancelar={() => setEditando(false)} onSalvandoMudou={setSalvando}
+        podeConfigurarPesos={Boolean(acesso.dados?.permissoes?.configurarPesos)}
+        podeReplanejarOcorrencias={Boolean(acesso.dados?.permissoes?.configurarAgendaOcorrencias)} />
     </div>}
     {item && !editando && <ConteudoEntregavel item={item} podeEditarEsperada={podeEditar} podeVerHistorico
       aoAtualizarEsperada={() => { void consulta.atualizar().catch(() => {}); }} />}
