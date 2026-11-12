@@ -1,0 +1,15 @@
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { AutorizacaoModule } from '../autorizacao/autorizacao.module.js';
+import { AuditoriaModule } from '../auditoria/auditoria.module.js';
+import { Entregavel } from '../entregaveis/entregavel.entity.js';
+import { AtividadeEntity } from './atividade.entity.js';
+import { AtividadesController } from './atividades.controller.js';
+import { AtividadesService } from './atividades.service.js';
+
+@Module({
+  imports: [TypeOrmModule.forFeature([AtividadeEntity, Entregavel]), AutorizacaoModule, AuditoriaModule],
+  providers: [AtividadesService],
+  controllers: [AtividadesController],
+})
+export class AtividadesModule {}

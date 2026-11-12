@@ -1,0 +1,45 @@
+.env
+.env.local
+
+node_modules/
+.next/
+dist/
+coverage/
+
+*.log
+
+*.tsbuildinfo
+
+# QA: artefatos locais, credenciais e dependencias nao vao ao Git.
+qa/.local/
+qa/**/.local/
+qa/**/venv/
+qa/**/.venv/
+qa/**/browsers/
+qa/**/relatorios/
+qa/**/execucoes/
+qa/**/*.zip
+qa/**/credenciais.json
+__pycache__/
+*.py[cod]
+.pytest_cache/
+**/.env
+**/.env.*
+!**/.env.example
+
+# Backups e dumps locais de desenvolvimento
+*.dump
+*.backup
+*.bak
+
+# Pacote exportado de QA na raiz
+/qa.zip
+
+# Credenciais e sessões de automação
+qa/**/credenciais*.json
+qa/**/storage-state*.json
+qa/**/auth-state*.json
+
+# Arquivos temporários do editor e sistema
+.DS_Store
+*.swp
