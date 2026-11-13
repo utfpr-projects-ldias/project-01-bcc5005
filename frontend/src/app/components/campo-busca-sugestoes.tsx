@@ -38,7 +38,7 @@ export function CampoBuscaSugestoes({ valor, onChange, opcoes, rotulo, placehold
     <div className="relative">
       <input ref={campo} id={id} type="search" role="combobox" aria-autocomplete="list" aria-expanded={aberta} aria-controls={`${id}-opcoes`}
         aria-activedescendant={aberta && sugestoes[indice] ? `${id}-opcao-${indice}` : undefined}
-        autoComplete="off" aria-label={rotulo} value={valor} placeholder={placeholder}
+        autoComplete="off" maxLength={120} aria-label={rotulo} value={valor} placeholder={placeholder}
         onFocus={() => { setAberta(true); setIndice(0); }} onClick={() => setAberta(true)} onKeyDown={teclado}
         onChange={e => { onChange(e.target.value); setIndice(0); setAberta(true); }}
         onBlur={() => setAberta(false)}

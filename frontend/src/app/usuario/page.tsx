@@ -96,18 +96,18 @@ export default function MinhaContaPage() {
         <label className="block text-sm" htmlFor="conta-email">Novo e-mail</label>
         <input className={campo} id="conta-email" type="email" autoComplete="email" required maxLength={320} value={email} onChange={(e) => setEmail(e.target.value)} />
         <label className="block text-sm" htmlFor="conta-senha-email">Senha atual</label>
-        <input className={campo} id="conta-senha-email" type="password" autoComplete="current-password" required value={senhaEmail} onChange={(e) => setSenhaEmail(e.target.value)} />
+        <input className={campo} id="conta-senha-email" type="password" maxLength={256} autoComplete="current-password" required value={senhaEmail} onChange={(e) => setSenhaEmail(e.target.value)} />
         <button className={botao} type="submit" disabled={enviando}> {enviando ? 'Salvando...' : 'Atualizar e-mail'} </button>
       </form>
       <form onSubmit={enviarSenha} aria-label="Alterar minha senha" className="space-y-4 rounded-xl border border-brand-green/30 p-5">
         <h2 className="font-semibold">Alterar minha senha</h2>
         <p className="text-xs text-foreground/70">Mínimo de 12 caracteres, incluindo maiúscula, minúscula, número e símbolo. Você precisará fazer login novamente.</p>
         <label className="block text-sm" htmlFor="conta-senha-atual">Senha atual</label>
-        <input className={campo} id="conta-senha-atual" type="password" autoComplete="current-password" required value={senhaAtual} onChange={(e) => setSenhaAtual(e.target.value)} />
+        <input className={campo} id="conta-senha-atual" type="password" maxLength={256} autoComplete="current-password" required value={senhaAtual} onChange={(e) => setSenhaAtual(e.target.value)} />
         <label className="block text-sm" htmlFor="conta-senha-nova">Nova senha</label>
         <input className={campo} id="conta-senha-nova" type="password" autoComplete="new-password" required minLength={12} maxLength={128} value={novaSenha} onChange={(e) => setNovaSenha(e.target.value)} />
         <label className="block text-sm" htmlFor="conta-senha-confirmar">Confirme a nova senha</label>
-        <input className={campo} id="conta-senha-confirmar" type="password" autoComplete="new-password" required value={confirmar} onChange={(e) => setConfirmar(e.target.value)} />
+        <input className={campo} id="conta-senha-confirmar" type="password" maxLength={128} autoComplete="new-password" required value={confirmar} onChange={(e) => setConfirmar(e.target.value)} />
         <button className={botao} type="submit" disabled={enviando}> {enviando ? 'Salvando...' : 'Alterar minha senha'} </button>
       </form>
     </>}

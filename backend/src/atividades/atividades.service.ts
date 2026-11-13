@@ -87,7 +87,7 @@ export class AtividadesService implements OnModuleInit {
     const idsEtapas = [...new Set(encontrados.map(e => e.etapaId))];
     const etapas = await manager.find(Etapa, { where: { id: In(idsEtapas), contratoId } });
     if (etapas.length !== idsEtapas.length || etapas.some(e =>
-      e.arquivadoEm || e.status === 'CONCLUIDA' || e.status === 'ENCERRADA')) {
+      e.arquivadoEm || e.conclusaoSolicitadaEm || e.encerramentoSolicitadoEm || e.status === 'CONCLUIDA' || e.status === 'ENCERRADA')) {
       throw new ConflictException('Reabra a etapa antes de vincular uma nova atividade');
     }
     return encontrados;

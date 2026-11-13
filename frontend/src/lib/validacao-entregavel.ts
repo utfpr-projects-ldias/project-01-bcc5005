@@ -59,8 +59,8 @@ export function mudouEstrutura(r: RascunhoEntregavel, inicial?: Entregavel): boo
 export function validarEntregavel(r: RascunhoEntregavel): { sucesso: true; dados: DadosPlanejamentoEntregavel } | { sucesso: false; erros: ErrosEntregavel } {
   const erros: ErrosEntregavel = {};
   const nome = r.nome.trim();
-  if (!nome || nome.length > 255) erros.nome = 'Informe o nome (até 255 caracteres).';
-  for (const [campo, maximo] of [['codigo', 50], ['descricao', 3000], ['unidadeMedida', 80], ['criterioConclusao', 5000], ['observacoes', 3000]] as const) {
+  if (!nome || nome.length > 120) erros.nome = 'Informe o nome (até 120 caracteres).';
+  for (const [campo, maximo] of [['codigo', 30], ['descricao', 1200], ['unidadeMedida', 80], ['criterioConclusao', 1500], ['observacoes', 1000]] as const) {
     const t = r[campo];
     if (t && (!t.trim() || t.length > maximo)) erros[campo] = `Revise o campo (até ${maximo} caracteres e sem valor somente com espaços).`;
   }

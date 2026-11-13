@@ -568,7 +568,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                   <select id="usuario-perfil" className={campo} value={form.perfil} onChange={(e) => setForm((s) => ({ ...s, perfil: e.target.value as PerfilFuncionario }))}><option value="GESTOR">Gestor</option><option value="COLABORADOR">Colaborador</option></select>
                 </div>
                 <div><label htmlFor="usuario-senha" className="mb-1 block text-sm">Senha inicial</label>
-                  <input id="usuario-senha" type="password" autoComplete="new-password" className={campo} value={form.senhaInicial} onChange={(e) => setForm((s) => ({ ...s, senhaInicial: e.target.value }))} aria-invalid={!!erros.senhaInicial} />
+                  <input id="usuario-senha" type="password" maxLength={128} autoComplete="new-password" className={campo} value={form.senhaInicial} onChange={(e) => setForm((s) => ({ ...s, senhaInicial: e.target.value }))} aria-invalid={!!erros.senhaInicial} />
                   {erros.senhaInicial && <p role="alert" className="text-xs text-error-text">{erros.senhaInicial}</p>}
                 </div>
                 <div><label htmlFor="usuario-confirmacao" className="mb-1 block text-sm">Confirmar senha</label>

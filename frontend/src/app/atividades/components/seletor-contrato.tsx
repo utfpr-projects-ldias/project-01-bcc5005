@@ -33,7 +33,7 @@ export function SeletorContrato({ contratos, valor, onChange, carregando = false
   }}>
     <label htmlFor="contrato-atividades" className="block text-xs font-semibold text-foreground/80">Contrato</label>
     <div className="relative mt-1.5">
-      <input id="contrato-atividades" type="search" role="combobox" aria-label="Contrato" autoComplete="off"
+      <input id="contrato-atividades" type="search" maxLength={160} role="combobox" aria-label="Contrato" autoComplete="off"
         aria-controls={idLista} aria-expanded={aberto} aria-autocomplete="list"
         aria-activedescendant={aberto && filtrados[realce] ? `${idLista}-${filtrados[realce].id}` : undefined}
         placeholder={carregando ? 'Carregando contratos...' : 'Selecione um contrato...'}

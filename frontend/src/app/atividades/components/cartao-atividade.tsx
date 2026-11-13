@@ -19,6 +19,7 @@ import type { Entregavel } from '@/lib/entregaveis';
 import { chaveTexto } from '@/lib/repositorio-consultas';
 import { consultarElegibilidadeConclusao, type Contrato } from '@/lib/contratos';
 import { contextoDaDecisao, coresDecisao } from '@/lib/cores-decisoes';
+import { estadoDoObjeto } from '@/lib/identidade-operacional';
 import { ModalEdicaoAtividade } from './modal-edicao-atividade';
 
 type Acao = 'solicitar-conclusao' | 'aprovar-conclusao' | 'cancelar-solicitacao' | 'reabrir' | 'arquivar' | 'reativar' | 'excluir';
@@ -40,7 +41,7 @@ function Icone({ nome }: { nome: keyof typeof ICONES }) {
 }
 const SITUACOES: Record<EstadoAtividade, { titulo: string; estilo: string }> = {
   REGISTRADA: { titulo: 'Registrada', estilo: 'border-brand-green/35 bg-brand-green/10 text-brand-neon' },
-  PENDENTE_CONCLUSAO: { titulo: 'Pendente de conclusão', estilo: 'border-amber-400/50 bg-amber-500/10 text-amber-200' },
+  PENDENTE_CONCLUSAO: { titulo: 'Pendente de conclusão', estilo: 'border-violet-400/50 bg-violet-500/10 text-violet-200' },
   VERIFICADA: { titulo: 'Verificada', estilo: 'border-violet-400/35 bg-violet-500/10 text-violet-200' },
   ARQUIVADA: { titulo: 'Arquivada', estilo: 'border-amber-500/40 bg-amber-500/10 text-amber-200' },
 };
@@ -54,8 +55,8 @@ export function statusVisualEntregavel(ent: Pick<Entregavel, 'arquivadoEm' | 're
 const COR_ATIVIDADE = {
   REGISTRADA: { borda: 'border-brand-green/35', fundo: 'bg-brand-green/[0.025]', texto: 'text-brand-neon',
     linha: 'border-brand-green/20', botao: 'border-brand-green/35 text-brand-neon hover:bg-brand-green/10' },
-  PENDENTE_CONCLUSAO: { borda: 'border-amber-400/45', fundo: 'bg-amber-500/[0.055]', texto: 'text-amber-200',
-    linha: 'border-amber-400/20', botao: 'border-amber-400/45 text-amber-200 hover:bg-amber-500/10' },
+  PENDENTE_CONCLUSAO: { borda: 'border-violet-400/45', fundo: 'bg-violet-500/[0.055]', texto: 'text-violet-200',
+    linha: 'border-violet-400/20', botao: 'border-violet-400/45 text-violet-200 hover:bg-violet-500/10' },
   VERIFICADA: { borda: 'border-violet-400/50', fundo: 'bg-violet-500/[0.045]', texto: 'text-violet-300',
     linha: 'border-violet-400/25', botao: 'border-violet-400/40 text-violet-300 hover:bg-violet-500/10' },
   ARQUIVADA: { borda: 'border-amber-500/50', fundo: 'bg-amber-500/[0.04]', texto: 'text-amber-300',
@@ -149,7 +150,7 @@ export function PreviaContrato({ contratoId, fechar, foco }: { contratoId: strin
           {acaoReabrir && podeReabrir ?
             <button type="button" className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-teal-500/65 bg-teal-500/10 px-3 text-xs font-semibold text-teal-200 hover:bg-teal-500/20 focus-visible:outline-2 focus-visible:outline-teal-400"
               onClick={() => enviarAcao(acaoReabrir)}>⟳ Reabrir</button>
-            : !acaoReabrir && <MenuAcoesObjeto rotulo="Fechar" disabled={!contrato}>
+            : !acaoReabrir && <MenuAcoesObjeto rotulo="Fechar" disabled={!contrato} pendenteConclusao={Boolean(contrato?.conclusaoSolicitadaEm)}>
             <BotaoAcaoModal intencao="suspender" disabled={!encerramentoElegivel || !permitido('suspenderContrato')} onClick={() => enviarAcao('suspender')}>⏸ Suspender contrato</BotaoAcaoModal>
             <BotaoAcaoModal intencao="cancelar" disabled={!encerramentoElegivel || !permitido('cancelarContrato')} onClick={() => enviarAcao('cancelar')}>✕ Cancelar contrato</BotaoAcaoModal>
             <BotaoAcaoModal intencao="encerrar" disabled={!encerramentoElegivel || !permitido('encerrarContrato')} onClick={() => enviarAcao('encerrar')}>⚑ Encerrar antecipadamente</BotaoAcaoModal>
@@ -231,7 +232,7 @@ export function CartaoAtividade({ atividade, contratoId, permissoes, compacto = 
   const estado = atividade.status ?? 'REGISTRADA';
   const situacao = SITUACOES[estado];
   const cores = COR_ATIVIDADE[estado];
-  const estadoModal = estado === 'VERIFICADA' ? 'concluido' : estado === 'ARQUIVADA' ? 'arquivado' : 'normal';
+  const estadoModal = estadoDoObjeto({objeto:'atividade',status:estado});
   const coresModalAcao = coresDecisao(contextoDaDecisao(pendente ? `${ROTULO[pendente]} atividade` : '', estadoModal));
 
   const acaoDisponivel = (acao: Acao) => {
@@ -270,7 +271,7 @@ export function CartaoAtividade({ atividade, contratoId, permissoes, compacto = 
     setDetalheAberto(true);
     window.setTimeout(() => setCarregandoCard(false), 250);
   }
-  function solicitar(acao: Acao, elemento: HTMLButtonElement) { setGatilho(elemento); setPendente(acao); setMotivo(''); setErro(''); }
+  function solicitar(acao: Acao, elemento: HTMLButtonElement | null) { setGatilho(elemento); setPendente(acao); setMotivo(''); setErro(''); }
   return <article data-tec08-item-clicavel data-tec08-card-carregando={carregandoCard || undefined} data-atividade-id={atividade.id} data-atividade-estado={estado}
     onClick={e => {
     if (!(e.target instanceof Element) || e.target.closest('button,a,input,textarea,select,[role="dialog"]')) return;
@@ -318,11 +319,16 @@ export function CartaoAtividade({ atividade, contratoId, permissoes, compacto = 
             if (onEditar) onEditar(atividade, e.currentTarget);
             else { setGatilhoEdicao(e.currentTarget); setEdicaoAberta(true); }
           }} />}
-        {(['solicitar-conclusao','reabrir','arquivar','reativar','excluir'] as const).some(acaoDisponivel) && <MenuAcoesObjeto rotulo={estado === 'VERIFICADA' || estado === 'ARQUIVADA' ? 'Reabrir' : 'Fechar'}>
-          {(['solicitar-conclusao','reabrir','arquivar','reativar','excluir'] as const).filter(acaoDisponivel).map(acao =>
+        {(['solicitar-conclusao','reabrir','arquivar','reativar','excluir'] as const).some(acaoDisponivel) && <MenuAcoesObjeto rotulo={estado === 'VERIFICADA' || estado === 'ARQUIVADA' ? 'Reabrir' : 'Fechar'}
+          pendenteConclusao={estado === 'PENDENTE_CONCLUSAO'}
+          acaoDireta={estado === 'VERIFICADA' && acaoDisponivel('reabrir') ? () => solicitar('reabrir', null)
+            : estado === 'ARQUIVADA' && acaoDisponivel('reativar') ? () => solicitar('reativar', null) : undefined}>
+          {(['solicitar-conclusao','reabrir','arquivar','reativar','excluir'] as const).filter(acao => acao !== 'excluir' && acaoDisponivel(acao)).map(acao =>
             <BotaoAcaoModal key={acao} intencao={acao} aria-label={`${ROTULO[acao]} atividade`}
               onClick={e => solicitar(acao, e.currentTarget)}><Icone nome={acao}/>{ROTULO[acao]}</BotaoAcaoModal>)}
         </MenuAcoesObjeto>}
+        {estado === 'VERIFICADA' && acaoDisponivel('arquivar') && acaoDisponivel('reabrir') && <button type="button" onClick={() => solicitar('arquivar', null)} title="Arquivar atividade verificada" aria-label="Arquivar atividade verificada" className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"><Icone nome="arquivar" /></button>}
+        {estado === 'ARQUIVADA' && acaoDisponivel('excluir') && <button type="button" onClick={() => solicitar('excluir', null)} title="Excluir atividade arquivada" aria-label="Excluir atividade arquivada" className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20">×</button>}
       </>}>
       <div className="space-y-4 text-sm" data-testid="detalhe-atividade-modal">
         <div className="flex flex-wrap items-center justify-between gap-3"><span className={`rounded-full border px-3 py-1 text-xs ${situacao.estilo}`}>{situacao.titulo}</span>

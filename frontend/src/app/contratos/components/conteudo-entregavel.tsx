@@ -1,5 +1,6 @@
 'use client';
 import { BotaoAcaoModal } from '@/app/components/botoes-modal';
+import { MenuAcoesObjeto } from '@/app/components/menu-acoes-objeto';
 import { AbasRolaveis } from '@/app/components/abas-rolaveis';
 import { resultadoFinalizacao } from '@/lib/finalizados';
 import { IconeStatus } from '@/app/components/icones-status';
@@ -518,15 +519,20 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
   {selecionada && createPortal(<ModalEtapa titulo={selecionada.tipoEvidencia} codigoPublico={selecionada.codigoPublico} contexto={`Evidência esperada · ${selecionada.obrigatoria ? 'Obrigatória' : 'Opcional'}`}
     camada="evidencia" arquivado={Boolean(selecionada.arquivadoEm)} concluido={!selecionada.arquivadoEm && !estadoEvidencias[selecionada.id]?.reabertoEm && estadoEvidencias[selecionada.id]?.status === 'VERIFICADA'} revisao={Boolean(estadoEvidencias[selecionada.id]?.reabertoEm)} estadoContextual={estadoEvidencias[selecionada.id]?.status === 'PENDENTE_VERIFICACAO' ? 'pendente' : 'normal'} ocupado={false} focoRetorno={focoRetornoEvidencia}
     textoFechar="Fechar ×" somenteIconeFechar bloqueadoPorSubmodal={edicaoAberta}
-    acoesComoMenu rotuloMenuAcoes={selecionada.arquivadoEm && podeReativarEvidencia ? 'Reabrir' : 'Fechar'} acoes={<>
+    acoes={<>
+      <MenuAcoesObjeto rotulo={selecionada.arquivadoEm || estadoEvidencias[selecionada.id]?.status === 'VERIFICADA' ? 'Reabrir' : 'Fechar'}
+        acaoDireta={selecionada.arquivadoEm && podeReativarEvidencia && !bloqueadoPorPai ? () => setConfirmarReativacao(selecionada.id)
+          : !selecionada.arquivadoEm && planejamentoHabilitado && podeReabrirEvidencia && estadoEvidencias[selecionada.id]?.status === 'VERIFICADA' && !bloqueadoPorPai && !paiArquivado
+            ? () => setConfirmarReabertura(selecionada.id) : undefined}>
       {selecionada.arquivadoEm && podeReativarEvidencia && !bloqueadoPorPai &&
         <BotaoAcaoModal intencao="reativar" disabled={ocupadoArquivo} onClick={() => setConfirmarReativacao(selecionada.id)}>⟳ Reativar</BotaoAcaoModal>}
-      {selecionada.arquivadoEm && podeExcluirEvidenciaArquivada && !bloqueadoPorPai &&
-        <BotaoAcaoModal intencao="excluir" disabled={ocupadoArquivo} onClick={() => setConfirmarExclusao(selecionada.id)}>Excluir</BotaoAcaoModal>}
       {!selecionada.arquivadoEm && planejamentoHabilitado && podeReabrirEvidencia && estadoEvidencias[selecionada.id]?.status === 'VERIFICADA' && !bloqueadoPorPai && !paiArquivado &&
         <BotaoAcaoModal intencao="reabrir" disabled={arquivandoItem} onClick={() => setConfirmarReabertura(selecionada.id)}>⟳ Reabrir</BotaoAcaoModal>}
       {!selecionada.arquivadoEm && planejamentoHabilitado && podeArquivarEvidencia && estadoEvidencias[selecionada.id]?.status !== 'VERIFICADA' && !bloqueadoPorPai && !paiArquivado &&
         <BotaoAcaoModal intencao="arquivar" disabled={ocupadoArquivo} onClick={() => setConfirmarArquivamento(selecionada.id)}>▣ Arquivar</BotaoAcaoModal>}
+      </MenuAcoesObjeto>
+      {selecionada.arquivadoEm && podeExcluirEvidenciaArquivada && !bloqueadoPorPai &&
+        <button type="button" title="Excluir evidência arquivada" aria-label="Excluir evidência arquivada" disabled={ocupadoArquivo} onClick={() => setConfirmarExclusao(selecionada.id)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/35 bg-red-500/10 text-red-300 hover:bg-red-500/20 disabled:opacity-40">×</button>}
     </>}
     rotuloFechar="Fechar evidência"
     onFechar={() => {

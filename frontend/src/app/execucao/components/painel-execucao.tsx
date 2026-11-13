@@ -120,7 +120,7 @@ export function PainelExecucao({ contratoId, entregavelId, estadoContextual = 'n
           {mensagem && <p role="status" className="text-sm">{mensagem}</p>}
           {podeRegistrar && <form data-pi-formulario className="space-y-3 rounded-xl border border-current/20 p-3" onSubmit={ev => void salvarExecucao(ev, e)}>
             <label htmlFor={`${idPrefixo}-inline`} className="block text-sm font-medium">{e.tipo === 'MARCO' ? 'Data em que o marco foi alcançado' : e.tipo === 'QUANTITATIVO' ? 'Quantidade efetivamente realizada' : 'Percentual físico realizado (0 a 100)'}
-              <input id={`${idPrefixo}-inline`} type={e.tipo === 'MARCO' ? 'date' : 'text'} inputMode={e.tipo === 'MARCO' ? undefined : 'decimal'}
+              <input id={`${idPrefixo}-inline`} type={e.tipo === 'MARCO' ? 'date' : 'text'} maxLength={e.tipo === 'MARCO' ? undefined : 18} inputMode={e.tipo === 'MARCO' ? undefined : 'decimal'}
                 value={valor} onChange={ev => setValor(ev.target.value)} required className={INPUT} placeholder={e.tipo === 'MARCO' ? undefined : 'Ex.: 75,50'} />
             </label>
             <div className="flex justify-end"><button type="submit" data-pi-acao="primaria" disabled={salvando} className={PRIMARIO}>{salvando ? 'Salvando...' : 'Salvar execução'}</button></div>
@@ -177,7 +177,7 @@ export function PainelExecucao({ contratoId, entregavelId, estadoContextual = 'n
     {erro && !detalhe && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-error-text">{erro}</p>}
     {mensagem && !detalhe && <p role="status" className="rounded-lg border border-current/25 p-3 text-sm">{mensagem}</p>}
 
-    {configurandoPesos && dados && podeConfigurar && !entregavelId && <ModalEtapa titulo="Configurar pesos" contexto="Execução física" estadoContextual={estadoContextual} compacto ocupado={false} focoRetorno={focoConfiguracao} onFechar={() => setConfigurandoPesos(false)}>
+    {configurandoPesos && dados && podeConfigurar && !entregavelId && <ModalEtapa titulo="Configurar pesos" contexto="Execução física" estadoContextual={estadoContextual} compacto alturaEstavel ocupado={false} focoRetorno={focoConfiguracao} onFechar={() => setConfigurandoPesos(false)}>
       <EditorPesos dados={dados} salvarPeso={consulta.atualizarPesoIndividual} alterarModo={consulta.atualizarModoCalculo} />
     </ModalEtapa>}
 
@@ -208,7 +208,7 @@ export function PainelExecucao({ contratoId, entregavelId, estadoContextual = 'n
         {editandoExecucao && podeEditar && detalhe.editavel && detalhe.tipo !== 'RECORRENTE' && !['OCORRENCIAS', 'CONFLITO_QUANTIDADE'].includes(detalhe.fonte) && <form data-pi-formulario className="space-y-3 rounded-xl border border-current/20 p-4" onSubmit={ev => void salvarExecucao(ev, detalhe)}>
           <h4 data-pi-titulo className="text-sm font-semibold">Atualizar execução</h4>
           <label htmlFor={`${idPrefixo}-valor`} className="block text-sm font-medium">{detalhe.tipo === 'MARCO' ? 'Data em que o marco foi alcançado' : detalhe.tipo === 'QUANTITATIVO' ? 'Quantidade efetivamente realizada' : 'Percentual físico realizado (0 a 100)'}
-            <input id={`${idPrefixo}-valor`} type={detalhe.tipo === 'MARCO' ? 'date' : 'text'} inputMode={detalhe.tipo === 'MARCO' ? undefined : 'decimal'} value={valor} onChange={ev => setValor(ev.target.value)} required placeholder={detalhe.tipo === 'MARCO' ? undefined : detalhe.tipo === 'QUANTITATIVO' ? 'Ex.: 15,500' : 'Ex.: 75,50'} className={INPUT} />
+            <input id={`${idPrefixo}-valor`} type={detalhe.tipo === 'MARCO' ? 'date' : 'text'} maxLength={detalhe.tipo === 'MARCO' ? undefined : 18} inputMode={detalhe.tipo === 'MARCO' ? undefined : 'decimal'} value={valor} onChange={ev => setValor(ev.target.value)} required placeholder={detalhe.tipo === 'MARCO' ? undefined : detalhe.tipo === 'QUANTITATIVO' ? 'Ex.: 15,500' : 'Ex.: 75,50'} className={INPUT} />
           </label>
           <div className="flex justify-end gap-2"><button type="button" className={CANCELAR_PESOS} onClick={() => { setEditandoExecucao(false); setErro(''); }}>Cancelar</button><button type="submit" data-pi-acao="primaria" disabled={salvando} className={PRIMARIO}>{salvando ? 'Salvando...' : 'Salvar execução'}</button></div>
         </form>}
@@ -262,7 +262,7 @@ function EditorPesos({ dados, salvarPeso, alterarModo }: {
     finally { setOcupado(false); }
   }
   return <div className="space-y-4" data-tec09-configuracao>
-    <p className="text-sm text-foreground/80">O peso informa a porcentagem que cada entregável representa na realização de 100% do contrato. Por exemplo: A representa 20% e B representa 80%. As ocorrências e atividades determinam quanto de cada entregável foi executado; elas não recebem pesos adicionais neste cálculo.</p>
+    <p className="text-sm text-foreground/80">O peso informa a porcentagem que cada entregável representa na realização de 100% do contrato. Por exemplo: A representa 20% e B representa 80%. Ocorrências, atividades e evidências registram ou comprovam a execução conforme o tipo de entregável. Nenhum desses registros recebe peso adicional; a comprovação documental, isoladamente, não aumenta o avanço físico.</p>
     <div data-pi-superficie className="grid gap-3 rounded-xl border p-3 text-sm sm:grid-cols-2">
       <div><span className="text-xs text-foreground/65">Modo de cálculo</span>
         {!editandoModo ? <div className="mt-1 flex items-center gap-2"><strong>{dados.modoCalculo === 'PONDERADO' ? 'Média ponderada' : 'Média simples'}</strong><button type="button" data-pi-acao="contextual" aria-label="Alterar modo de cálculo" title="Alterar modo de cálculo" disabled={ocupado || editando !== null} className="rounded-md p-1.5 focus-visible:outline-2 focus-visible:outline-current" onClick={() => { setNovoModo(dados.modoCalculo); setEditandoModo(true); }}>✎</button></div>
@@ -281,7 +281,7 @@ function EditorPesos({ dados, salvarPeso, alterarModo }: {
           {editando === e.entregavelId
             ? <form className="flex min-w-0 flex-wrap items-center justify-end gap-2" onSubmit={ev => { ev.preventDefault(); void confirmar(e); }}>
                 <label className="flex w-28 items-center gap-1 border-b border-current/50 focus-within:border-current">
-                  <input aria-label={`Novo peso de ${e.nome}`} type="text" inputMode="decimal" autoFocus value={rascunho} onChange={ev => setRascunho(ev.target.value)} placeholder="Ex.: 20" disabled={ocupado} className="w-full min-w-0 bg-transparent py-1 text-right text-sm font-semibold outline-none" /><span className="text-xs text-foreground/70">%</span>
+                  <input aria-label={`Novo peso de ${e.nome}`} type="text" inputMode="decimal" maxLength={6} autoFocus value={rascunho} onChange={ev => setRascunho(ev.target.value)} placeholder="Ex.: 20" disabled={ocupado} className="w-full min-w-0 bg-transparent py-1 text-right text-sm font-semibold outline-none" /><span className="text-xs text-foreground/70">%</span>
                 </label>
                 <button type="button" disabled={ocupado} className="rounded-lg border border-red-500/45 bg-red-500/10 px-2.5 py-2 text-xs font-bold text-red-700 hover:bg-red-500/15 dark:text-red-300" onClick={() => { setEditando(null); setErro(''); }}>Cancelar</button>
                 <button type="submit" disabled={ocupado} data-pi-acao="primaria" className="rounded-lg px-2.5 py-2 text-xs font-bold disabled:opacity-50">Confirmar</button>

@@ -398,7 +398,7 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, embutido
           }} aria-label="Configurar ocorrências" title={!podeConfigurarSelecionado ? 'Sem permissão para configurar as ocorrências' : entregavelDaConsulta?.tipo === 'RECORRENTE' ? 'Replanejar datas e periodicidade' : 'Editar planejamento do entregável'}>
           <IconeEngrenagem />
         </button>}
-        {(!contextoEntregavel || contextoDoEntregavel?.tipo !== 'RECORRENTE') && podeCriarBase && <button type="button" disabled={!planejamentoDisponivel} onClick={e => { if (podeCriar && podeCadastrarNesteContexto) abrirCadastro(e.currentTarget); else setAlertaElegibilidade(true); }} data-pi-acao="primaria" className={PRINCIPAL}>＋ Nova ocorrência</button>}
+        {(!contextoEntregavel || contextoDoEntregavel?.tipo !== 'RECORRENTE') && podeCriarBase && <button type="button" disabled={!planejamentoDisponivel || !podeCriar || !podeCadastrarNesteContexto} title={!podeCriar || !podeCadastrarNesteContexto ? "É necessário entregável aberto e permissão para registrar" : "Criar ocorrência"} onClick={e => { abrirCadastro(e.currentTarget); }} data-pi-acao="primaria" className={PRINCIPAL}>＋ Nova ocorrência</button>}
       </div>
     </header>
     {contextoEntregavel && contextoDoEntregavel?.tipo === 'RECORRENTE' && !agendaJaCriada && agendaConfiavel && planejamentoDisponivel && podeAgendar &&
@@ -406,7 +406,7 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, embutido
         <button type="button" className="inline-flex items-center gap-2 text-sm font-bold text-brand-neon underline underline-offset-4 transition hover:brightness-125 focus-visible:outline-2 focus-visible:outline-brand-neon" onClick={e => {setFocoRetorno(e.currentTarget);setEntregavelRecorrente(entregavelIdInicial);setConfirmarGeracao(true);}}>＋ Gerar ocorrências</button>
         <p className="max-w-md text-xs text-foreground/65">Confirme a criação dos períodos planejados. Nenhuma ocorrência será gerada antes da confirmação.</p>
       </div>}
-    {podeCriarBase && planejamentoDisponivel && !podeCriar && !podeGerar && <p data-pi-superficie role="status" className="rounded-lg border p-3 text-sm text-foreground/70">Para registrar ocorrências, crie ou reabra um entregável. Rotinas recorrentes usam a agenda; outros entregáveis podem ter registros descritivos ou quantitativos.</p>}
+
     {somenteLeitura && <p className="text-xs text-foreground/65">Contrato somente para consulta.</p>}
     {!somenteLeitura && !podeCriarBase && <p className="text-xs text-foreground/65">Você não possui permissão para adicionar ou gerar ocorrências.</p>}
     {podeCriarBase && !planejamentoDisponivel && <p role="status" className="text-xs text-foreground/65">{entregaveisConsulta.erro || etapasConsulta.erro ? "Não foi possível consultar o planejamento." : "Consultando entregáveis disponíveis..."}</p>}
@@ -567,7 +567,7 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, embutido
           {!podeEditar && <p className="text-xs">A conciliação requer permissão de editar entregáveis neste contrato.</p>}
         </div>}
         {form.entregavelId && <p role="note" className="rounded-lg border border-brand-green/25 bg-brand-green/[0.06] p-3 text-xs text-foreground/75">{tipoCadastroSelecionado === 'QUANTITATIVO' ? 'Registro por quantidade. Defina a meta na unidade de medida do entregável.' : 'Registro descritivo. Descreva o serviço e vincule as atividades realizadas.'}</p>}
-        <label className="block text-sm font-medium">Título *<input className={CAMPO} required maxLength={255} placeholder="Ex.: Manutenção do laboratório A" value={form.titulo} onChange={e => setForm(v => ({ ...v, titulo: e.target.value }))}/></label>
+        <label className="block text-sm font-medium">Título *<input className={CAMPO} required maxLength={120} placeholder="Ex.: Manutenção do laboratório A" value={form.titulo} onChange={e => setForm(v => ({ ...v, titulo: e.target.value }))}/></label>
         {form.modoRegistro === 'QUANTITATIVO' && <label className="block text-sm font-medium">Meta a executar{unidades[form.entregavelId] ? ` (${unidades[form.entregavelId]})` : ' (quantidade)'} *
           <input type="text" inputMode="decimal" maxLength={18} required className={CAMPO} value={form.metaQuantidade} onChange={e => setForm(v => ({ ...v, metaQuantidade: e.target.value }))} placeholder="Ex.: 20" />
           <span className="mt-1 block text-xs text-foreground/65">Exemplo: meta de 20 computadores. As atividades registrarão as parcelas efetivamente realizadas. A unidade de medida é definida no entregável.</span>
@@ -581,7 +581,7 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, embutido
             {!dataUnica && <label className="block text-sm">Término das ocorrências<input type="date" min={form.periodoInicio || undefined} className={CAMPO} value={form.periodoFim} onChange={e => setForm(v => ({ ...v, periodoFim: e.target.value }))}/></label>}
           </div>
         </fieldset>
-        <label className="block text-sm">Observações<textarea rows={3} maxLength={3000} placeholder="Descreva a obrigação ou os detalhes do serviço." className={CAMPO} value={form.observacoes} onChange={e => setForm(v => ({ ...v, observacoes: e.target.value }))}/></label>
+        <label className="block text-sm">Observações<textarea rows={3} maxLength={1000} placeholder="Descreva a obrigação ou os detalhes do serviço." className={CAMPO} value={form.observacoes} onChange={e => setForm(v => ({ ...v, observacoes: e.target.value }))}/></label>
         <div className="flex flex-wrap justify-end gap-2 border-t border-brand-green/20 pt-4"><button data-pi-acao="secundaria" type="button" className={BOTAO} disabled={ocupado} onClick={() => { setModalCadastro(false); setErro(''); }}>Cancelar</button>
           <button data-pi-acao="primaria" type="submit" className={PRINCIPAL} disabled={!podeCriar || ocupado || (form.modoRegistro === 'QUANTITATIVO' && quantidadeDireta !== null) || !form.titulo.trim() || !form.entregavelId || (form.modoRegistro === 'QUANTITATIVO' && Number(form.metaQuantidade) <= 0)}>{ocupado ? 'Salvando...' : 'Registrar ocorrência'}</button></div>
       </form>
@@ -590,6 +590,8 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, embutido
       retornoEsquerda mostrarXComVoltar somenteIconeFechar
       acoes={<>
       {!editando && podeEditarDetalhe && <BotaoEditarModal rotulo="Editar ocorrência" disabled={ocupado} onClick={() => setEditando(true)} />}
+      {!editando && !detalhe.substituidaEm && podeReabrir && ['CONCLUIDO','ENCERRADA'].includes(detalhe.status) &&
+        <MenuAcoesObjeto rotulo="Reabrir" disabled={ocupado} acaoDireta={() => {setFocoReabertura(null);setMotivoReabertura('');setMostrarReabertura(true);}} />}
       {podeEditar && ['NAO_INICIADO','EM_ANDAMENTO','EM_REVISAO'].includes(detalhe.status) && <MenuAcoesObjeto rotulo="Fechar" disabled={ocupado}>
           <BotaoAcaoModal intencao="solicitar-conclusao" disabled={ocupado || !podeSolicitarConclusao}
             title={semAtividadeVerificada ? 'É necessária ao menos uma atividade verificada, sem outras pendentes.' : undefined}
@@ -617,11 +619,11 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, embutido
 
         <label className="block text-sm">Data realizada<input type="date" className={CAMPO} value={formEdicao.dataRealizada} onChange={e => setFormEdicao(v => ({ ...v, dataRealizada: e.target.value }))}/></label>
         {detalhe.metaQuantidade != null && <label className="block text-sm">Meta planejada desta ocorrência
-          <input type="text" inputMode="decimal" className={CAMPO} value={formEdicao.metaQuantidade} onChange={e => setFormEdicao(v=>({...v,metaQuantidade:e.target.value}))}/>
+          <input type="text" inputMode="decimal" maxLength={18} className={CAMPO} value={formEdicao.metaQuantidade} onChange={e => setFormEdicao(v=>({...v,metaQuantidade:e.target.value}))}/>
           <span className="mt-1 block text-xs text-foreground/65">Somente pessoas com permissão de edição podem alterar esta meta. Não pode ser inferior ao já executado.</span>
         </label>}
-        {detalhe.origem === 'MANUAL_QUANTITATIVA' && detalhe.modoRegistro !== 'DESCRITIVO' && detalhe.metaQuantidade == null && <label className="block text-sm">Quantidade realizada<input type="text" inputMode="decimal" className={CAMPO} value={formEdicao.quantidadeRealizada} onChange={e => setFormEdicao(v => ({ ...v, quantidadeRealizada: e.target.value }))}/></label>}
-        <label className="block text-sm">Observações<textarea maxLength={3000} rows={3} className={CAMPO} value={formEdicao.observacoes} onChange={e => setFormEdicao(v => ({ ...v, observacoes: e.target.value }))}/></label>
+        {detalhe.origem === 'MANUAL_QUANTITATIVA' && detalhe.modoRegistro !== 'DESCRITIVO' && detalhe.metaQuantidade == null && <label className="block text-sm">Quantidade realizada<input type="text" inputMode="decimal" maxLength={18} className={CAMPO} value={formEdicao.quantidadeRealizada} onChange={e => setFormEdicao(v => ({ ...v, quantidadeRealizada: e.target.value }))}/></label>}
+        <label className="block text-sm">Observações<textarea maxLength={1000} rows={3} className={CAMPO} value={formEdicao.observacoes} onChange={e => setFormEdicao(v => ({ ...v, observacoes: e.target.value }))}/></label>
         <div className="flex flex-wrap justify-end gap-2"><button data-pi-acao="secundaria" className={BOTAO} type="button" disabled={ocupado} onClick={() => setEditando(false)}>Cancelar edição</button><button data-pi-acao="primaria" className={PRINCIPAL} type="submit" disabled={ocupado || !podeEditarDetalhe}>{ocupado ? 'Salvando...' : 'Salvar alterações'}</button></div>
       </form>}
       {!editando && <div className="mt-4 rounded-2xl border border-current/20 bg-current/[0.025] p-2">
@@ -633,11 +635,6 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, embutido
           <span aria-hidden="true" className="text-lg text-foreground/45">›</span>
         </button>
       </div>}
-      {!editando && !detalhe.substituidaEm && podeReabrir && ['CONCLUIDO','ENCERRADA'].includes(detalhe.status) && <footer className="mt-3 flex justify-end" aria-label="Ações de reabertura da ocorrência">
-
-        {podeReabrir && ['CONCLUIDO','ENCERRADA'].includes(detalhe.status) && <button type="button" className="rounded-lg border border-emerald-500/50 bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500" disabled={ocupado} onClick={e => {setFocoReabertura(e.currentTarget);setMotivoReabertura('');setMostrarReabertura(true);}}>⟳ Reabrir</button>}
-
-      </footer>}
     </ModalEtapa>}
     {detalhe && mostrarVincular && <ModalEtapa titulo="Vincular atividade" contexto={tituloApresentacao(detalhe, periodos[detalhe.entregavelId])}
       estadoContextual={(ESTADOS[detalhe.status] ?? ESTADOS.NAO_INICIADO).modal} camada="edicao" estreito ocupado={ocupado}

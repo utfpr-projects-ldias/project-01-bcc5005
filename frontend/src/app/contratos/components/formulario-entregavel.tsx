@@ -111,9 +111,9 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
         <h4 className="font-semibold text-brand-neon">Informações do entregável</h4>
     <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_2fr]">
       <div><label className="mb-1 block text-sm" htmlFor={formId('codigo')}>Código (opcional)</label>
-        <input id={formId('codigo')} className={estilo} maxLength={50} value={dados.codigo} {...campoErro('codigo')} onChange={(e) => atualizar('codigo', e.target.value)} />{mensagem('codigo')}</div>
+        <input id={formId('codigo')} className={estilo} maxLength={30} value={dados.codigo} {...campoErro('codigo')} onChange={(e) => atualizar('codigo', e.target.value)} />{mensagem('codigo')}</div>
       <div><label className="mb-1 block text-sm" htmlFor={formId('nome')}>Nome *</label>
-        <input id={formId('nome')} className={estilo} maxLength={255} value={dados.nome} {...campoErro('nome')} onChange={(e) => atualizar('nome', e.target.value)} />{mensagem('nome')}</div>
+        <input id={formId('nome')} className={estilo} maxLength={120} value={dados.nome} {...campoErro('nome')} onChange={(e) => atualizar('nome', e.target.value)} />{mensagem('nome')}</div>
     </div>
     <div className="space-y-2">
       <p className="block text-sm font-semibold">Responsável pelo entregável (opcional)</p>
@@ -190,10 +190,10 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
       {mensagem('responsavelId')}
     </div>
     <div><label className="mb-1 block text-sm" htmlFor={formId('descricao')}>Descrição (opcional)</label>
-      <textarea id={formId('descricao')} className={estilo} rows={3} maxLength={3000} value={dados.descricao}
+      <textarea id={formId('descricao')} className={estilo} rows={3} maxLength={1200} value={dados.descricao}
         onChange={(e) => atualizar('descricao', e.target.value)} />{mensagem('descricao')}</div>
     <div><label className="mb-1 block text-sm" htmlFor={formId('observacoes')}>Observações (opcional)</label>
-      <textarea id={formId('observacoes')} className={estilo} rows={2} maxLength={3000} value={dados.observacoes}
+      <textarea id={formId('observacoes')} className={estilo} rows={2} maxLength={1000} value={dados.observacoes}
         onChange={(e) => atualizar('observacoes', e.target.value)} />{mensagem('observacoes')}</div>
       </section>
       <section className="min-w-0 space-y-4 rounded-xl border border-brand-green/25 bg-brand-green/[0.04] p-3 sm:p-4" aria-label="Planejamento do entregável">
@@ -248,7 +248,7 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
       <p className="mt-1 text-xs text-foreground/65">% dos 100% que representa o contrato para este entregável.</p>
       {pesoBloqueado && <p className="mt-1 text-xs text-foreground/65">Somente leitura: requer permissão Configurar pesos.</p>}</div>
     <div><label className="mb-1 block text-sm" htmlFor={formId('criterioConclusao')}>Critério de conclusão {['CONTINUO','MARCO'].includes(dados.tipo) ? '*' : '(opcional)'}</label>
-      <textarea id={formId('criterioConclusao')} className={estilo} rows={3} maxLength={5000} value={dados.criterioConclusao} {...campoErro('criterioConclusao')}
+      <textarea id={formId('criterioConclusao')} className={estilo} rows={3} maxLength={1500} value={dados.criterioConclusao} {...campoErro('criterioConclusao')}
         onChange={(e) => atualizar('criterioConclusao', e.target.value)} />{mensagem('criterioConclusao')}</div>
       </section>
     </div>

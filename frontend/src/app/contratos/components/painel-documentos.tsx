@@ -445,7 +445,9 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
 
     {documentoDetalhe && createPortal(<ModalEtapa titulo={documentoDetalhe.nomeOriginal} contexto="Documento contratual" acoes={<>
       {podeEditarRegistro && !somenteLeitura && !documentoDetalhe.arquivadoEm && documentoDetalhe.categoria !== 'CONTRATO_PRINCIPAL' && <BotaoEditarModal rotulo="Editar metadados do documento" onClick={() => { setDocumentoEdicao(documentoDetalhe); setCategoriaEdicao(documentoDetalhe.categoria); setDescricaoEdicao(documentoDetalhe.descricao ?? ''); setErroMetadados(''); }} />}
-      <MenuAcoesObjeto rotulo={documentoDetalhe.arquivadoEm || !!documentoDetalhe.verificadoEm ? 'Reabrir' : 'Fechar'} disabled={somenteLeitura || salvandoMetadados}>
+      <MenuAcoesObjeto rotulo={documentoDetalhe.arquivadoEm || !!documentoDetalhe.verificadoEm ? 'Reabrir' : 'Fechar'} disabled={somenteLeitura || salvandoMetadados}
+        acaoDireta={documentoDetalhe.arquivadoEm && permiteReativar(documentoDetalhe) ? () => setDocumentoReativar(documentoDetalhe)
+          : !documentoDetalhe.arquivadoEm && !!documentoDetalhe.verificadoEm && permiteReabrir(documentoDetalhe) ? () => setDocumentoReabrir(documentoDetalhe) : undefined}>
         {!documentoDetalhe.arquivadoEm && !!documentoDetalhe.verificadoEm && permiteReabrir(documentoDetalhe) &&
           <BotaoAcaoModal intencao="reabrir" disabled={somenteLeitura || salvandoMetadados} onClick={() => setDocumentoReabrir(documentoDetalhe)}>⟳ Reabrir</BotaoAcaoModal>}
         {!documentoDetalhe.arquivadoEm && !documentoDetalhe.verificadoEm && permiteArquivar(documentoDetalhe) &&

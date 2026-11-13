@@ -35,12 +35,12 @@ export class CriarContratoDto {
 
   @IsString()
   @IsNotEmpty()
-  @MaxLength(255)
+  @MaxLength(160)
   orgaoContratante!: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(255)
+  @MaxLength(160)
   unidadeResponsavel?: string | null;
 
   @IsString()
@@ -75,7 +75,7 @@ export class CriarContratoDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(255)
+  @MaxLength(160)
   fiscalGestor?: string | null;
 
   @IsEnum(ModoCalculo)

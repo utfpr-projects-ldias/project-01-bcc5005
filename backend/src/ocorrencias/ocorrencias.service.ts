@@ -203,7 +203,7 @@ export class OcorrenciasService implements OnModuleInit {
       throw new ConflictException('Reabra o entregável antes de alterar ocorrências');
     }
     const etapa = await m.findOne(Etapa, { where: { id: entregavel.etapaId, contratoId: entregavel.contratoId } });
-    if (!etapa || etapa.arquivadoEm || etapa.status === 'CONCLUIDA' || etapa.status === 'ENCERRADA' || etapa.status === 'FINALIZADA') {
+    if (!etapa || etapa.conclusaoSolicitadaEm || etapa.encerramentoSolicitadoEm || etapa.arquivadoEm || etapa.status === 'CONCLUIDA' || etapa.status === 'ENCERRADA' || etapa.status === 'FINALIZADA') {
       throw new ConflictException('Reabra a etapa antes de alterar ocorrências');
     }
   }

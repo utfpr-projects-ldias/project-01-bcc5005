@@ -1,7 +1,8 @@
 'use client';
 import { AbasRolaveis } from '@/app/components/abas-rolaveis';
 
-import Link from 'next/link';
+import { ModalNovoContrato } from './components/modal-novo-contrato';
+import { SeletorOrdenacaoContratos, type OrdemContratos } from './components/seletor-ordenacao-contratos';
 import { PreviaContrato } from '@/app/atividades/components/cartao-atividade';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { ConfirmacaoSimples } from '@/app/components/confirmacao-simples';
@@ -30,6 +31,9 @@ export default function ContratosListPage() {
   const [ocupado, setOcupado] = useState(false);
   const [contratoModal, setContratoModal] = useState<{ id: string; foco: HTMLElement | null } | null>(null);
   const [erroOperacao, setErroOperacao] = useState('');
+  const [novoContrato, setNovoContrato] = useState(false);
+  const [gatilhoNovoContrato, setGatilhoNovoContrato] = useState<HTMLElement | null>(null);
+  const [ordem, setOrdem] = useState<OrdemContratos>('inicio-desc');
   const [motivoDecisao, setMotivoDecisao] = useState('');
   const [excluidos, setExcluidos] = useState<string[]>([]);
   const [reativados, setReativados] = useState<string[]>([]);
@@ -149,7 +153,12 @@ export default function ContratosListPage() {
         : filtro === 'PENDENTE_CONCLUSAO' ? situacao === 'pendentes'
         : situacao !== 'arquivados' && c.status === filtro);
     return daAba && correspondeStatus && corresponde;
-  }), [contratos, busca, campoBusca, filtro, filtroArquivo, idsPendentes, excluidos, reativados]);
+  }).sort((a,b) => {
+    if(ordem==='inicio-asc')return a.inicioVigencia.localeCompare(b.inicioVigencia)||a.numeroContrato.localeCompare(b.numeroContrato,'pt-BR',{numeric:true});
+    if(ordem==='numero-asc')return a.numeroContrato.localeCompare(b.numeroContrato,'pt-BR',{numeric:true});
+    if(ordem==='numero-desc')return b.numeroContrato.localeCompare(a.numeroContrato,'pt-BR',{numeric:true});
+    return b.inicioVigencia.localeCompare(a.inicioVigencia)||a.numeroContrato.localeCompare(b.numeroContrato,'pt-BR',{numeric:true});
+  }), [contratos, busca, campoBusca, filtro, filtroArquivo, idsPendentes, excluidos, reativados, ordem]);
   return <AreaContratos titulo="Gestão de Contratos">
     <section className="flex flex-wrap items-center justify-between gap-3" aria-label="Cabeçalho dos contratos">
       <div className="flex min-w-0 flex-wrap items-center gap-3">
@@ -164,11 +173,11 @@ export default function ContratosListPage() {
         </div></AbasRolaveis> : <div aria-hidden="true" data-testid="abas-aguardando-restauracao"
           className="h-9 min-w-[240px] rounded-xl border border-transparent opacity-0" />}
       </div>
-      {perfil?.perfil === 'ADMINISTRADOR' && <Link href="/contratos/novo" data-tec08-acao-criar="contrato"
+      {perfil?.perfil === 'ADMINISTRADOR' && <button type="button" onClick={evento=>{setGatilhoNovoContrato(evento.currentTarget);setNovoContrato(true);}} data-tec08-acao-criar="contrato"
         className="inline-flex h-10 items-center gap-2 rounded-lg bg-brand-green px-3 text-xs font-semibold text-on-brand-green transition hover:brightness-110">
         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><rect x="4" y="3" width="15" height="18" rx="2"/><path d="M8 8h7M8 12h4M16 14v6m-3-3h6"/></svg>
         Cadastrar contrato
-      </Link>}
+      </button>}
     </section>
     {erroOperacao && <Aviso erro>{erroOperacao}</Aviso>}
     {erro && <div className="space-y-2"><Aviso erro>{erro}</Aviso><button type="button" onClick={() => void lista.atualizar().catch(() => {})} className="text-sm text-brand-neon underline">Tentar novamente</button></div>}
@@ -183,6 +192,7 @@ export default function ContratosListPage() {
               {(['PLANEJAMENTO','EM_EXECUCAO'] as const).map(k => <option key={k} value={k}>{STATUS[k]}</option>)}
               {(['SUSPENSO','CANCELADO'] as const).map(k => <option key={k} value={k}>{STATUS[k]}</option>)}
             </select>
+            <div className="mt-2"><SeletorOrdenacaoContratos valor={ordem} onChange={setOrdem}/></div>
           </div>
           <div className="min-w-0 order-3 min-[500px]:order-3">
             <label htmlFor="campo-busca" className="mb-1 block text-xs font-medium text-foreground/70">Buscar por</label>
@@ -197,7 +207,7 @@ export default function ContratosListPage() {
             <div className="relative">
               <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
                 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/50"><circle cx="11" cy="11" r="7"/><path d="m16 16 5 5"/></svg>
-              <input id="busca-contrato" type="search" placeholder="Digite para buscar..." aria-label="Pesquisar contrato"
+              <input id="busca-contrato" type="search" maxLength={160} placeholder="Digite para buscar..." aria-label="Pesquisar contrato"
                 className="h-10 w-full rounded-lg border border-brand-green/30 bg-background pl-9 pr-3 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-brand-neon"
                 value={busca} onChange={e => setBusca(e.target.value)} />
             </div>
@@ -245,6 +255,7 @@ export default function ContratosListPage() {
             </button>
           </div>}
         </li>; })}</ul>}
+      {novoContrato && <ModalNovoContrato focoRetorno={gatilhoNovoContrato} onFechar={()=>setNovoContrato(false)} onCriado={async()=>{cache.invalidar(['contratos','lista']);await lista.atualizar().catch(()=>{});}}/>}
       {contratoModal && <PreviaContrato contratoId={contratoModal.id} foco={contratoModal.foco} fechar={() => setContratoModal(null)} />}
       {confirmacao && <ConfirmacaoSimples
         titulo={confirmacao.tipo === 'excluir' ? 'Excluir contrato arquivado?' : confirmacao.tipo === 'retomar' ? 'Retomar contrato suspenso?' : 'Reativar contrato?'}

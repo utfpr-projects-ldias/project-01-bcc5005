@@ -65,7 +65,9 @@ export function CalendarioOcorrencias({registros,aoAbrir,periodicidade='DIARIA'}
   const ativos=registros.filter(o=>!o.substituidaEm);
   const todosConcluidos=ativos.length>0&&ativos.every(o=>o.status==='CONCLUIDO');
   const existeEncerrada=ativos.some(o=>o.status==='ENCERRADA');
-  const corTotal=existeEncerrada?'border-purple-500/55 bg-purple-500/[0.04]':todosConcluidos?'border-violet-500/55 bg-violet-500/[0.04]':'border-current/25 bg-background/20';
+  // A superfície do calendário pertence ao ENTREGÁVEL. Nenhuma ocorrência
+  // pode mudar borda/fundo do calendário inteiro; apenas seus próprios cards.
+  const corTotal='pi-agenda-superficie';
   const grupos=new Map<string,Ocorrencia[]>();
   const semData:Ocorrencia[]=[];
   const chaveGrupo=(data:string)=>{
@@ -186,9 +188,9 @@ export function CalendarioOcorrencias({registros,aoAbrir,periodicidade='DIARIA'}
                     const selecionado=diaSelecionado===data;
                     const passado=data<hojeIso;
                     const resumo = itensDoDia.slice().sort((a,b)=>ordemStatus.indexOf(statusVisual(a, hojeIso)) - ordemStatus.indexOf(statusVisual(b, hojeIso))).slice(0,3);
-                    return <button type="button" key={data} data-dia-atual={atual||undefined} aria-pressed={selecionado}
+                    return <button type="button" key={data} data-dia-atual={atual||undefined} data-pi-dia-selecionado={selecionado || undefined} aria-pressed={selecionado}
                       onClick={() => setDiaSelecionado(data)}
-                      className={`min-h-[84px] rounded-xl border p-2 text-left transition focus-visible:outline-2 focus-visible:outline-current ${selecionado ? 'border-brand-green bg-brand-green/12 ring-1 ring-brand-green/45' : atual ? 'border-brand-green/55 bg-brand-green/7' : 'border-current/15 bg-current/[0.03]'} ${passado?'opacity-80':''}`}>
+                      className={`min-h-[84px] rounded-xl border p-2 text-left transition focus-visible:outline-2 focus-visible:outline-current ${selecionado ? 'pi-agenda-dia-selecionado' : atual ? 'pi-agenda-dia-atual' : 'border-current/15 bg-current/[0.03]'} ${passado?'opacity-80':''}`}>
                       <div className="flex items-start justify-between gap-2">
                         <time dateTime={data} className="text-sm font-semibold tabular-nums">{i+1}</time>
                         {atual && <span className="rounded-full border border-brand-green/35 bg-brand-green/10 px-1.5 py-0.5 text-[10px] font-semibold text-brand-neon">Hoje</span>}
@@ -203,7 +205,7 @@ export function CalendarioOcorrencias({registros,aoAbrir,periodicidade='DIARIA'}
               </div>
             </div>
           </div>
-          <aside className="min-w-0 bg-background/35 p-3">
+          <aside className="pi-agenda-painel-dia min-w-0 p-3">
             <div className="flex items-center justify-between gap-2 border-b border-current/10 pb-2">
               <div>
                 <h5 className="text-sm font-semibold">{diaSelecionado ? formatar(diaSelecionado) : 'Selecione um dia'}</h5>
@@ -247,7 +249,7 @@ export function CalendarioOcorrencias({registros,aoAbrir,periodicidade='DIARIA'}
             {!itensAtivos.length && <div className="rounded-xl border border-dashed border-current/20 bg-background/45 p-4 text-sm text-foreground/60">Ainda não há ocorrências neste período.</div>}
           </div>
         </div>
-        <aside className="min-w-0 bg-background/35 p-3">
+        <aside className="pi-agenda-painel-dia min-w-0 p-3">
           {selecionada ? <div className="space-y-3">
             <div className="border-b border-current/10 pb-2">
               <p className="text-sm font-semibold">{selecionada.titulo}</p>

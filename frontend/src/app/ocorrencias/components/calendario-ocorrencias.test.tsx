@@ -17,13 +17,14 @@ test.each([
   fireEvent.click(screen.getByRole('button',{name:/Abrir ocorrência Ocorrência A/}));
   expect(abrir).toHaveBeenCalledTimes(1);
 });
-test('conclusão histórica permanece clicável e encerramento administrativo colore o conjunto',()=>{
+test('conclusão histórica permanece clicável sem que um filho repinte o calendário',()=>{
   const abrir=jest.fn();
   render(<CalendarioOcorrencias periodicidade="MENSAL" registros={[
     item('A','2026-11-01','2026-11-30','CONCLUIDO'),
     item('B','2026-12-01','2026-12-31','ENCERRADA'),
   ]} aoAbrir={abrir}/>);
   expect(screen.getByText('Encerramento registrado')).toBeInTheDocument();
+  expect(document.querySelector('[data-pi-calendario-ocorrencias] .pi-agenda-superficie')).not.toHaveClass('border-purple-500/55');
   fireEvent.click(screen.getByRole('button',{name:'Próximo período'}));
   fireEvent.click(screen.getByRole('button',{name:/Abrir ocorrência Ocorrência B/}));
   expect(abrir).toHaveBeenCalledTimes(1);

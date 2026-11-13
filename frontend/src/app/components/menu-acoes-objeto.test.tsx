@@ -21,3 +21,23 @@ it('abre opções e Escape fecha apenas o menu, com foco restaurado', () => {
   expect(suspender).toHaveBeenCalledTimes(1);
   expect(screen.queryByRole('menu')).not.toBeInTheDocument();
 });
+
+
+it('Reabrir executa a transição diretamente, sem um menu de seleção redundante', () => {
+  const reabrir = jest.fn();
+  render(<MenuAcoesObjeto rotulo="Reabrir" acaoDireta={reabrir}><button type="button">Reabrir</button></MenuAcoesObjeto>);
+  fireEvent.click(screen.getByRole('button', { name: 'Reabrir' }));
+  expect(reabrir).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+});
+
+it('estado pendente de conclusão usa checklist violeta sem aprovar automaticamente', () => {
+  const aprovar = jest.fn();
+  render(<MenuAcoesObjeto rotulo="Fechar" pendenteConclusao><button type="button" onClick={aprovar}>Aprovar</button></MenuAcoesObjeto>);
+  const botao = screen.getByRole('button', { name: 'Fechar: escolher ação' });
+  expect(botao).toHaveAttribute('data-pi-controle-fechamento', 'pendente-conclusao');
+  fireEvent.click(botao);
+  expect(aprovar).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Aprovar' }));
+  expect(aprovar).toHaveBeenCalledTimes(1);
+});

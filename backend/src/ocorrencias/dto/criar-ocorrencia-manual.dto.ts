@@ -10,7 +10,7 @@ import {
 export class CriarOcorrenciaManualDto {
   @IsString()
   @IsNotEmpty()
-  @MaxLength(255)
+  @MaxLength(120)
   titulo!: string;
 
   @IsOptional()
@@ -51,6 +51,6 @@ export class CriarOcorrenciaManualDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(3000)
+  @MaxLength(1000)
   observacoes?: string | null;
 }

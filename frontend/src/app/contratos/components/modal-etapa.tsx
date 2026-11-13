@@ -19,7 +19,7 @@ export function ModalEtapa({ titulo, ocupado, onFechar, focoRetorno, contexto = 
     const anteriorFoco = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const liberarRolagem = bloquearRolagemDocumento();
     // O foco de uma camada de baixo não deve capturar a interação do filho.
-    if (!bloqueioInicial.current) fecharRef.current?.focus({ preventScroll: true });
+    if (!bloqueioInicial.current) painel.current?.querySelector<HTMLElement>('[data-pi-foco-inicial]')?.focus({ preventScroll: true });
     return () => {
       liberarRolagem();
       const destino = focoRetorno?.isConnected ? focoRetorno : anteriorFoco;
@@ -122,7 +122,7 @@ export function ModalEtapa({ titulo, ocupado, onFechar, focoRetorno, contexto = 
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><path d="m14 6-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>}
         <div className="min-w-0 flex-1"><p className="text-[11px] font-semibold uppercase tracking-wider text-foreground/60">{contexto}</p>
-          <div className="mt-0.5 flex min-w-0 items-baseline gap-2"><h2 id={tituloId} title={titulo} className={`min-w-0 text-lg font-semibold leading-snug ${corTitulo} ${camada === 'evidencia' ? 'truncate' : 'line-clamp-2 break-words [overflow-wrap:anywhere]'}`}>{titulo}</h2>{codigoPublico != null && <span className="shrink-0 font-mono text-xs text-foreground/60">{rotuloCodigoPublico(codigoPublico)}</span>}{etiqueta && <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${corTitulo} ${corConclusao}`}>{etiqueta}</span>}</div></div>
+          <div className="mt-0.5 flex min-w-0 items-baseline gap-2"><h2 id={tituloId} tabIndex={-1} data-pi-foco-inicial title={titulo} className={`min-w-0 text-lg font-semibold leading-snug ${corTitulo} ${camada === 'evidencia' ? 'truncate' : 'line-clamp-2 break-words [overflow-wrap:anywhere]'}`}>{titulo}</h2>{codigoPublico != null && <span className="shrink-0 font-mono text-xs text-foreground/60">{rotuloCodigoPublico(codigoPublico)}</span>}{etiqueta && <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${corTitulo} ${corConclusao}`}>{etiqueta}</span>}</div></div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
         {acoesComoMenu && acoes ? <MenuAcoesObjeto disabled={ocupado} rotulo={rotuloMenuAcoes}>{acoes}</MenuAcoesObjeto> : acoes}
         {(!retornoEsquerda || mostrarXComVoltar) && !ocultarFechar && <button ref={fecharRef} type="button" onClick={fechar} disabled={ocupado}

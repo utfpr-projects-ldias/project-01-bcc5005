@@ -70,8 +70,8 @@ export function ModalCadastroAtividade({ contratoId, entregavelId = '', origem, 
       <p className="text-xs text-foreground/70">Campos com * são obrigatórios. A atividade pode vincular vários entregáveis abertos do mesmo contrato.</p>
       {erro && <p role="alert" className="rounded-lg border border-error-text/40 p-3 text-sm text-error-text">{erro}</p>}
       <label className="block text-sm font-medium">Título *
-        <input required maxLength={255} className={CAMPO} value={form.titulo} onChange={e => campo('titulo', e.target.value)} aria-invalid={Boolean(erros.titulo)} />
-        <span className="block text-right text-[11px] text-foreground/50">{form.titulo.length}/255</span>
+        <input required maxLength={120} className={CAMPO} value={form.titulo} onChange={e => campo('titulo', e.target.value)} aria-invalid={Boolean(erros.titulo)} />
+        <span className="block text-right text-[11px] text-foreground/50">{form.titulo.length}/120</span>
       </label>{erros.titulo && <p className="text-xs text-error-text">{erros.titulo}</p>}
       <div className="grid gap-2 sm:grid-cols-2">
         <label className="block text-sm font-medium">Data e hora *
@@ -84,25 +84,25 @@ export function ModalCadastroAtividade({ contratoId, entregavelId = '', origem, 
         </label>
       </div>{erros.dataHora && <p className="text-xs text-error-text">{erros.dataHora}</p>}
       <label className="block text-sm font-medium">Descrição *
-        <textarea required rows={2} maxLength={5000} className={CAMPO} value={form.descricao} onChange={e => campo('descricao', e.target.value)} />
-        <span className="block text-right text-[11px] text-foreground/50">{form.descricao.length}/5000</span>
+        <textarea required rows={2} maxLength={1500} className={CAMPO} value={form.descricao} onChange={e => campo('descricao', e.target.value)} />
+        <span className="block text-right text-[11px] text-foreground/50">{form.descricao.length}/1500</span>
       </label>{erros.descricao && <p className="text-xs text-error-text">{erros.descricao}</p>}
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <label className="block text-sm font-medium">Responsável
-          <input maxLength={255} placeholder="Padrão: usuário conectado" className={CAMPO} value={form.responsavel} onChange={e => campo('responsavel', e.target.value)} />
+          <input maxLength={120} placeholder="Padrão: usuário conectado" className={CAMPO} value={form.responsavel} onChange={e => campo('responsavel', e.target.value)} />
         </label>
         <label className="block text-sm font-medium">Duração
-          <input maxLength={80} placeholder="Ex.: 2 horas" className={CAMPO} value={form.duracao} onChange={e => campo('duracao', e.target.value)} />
+          <input maxLength={50} placeholder="Ex.: 2 horas" className={CAMPO} value={form.duracao} onChange={e => campo('duracao', e.target.value)} />
         </label>
         <label className="block text-sm font-medium">Participantes
           <input maxLength={2000} placeholder="Separe por vírgulas" className={CAMPO} value={form.participantes} onChange={e => campo('participantes', e.target.value)} />
         </label>
         <label className="block text-sm font-medium">Local
-          <input maxLength={255} className={CAMPO} value={form.local} onChange={e => campo('local', e.target.value)} />
+          <input maxLength={160} className={CAMPO} value={form.local} onChange={e => campo('local', e.target.value)} />
         </label>
       </div>
       <label className="block text-sm font-medium">Observações
-        <textarea rows={2} maxLength={5000} className={CAMPO} value={form.observacoes} onChange={e => campo('observacoes', e.target.value)} /><span className="block text-right text-[11px] text-foreground/55">{form.observacoes.length}/5000</span>
+        <textarea rows={2} maxLength={1000} className={CAMPO} value={form.observacoes} onChange={e => campo('observacoes', e.target.value)} /><span className="block text-right text-[11px] text-foreground/55">{form.observacoes.length}/1000</span>
       </label>
       <fieldset className="rounded-xl border border-brand-green/25 p-3 space-y-2">
         <legend className="px-1 text-sm font-semibold">Vincular ao(s) entregável(is) *</legend>

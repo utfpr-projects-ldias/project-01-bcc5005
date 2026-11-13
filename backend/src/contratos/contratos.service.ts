@@ -758,8 +758,8 @@ export class ContratosService {
       if (!contrato) throw new NotFoundException('Contrato não encontrado');
       if (contrato.arquivadoEm) throw new ConflictException('Reative o contrato arquivado antes de reabri-lo');
       if (contrato.reabertoEm) throw new ConflictException('Contrato já foi reaberto');
-      if (contrato.status !== 'CONCLUIDO' && contrato.status !== 'ENCERRADO')
-        throw new ConflictException('Somente contratos com decisão final podem ser reabertos');
+      if (!['CONCLUIDO', 'ENCERRADO', 'FINALIZADO'].includes(contrato.status))
+        throw new ConflictException('Somente contratos finalizados ou com decisão final podem ser reabertos');
       const anterior = contrato.status;
       contrato.status = 'PLANEJAMENTO' as Contrato['status'];
       contrato.encerradoEm = null;

@@ -44,7 +44,7 @@ test('HU05-06: não oferece criar a Colaborador', async () => {
   perfil.mockResolvedValue({ id: 'c', nome: null, email: 'c@example.com', perfil: 'COLABORADOR', ativo: true });
   listar.mockResolvedValue([]);
   await act(async () => { renderComConsultas(<ContratosListPage />); });
-  expect(screen.queryByRole('link', { name: 'Cadastrar contrato' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Cadastrar contrato' })).not.toBeInTheDocument();
 });
 
 
@@ -171,7 +171,8 @@ test('filtros compactos: selects com mesma largura e abas junto ao título Contr
   expect(screen.getByLabelText('Buscar por').parentElement).toHaveClass('order-3', 'min-[500px]:order-3');
   expect(screen.getByLabelText('Filtrar por situação').parentElement).toHaveClass('order-2', 'min-[500px]:order-2');
   expect(screen.getByLabelText('Pesquisar contrato').closest('.order-1')).toHaveClass('lg:order-4');
-  expect(screen.getByRole('link', { name: 'Cadastrar contrato' })).toHaveAttribute('href', '/contratos/novo');
+  expect(screen.getByRole('button', { name: 'Cadastrar contrato' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Ordenar contratos' })).toHaveTextContent('Padrão');
 });
 
 

@@ -291,7 +291,7 @@ export class EntregaveisService implements OnModuleInit {
   private async validarEtapa(m: EntityManager, contratoId: string, etapaId: string, somenteLeitura = false): Promise<void> {
     const etapa = await m.getRepository(Etapa).findOneBy({ id: etapaId, contratoId });
     if (!etapa) throw new NotFoundException('Etapa não encontrada neste contrato');
-    if (!somenteLeitura && (etapa.arquivadoEm || etapa.status === 'CONCLUIDA' || etapa.status === 'ENCERRADA' ||
+    if (!somenteLeitura && (etapa.conclusaoSolicitadaEm || etapa.encerramentoSolicitadoEm || etapa.arquivadoEm || etapa.status === 'CONCLUIDA' || etapa.status === 'ENCERRADA' ||
       (etapa.reabertoEm === null && await documentacaoVerificada(m, contratoId, etapaId))))
       throw new ConflictException('Reative ou reabra a etapa antes de alterar entregáveis');
   }

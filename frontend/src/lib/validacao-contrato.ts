@@ -4,9 +4,9 @@ import type { DadosContrato } from './contratos';
 /** Limites de UX alinhados aos DTOs do NestJS. Textos longos: convenção da equipe,
  * não limites estipulados pelo PRD; podem ser refinados com o cliente. */
 export const LIMITES_CONTRATO = {
-  numeroContrato: 100, processoAdministrativo: 100, orgaoContratante: 255,
-  unidadeResponsavel: 255, objeto: 500, descricao: 1500,
-  fiscalGestor: 255, observacoes: 1000,
+  numeroContrato: 100, processoAdministrativo: 100, orgaoContratante: 160,
+  unidadeResponsavel: 160, objeto: 500, descricao: 1500,
+  fiscalGestor: 160, observacoes: 1000,
 } as const;
 
 function dataCivilValida(valor: string): boolean {

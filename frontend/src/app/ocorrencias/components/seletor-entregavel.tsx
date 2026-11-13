@@ -45,7 +45,7 @@ export function SeletorEntregavel({ itens, valor, onChange, rotulo = 'Entregáve
   return <div ref={ref} className="relative min-w-0" onBlur={e => { if (!ref.current?.contains(e.relatedTarget as Node | null)) { setAberto(false); setBusca(''); } }}>
     <label htmlFor={id} className="block text-xs font-semibold text-foreground/80">{rotulo}</label>
     <div className="relative mt-1.5">
-      <input ref={entrada} id={id} type="search" role="combobox" aria-label={rotulo} aria-autocomplete="list" aria-expanded={aberto} aria-controls={`${id}-lista`} aria-activedescendant={aberto && filtrados[realce] ? `${id}-${filtrados[realce].id}` : undefined} autoComplete="off"
+      <input ref={entrada} id={id} type="search" maxLength={120} role="combobox" aria-label={rotulo} aria-autocomplete="list" aria-expanded={aberto} aria-controls={`${id}-lista`} aria-activedescendant={aberto && filtrados[realce] ? `${id}-${filtrados[realce].id}` : undefined} autoComplete="off"
         placeholder={placeholder} value={aberto ? busca : selecionado?.nome ?? ''}
         onFocus={() => { setAberto(true); setBusca(''); setRealce(0); }} onClick={() => setAberto(true)} onKeyDown={teclado}
         onChange={e => { setBusca(e.target.value); setAberto(true); setRealce(0); }}

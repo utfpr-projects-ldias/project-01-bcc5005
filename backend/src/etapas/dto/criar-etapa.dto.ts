@@ -6,13 +6,13 @@ import { StatusEtapa } from '../status-etapa.enum.js';
 
 /** Sequência é calculada sob lock pelo servidor; contratoId vem apenas da rota. */
 export class CriarEtapaDto {
-  @IsString() @IsNotEmpty() @MaxLength(255)
+  @IsString() @IsNotEmpty() @MaxLength(100)
   nome!: string;
 
-  @IsOptional() @IsString() @MaxLength(50)
+  @IsOptional() @IsString() @MaxLength(30)
   codigo?: string | null;
 
-  @IsOptional() @IsString() @MaxLength(3000)
+  @IsOptional() @IsString() @MaxLength(1000)
   descricao?: string | null;
 
   @IsOptional() @IsDateString({ strict: true })
@@ -27,6 +27,6 @@ export class CriarEtapaDto {
   @IsEnum(StatusEtapa)
   status?: StatusEtapa;
 
-  @IsOptional() @IsString() @MaxLength(3000)
+  @IsOptional() @IsString() @MaxLength(1000)
   observacoes?: string | null;
 }

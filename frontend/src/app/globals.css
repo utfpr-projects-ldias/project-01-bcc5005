@@ -2064,3 +2064,73 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
     --contrato-texto: #7e22ce;
   }
 }
+
+/* PATCH34 — Superfícies por identidade própria. Um filho nunca herda o
+   estado visual do contrato quando declara seu próprio data-tec08-estado.
+   A cor da ação é separada e usa data-pi-intencao. */
+[data-tec08-estado="finalizado"],
+[data-etapa-estado="finalizada"], [data-entregavel-estado="finalizado"],
+[data-ocorrencia-estado="ENCERRADA"], [data-ocorrencia-estado="PENDENTE_ENCERRAMENTO"] {
+  --pi-cor-propria: #a855f7 !important;
+  --pi-texto-proprio: #d8b4fe !important;
+  --tec08-status-border: #a855f7 !important;
+  --tec08-status-heading: #d8b4fe !important;
+  --tec08-status-bg: #7e22ce !important;
+  --tec08-status-fg: #fff !important;
+}
+/* O estado pendente de conclusão pertence à identidade de conclusão, não
+   à paleta genérica (amarela) usada na verificação de documentos. */
+[data-tec08-estado="concluido"],
+[data-ocorrencia-estado="PENDENTE_CONCLUSAO"],
+[data-atividade-estado="PENDENTE_CONCLUSAO"] {
+  --pi-cor-propria: #a78bfa !important;
+  --pi-texto-proprio: #c4b5fd !important;
+  --tec08-status-border: #a78bfa !important;
+  --tec08-status-heading: #c4b5fd !important;
+}
+/* A agenda usa exclusivamente a variável do modal/entregável que a contém.
+   Cada botão de ocorrência possui sua própria classe semântica e não afeta
+   este contêiner nem o painel lateral de registros do dia selecionado. */
+[data-pi-calendario-ocorrencias] .pi-agenda-superficie {
+  border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 45%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 4%, var(--bg-primary)) !important;
+}
+[data-pi-calendario-ocorrencias] .pi-agenda-painel-dia {
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 6%, var(--bg-primary)) !important;
+}
+/* Superfícies independentes (incluindo fundo), com escopo explícito no próprio
+   objeto. Se o componente passar data-tec08-estado, seu fundo não é repintado
+   por data-tec08-estado do ancestral. */
+[data-tec08-entidade="modal"][data-tec08-estado] {
+  border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 70%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 4%, var(--bg-primary)) !important;
+}
+[data-tec08-entidade="modal"][data-tec08-estado] > header {
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 9%, var(--bg-primary)) !important;
+}
+[data-tec08-secao-contextual][data-tec08-estado],
+[data-pi-superficie][data-tec08-estado] {
+  border-color: color-mix(in srgb, var(--pi-cor-propria) 52%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria) 7%, var(--bg-primary)) !important;
+}
+[data-pi-controle-fechamento="pendente-conclusao"] {
+  color: #c4b5fd !important;
+  border-color: rgb(167 139 250 / .7) !important;
+  background-color: rgb(139 92 246 / .16) !important;
+}
+[data-pi-controle-fechamento="pendente-conclusao"]:hover,
+[data-pi-controle-fechamento="pendente-conclusao"]:focus-visible {
+  background-color: rgb(139 92 246 / .25) !important;
+}
+
+/* Seleção temporal pertence à agenda do entregável; pontos coloridos nas
+   células representam SOMENTE as ocorrências individuais. */
+[data-pi-calendario-ocorrencias] .pi-agenda-dia-selecionado {
+  border-color: var(--pi-cor-propria, #5fd34a) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 12%, var(--bg-primary)) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 45%, transparent);
+}
+[data-pi-calendario-ocorrencias] .pi-agenda-dia-atual {
+  border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 55%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 7%, var(--bg-primary)) !important;
+}

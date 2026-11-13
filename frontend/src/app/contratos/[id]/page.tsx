@@ -49,6 +49,7 @@ export default function DetalheContratoPage() {
   const cache = useRepositorioConsultas();
   const [abaExecucao, setAbaExecucao] = useState<'geral' | 'ocorrencias'>('geral');
   const [abaContrato, setAbaContrato] = useState<'visao' | 'execucao' | 'etapas' | 'atividades' | 'documentos'>('visao');
+  const [abaGeral, setAbaGeral] = useState<'informacoes' | 'vigencia' | 'historico'>('informacoes');
   // Pós-cadastro: revelar a seção documental antes de abrir o modal solicitado.
   // Leitura apenas após montar evita divergência entre SSR e hidratação.
   useEffect(() => {
@@ -614,39 +615,40 @@ export default function DetalheContratoPage() {
               <ResumoPlanejamentoContrato contratoId={contrato.id} variante="detalhe" contratoArquivado={Boolean(contrato.arquivadoEm)} contratoSuspenso={suspenso} contratoEmRevisao={emRevisao} contratoEncerrado={encerrado} contratoConcluido={concluido || pendenteConclusao} contratoCancelado={cancelado} />
             </section>}
 
-            <section data-tec08-secao-contrato aria-label="Informações do contrato" className="rounded-xl border border-brand-green/20 bg-brand-darkgreen/5 px-4 py-2">
-              <h3 data-tec08-acento-contrato className="py-2 text-sm font-semibold text-brand-neon">Informações do contrato</h3>
-              <details role="region" aria-label="Identificação do contrato" className="group border-t border-brand-green/15 py-2" open>
-                <summary data-tec08-acento-hover-contrato className="cursor-pointer py-1 text-sm font-semibold transition-colors hover:text-brand-neon">Identificação</summary>
-                <dl className="mt-3 grid min-w-0 gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
-                  {([['Objeto contratual', contrato.objeto], ['Número', contrato.numeroContrato], ['Código', rotuloCodigoPublico(contrato.codigoPublico)], ['Órgão contratante', contrato.orgaoContratante],
-                    ['Processo administrativo', contrato.processoAdministrativo], ['Unidade responsável', contrato.unidadeResponsavel]] as Par[])
-                    .map(([rotulo, valor]) => <div key={rotulo} className={`min-w-0 ${rotulo === 'Órgão contratante' || rotulo === 'Objeto contratual' ? 'sm:col-span-2 lg:col-span-2' : ''}`}>
-                      <dt className="text-xs text-foreground/55">{rotulo}</dt>
-                      <dd className="mt-0.5 max-h-28 overflow-y-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{valor || 'Não informado'}</dd>
+            <section data-tec08-secao-contrato aria-label="Visão geral do contrato" className="min-w-0 space-y-3 rounded-xl border border-current/25 bg-background/30 p-3 sm:p-4">
+              <nav role="tablist" aria-label="Seções da visão geral" className="flex max-w-full flex-wrap items-center gap-1 rounded-xl border border-current/20 bg-background/55 p-1">
+                {([
+                  ['informacoes','Informações','M4 5h16v14H4zM8 9h8M8 13h8'],
+                  ['vigencia','Vigência e responsáveis','M7 3v4M17 3v4M4 9h16M4 6h16v15H4z'],
+                  ['historico','Rastreabilidade','M3 12a9 9 0 1 0 3-7M3 4v5h5M12 7v5l3 2'],
+                ] as const).map(([aba,rotulo,icone])=><button key={aba} type="button" role="tab" aria-selected={abaGeral===aba} aria-controls={`secao-geral-${aba}`}
+                  onClick={()=>setAbaGeral(aba)} className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition hover:bg-current/10 focus-visible:outline-2 focus-visible:outline-current ${abaGeral===aba?'bg-current/15 text-current ring-1 ring-current/20':'text-foreground/65'}`}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round" strokeLinecap="round"><path d={icone}/></svg>{rotulo}
+                </button>)}
+              </nav>
+              <div id="secao-geral-informacoes" role="tabpanel" hidden={abaGeral!=='informacoes'} className={abaGeral==='informacoes'?'space-y-4':'hidden'}>
+                <div>
+                  <h3 className="mb-3 text-sm font-semibold text-current">Identificação</h3>
+                  <dl className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {([['Objeto contratual',contrato.objeto],['Número',contrato.numeroContrato],['Código',rotuloCodigoPublico(contrato.codigoPublico)],['Órgão contratante',contrato.orgaoContratante],['Processo administrativo',contrato.processoAdministrativo],['Unidade responsável',contrato.unidadeResponsavel]] as Par[]).map(([rotulo,valor])=><div key={rotulo} className={`min-w-0 rounded-xl border border-current/15 bg-background/45 px-3 py-3 ${rotulo==='Objeto contratual'?'sm:col-span-2':''}`}>
+                      <dt className="text-xs text-foreground/60">{rotulo}</dt><dd className="mt-1 whitespace-pre-wrap break-words text-sm font-medium [overflow-wrap:anywhere]">{valor||'Não informado'}</dd>
                     </div>)}
+                  </dl>
+                </div>
+                {(contrato.descricao?.trim()||contrato.observacoes?.trim())&&<div className="grid gap-3 sm:grid-cols-2">
+                  {contrato.descricao?.trim()&&<div className="min-w-0 rounded-xl border border-current/15 bg-background/45 p-3"><h4 className="mb-2 text-xs font-semibold text-current">Descrição</h4><p className="max-h-52 overflow-y-auto whitespace-pre-wrap break-words text-sm text-foreground/85 [overflow-wrap:anywhere]">{contrato.descricao}</p></div>}
+                  {contrato.observacoes?.trim()&&<div className="min-w-0 rounded-xl border border-current/15 bg-background/45 p-3"><h4 className="mb-2 text-xs font-semibold text-current">Observações</h4><p className="max-h-52 overflow-y-auto whitespace-pre-wrap break-words text-sm text-foreground/75 [overflow-wrap:anywhere]">{contrato.observacoes}</p></div>}
+                </div>}
+              </div>
+              <div id="secao-geral-vigencia" role="tabpanel" hidden={abaGeral!=='vigencia'} className={abaGeral==='vigencia'?'space-y-3':'hidden'}>
+                <h3 className="text-sm font-semibold text-current">Vigência e responsáveis</h3>
+                <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {([['Início',dataBR(contrato.inicioVigencia)],['Término',dataBR(contrato.terminoVigencia)],['Assinatura',dataBR(contrato.dataAssinatura)],['Situação',contrato.arquivadoEm?'Arquivado':encerrado?'Encerrado':emRevisao?`Em revisão · ${faseEmRevisao(contrato.status)}`:pendenteConclusao?'Pendente de conclusão':STATUS[contrato.status]],['Cálculo',MODOS[contrato.modoCalculo]],['Responsável interno',responsavelVisivel],['Fiscal/gestor público',contrato.fiscalGestor]] as Par[]).map(([rotulo,valor])=><div key={rotulo} className="min-w-0 rounded-xl border border-current/15 bg-background/45 p-3"><dt className="text-xs text-foreground/60">{rotulo}</dt><dd className="mt-1 break-words text-sm font-medium [overflow-wrap:anywhere]">{valor||'Não informado'}</dd></div>)}
                 </dl>
-              </details>
-              <details className="border-t border-brand-green/15 py-2" open>
-                <summary data-tec08-acento-hover-contrato className="cursor-pointer py-1 text-sm font-semibold transition-colors hover:text-brand-neon">Vigência e execução</summary>
-                <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">{([['Início', dataBR(contrato.inicioVigencia)], ['Término', dataBR(contrato.terminoVigencia)], ['Assinatura', dataBR(contrato.dataAssinatura)], ['Status', contrato.arquivadoEm ? 'Arquivado' : encerrado ? 'Encerrado' : emRevisao ? `Em revisão · ${faseEmRevisao(contrato.status)}` : pendenteConclusao ? 'Pendente de conclusão' : STATUS[contrato.status]], ['Cálculo', MODOS[contrato.modoCalculo]]] as Par[]).map(([rotulo, valor]) => <div key={rotulo}><dt className="text-xs text-foreground/55">{rotulo}</dt><dd className="mt-0.5 break-words">{valor || 'Não informado'}</dd></div>)}</dl>
-              </details>
-              <details className="border-t border-brand-green/15 py-2" open>
-                <summary data-tec08-acento-hover-contrato className="cursor-pointer py-1 text-sm font-semibold transition-colors hover:text-brand-neon">Responsáveis</summary>
-                <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">{([['Responsável interno', responsavelVisivel], ['Fiscal/gestor público', contrato.fiscalGestor]] as Par[]).map(([rotulo, valor]) => <div key={rotulo}><dt className="text-xs text-foreground/55">{rotulo}</dt><dd className="mt-0.5 break-words">{valor || 'Não informado'}</dd></div>)}</dl>
-              </details>
-            </section>
-
-            <HistoricoContrato estado={contrato.arquivadoEm ? "arquivado" : cancelado ? "cancelado" : suspenso ? "suspenso" : encerrado ? "encerrado" : concluido || pendenteConclusao ? "concluido" : emRevisao ? "revisao" : "normal"} contratoId={contrato.id} versao={`${contrato.status}:${contrato.reabertoEm ?? ''}:${contratoQuery.dados?.numeroContrato ?? ''}:${abaContrato}:${versaoHistorico}`} />
-            <section data-tec08-secao-contrato aria-label="Descrição e observações" className="space-y-2 rounded-xl border border-brand-green/15 bg-brand-darkgreen/5 p-3 text-sm">
-              <details className="group/descricao" open={!contrato.descricao || contrato.descricao.length < 240}>
-                <summary data-tec08-acento-contrato className="cursor-pointer py-1 text-sm font-semibold text-brand-neon">Descrição</summary>
-                <p className="mt-2 max-h-52 overflow-y-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-foreground/85">{contrato.descricao || 'Não informada'}</p>
-              </details>
-              <details className="group/observacoes" open={!contrato.observacoes || contrato.observacoes.length < 180}>
-                <summary data-tec08-acento-contrato className="cursor-pointer border-t border-brand-green/10 pt-3 text-sm font-semibold text-brand-neon">Observações</summary>
-                <p className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-foreground/70">{contrato.observacoes || 'Nenhuma observação'}</p>
-              </details>
+              </div>
+              <div id="secao-geral-historico" role="tabpanel" hidden={abaGeral!=='historico'} className={abaGeral==='historico'?'space-y-3':'hidden'}>
+                {abaGeral==='historico'&&<HistoricoContrato estado={contrato.arquivadoEm?'arquivado':cancelado?'cancelado':suspenso?'suspenso':encerrado?'encerrado':concluido||pendenteConclusao?'concluido':emRevisao?'revisao':'normal'} contratoId={contrato.id} versao={`${contrato.status}:${contrato.reabertoEm??''}:${contratoQuery.dados?.numeroContrato??''}:${abaContrato}:${versaoHistorico}`} />}
+              </div>
             </section>
 
 
@@ -690,7 +692,7 @@ export default function DetalheContratoPage() {
         {(!painelInterno || Boolean(contrato.observacoes?.trim())) && <footer data-tec08-contexto-operacional data-tec08-estado={contrato.arquivadoEm ? 'arquivado' : cancelado ? 'cancelado' : suspenso ? 'suspenso' : finalizado ? 'finalizado' : encerrado ? 'encerrado' : emRevisao ? 'revisao' : (concluido || pendenteConclusao) ? 'concluido' : 'normal'} className="mt-4 flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border bg-background/70 px-4 py-3" aria-label="Observações e ações do contrato">
           {Boolean(contrato.observacoes?.trim()) && <p className="min-w-0 flex-1 truncate text-xs text-foreground/65" title={contrato.observacoes ?? ''}>{contrato.observacoes}</p>}
         <div className="flex min-w-0 items-center justify-end gap-2">
-          {!painelInterno && <MenuAcoesObjeto rotulo="Fechar contrato" disabled={alterandoArquivo}>
+          {!painelInterno && <MenuAcoesObjeto rotulo="Fechar contrato" disabled={alterandoArquivo} pendenteConclusao={pendenteConclusao}>
            {podeSuspender && <BotaoAcaoModal intencao="suspender" disabled={alterandoArquivo} onClick={() => setConfirmarSuspensao(true)}>⏸ Suspender contrato</BotaoAcaoModal>}
            {podeCancelarContrato && <BotaoAcaoModal intencao="cancelar" disabled={alterandoArquivo} onClick={() => setCancelamentoAberto(true)}>✕ Cancelar contrato</BotaoAcaoModal>}
            {podeEncerrar && <BotaoAcaoModal intencao="encerrar" disabled={alterandoArquivo} onClick={() => setAbrirEncerramento(true)}>⚑ Encerrar antecipadamente</BotaoAcaoModal>}
@@ -844,9 +846,9 @@ export default function DetalheContratoPage() {
       justificativa={motivoDecisao} onJustificativaChange={setMotivoDecisao}
       onCancelar={() => setConfirmarFechamentoRevisao(false)} onConfirmar={() => void executarFechamentoRevisao()} />}
     {confirmarReabertura && contrato && <ConfirmacaoSimples
-      titulo={encerrado ? 'Reabrir contrato encerrado?' : 'Reabrir contrato concluído?'}
-      descricao={`O contrato deixará de ficar ${encerrado ? 'Encerrado' : 'Concluído'} e passará para Em revisão. Etapas, entregáveis e evidências continuarão no estado atual e poderão ser reabertos separadamente. O histórico será preservado.`}
-      confirmar="Reabrir contrato" estadoContextual={encerrado ? 'encerrado' : 'concluido'} preservarCorOrigem ocupado={alterandoArquivo} justificativa={motivoDecisao} onJustificativaChange={setMotivoDecisao} onCancelar={() => setConfirmarReabertura(false)}
+      titulo={finalizado ? 'Reabrir contrato finalizado?' : encerrado ? 'Reabrir contrato encerrado?' : 'Reabrir contrato concluído?'}
+      descricao={`O contrato deixará de ficar ${finalizado ? 'Finalizado' : encerrado ? 'Encerrado' : 'Concluído'} e passará para Em revisão. Etapas, entregáveis e evidências continuarão no estado atual e poderão ser reabertos separadamente. O histórico será preservado.`}
+      confirmar="Reabrir contrato" estadoContextual={finalizado ? 'finalizado' : encerrado ? 'encerrado' : 'concluido'} preservarCorOrigem ocupado={alterandoArquivo} justificativa={motivoDecisao} onJustificativaChange={setMotivoDecisao} onCancelar={() => setConfirmarReabertura(false)}
       onConfirmar={() => void executarReabertura()} />}
     {confirmarArquivo && contrato && <ConfirmacaoSimples
       titulo='Arquivar contrato?'

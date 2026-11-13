@@ -12,11 +12,15 @@ function temAcaoDisponivel(conteudo: ReactNode): boolean {
 }
 
 /** Menu universal: só exibe ações autorizadas recebidas do módulo. Não altera permissões nem regras da API. */
-export function MenuAcoesObjeto({ children, rotulo = 'Fechar', disabled = false }: {
-  children: ReactNode; rotulo?: string; disabled?: boolean;
+export function MenuAcoesObjeto({ children, rotulo = 'Fechar', disabled = false, acaoDireta, pendenteConclusao = false }: {
+  children?: ReactNode; rotulo?: string; disabled?: boolean;
+  /** Abertura direta de uma única transição, sem um segundo menu de seleção. */
+  acaoDireta?: () => void;
+  /** Sinalizador visual: a decisão de conclusão está pendente, sem aprová-la automaticamente. */
+  pendenteConclusao?: boolean;
 }) {
   const [aberto, setAberto] = useState(false);
-  const temOpcoes = temAcaoDisponivel(children);
+  const temOpcoes = Boolean(acaoDireta) || temAcaoDisponivel(children);
   const botao = useRef<HTMLButtonElement>(null);
   const painel = useRef<HTMLDivElement>(null);
   const [posicao, setPosicao] = useState({top: 0, left: 0, acima: false});
@@ -51,19 +55,22 @@ export function MenuAcoesObjeto({ children, rotulo = 'Fechar', disabled = false 
   }, [aberto, temOpcoes]);
   if (!temOpcoes) return null;
   return <>
-    <button ref={botao} type="button" disabled={disabled} aria-expanded={aberto} aria-haspopup="menu" aria-label={`${rotulo}: escolher ação`}
+    <button ref={botao} type="button" disabled={disabled} aria-expanded={acaoDireta ? undefined : aberto}
+      aria-haspopup={acaoDireta ? undefined : 'menu'} aria-label={acaoDireta ? rotulo : `${rotulo}: escolher ação`}
+      data-pi-controle-fechamento={pendenteConclusao ? 'pendente-conclusao' : acaoDireta ? 'reabrir-direto' : 'menu'}
       onClick={() => {
+         if (acaoDireta) { setAberto(false); acaoDireta(); return; }
          const r = botao.current?.getBoundingClientRect();
          if (r) setPosicao({ top: r.bottom + 6,
            left: Math.max(12, Math.min(r.right - 274, window.innerWidth - 286)), acima: false });
          setAberto(v => !v);
        }}
-      className="inline-flex min-h-9 shrink-0 items-center gap-2 rounded-lg border border-slate-400/40 bg-slate-500/15 px-3 py-2 text-xs font-semibold text-foreground hover:bg-slate-500/25 focus-visible:outline-2 focus-visible:outline-brand-neon disabled:opacity-50">
-      <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>
+      className={`inline-flex min-h-9 shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-2 disabled:opacity-50 ${pendenteConclusao ? 'border-violet-500/65 bg-violet-500/15 text-violet-300 hover:bg-violet-500/25 focus-visible:outline-violet-400' : acaoDireta ? 'border-teal-500/40 bg-teal-500/10 text-teal-200 hover:bg-teal-500/20 focus-visible:outline-teal-400' : 'border-slate-400/40 bg-slate-500/15 text-foreground hover:bg-slate-500/25 focus-visible:outline-brand-neon'}`}>
+      {pendenteConclusao ? <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="m7.5 12 3 3 6-6" /></svg> : acaoDireta ? <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M3.5 10a9 9 0 1 1 1.9 7M3.5 4v6h6"/></svg> : <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>}
       {rotulo}
-      <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m6 9 6 6 6-6"/></svg>
+      {!acaoDireta && <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m6 9 6 6 6-6"/></svg>}
     </button>
-    {aberto && createPortal(<div ref={painel} role="menu" aria-label={rotulo}
+    {!acaoDireta && aberto && createPortal(<div ref={painel} role="menu" aria-label={rotulo}
       onPointerDown={evento => evento.stopPropagation()}
       onKeyDown={evento => {
         if (evento.key === 'Escape') {

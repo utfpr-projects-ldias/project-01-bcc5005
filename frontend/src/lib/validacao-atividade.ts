@@ -7,19 +7,19 @@ const obrigatorio = (nome: string, max: number) => z.string().trim().min(1, `${n
 const opcional = (nome: string, max: number) => z.string().trim()
   .max(max, `${nome} aceita no máximo ${max} caracteres.`);
 export const atividadeSchema = z.object({
-  titulo: obrigatorio('Título', 255),
+  titulo: obrigatorio('Título', 120),
   dataHora: z.string().min(1, 'Informe data e hora.').refine(s => Number.isFinite(new Date(s).getTime()), 'Data e hora inválidas.'),
   tipo: z.enum(TIPOS_ATIVIDADE),
-  descricao: obrigatorio('Descrição', 5000),
-  responsavel: opcional('Responsável', 255),
-  duracao: opcional('Duração', 80),
+  descricao: obrigatorio('Descrição', 1500),
+  responsavel: opcional('Responsável', 120),
+  duracao: opcional('Duração', 50),
   participantes: opcional('Participantes', 2000).superRefine((valor, ctx) => {
     const pessoas = valor.split(',').map(p => p.trim()).filter(Boolean);
     if (pessoas.length > 20) ctx.addIssue({ code: 'custom', message: 'Informe no máximo 20 participantes.' });
     if (pessoas.some(p => p.length > 100)) ctx.addIssue({ code: 'custom', message: 'Cada participante pode ter até 100 caracteres.' });
   }),
-  local: opcional('Local', 255),
-  observacoes: opcional('Observações', 5000),
+  local: opcional('Local', 160),
+  observacoes: opcional('Observações', 1000),
   ocorrenciaId: z.string().uuid().nullable().optional(),
   ocorrenciaIds: z.array(z.string().uuid()).refine(ids => new Set(ids).size === ids.length, 'Ocorrências repetidas.').optional(),
   quantidadeExecucao: z.string().regex(/^\d{1,15}(?:\.\d{1,3})?$/, 'Informe uma quantidade válida.').nullable().optional(),

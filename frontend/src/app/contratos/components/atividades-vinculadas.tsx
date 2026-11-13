@@ -76,7 +76,7 @@ function ListaAtividadesVinculadas({ contratoId, entregavelId, somenteLeitura = 
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h3 data-pi-titulo data-tec08-titulo-secao-atividades className="text-lg font-semibold">{fixo ? 'Atividades vinculadas' : 'Linha do tempo de atividades'}</h3>
         <p className="mt-1 text-xs text-foreground/65">Diário operacional — {intervaloInvalido ? 'intervalo inválido' : `${total} ${total === 1 ? 'registro' : 'registros'}`}</p></div>
-      {<button type="button" onClick={e => { setGatilhoCadastro(e.currentTarget); if (podeRegistrar && podeAbrirCadastro) setCadastroAberto(true); else setAvisoCadastro(true); }} className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-brand-green px-3 py-2 text-xs font-semibold text-on-brand-green hover:brightness-105" data-pi-acao="primaria" aria-label="Nova atividade neste contexto">
+      {<button type="button" disabled={!podeRegistrar || !podeAbrirCadastro} title={!podeRegistrar?'Sem permissão para criar atividade':!podeAbrirCadastro?'É necessário um entregável aberto em uma etapa ativa':'Criar atividade'} onClick={e => { setGatilhoCadastro(e.currentTarget); setCadastroAberto(true); }} className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-brand-green px-3 py-2 text-xs font-semibold text-on-brand-green hover:brightness-105 disabled:cursor-not-allowed disabled:!border-slate-500/30 disabled:!bg-slate-500/15 disabled:!text-foreground/40" data-pi-acao="primaria" aria-label="Nova atividade neste contexto">
         <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 5h16v14H4zM7 9h10M7 13h6"/><path d="M17 14v6M14 17h6"/></svg> Nova atividade
       </button>}
     </div>
@@ -84,7 +84,7 @@ function ListaAtividadesVinculadas({ contratoId, entregavelId, somenteLeitura = 
       <p className="text-sm text-foreground/80">{!podeRegistrar ? 'Você não possui permissão para registrar atividades neste contrato.' : 'Para registrar, é necessário pelo menos um entregável aberto e uma etapa ativa no contrato.'}</p>
       <div className="mt-4 flex justify-end"><button type="button" className="rounded-lg border border-current/25 px-4 py-2 text-sm font-semibold" onClick={() => setAvisoCadastro(false)}>Entendi</button></div>
     </ModalEtapa>, document.body)}
-    {podeRegistrar && consultaPlanejamentoPronta && !podeAbrirCadastro && <p role="status" data-pi-superficie className="rounded-lg border p-3 text-sm text-foreground/70">Reabra um entregável e a etapa correspondente, se estiverem concluídos, para registrar uma atividade.</p>}
+
     {podeRegistrar && (Boolean(entregaveisConsulta.erro) || Boolean(etapasConsulta.erro)) && <p role="alert" className="text-sm text-error-text">Não foi possível conferir os entregáveis e as etapas para cadastro.</p>}
     <div className="min-w-0 max-w-full">{abasSituacao}</div>
     {!fixo ? <div data-pi-superficie aria-label="Filtrar atividades do contrato" className="grid min-w-0 gap-3 rounded-xl border border-brand-green/20 bg-background/30 p-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,.9fr)_minmax(0,1.5fr)] xl:items-end">

@@ -65,7 +65,7 @@ export function ModalEdicaoAtividade({ atividade, contratoId, origem, onFechar, 
       <p className="text-xs text-foreground/70">Campos com * são obrigatórios. As alterações ficam registradas na rastreabilidade.</p>
       {erro && <p role="alert" className="rounded-lg border border-error-text/35 p-3 text-sm text-error-text">{erro}</p>}
       <label className="block text-sm font-medium">Título *
-        <input required maxLength={255} className={CAMPO} value={form.titulo} onChange={e => campo('titulo', e.target.value)} aria-invalid={Boolean(errosCampos.titulo)} /><span className="block text-right text-[11px] text-foreground/55">{form.titulo.length}/255</span></label>
+        <input required maxLength={120} className={CAMPO} value={form.titulo} onChange={e => campo('titulo', e.target.value)} aria-invalid={Boolean(errosCampos.titulo)} /><span className="block text-right text-[11px] text-foreground/55">{form.titulo.length}/120</span></label>
       {errosCampos.titulo && <p className="text-xs text-error-text">{errosCampos.titulo}</p>}
       <div className="grid gap-3 lg:grid-cols-2"><label className="block min-w-0 text-sm font-medium">Data e hora *
         <input required type="datetime-local" lang="pt-BR" className={`${CAMPO} tec08-data-hora`} value={form.dataHora} onChange={e => campo('dataHora', e.target.value)} aria-invalid={Boolean(errosCampos.dataHora)} /></label>
@@ -74,20 +74,20 @@ export function ModalEdicaoAtividade({ atividade, contratoId, origem, onFechar, 
             {TIPOS_ATIVIDADE.map(x => <option key={x}>{x}</option>)}</select></label></div>
       {errosCampos.dataHora && <p className="text-xs text-error-text">{errosCampos.dataHora}</p>}
       <label className="block text-sm font-medium">Descrição *
-        <textarea required rows={2} maxLength={5000} className={CAMPO} value={form.descricao} onChange={e => campo('descricao', e.target.value)} /><span className="block text-right text-[11px] text-foreground/55">{form.descricao.length}/5000</span></label>
+        <textarea required rows={2} maxLength={1500} className={CAMPO} value={form.descricao} onChange={e => campo('descricao', e.target.value)} /><span className="block text-right text-[11px] text-foreground/55">{form.descricao.length}/1500</span></label>
       {errosCampos.descricao && <p className="text-xs text-error-text">{errosCampos.descricao}</p>}
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <label className="block text-sm font-medium">Responsável
-          <input maxLength={255} className={CAMPO} value={form.responsavel} onChange={e => campo('responsavel', e.target.value)} /></label>
+          <input maxLength={120} className={CAMPO} value={form.responsavel} onChange={e => campo('responsavel', e.target.value)} /></label>
         <label className="block text-sm font-medium">Duração
-          <input maxLength={80} className={CAMPO} value={form.duracao} onChange={e => campo('duracao', e.target.value)} /></label>
+          <input maxLength={50} className={CAMPO} value={form.duracao} onChange={e => campo('duracao', e.target.value)} /></label>
         <label className="block text-sm font-medium">Participantes
           <input maxLength={2000} className={CAMPO} value={form.participantes} onChange={e => campo('participantes', e.target.value)} /></label>
         <label className="block text-sm font-medium">Local
-          <input maxLength={255} className={CAMPO} value={form.local} onChange={e => campo('local', e.target.value)} /></label>
+          <input maxLength={160} className={CAMPO} value={form.local} onChange={e => campo('local', e.target.value)} /></label>
       </div>
       <label className="block text-sm font-medium">Observações
-        <textarea rows={2} maxLength={5000} className={CAMPO} value={form.observacoes} onChange={e => campo('observacoes', e.target.value)} /><span className="block text-right text-[11px] text-foreground/55">{form.observacoes.length}/5000</span></label>
+        <textarea rows={2} maxLength={1000} className={CAMPO} value={form.observacoes} onChange={e => campo('observacoes', e.target.value)} /><span className="block text-right text-[11px] text-foreground/55">{form.observacoes.length}/1000</span></label>
       <fieldset className="space-y-2 rounded-lg border border-brand-green/25 p-3"><legend className="px-1 text-sm font-semibold">Vincular ao(s) entregável(is) *</legend>
         {entregaveis.carregando ? <p role="status" className="text-sm">Carregando entregáveis...</p> : entregaveis.erro ?
           <p role="alert" className="text-sm text-error-text">Não foi possível consultar entregáveis.</p> :

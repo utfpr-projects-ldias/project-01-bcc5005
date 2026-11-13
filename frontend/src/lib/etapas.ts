@@ -18,6 +18,11 @@ export type Etapa = {
   terminoPrevisto: string | null;
   status: StatusEtapa;
   observacoes: string | null;
+  conclusaoSolicitadaEm?: string | null;
+  conclusaoSolicitadaPor?: string | null;
+  encerramentoSolicitadoEm?: string | null;
+  encerramentoSolicitadoPor?: string | null;
+  encerramentoMotivo?: string | null;
   vigenciaContrato: { inicioVigencia: string; terminoVigencia: string };
   avisoVigencia: boolean;
 };
@@ -66,6 +71,9 @@ export const criarEtapa = (contratoId: string, dados: DadosEtapa) => requisitar<
 export const editarEtapa = (contratoId: string, etapaId: string, dados: DadosEtapa) => requisitar<Etapa>(
   `${caminho(contratoId)}/${encodeURIComponent(etapaId)}`, { method: 'PATCH', body: JSON.stringify(dados) },
 );
+export const solicitarConclusaoEtapa = (c:string,e:string) => requisitar<Etapa>(`${caminho(c)}/${encodeURIComponent(e)}/solicitar-conclusao`,{method:'PATCH'});
+export const solicitarEncerramentoEtapa = (c:string,e:string,motivo:string) => requisitar<Etapa>(`${caminho(c)}/${encodeURIComponent(e)}/solicitar-encerramento`,{method:'PATCH',body:JSON.stringify({motivo})});
+export const devolverSolicitacaoEtapa = (c:string,e:string,tipo:'conclusao'|'encerramento',motivo:string) => requisitar<Etapa>(`${caminho(c)}/${encodeURIComponent(e)}/devolver-${tipo}`,{method:'PATCH',body:JSON.stringify({motivo})});
 export const finalizarEtapa = (c: string, e: string, motivo: string) => requisitar<Etapa>(
   `${caminho(c)}/${encodeURIComponent(e)}/finalizar`, { method: 'PATCH', body: JSON.stringify({ motivo }) });
 export const concluirEtapa = (c: string, e: string) => requisitar<Etapa>(`${caminho(c)}/${encodeURIComponent(e)}/concluir`, { method: 'PATCH' });

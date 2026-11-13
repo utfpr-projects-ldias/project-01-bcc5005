@@ -7,13 +7,13 @@ import { StatusEtapa } from '../status-etapa.enum.js';
 /** PATCH: omissão mantém o valor, null limpa somente campos opcionais. */
 export class AtualizarEtapaDto {
   @ValidateIf((_, valor: unknown) => valor !== undefined)
-  @IsString() @IsNotEmpty() @MaxLength(255)
+  @IsString() @IsNotEmpty() @MaxLength(100)
   nome?: string;
 
-  @IsOptional() @IsString() @MaxLength(50)
+  @IsOptional() @IsString() @MaxLength(30)
   codigo?: string | null;
 
-  @IsOptional() @IsString() @MaxLength(3000)
+  @IsOptional() @IsString() @MaxLength(1000)
   descricao?: string | null;
 
   @IsOptional() @IsDateString({ strict: true })
@@ -28,6 +28,6 @@ export class AtualizarEtapaDto {
   @IsEnum(StatusEtapa)
   status?: StatusEtapa;
 
-  @IsOptional() @IsString() @MaxLength(3000)
+  @IsOptional() @IsString() @MaxLength(1000)
   observacoes?: string | null;
 }

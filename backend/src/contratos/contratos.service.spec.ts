@@ -669,6 +669,18 @@ describe('Solicitação contratual antes da aprovação (Patch 31)', () => {
   });
 });
 
+describe('Reabertura operacional de contratos finalizados parcialmente (Patch 34)', () => {
+  it('admite FINALIZADO por reabertura autorizada, mantendo a trilha de auditoria', async () => {
+    const c = montarCenario();
+    Object.assign(c.repositorio, { findOne: jest.fn(async () => contratoBase({ status: 'FINALIZADO' as StatusContrato })) });
+    const atualizado = await c.service.reabrir(ID_CONTRATO, ator, 'Reabertura autorizada para continuidade da execução');
+    expect(atualizado.status).toBe(PLANEJAMENTO);
+    expect(atualizado.reabertoEm).toBeInstanceOf(Date);
+    expect(c.eventos[0]).toMatchObject({ acao: AcaoAuditoria.CONTRATO_REABERTO,
+      dadosAnteriores: { status: 'FINALIZADO', reabertoEm: null } });
+  });
+});
+
 describe('Rastreabilidade contratual e pendência de conclusão (TEC08)', () => {
   it('restringe histórico à raiz contratual e projeta apenas campos públicos, sem JSONB cru', async () => {
     const cenario = montarCenario();

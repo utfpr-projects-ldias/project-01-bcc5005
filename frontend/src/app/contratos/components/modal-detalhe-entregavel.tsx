@@ -165,7 +165,10 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, pode
     bloqueadoPorSubmodal={nivel !== 'entregavel'}
     acoes={!editando && item ? <>
       {podeEditarCadastro && !bloqueioEdicao && !verificado && !['CONCLUIDO','FINALIZADO'].includes(item.statusExecucao ?? '') && <BotaoEditarModal rotulo="Editar entregável" onClick={() => setEditando(true)} />}
-      <MenuAcoesObjeto rotulo={item.arquivadoEm || ['CONCLUIDO','FINALIZADO'].includes(item.statusExecucao ?? '') ? 'Reabrir' : 'Fechar'} disabled={salvando}>
+      <MenuAcoesObjeto rotulo={item.arquivadoEm || ['CONCLUIDO','FINALIZADO'].includes(item.statusExecucao ?? '') ? 'Reabrir' : 'Fechar'} disabled={salvando}
+        pendenteConclusao={item.statusExecucao === 'PENDENTE_CONCLUSAO'}
+        acaoDireta={item.arquivadoEm && permissoes?.reativarEntregaveis ? onReativar
+          : !item.arquivadoEm && !item.reabertoEm && ['CONCLUIDO','FINALIZADO'].includes(item.statusExecucao ?? '') && permissoes?.reabrirEntregaveis && !bloqueioEdicao ? onReabrir : undefined}>
             {abertaParaDecisao && permissoes?.editarEntregaveis && <>
               <BotaoAcaoModal intencao="solicitar-conclusao" disabled={salvando || !podeSolicitarConclusao}
                 title={!podeSolicitarConclusao ? 'A conclusão requer execução integral, atividades verificadas e documentação válida.' : undefined}
@@ -179,8 +182,8 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, pode
             {item.statusExecucao === 'CONCLUIDO' && !item.reabertoEm && permissoes?.reabrirEntregaveis && !bloqueioEdicao && <BotaoAcaoModal intencao="reabrir" onClick={onReabrir}>⟳ Reabrir</BotaoAcaoModal>}
             {!item.arquivadoEm && podeArquivar && !['CONCLUIDO','FINALIZADO'].includes(item.statusExecucao ?? '') && <BotaoAcaoModal intencao="arquivar" onClick={onArquivar}>▣ Arquivar</BotaoAcaoModal>}
             {item.arquivadoEm && permissoes?.reativarEntregaveis && <BotaoAcaoModal intencao="reativar" onClick={onReativar}>⟳ Reativar</BotaoAcaoModal>}
-            {item.arquivadoEm && permissoes?.excluirEntregaveisArquivados && <BotaoAcaoModal intencao="excluir" onClick={onExcluir}>▣ Excluir</BotaoAcaoModal>}
           </MenuAcoesObjeto>
+          {item.arquivadoEm && permissoes?.excluirEntregaveisArquivados && <button type="button" onClick={onExcluir} disabled={salvando} title="Excluir entregável arquivado" aria-label="Excluir entregável arquivado" className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 transition hover:bg-red-500/20 disabled:opacity-40">×</button>}
     </> : undefined}
     ocupado={salvando} focoRetorno={focoRetorno} onFechar={fecharNivel}>
     <div className="min-w-0 space-y-4" data-testid="modal-detalhe-entregavel">

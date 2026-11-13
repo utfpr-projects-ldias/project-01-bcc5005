@@ -42,12 +42,12 @@ export class AtualizarContratoDto {
   @ValidateIf((_, v) => v !== undefined)
   @IsString()
   @IsNotEmpty()
-  @MaxLength(255)
+  @MaxLength(160)
   orgaoContratante?: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(255)
+  @MaxLength(160)
   unidadeResponsavel?: string | null;
 
   @ValidateIf((_, v) => v !== undefined)
@@ -58,7 +58,7 @@ export class AtualizarContratoDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(3000)
+  @MaxLength(1500)
   descricao?: string | null;
 
   @IsOptional()
@@ -86,7 +86,7 @@ export class AtualizarContratoDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(255)
+  @MaxLength(160)
   fiscalGestor?: string | null;
 
   @ValidateIf((_, v) => v !== undefined)
@@ -95,6 +95,6 @@ export class AtualizarContratoDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(2000)
+  @MaxLength(1000)
   observacoes?: string | null;
 }
