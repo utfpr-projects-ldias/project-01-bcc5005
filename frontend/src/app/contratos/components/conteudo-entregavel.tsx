@@ -28,7 +28,7 @@ function Quadro({ titulo, campos, estado = 'normal' }: { titulo: string; campos:
   return <section data-tec08-secao-contextual data-tec08-estado={estado} className={`min-w-0 space-y-2 rounded-xl border p-3 sm:p-4 ${estado === 'arquivado' ? 'border-amber-500/45 bg-amber-500/[0.04]' : estado === 'concluido' ? 'border-violet-400/40 bg-violet-500/[0.04]' : estado === 'finalizado' ? 'border-purple-400/40 bg-purple-500/[0.04]' : estado === 'revisao' ? 'border-teal-500/40 bg-teal-500/[0.04]' : 'border-brand-green/20 bg-brand-darkgreen/5'}`}>
     <h2 className={`text-lg font-semibold ${estado === 'arquivado' ? 'text-amber-200' : estado === 'concluido' ? 'text-violet-200' : estado === 'finalizado' ? 'text-purple-200' : estado === 'revisao' ? 'text-teal-200' : 'text-brand-neon'}`}>{titulo}</h2>
     <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm lg:grid-cols-3">
-      {campos.map(([nome, valor]) => <div key={nome} className={`min-w-0 ${nome === 'Critério operacional' ? 'col-span-full' : ''}`}><dt className="text-xs text-foreground/60">{nome}</dt>
+      {campos.map(([nome, valor]) => <div key={nome} className={`min-w-0 ${['Descrição','Observações','Critério operacional'].includes(nome) ? 'col-span-full border-t border-current/15 pt-3' : ''}`}><dt className="text-xs text-foreground/60">{nome}</dt>
         <dd className="mt-0.5 whitespace-pre-wrap break-words text-sm">{valor?.trim() || 'Não informado'}</dd></div>)}
     </dl>
   </section>;
@@ -320,7 +320,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
       ['Configuração de recorrência', item.configuracaoPeriodicidade ? `Versão ${item.configuracaoPeriodicidade.versao}` : null],
     ] as Campo[] : []),
     ['Peso operacional', item.peso === null ? null : `${Number(item.peso).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`],
-    ['Observações', item.observacoes],
+    ['Descrição', item.descricao], ['Observações', item.observacoes],
     ...(item.criterioConclusao?.trim() ? [['Critério operacional', item.criterioConclusao]] as Campo[] : []),
   ];
   const evidenciaNaAba = (id: string): boolean => {
@@ -332,7 +332,6 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
   };
   const estadoProprioEntregavel = estadoDoObjeto({objeto:'entregavel',status:item.statusExecucao,arquivado:Boolean(item.arquivadoEm),reaberto:Boolean(item.reabertoEm)});
   return <><div data-tec08-contexto-operacional data-tec08-estado={estadoProprioEntregavel} className="min-w-0 space-y-3">
-    {item.descricao && <p className="whitespace-pre-wrap break-words text-xs text-foreground/75">{item.descricao}</p>}
     <Quadro titulo="Identificação e planejamento" campos={campos} estado={estadoProprioEntregavel === 'finalizado' ? 'finalizado' : estadoProprioEntregavel === 'concluido' ? 'concluido' : estadoProprioEntregavel === 'arquivado' ? 'arquivado' : estadoProprioEntregavel === 'revisao' ? 'revisao' : 'normal'} />
     {podeVerHistorico && <details onToggle={evento => setHistoricoExpandido(evento.currentTarget.open)} className="rounded-xl border border-brand-green/20 px-3 py-2">
       <summary data-tec08-titulo-historico className="cursor-pointer text-sm font-semibold text-brand-neon">Rastreabilidade do entregável</summary>
@@ -386,7 +385,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
         const verificadas = statusInicialCarregado ? obrigatorias.filter(e => estadoEvidencias[e.id]?.status === 'VERIFICADA').length : resumoValido ? resumoInicial!.verificadas : 0;
         const opcionaisVerificadas = statusInicialCarregado ? opcionais.filter(e => estadoEvidencias[e.id]?.status === 'VERIFICADA').length : resumoValido ? (resumoInicial!.verificadasTotal! - resumoInicial!.verificadas) : 0;
         const contagemDisponivel = statusInicialCarregado || resumoValido;
-        return <><p className="min-h-4 text-xs tabular-nums text-foreground/65">{contagemDisponivel ? `${verificadas}/${obrigatorias.length} evidências obrigatórias verificadas` : "Consultando evidências…"}</p>
+        return <><p className="min-h-4 text-xs tabular-nums text-foreground/65">{contagemDisponivel ? `${verificadas}/${obrigatorias.length} evidências obrigatórias` : "Consultando evidências…"}</p>
           {contagemDisponivel && opcionais.length > 0 && <p className="text-xs tabular-nums text-foreground/60">{opcionaisVerificadas}/{opcionais.length} opcionais verificadas · não bloqueiam a conclusão</p>}
           <div className="flex h-1.5 max-w-64 gap-0.5 overflow-hidden rounded-full" role="img"
             aria-label={contagemDisponivel ? `${verificadas} de ${obrigatorias.length} evidências obrigatórias verificadas` : 'Consultando comprovação das evidências obrigatórias'}>

@@ -7,6 +7,7 @@ import { ModalEtapa } from '@/app/contratos/components/modal-etapa';
 import { useEntregaveis } from '@/hooks/use-entregaveis';
 import { editarAtividadeApi, type Atividade } from '@/hooks/use-atividades';
 import { atividadeSchema, TIPOS_ATIVIDADE, type FormularioAtividade } from '@/lib/validacao-atividade';
+import { estadoDoObjeto } from '@/lib/identidade-operacional';
 
 const CAMPO = 'mt-1 w-full min-w-0 rounded-xl border border-brand-green/25 bg-background/80 px-3 py-2.5 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-brand-neon';
 function dataLocal(data: string): string {
@@ -103,7 +104,7 @@ export function ModalEdicaoAtividade({ atividade, contratoId, origem, onFechar, 
     } catch (falha) { setErro(falha instanceof Error ? falha.message : 'Não foi possível editar a atividade.'); }
     finally { setSalvando(false); }
   }
-  return createPortal(<ModalEtapa titulo="Editar atividade" contexto={atividade.titulo} estadoContextual="normal"
+  return createPortal(<ModalEtapa titulo="Editar atividade" contexto={atividade.titulo} estadoContextual={estadoDoObjeto({objeto: 'atividade', status: atividade.status})}
     ocupado={salvando} formularioHorizontal cabecalhoUmaLinha camada="edicao" focoRetorno={origem} onFechar={onFechar} rotuloFechar="Fechar edição da atividade">
     <form aria-label="Formulário de edição da atividade" onSubmit={salvar} noValidate className="mx-auto max-w-3xl space-y-4">
       <p className="text-xs text-foreground/70">Campos com * são obrigatórios. As alterações ficam registradas na rastreabilidade.</p>

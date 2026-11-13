@@ -45,10 +45,10 @@ test('nova etapa não permite seleção manual de Concluída nem Encerrada', () 
 test('formulário não executa encerramento direto e limita nome, código e texto', () => {
   render(<FormularioEtapa onSalvar={jest.fn()} onCancelar={jest.fn()} />);
   expect(screen.queryByRole('option', { name: 'Encerrada' })).not.toBeInTheDocument();
-  expect(screen.getByLabelText('Nome *')).toHaveAttribute('maxlength', '100');
-  expect(screen.getByLabelText('Código')).toHaveAttribute('maxlength', '30');
-  expect(screen.getByLabelText('Descrição')).toHaveAttribute('maxlength', '1000');
-  expect(screen.getByLabelText('Observações')).toHaveAttribute('maxlength', '1000');
+  expect(screen.getByLabelText('Nome *')).toHaveAttribute('maxlength', '36');
+  expect(screen.getByLabelText('Código')).toHaveAttribute('maxlength', '15');
+  expect(screen.getByLabelText('Descrição')).toHaveAttribute('maxlength', '500');
+  expect(screen.getByLabelText('Observações')).toHaveAttribute('maxlength', '200');
   expect(screen.queryByRole('button', { name: /encerramento/i })).not.toBeInTheDocument();
 });
 

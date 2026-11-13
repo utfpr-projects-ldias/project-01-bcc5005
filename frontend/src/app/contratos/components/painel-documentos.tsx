@@ -241,10 +241,11 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
     if (!documento || salvandoMetadados || somenteLeitura || !permiteReabrir(documento)) return;
     setSalvandoMetadados(true); setErroMetadados('');
     try {
-      await reabrirDocumento(contratoId, documento.id, motivoDocumento.trim());
+      const reaberto = await reabrirDocumento(contratoId, documento.id, motivoDocumento.trim());
+      setDocumentoDetalhe(atual => atual?.id === documento.id ? reaberto : atual);
       setDocumentoReabrir(null); setMotivoDocumento(''); onDocumentoAlterado?.(); toastAviso('Documento em revisão: nova verificação necessária.');
       await Promise.allSettled([consulta.atualizar(), principais.atualizar(), totalAtivos.atualizar()]);
-    } catch (e) { setDocumentoReabrir(null); setErroMetadados(erroMensagem(e, 'Não foi possível reabrir o documento.')); }
+    } catch (e) { setErroMetadados(erroMensagem(e, 'Não foi possível reabrir o documento.')); }
     finally { setSalvandoMetadados(false); }
   }
   async function confirmarArquivamento() {
@@ -450,12 +451,10 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
       onCancelar={() => { setDocumentoArquivar(null); setErroMetadados(''); }} onConfirmar={() => void confirmarArquivamento()} /></div>, document.body)}
 
     {documentoDetalhe && createPortal(<ModalEtapa titulo={documentoDetalhe.nomeOriginal} contexto="Documento contratual" acoes={<>
-      {podeEditarRegistro && !somenteLeitura && !documentoDetalhe.arquivadoEm && documentoDetalhe.categoria !== 'CONTRATO_PRINCIPAL' && <BotaoEditarModal rotulo="Editar metadados do documento" onClick={() => { setDocumentoEdicao(documentoDetalhe); setCategoriaEdicao(documentoDetalhe.categoria); setDescricaoEdicao(documentoDetalhe.descricao ?? ''); setErroMetadados(''); }} />}
+      {podeEditarRegistro && !somenteLeitura && !documentoDetalhe.arquivadoEm && !documentoDetalhe.verificadoEm && documentoDetalhe.categoria !== 'CONTRATO_PRINCIPAL' && <BotaoEditarModal rotulo="Editar metadados do documento" onClick={() => { setDocumentoEdicao(documentoDetalhe); setCategoriaEdicao(documentoDetalhe.categoria); setDescricaoEdicao(documentoDetalhe.descricao ?? ''); setErroMetadados(''); }} />}
       <MenuAcoesObjeto rotulo={documentoDetalhe.arquivadoEm || !!documentoDetalhe.verificadoEm ? 'Reabrir' : 'Fechar'} disabled={somenteLeitura || salvandoMetadados}
         acaoDireta={documentoDetalhe.arquivadoEm && permiteReativar(documentoDetalhe) ? () => setDocumentoReativar(documentoDetalhe)
           : !documentoDetalhe.arquivadoEm && !!documentoDetalhe.verificadoEm && permiteReabrir(documentoDetalhe) ? () => setDocumentoReabrir(documentoDetalhe) : undefined}>
-        {!documentoDetalhe.arquivadoEm && !!documentoDetalhe.verificadoEm && permiteReabrir(documentoDetalhe) &&
-          <BotaoAcaoModal intencao="reabrir" disabled={somenteLeitura || salvandoMetadados} onClick={() => setDocumentoReabrir(documentoDetalhe)}>⟳ Reabrir</BotaoAcaoModal>}
         {!documentoDetalhe.arquivadoEm && !documentoDetalhe.verificadoEm && permiteArquivar(documentoDetalhe) &&
           <BotaoAcaoModal intencao="arquivar" disabled={somenteLeitura || salvandoMetadados} onClick={() => { setDocumentoArquivar(documentoDetalhe); setErroMetadados(''); }}>Arquivar</BotaoAcaoModal>}
         {!!documentoDetalhe.arquivadoEm && permiteReativar(documentoDetalhe) &&

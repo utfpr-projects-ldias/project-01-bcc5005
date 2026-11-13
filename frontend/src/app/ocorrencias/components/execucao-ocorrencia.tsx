@@ -1,6 +1,8 @@
 'use client';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { alteracoesLegiveis, rotuloEventoOcorrencia } from './historico-legivel';
+import { AnelProgresso } from './anel-progresso';
+import { quantidadeBRParaApi, quantidadeApiParaBR } from '@/lib/numero-quantidade-br';
 import {
   criarLancamentoOcorrencia, corrigirLancamentoOcorrencia, listarLancamentosOcorrencia,
   listarComprovantesOcorrencia, vincularComprovanteOcorrencia, desvincularComprovanteOcorrencia,
@@ -13,12 +15,12 @@ const ACAO='rounded-lg border border-current/30 px-3 py-2 text-xs font-semibold 
 const CONFIRMAR='rounded-lg bg-brand-green px-4 py-2 text-xs font-semibold text-on-brand-green hover:brightness-110 disabled:opacity-40';
 const formatar=(n:number)=>new Intl.NumberFormat('pt-BR',{maximumFractionDigits:3}).format(n);
 const aberta=(o:Ocorrencia)=>!o.substituidaEm && ['NAO_INICIADO','EM_ANDAMENTO','EM_REVISAO'].includes(o.status);
-const naoNegativa=(v:string)=>/^\d{1,12}(?:\.\d{1,3})?$/.test(v);
-const positiva=(v:string)=>/^(?!0+(?:\.0+)?$)\d{1,12}(?:\.\d{1,3})?$/.test(v);
+const naoNegativa=(v:string)=>quantidadeBRParaApi(v)!==null;
+const positiva=(v:string)=>{const n=quantidadeBRParaApi(v);return n!==null && Number(n)>0;};
 
 /** Detalhamento da execução física: lançamento manual é independente da medição aprovada por atividade. */
-export function ExecucaoOcorrencia({ contratoId, ocorrencia, unidade, podeRegistrar, onAtualizar }: {
-  contratoId:string; ocorrencia:Ocorrencia; unidade:string; podeRegistrar:boolean; onAtualizar:()=>Promise<unknown>;
+export function ExecucaoOcorrencia({ contratoId, ocorrencia, unidade, podeRegistrar, podeCorrigir, onAtualizar }: {
+  contratoId:string; ocorrencia:Ocorrencia; unidade:string; podeRegistrar:boolean; podeCorrigir:boolean; onAtualizar:()=>Promise<unknown>;
 }) {
   const [lancamentos,setLancamentos]=useState<LancamentoOcorrencia[]>([]);
   const [carregando,setCarregando]=useState(false);const [ocupado,setOcupado]=useState(false);
@@ -43,65 +45,69 @@ export function ExecucaoOcorrencia({ contratoId, ocorrencia, unidade, podeRegist
   const restante=Math.max(0,meta-realizado);
   const percentual=meta>0?Math.min(100,(realizado/meta)*100):0;
   async function registrar(e:FormEvent){
-    e.preventDefault();if(ocupado||!positiva(quantidade))return;
+    e.preventDefault();if(ocupado)return;
+    const quantidadeApi=quantidadeBRParaApi(quantidade);
+    if(quantidadeApi===null || Number(quantidadeApi)<=0){setErro('Informe uma quantidade positiva. Use vírgula para decimais e ponto para milhar.');return;}
+    if(Number(quantidadeApi)+comprometido>meta+0.0000001){setErro(`A meta cadastrada é ${formatar(meta)} ${unidade}. O total previsto após este lançamento seria ${formatar(Number(quantidadeApi)+comprometido)}. Se a meta deveria ser maior, atualize-a antes de registrar.`);return;}
     chavePendente.current??=crypto.randomUUID();
     setOcupado(true);setErro('');
     try {
-      await criarLancamentoOcorrencia(contratoId,ocorrencia.id,chavePendente.current,quantidade,justificativa.trim());
+      await criarLancamentoOcorrencia(contratoId,ocorrencia.id,chavePendente.current,quantidadeApi,justificativa.trim());
       chavePendente.current=null;setQuantidade('');setJustificativa('');
       setLancamentos(await listarLancamentosOcorrencia(contratoId,ocorrencia.id));await onAtualizar();
     } catch(f){setErro(f instanceof Error?f.message:'Falha no lançamento.');}
     finally{setOcupado(false);}
   }
   async function corrigir(e:FormEvent){
-    e.preventDefault();if(ocupado||!corrigindo||!naoNegativa(quantidadeCorrecao)||motivoCorrecao.trim().length<15)return;
+    e.preventDefault();const quantidadeApi=quantidadeBRParaApi(quantidadeCorrecao);
+    if(ocupado||!corrigindo||quantidadeApi===null||motivoCorrecao.trim().length<15)return;
     setOcupado(true);setErro('');
-    try{await corrigirLancamentoOcorrencia(contratoId,ocorrencia.id,corrigindo,quantidadeCorrecao,motivoCorrecao.trim());
+    try{await corrigirLancamentoOcorrencia(contratoId,ocorrencia.id,corrigindo,quantidadeApi,motivoCorrecao.trim());
       setCorrigindo(null);setMotivoCorrecao('');setLancamentos(await listarLancamentosOcorrencia(contratoId,ocorrencia.id));await onAtualizar();}
     catch(f){setErro(f instanceof Error?f.message:'Não foi possível corrigir o lançamento.');}
     finally{setOcupado(false);}
   }
   if(!quantitativa)return <p className="rounded-lg border border-current/20 p-3 text-sm text-foreground/70">Esta ocorrência registra atividades e descrições sem meta numérica.</p>;
   return <section className="space-y-4" aria-label="Progresso quantitativo da ocorrência">
-    <div className="rounded-xl border border-current/20 bg-current/[0.035] p-3 sm:p-4">
-      <h4 className="text-sm font-semibold">Progresso da meta</h4>
-      <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div><dt className="text-xs text-foreground/65">Meta</dt><dd className="mt-1 text-lg font-bold tabular-nums">{formatar(meta)}</dd></div>
-        <div><dt className="text-xs text-foreground/65">Executado aprovado</dt><dd className="mt-1 text-lg font-bold tabular-nums">{formatar(realizado)}</dd></div>
-        <div><dt className="text-xs text-foreground/65">Falta realizar</dt><dd className="mt-1 text-lg font-bold tabular-nums">{formatar(restante)}</dd></div>
-        <div><dt className="text-xs text-foreground/65">Avanço</dt><dd className="mt-1 text-lg font-bold tabular-nums">{formatar(percentual)}%</dd></div>
-      </dl>
-      <div role="progressbar" aria-label="Avanço quantitativo da ocorrência" aria-valuenow={percentual} aria-valuemin={0} aria-valuemax={100}
-        className="mt-3 h-2.5 overflow-hidden rounded-full bg-current/10"><div className="h-full rounded-full bg-brand-green" style={{width:`${percentual}%`}}/></div>
-      <p className="mt-2 text-xs text-foreground/65">Unidade: {unidade}. {formatar(Number(ocorrencia.quantidadeManual??0))} lançados diretamente + {formatar(Number(ocorrencia.quantidadeAtividadesVerificada??0))} de atividades verificadas.
-        {comprometido>realizado?` Há ${formatar(comprometido-realizado)} registrados em atividades ainda não aprovadas.`:''}</p>
-    </div>
-    <div className="rounded-xl border border-current/20 p-3 sm:p-4">
-      <h4 className="text-sm font-semibold">Registrar execução diretamente</h4>
-      <p className="mt-1 text-xs text-foreground/65">Informe o que foi realizado <strong>agora</strong>, não o total acumulado. Um novo lançamento soma à execução, enquanto corrigir um anterior substitui apenas aquele valor.</p>
+    <section className="max-w-2xl rounded-xl border border-violet-500/35 bg-violet-500/[0.035] p-3 sm:p-4" aria-label="Resumo do avanço quantitativo">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs text-foreground/65">Executado ({unidade})</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-violet-700 dark:text-violet-200">{formatar(realizado)} / {formatar(meta)}</p>
+          <p className="mt-1 text-xs text-foreground/60">{formatar(Number(ocorrencia.quantidadeManual??0))} lançados diretamente + {formatar(Number(ocorrencia.quantidadeAtividadesVerificada??0))} de atividades verificadas.</p>
+          {comprometido>realizado&&<p className="mt-1 text-xs text-foreground/60">{formatar(comprometido-realizado)} aguardando aprovação.</p>}
+        </div>
+        <div className="flex items-center gap-3"><AnelProgresso atual={realizado} total={meta} rotulo="Avanço físico" tamanho={90}/>
+          <div><p className="text-xs text-foreground/65">Avanço</p><p className="text-xl font-bold tabular-nums text-violet-700 dark:text-violet-200">{formatar(percentual)}%</p></div>
+        </div>
+      </div>
+    </section>
+    <div className="max-w-2xl rounded-xl border border-current/20 p-3 sm:p-4">
+      {aberta(ocorrencia) && podeRegistrar && <><h4 className="text-sm font-semibold">Registrar execução diretamente</h4>
+      <p className="mt-1 text-xs text-foreground/65">Informe o que realizou agora. Corrigir um lançamento anterior substitui somente aquele valor.</p></>}
       {aberta(ocorrencia)&&podeRegistrar?<form onSubmit={registrar} className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto] sm:items-end">
         <label className="text-xs font-semibold">Quantidade realizada agora
-          <input className={`mt-1 ${CAMPO}`} type="number" min="0.001" step="0.001" inputMode="decimal" placeholder="Ex.: 19" value={quantidade}
+          <input className={`mt-1 ${CAMPO}`} type="text" inputMode="decimal" maxLength={20} placeholder="Ex.: 19 ou 1.000,5" value={quantidade}
             onChange={e=>{setQuantidade(e.target.value);chavePendente.current=null;}} required /></label>
         <label className="text-xs font-semibold">Observação do lançamento (opcional)
-          <input className={`mt-1 ${CAMPO}`} maxLength={200} placeholder="Ex.: manutenção do lote 2" value={justificativa}
+          <input className={`mt-1 ${CAMPO}`} maxLength={25} placeholder="Ex.: lote 2" value={justificativa}
             onChange={e=>{setJustificativa(e.target.value);chavePendente.current=null;}} /></label>
         <button type="submit" className={`${CONFIRMAR} min-h-9`} disabled={ocupado||!positiva(quantidade)}>{ocupado?'Registrando…':'Registrar'}</button>
-      </form>:<p className="mt-2 text-xs text-foreground/65">{!podeRegistrar?'Você não possui autorização para registrar progresso físico.':'Ocorrência bloqueada até reabertura autorizada.'}</p>}
+      </form>:null}
       {erro&&<p role="alert" className="mt-3 rounded-lg border border-red-500/40 p-2 text-xs text-error-text">{erro}</p>}
       <div className="mt-4 space-y-2">
         <h5 className="text-xs font-semibold">Lançamentos identificáveis</h5>
         {carregando?<p role="status" className="text-xs text-foreground/65">Consultando lançamentos…</p>:
-          lancamentos.length===0?<p className="text-xs text-foreground/60">Nenhum lançamento manual. Medições de atividades aparecem no total aprovado acima.</p>:
+          lancamentos.length===0?<p className="text-xs text-foreground/60">Nenhum lançamento manual registrado.</p>:
           <ul className="space-y-2">{lancamentos.map(item=><li key={item.id} className="rounded-lg border border-current/15 p-3 text-sm">
             <div className="flex flex-wrap items-start justify-between gap-2"><div>
               <strong className="tabular-nums">{formatar(Number(item.quantidade))} {unidade}</strong>
               <p className="text-xs text-foreground/60">{new Date(item.criadoEm).toLocaleString('pt-BR')}{item.alteradoEm?' · corrigido posteriormente':''}</p>
               {item.justificativa&&<p className="mt-1 break-words text-xs text-foreground/70">{item.justificativa}</p>}
             </div>
-            {aberta(ocorrencia)&&podeRegistrar&&<button type="button" className={ACAO} onClick={()=>{setCorrigindo(item.id);setQuantidadeCorrecao(item.quantidade);setMotivoCorrecao('');}}>Corrigir</button>}</div>
+            {aberta(ocorrencia)&&podeCorrigir&&<button type="button" aria-label="Editar lançamento" title="Editar lançamento" className={ACAO} onClick={()=>{setCorrigindo(item.id);setQuantidadeCorrecao(quantidadeApiParaBR(item.quantidade));setMotivoCorrecao('');}}>✎</button>}</div>
             {corrigindo===item.id&&<form onSubmit={corrigir} className="mt-3 grid gap-2 border-t border-current/15 pt-3 sm:grid-cols-2">
-              <label className="text-xs font-semibold">Novo valor absoluto<input className={`mt-1 ${CAMPO}`} type="number" min="0" step="0.001" value={quantidadeCorrecao} onChange={e=>setQuantidadeCorrecao(e.target.value)}/></label>
+              <label className="text-xs font-semibold">Novo valor absoluto<input className={`mt-1 ${CAMPO}`} type="text" inputMode="decimal" maxLength={20} value={quantidadeCorrecao} onChange={e=>setQuantidadeCorrecao(e.target.value)}/></label>
               <label className="text-xs font-semibold">Justificativa (15–200 caracteres)<input className={`mt-1 ${CAMPO}`} maxLength={200} value={motivoCorrecao} onChange={e=>setMotivoCorrecao(e.target.value)} /></label>
               <div className="flex gap-2 sm:col-span-2"><button className={ACAO} type="button" onClick={()=>setCorrigindo(null)}>Cancelar</button><button className={CONFIRMAR} type="submit" disabled={ocupado||!naoNegativa(quantidadeCorrecao)||motivoCorrecao.trim().length<15}>Salvar correção</button></div>
             </form>}

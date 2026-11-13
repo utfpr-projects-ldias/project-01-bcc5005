@@ -7,7 +7,7 @@ import { StatusEtapa } from '../status-etapa.enum.js';
 /** PATCH: omissão mantém o valor, null limpa somente campos opcionais. */
 export class AtualizarEtapaDto {
   @ValidateIf((_, valor: unknown) => valor !== undefined)
-  @IsString() @IsNotEmpty() @MaxLength(50)
+  @IsString() @IsNotEmpty() @MaxLength(36)
   nome?: string;
 
   @IsOptional() @IsString() @MaxLength(15)

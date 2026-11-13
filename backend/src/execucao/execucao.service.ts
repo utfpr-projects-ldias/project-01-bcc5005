@@ -47,6 +47,8 @@ export class ExecucaoService {
       let realizado: string | null = e.tipo === 'QUANTITATIVO' ? '0' : e.quantidadeRealizada;
       let fonte = 'DECLARADO';
       let periodos: number | null = null;
+      let percentualPonderadoSerie: number | null = null;
+      let pesosSerieIncompletos = false;
       // Registros descritivos não têm medida física: não substituem a quantidade
       // declarada nem transformam a situação documental em avanço de unidades.
       const ocorrenciasMedidas = ocorrencias.filter(o => o.origem === 'MANUAL_QUANTITATIVA' && o.modoRegistro !== 'DESCRITIVO');
@@ -71,20 +73,32 @@ export class ExecucaoService {
             if (gradeAvaliada.completa) {
               periodos = gradeAvaliada.total;
               realizado = String(gradeAvaliada.concluidas);
+              const comPeso = ocorrencias.filter(o => o.pesoPeriodo != null);
+              if (comPeso.length) {
+                const pesosValidos = comPeso.length === ocorrencias.length &&
+                  Math.abs(comPeso.reduce((a,o)=>a+Number(o.pesoPeriodo),0)-100)<0.00001;
+                if (pesosValidos) percentualPonderadoSerie = arredondar(ocorrencias.reduce((a,o)=>
+                  a + (o.status === 'CONCLUIDO' ? Number(o.pesoPeriodo) : 0),0));
+                else pesosSerieIncompletos = true;
+              }
             } else realizado = null;
           } catch { /* Sem períodos completos, não publicar percentual aproximado. */ }
         }
         previsto = periodos == null ? null : String(periodos);
       }
       const percentual = (e.tipo === 'UNICO' && e.percentualExecucao == null && ['CONCLUIDO','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? '')) ? null : calcularFisico({ tipo: e.tipo, percentualManual: numero(e.percentualExecucao), quantidadePrevista: numero(previsto), quantidadeRealizada: numero(realizado), ocorrenciasPrevistas: periodos, ocorrenciasConcluidas: numero(realizado), dataEfetivaMarco: e.tipo === 'MARCO' && ocorrencias.length === 1 && ocorrencias[0]?.status === 'CONCLUIDO' ? e.dataEfetivaMarco : null });
+      const percentualCalculado = e.tipo==='RECORRENTE'
+        ? pesosSerieIncompletos ? null : percentualPonderadoSerie ?? percentual
+        : percentual;
+      if (pesosSerieIncompletos) fonte='PESOS_SERIE_INCOMPLETOS';
       const etapa = etapas.find(et => et.id === e.etapaId);
       return { entregavelId: e.id, nome: e.nome, tipo: e.tipo, statusEntregavel: e.statusExecucao, realizado, previsto, fonte,
-        percentualExecucao: percentual == null ? null : arredondar(percentual), pesoOperacional: e.peso,
+        percentualExecucao: percentualCalculado == null ? null : arredondar(percentualCalculado), pesoOperacional: e.peso,
         dataEfetivaMarco: e.dataEfetivaMarco ?? null, inicioPrevisto: e.inicioPrevisto, terminoPrevisto: e.terminoPrevisto,
         situacaoAdministrativa: e.statusExecucao === 'FINALIZADO' ? 'FINALIZADO' : e.statusExecucao,
-        statusFisico: percentual == null ? 'NAO_AVALIADO' : percentual === 100 ? 'CONCLUIDO' : percentual > 0 ? 'EM_ANDAMENTO' : 'NAO_INICIADO',
+        statusFisico: percentualCalculado == null ? 'NAO_AVALIADO' : percentualCalculado === 100 ? 'CONCLUIDO' : percentualCalculado > 0 ? 'EM_ANDAMENTO' : 'NAO_INICIADO',
         editavel: !contrato.arquivadoEm && ['PLANEJAMENTO','EM_EXECUCAO'].includes(contrato.status) && etapa?.status !== 'ENCERRADA' && etapa?.status !== 'CONCLUIDA' && etapa?.status !== 'FINALIZADA' && !['CONCLUIDO','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? ''),
-        comprovacao: 'NAO_AVALIADA' as const, percentualBruto: percentual };
+        comprovacao: 'NAO_AVALIADA' as const, percentualBruto: percentualCalculado };
     });
     const agregado = agregarFisico(entregaveis.map(e => ({ percentual: e.percentualBruto, peso: e.pesoOperacional })));
     return { contratoId, statusContrato: contrato.status, modoCalculo: contrato.modoCalculo, versaoPesos: versaoPesos(contrato, ativos), ...agregado,

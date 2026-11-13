@@ -90,6 +90,12 @@ export class EntregaveisController {
     return this.service.solicitarEncerramento(c, id, dto.motivo, req.usuarioDominio!);
   }
 
+  @Patch(':entregavelId/devolver-solicitacao')
+  @ExigirPoliticaOperacional('entregaveis:concluir', { tipo: 'recurso', recurso: 'entregavel', parametro: 'entregavelId', parametroContratoPai: 'contratoId' })
+  devolverSolicitacao(@Param('contratoId') c: string, @Param('entregavelId') id: string, @Body() dto: JustificativaDecisaoDto, @Req() req: RequisicaoAutorizada) {
+    return this.service.devolverSolicitacao(c, id, dto.motivo, req.usuarioDominio!);
+  }
+
   @Patch(':entregavelId/aprovar-encerramento')
   @ExigirPoliticaOperacional('entregaveis:concluir', { tipo: 'recurso', recurso: 'entregavel', parametro: 'entregavelId', parametroContratoPai: 'contratoId' })
   aprovarEncerramento(@Param('contratoId') c: string, @Param('entregavelId') id: string, @Req() req: RequisicaoAutorizada) {

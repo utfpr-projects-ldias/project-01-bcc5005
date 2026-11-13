@@ -20,7 +20,7 @@ export function FormularioEtapa({ inicial, onSalvar, onCancelar, onSalvandoMudou
   const [erros, setErros] = useState<ErrosCamposEtapa>({});
   const [erroGeral, setErroGeral] = useState('');
   const [salvando, setSalvando] = useState(false);
-  const somenteMetadados = Boolean(inicial && !inicial.reabertoEm && ['CONCLUIDA','ENCERRADA','FINALIZADA'].includes(inicial.status));
+  const somenteMetadados = false; // Etapa finalizada exige reabertura antes de abrir o formulário.
   function mudar<K extends Campo>(campo: K, valor: DadosEtapa[K]) {
     setDados((atual) => ({ ...atual, [campo]: valor }));
     setErros((atual) => ({ ...atual, [campo]: undefined }));

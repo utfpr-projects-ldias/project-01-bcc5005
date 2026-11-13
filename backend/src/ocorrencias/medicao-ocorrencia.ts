@@ -50,12 +50,24 @@ export async function resumoMedicao(m: EntityManager, o: Ocorrencia): Promise<Re
   // Colunas novas respeitam a quantidade configurada; registros anteriores à migration
   // preservam a semântica de 1 atividade ou 1 evidência por formato, se exigidas.
   const minimoEvidencias = o.minimoEvidenciasVerificadas ?? (exige === 'AMBOS' ? 2 : exige === 'NENHUMA' ? 0 : 1);
-  const evidenciaAtendida = fotos + relatorios >= minimoEvidencias && (
+  const formatoIndividual = o.minimoFotos != null || o.minimoRelatorios != null || o.minimoEvidenciasLivres != null;
+  const evidenciaAtendidaLegada = fotos + relatorios >= minimoEvidencias && (
     minimoEvidencias === 0 || exige === 'NENHUMA' ||
     ((exige === 'FOTO' || exige === 'AMBOS' ? fotos > 0 : true) &&
      (exige === 'RELATORIO' || exige === 'AMBOS' ? relatorios > 0 : true))
   ) && (minimoEvidencias === 0 || (exige === 'FOTO' ? fotos >= minimoEvidencias :
     exige === 'RELATORIO' ? relatorios >= minimoEvidencias : true));
+  // Requisitos livres podem ser preenchidos por qualquer formato já verificado,
+  // mas uma mesma evidência não satisfaz duas cotas ao mesmo tempo.
+  const fotosNecessarias = o.minimoFotos ?? 0;
+  const relatoriosNecessarios = o.minimoRelatorios ?? 0;
+  const livres = o.minimoEvidenciasLivres ?? 0;
+  const evidenciaAtendida = formatoIndividual
+    ? fotos >= fotosNecessarias && relatorios >= relatoriosNecessarios &&
+      fotos + relatorios >= fotosNecessarias + relatoriosNecessarios + livres
+    : evidenciaAtendidaLegada;
+  const totalObrigatorio = formatoIndividual
+    ? fotosNecessarias + relatoriosNecessarios + livres : minimoEvidencias;
   const atividadesVerificadas = Number(atividades[0]?.verificadas ?? 0);
   const atividadesPendentes = Number(atividades[0]?.pendentes ?? 0);
   const minimoAtividades = o.minimoAtividadesVerificadas ?? (o.exigeAtividade ? 1 : 0);
@@ -68,7 +80,7 @@ export async function resumoMedicao(m: EntityManager, o: Ocorrencia): Promise<Re
     quantidadeRegistrada: comprometida, quantidadeRestante: meta == null ? null : texto(Math.max(0,meta - executada)),
     progressoPercentual: meta == null || meta <= 0 ? null : texto(Math.min(100, (executada / meta) * 100)),
     atividadesVerificadas, atividadesPendentes, evidenciasFoto: fotos, evidenciasRelatorio: relatorios,
-    requisitosAtendidos, metaAtingida, situacaoComprovacao: minimoEvidencias === 0 ? 'NAO_EXIGIDA' : evidenciaAtendida ? 'APRESENTADA' : 'PARCIAL',
+    requisitosAtendidos, metaAtingida, situacaoComprovacao: totalObrigatorio === 0 ? 'NAO_EXIGIDA' : evidenciaAtendida ? 'APRESENTADA' : 'PARCIAL',
   };
 }
 
@@ -76,6 +88,6 @@ export async function resumoMedicao(m: EntityManager, o: Ocorrencia): Promise<Re
 export function proximoStatusAutomatico(o: Ocorrencia, r: ResumoMedicao): 'NAO_INICIADO'|'EM_ANDAMENTO'|'EM_REVISAO'|'PENDENTE_CONCLUSAO' {
   if (o.status === 'EM_REVISAO') return 'EM_REVISAO';
   if (r.metaAtingida && r.requisitosAtendidos) return 'PENDENTE_CONCLUSAO';
-  return r.quantidadeRegistrada > 0 || r.atividadesVerificadas > 0 || r.atividadesPendentes > 0
+  return o.status === 'EM_ANDAMENTO' || r.quantidadeRegistrada > 0 || r.atividadesVerificadas > 0 || r.atividadesPendentes > 0
     ? 'EM_ANDAMENTO' : 'NAO_INICIADO';
 }

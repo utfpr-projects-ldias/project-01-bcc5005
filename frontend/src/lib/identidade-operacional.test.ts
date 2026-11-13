@@ -30,3 +30,16 @@ test('ações com consequências distintas têm identidades distintas', () => {
   expect(CLASSES_ACAO_MENU.encerrar).not.toBe(CLASSES_ACAO_MENU.reabrir);
   expect(CLASSES_ACAO_MENU.arquivar).not.toBe(CLASSES_ACAO_MENU.excluir);
 });
+
+
+test('etapa reaberta usa identidade de revisão independentemente do status armazenado', () => {
+  expect(estadoDoObjeto({ objeto: 'etapa', status: 'PLANEJADA', reaberto: true })).toBe('revisao');
+  expect(estadoDoObjeto({ objeto: 'etapa', status: 'CONCLUIDA', reaberto: true })).toBe('revisao');
+  expect(estadoDoObjeto({ objeto: 'etapa', status: 'CONCLUIDA', reaberto: false })).toBe('concluido');
+});
+
+
+test('solicitação pendente prevalece sobre marcador de reabertura antigo', () => {
+  expect(estadoDoObjeto({ objeto: 'entregavel', status: 'PENDENTE_CONCLUSAO', reaberto: true })).toBe('concluido');
+  expect(estadoDoObjeto({ objeto: 'entregavel', status: 'PENDENTE_ENCERRAMENTO', reaberto: true })).toBe('finalizado');
+});

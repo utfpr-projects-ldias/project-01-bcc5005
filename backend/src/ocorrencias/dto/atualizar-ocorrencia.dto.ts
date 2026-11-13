@@ -14,7 +14,12 @@ export class AtualizarOcorrenciaDto {
   @IsOptional() @IsBoolean() exigeAtividade?: boolean;
   @IsOptional() @IsInt() @Min(0) @Max(99) minimoAtividadesVerificadas?: number;
   @IsOptional() @IsInt() @Min(0) @Max(99) minimoEvidenciasVerificadas?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(99) minimoFotos?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(99) minimoRelatorios?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(99) minimoEvidenciasLivres?: number;
+
   @IsOptional() @IsIn(['NENHUMA','FOTO','RELATORIO','AMBOS']) evidenciaExigida?: 'NENHUMA'|'FOTO'|'RELATORIO'|'AMBOS';
+  @IsOptional() @Matches(/^(?:100(?:\.0{1,4})?|\d{1,2}(?:\.\d{1,4})?)$/) pesoPeriodo?: string | null;
   @IsOptional() @IsBoolean() permiteEncerramentoExcepcional?: boolean;
 
   @IsOptional()

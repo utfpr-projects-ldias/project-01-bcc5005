@@ -189,6 +189,14 @@ export class OcorrenciasService implements OnModuleInit {
     }
   }
 
+  private async exigirPermissaoEspecifica(m: EntityManager, contratoId: string,
+    ator: UsuarioAutenticado, chave: 'editarExigenciasOcorrencia' | 'editarPesoOcorrencia') {
+    if (ator.perfil === PerfilUsuario.ADMINISTRADOR) return;
+    const vinculo = await m.getRepository(PermissaoContrato).findOneBy({ contratoId, usuarioId: ator.id });
+    if (!vinculo || !permissoesEfetivas(ator.perfil, Boolean(vinculo.podeEditar), vinculo.permissoesDetalhadas)[chave])
+      throw new ForbiddenException(`Sem permissão específica para ${chave === 'editarPesoOcorrencia' ? 'alterar peso do período' : 'alterar exigências de atividades/evidências'}`);
+  }
+
   // Mesmo lock raiz da HU08: uma mutação não pode atravessar uma conclusão
   // concorrente do contrato, da etapa ou do entregável.
   private async bloquearContratoAberto(m: EntityManager, contratoId: string) {
@@ -217,6 +225,8 @@ export class OcorrenciasService implements OnModuleInit {
     forcar: boolean,
     ator: UsuarioAutenticado,
     requisitos?: {minimoAtividadesVerificadas?: number; minimoEvidenciasVerificadas?: number;
+      minimoFotos?: number; minimoRelatorios?: number; minimoEvidenciasLivres?: number;
+      modoRegistro?: 'DESCRITIVO' | 'QUANTITATIVO'; metaQuantidade?: string;
       evidenciaExigida?: 'NENHUMA'|'FOTO'|'RELATORIO'|'AMBOS'; permiteEncerramentoExcepcional?: boolean},
   ) {
     // Não simular regeneração de períodos futuros: depende de versão/impacto
@@ -257,7 +267,9 @@ export class OcorrenciasService implements OnModuleInit {
         entregavel.terminoPrevisto,
         entregavel.periodicidade,
       );
-      validarRequisitosMinimos(requisitos?.minimoEvidenciasVerificadas, requisitos?.evidenciaExigida);
+      validarRequisitosMinimos(requisitos?.minimoEvidenciasVerificadas, requisitos?.evidenciaExigida, requisitos);
+      if (requisitos?.modoRegistro === 'QUANTITATIVO' && (!entregavel.unidadeMedida || !requisitos.metaQuantidade || !(Number(requisitos.metaQuantidade) > 0)))
+        throw new BadRequestException('Recorrente quantitativo requer unidade do entregável e meta positiva por ocorrência.');
       const repo = m.getRepository(Ocorrencia);
       let geradas = 0;
 
@@ -288,11 +300,14 @@ export class OcorrenciasService implements OnModuleInit {
           minimoAtividadesVerificadas: requisitos?.minimoAtividadesVerificadas ?? 1,
           evidenciaExigida: requisitos?.evidenciaExigida ?? 'NENHUMA',
           minimoEvidenciasVerificadas: requisitos?.minimoEvidenciasVerificadas ?? 0,
+          minimoFotos: requisitos?.minimoFotos ?? null,
+          minimoRelatorios: requisitos?.minimoRelatorios ?? null,
+          minimoEvidenciasLivres: requisitos?.minimoEvidenciasLivres ?? null,
           permiteEncerramentoExcepcional: requisitos?.permiteEncerramentoExcepcional ?? true,
           // Calendário recorrente mantém meta por período somente quando a obrigação
           // está explicitamente configurada com quantidade/unidade.
-          modoRegistro: entregavel.quantidadePrevista && entregavel.unidadeMedida ? 'QUANTITATIVO' : 'DESCRITIVO',
-          metaQuantidade: entregavel.quantidadePrevista && entregavel.unidadeMedida ? entregavel.quantidadePrevista : null,
+          modoRegistro: requisitos?.modoRegistro ?? 'DESCRITIVO',
+          metaQuantidade: requisitos?.modoRegistro === 'QUANTITATIVO' ? requisitos.metaQuantidade! : null,
         });
 
         // A linha do entregável foi bloqueada nesta transação; duas gerações
@@ -358,7 +373,7 @@ export class OcorrenciasService implements OnModuleInit {
       if (dto.metaQuantidade != null && (!Number.isFinite(Number(dto.metaQuantidade)) || Number(dto.metaQuantidade) <= 0)) throw new BadRequestException('Meta quantitativa deve ser maior que zero');
       validarDadosOcorrencia(dto);
       const repo = m.getRepository(Ocorrencia);
-      validarRequisitosMinimos(dto.minimoEvidenciasVerificadas, dto.evidenciaExigida);
+      validarRequisitosMinimos(dto.minimoEvidenciasVerificadas, dto.evidenciaExigida, dto);
       const nova = repo.create({
         entregavelId,
         contratoId,
@@ -377,6 +392,10 @@ export class OcorrenciasService implements OnModuleInit {
         minimoAtividadesVerificadas: dto.minimoAtividadesVerificadas ?? (dto.exigeAtividade === false ? 0 : 1),
         evidenciaExigida: dto.evidenciaExigida ?? 'NENHUMA',
         minimoEvidenciasVerificadas: dto.minimoEvidenciasVerificadas ?? (dto.evidenciaExigida === 'AMBOS' ? 2 : dto.evidenciaExigida && dto.evidenciaExigida !== 'NENHUMA' ? 1 : 0),
+        minimoFotos: dto.minimoFotos ?? null,
+        minimoRelatorios: dto.minimoRelatorios ?? null,
+        minimoEvidenciasLivres: dto.minimoEvidenciasLivres ?? null,
+        pesoPeriodo: dto.pesoPeriodo ?? null,
         permiteEncerramentoExcepcional: dto.permiteEncerramentoExcepcional ?? true,
       });
 
@@ -392,6 +411,8 @@ export class OcorrenciasService implements OnModuleInit {
           modoRegistro: salva.modoRegistro,
           minimoAtividadesVerificadas: salva.minimoAtividadesVerificadas,
           minimoEvidenciasVerificadas: salva.minimoEvidenciasVerificadas,
+          minimoFotos: salva.minimoFotos, minimoRelatorios: salva.minimoRelatorios,
+          minimoEvidenciasLivres: salva.minimoEvidenciasLivres, pesoPeriodo: salva.pesoPeriodo,
           evidenciaExigida: salva.evidenciaExigida,
         },
       });
@@ -410,7 +431,7 @@ export class OcorrenciasService implements OnModuleInit {
   private async recalcularEstado(m: EntityManager, o: Ocorrencia, ator: UsuarioAutenticado): Promise<ResumoMedicao> {
     const r = await resumoMedicao(m, o);
     if (o.metaQuantidade != null && r.quantidadeRegistrada > Number(o.metaQuantidade))
-      throw new ConflictException(`Quantidade registrada (${r.quantidadeRegistrada}) excede a meta (${o.metaQuantidade})`);
+      throw new ConflictException(`Quantidade registrada (${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 }).format(r.quantidadeRegistrada)}) excede a meta (${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 }).format(Number(o.metaQuantidade))}). Corrija a meta ou o lançamento sem duplicar a execução.`);
     if ([StatusOcorrencia.CONCLUIDO,StatusOcorrencia.ENCERRADA,
       StatusOcorrencia.PENDENTE_ENCERRAMENTO,StatusOcorrencia.PENDENTE_CONCLUSAO].includes(o.status)) return r;
     const anterior = o.status;
@@ -586,6 +607,30 @@ export class OcorrenciasService implements OnModuleInit {
 
   /** Início explícito: não envolve aprovação nem alteração quantitativa.
    *  Transição idempotente com política da ocorrência e auditoria transacional. */
+  /** Ativação temporal explícita e idempotente; nunca altera revisão, pendências ou finais.
+   * A visualização pública não executa UPDATE em GET. */
+  async iniciarPrevistas(contratoId:string,ator:UsuarioAutenticado) {
+    return this.dataSource.transaction(async m=>{
+      await this.validarPermissaoContrato(m,contratoId,ator,'editar');
+      await this.bloquearContratoAberto(m,contratoId);
+      const hoje=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+      const previstas=await m.getRepository(Ocorrencia).find({where:{contratoId,status:StatusOcorrencia.NAO_INICIADO,substituidaEm:IsNull()},order:{periodoInicio:'ASC'},take:500,lock:{mode:'pessimistic_write'}});
+      let iniciadas=0;
+      for (const o of previstas) {
+        const data=o.periodoInicio??o.dataPrevista;
+        if (!data || data>hoje) continue;
+        const e=await m.findOneBy(Entregavel,{id:o.entregavelId,contratoId});
+        if (!e || e.arquivadoEm || ['CONCLUIDO','FINALIZADO'].includes(e.statusExecucao??'')) continue;
+        o.status=StatusOcorrencia.EM_ANDAMENTO;
+        await m.save(Ocorrencia,o);
+        await this.auditoria.registrarNaTransacao(m,ator,{acao:AcaoAuditoria.OCORRENCIA_STATUS_ALTERADO,
+          entidadeTipo:'OCORRENCIA',entidadeId:o.id,dadosAnteriores:{status:StatusOcorrencia.NAO_INICIADO},
+          dadosPosteriores:{status:StatusOcorrencia.EM_ANDAMENTO,motivo:'INICIO_AUTOMATICO_POR_DATA',data}});
+        iniciadas++;
+      }
+      return {iniciadas,dataReferencia:hoje};
+    });
+  }
   async iniciar(contratoId: string, id: string, ator: UsuarioAutenticado) {
     return this.dataSource.transaction(async m => {
       await this.validarPermissaoContrato(m, contratoId, ator, 'editar');
@@ -614,9 +659,19 @@ export class OcorrenciasService implements OnModuleInit {
     id: string,
     dto: AtualizarOcorrenciaDto,
     ator: UsuarioAutenticado,
+    escopo: 'GERAL' | 'EXIGENCIAS' | 'PESO' = 'GERAL',
   ) {
     return this.dataSource.transaction(async (m) => {
-      await this.validarPermissaoContrato(m, contratoId, ator, 'editar');
+      await this.validarPermissaoContrato(m, contratoId, ator, escopo === 'GERAL' ? 'editar' : 'visualizar');
+      if (escopo !== 'GERAL') {
+        const chavesPermitidas = escopo === 'PESO' ? ['pesoPeriodo'] : [
+          'exigeAtividade','minimoAtividadesVerificadas','minimoEvidenciasVerificadas',
+          'minimoFotos','minimoRelatorios','minimoEvidenciasLivres','evidenciaExigida','permiteEncerramentoExcepcional',
+        ];
+        if (Object.keys(dto).some(chave => !chavesPermitidas.includes(chave)))
+          throw new BadRequestException('Esta operação só pode alterar as propriedades autorizadas da ocorrência.');
+        await this.exigirPermissaoEspecifica(m, contratoId, ator, escopo === 'PESO' ? 'editarPesoOcorrencia' : 'editarExigenciasOcorrencia');
+      }
       await this.bloquearContratoAberto(m, contratoId);
       const repo = m.getRepository(Ocorrencia);
       const o = await repo.findOne({
@@ -631,7 +686,13 @@ export class OcorrenciasService implements OnModuleInit {
       await this.exigirEntregavelAberto(m, entregavel);
 
       validarDadosOcorrencia(dto);
-      validarRequisitosMinimos(dto.minimoEvidenciasVerificadas, dto.evidenciaExigida ?? o.evidenciaExigida);
+      if (['minimoAtividadesVerificadas','minimoEvidenciasVerificadas','minimoFotos','minimoRelatorios','minimoEvidenciasLivres','exigeAtividade','evidenciaExigida'].some(c => Object.prototype.hasOwnProperty.call(dto,c)))
+        await this.exigirPermissaoEspecifica(m, contratoId, ator, 'editarExigenciasOcorrencia');
+      if (dto.pesoPeriodo !== undefined) await this.exigirPermissaoEspecifica(m, contratoId, ator, 'editarPesoOcorrencia');
+      validarRequisitosMinimos(dto.minimoEvidenciasVerificadas, dto.evidenciaExigida ?? o.evidenciaExigida, {
+        minimoFotos: dto.minimoFotos ?? o.minimoFotos, minimoRelatorios: dto.minimoRelatorios ?? o.minimoRelatorios,
+        minimoEvidenciasLivres: dto.minimoEvidenciasLivres ?? o.minimoEvidenciasLivres,
+      });
       if (o.origem === OrigemOcorrencia.RECORRENTE && dto.quantidadeRealizada != null) throw new BadRequestException('Quantidade é exclusiva de ocorrências quantitativas');
       if (o.modoRegistro === 'DESCRITIVO' && (dto.quantidadeRealizada != null || dto.metaQuantidade != null)) throw new BadRequestException('Ocorrência descritiva não aceita quantidade nem meta');
       const antes = {
@@ -643,6 +704,8 @@ export class OcorrenciasService implements OnModuleInit {
         metaQuantidade: o.metaQuantidade, exigeAtividade: o.exigeAtividade,
         minimoAtividadesVerificadas: o.minimoAtividadesVerificadas,
         minimoEvidenciasVerificadas: o.minimoEvidenciasVerificadas,
+        minimoFotos: o.minimoFotos, minimoRelatorios: o.minimoRelatorios,
+        minimoEvidenciasLivres: o.minimoEvidenciasLivres, pesoPeriodo: o.pesoPeriodo,
         evidenciaExigida: o.evidenciaExigida, permiteEncerramentoExcepcional: o.permiteEncerramentoExcepcional,
       };
 
@@ -667,6 +730,10 @@ export class OcorrenciasService implements OnModuleInit {
           o.minimoEvidenciasVerificadas = dto.evidenciaExigida === 'AMBOS' ? 2 : dto.evidenciaExigida === 'NENHUMA' ? 0 : 1;
       }
       if (dto.minimoEvidenciasVerificadas !== undefined) o.minimoEvidenciasVerificadas = dto.minimoEvidenciasVerificadas;
+      if (dto.minimoFotos !== undefined) o.minimoFotos = dto.minimoFotos;
+      if (dto.minimoRelatorios !== undefined) o.minimoRelatorios = dto.minimoRelatorios;
+      if (dto.minimoEvidenciasLivres !== undefined) o.minimoEvidenciasLivres = dto.minimoEvidenciasLivres;
+      if (dto.pesoPeriodo !== undefined) o.pesoPeriodo = dto.pesoPeriodo;
       if (dto.permiteEncerramentoExcepcional !== undefined) o.permiteEncerramentoExcepcional = dto.permiteEncerramentoExcepcional;
       if (dto.titulo !== undefined) o.titulo = dto.titulo.trim();
       if (dto.dataPrevista !== undefined) o.dataPrevista = dto.dataPrevista;
@@ -689,6 +756,8 @@ export class OcorrenciasService implements OnModuleInit {
           quantidadeRealizada: salva.quantidadeRealizada, metaQuantidade: salva.metaQuantidade, exigeAtividade: salva.exigeAtividade,
           minimoAtividadesVerificadas: salva.minimoAtividadesVerificadas,
           minimoEvidenciasVerificadas: salva.minimoEvidenciasVerificadas,
+          minimoFotos: salva.minimoFotos, minimoRelatorios: salva.minimoRelatorios,
+          minimoEvidenciasLivres: salva.minimoEvidenciasLivres, pesoPeriodo: salva.pesoPeriodo,
           evidenciaExigida: salva.evidenciaExigida, permiteEncerramentoExcepcional: salva.permiteEncerramentoExcepcional,
         },
       });
@@ -710,7 +779,12 @@ export class OcorrenciasService implements OnModuleInit {
   async registrarLancamento(contratoId: string, id: string, operacaoId: string, quantidade: string,
     justificativa: string | undefined, ator: UsuarioAutenticado) {
     return this.dataSource.transaction(async m => {
-      await this.validarPermissaoContrato(m,contratoId,ator,'registrar');
+      await this.validarPermissaoContrato(m,contratoId,ator,'visualizar');
+      if (ator.perfil !== PerfilUsuario.ADMINISTRADOR) {
+        const vinculo = await m.findOneBy(PermissaoContrato,{contratoId,usuarioId:ator.id});
+        if (!vinculo || !permissoesEfetivas(ator.perfil,Boolean(vinculo.podeEditar),vinculo.permissoesDetalhadas).registrarExecucaoOcorrencia)
+          throw new ForbiddenException('Sem permissão para registrar execução manual');
+      }
       await this.bloquearContratoAberto(m,contratoId);
       const o = await m.findOne(Ocorrencia,{where:{id,contratoId},lock:{mode:'pessimistic_write'}});
       if (!o || o.substituidaEm) throw new NotFoundException('Ocorrência não encontrada');
@@ -745,7 +819,12 @@ export class OcorrenciasService implements OnModuleInit {
     if (justificativa.trim().length<15 || justificativa.trim().length>200)
       throw new BadRequestException('Explique a correção em 15 a 200 caracteres');
     return this.dataSource.transaction(async m => {
-      await this.validarPermissaoContrato(m,contratoId,ator,'registrar');
+      await this.validarPermissaoContrato(m,contratoId,ator,'visualizar');
+      if (ator.perfil !== PerfilUsuario.ADMINISTRADOR) {
+        const vinculo = await m.findOneBy(PermissaoContrato,{contratoId,usuarioId:ator.id});
+        if (!vinculo || !permissoesEfetivas(ator.perfil,Boolean(vinculo.podeEditar),vinculo.permissoesDetalhadas).corrigirExecucaoOcorrencia)
+          throw new ForbiddenException('Sem permissão para corrigir lançamentos manuais');
+      }
       await this.bloquearContratoAberto(m,contratoId);
       const o=await m.findOne(Ocorrencia,{where:{id,contratoId},lock:{mode:'pessimistic_write'}});
       if (!o || o.substituidaEm) throw new NotFoundException('Ocorrência não encontrada');
@@ -846,7 +925,15 @@ export class OcorrenciasService implements OnModuleInit {
 }
 
 /** Não permitir combinações impossíveis: "ambos" requer pelo menos um de cada tipo. */
-function validarRequisitosMinimos(minimo: number | undefined, formato: 'NENHUMA'|'FOTO'|'RELATORIO'|'AMBOS' | undefined) {
+function validarRequisitosMinimos(minimo: number | undefined, formato: 'NENHUMA'|'FOTO'|'RELATORIO'|'AMBOS' | undefined,
+  individuais?: { minimoFotos?:number|null; minimoRelatorios?:number|null; minimoEvidenciasLivres?:number|null }) {
+  if (individuais && [individuais.minimoFotos, individuais.minimoRelatorios, individuais.minimoEvidenciasLivres].some(n=>n!=null)) {
+    const soma = (individuais.minimoFotos??0)+(individuais.minimoRelatorios??0)+(individuais.minimoEvidenciasLivres??0);
+    if (soma>99) throw new BadRequestException('O total das evidências obrigatórias não pode ultrapassar 99.');
+    if (minimo !== undefined && minimo !== soma)
+      throw new BadRequestException('O total de evidências precisa corresponder à soma de fotos, relatórios e evidências livres.');
+    return;
+  }
   if (minimo === undefined) return;
   if (formato === 'NENHUMA' && minimo > 0)
     throw new BadRequestException('Escolha o formato das evidências antes de exigir uma quantidade.');

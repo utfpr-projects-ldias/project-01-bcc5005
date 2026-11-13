@@ -711,11 +711,11 @@ button[data-tec08-confirmar][data-tec08-acao-aprovar]:not(:disabled):hover {back
 }
 /* Coloração local das etapas — título/borda, não ações de arquivar/excluir. */
 [data-etapa-estado="normal"] { border-color: rgb(95 211 74 / .4) !important; }
-[data-etapa-estado="reaberta"] { border-color: rgb(20 184 166 / .6) !important; }
+[data-etapa-estado="revisao"] { border-color: rgb(20 184 166 / .6) !important; }
 [data-etapa-estado="concluida"] { border-color: rgb(167 139 250 / .65) !important; }
 [data-etapa-estado="arquivada"] { border-color: rgb(217 119 6 / .65) !important; }
 [data-etapa-estado="encerrada"] { border-color: rgb(100 116 139 / .65) !important; }
-[data-etapa-estado="reaberta"] > div button span[class*="text-brand-neon"] { color: #99f6e4 !important; }
+[data-etapa-estado="revisao"] > div button span[class*="text-brand-neon"] { color: #99f6e4 !important; }
 @media (prefers-color-scheme: light) {
   :is(.contrato-detalhe-documental, [data-tec08-entidade="modal"], [data-tec08-contexto-operacional])[data-tec08-estado="revisao"] { --tec08-status-heading: #0f766e; }
   :is(.contrato-detalhe-documental, [data-tec08-entidade="modal"], [data-tec08-contexto-operacional])[data-tec08-estado="concluido"] { --tec08-status-heading: #5b21b6; }
@@ -723,7 +723,7 @@ button[data-tec08-confirmar][data-tec08-acao-aprovar]:not(:disabled):hover {back
   :is(.contrato-detalhe-documental, [data-tec08-entidade="modal"], [data-tec08-contexto-operacional])[data-tec08-estado="arquivado"] { --tec08-status-heading: #854d0e; }
   :is(.contrato-detalhe-documental, [data-tec08-entidade="modal"], [data-tec08-contexto-operacional])[data-tec08-estado="cancelado"] { --tec08-status-heading: #991b1b; }
   :is(.contrato-detalhe-documental, [data-tec08-entidade="modal"], [data-tec08-contexto-operacional])[data-tec08-estado="encerrado"] { --tec08-status-heading: #334155; }
-  [data-etapa-estado="reaberta"] > div button span[class*="text-brand-neon"] { color: #0f766e !important; }
+  [data-etapa-estado="revisao"] > div button span[class*="text-brand-neon"] { color: #0f766e !important; }
 }
 @media (prefers-reduced-motion: reduce) {
   :is(.contrato-detalhe-documental, [data-tec08-entidade="modal"]) :is(button, a) { transition-duration: 0ms !important; }
@@ -1109,7 +1109,7 @@ section[aria-label^="Rastreabilidade"] {
 /* Cards de etapa — progresso e borda usam o STATUS DA ETAPA, não a comprovação
  * dos filhos e tampouco o status do contrato arquivado. */
 [data-etapa-estado="normal"] { --tec08-item-borda: #5fd34a; --tec08-item-tinta: #5fd34a; }
-[data-etapa-estado="reaberta"] { --tec08-item-borda: #14b8a6; --tec08-item-tinta: #5eead4; }
+[data-etapa-estado="revisao"] { --tec08-item-borda: #14b8a6; --tec08-item-tinta: #5eead4; }
 [data-etapa-estado="concluida"] { --tec08-item-borda: #a78bfa; --tec08-item-tinta: #c4b5fd; }
 [data-etapa-estado="encerrada"] { --tec08-item-borda: #64748b; --tec08-item-tinta: #cbd5e1; }
 [data-etapa-estado="arquivada"] { --tec08-item-borda: #d97706; --tec08-item-tinta: #fcd34d; }
@@ -1131,7 +1131,7 @@ section[aria-label^="Rastreabilidade"] {
 [data-etapa-estado] button[aria-label^="Abrir detalhes da etapa"] > span:first-child > span:first-child {
   color: var(--tec08-item-tinta) !important;
 }
-[data-etapa-estado="reaberta"] [aria-label^="Posição"] > span:last-child {
+[data-etapa-estado="revisao"] [aria-label^="Posição"] > span:last-child {
   background-color: color-mix(in srgb, var(--tec08-item-borda) 13%, transparent) !important;
   border-color: var(--tec08-item-borda) !important;
   color: var(--tec08-item-tinta) !important;
@@ -1210,7 +1210,7 @@ section[aria-label^="Rastreabilidade"] {
   #conteudo-principal :is(button, a, [role="button"]):active { transform: none; }
 }
 @media (prefers-color-scheme: light) {
-  [data-etapa-estado="reaberta"], [data-entregavel-estado="revisao"] { --tec08-item-tinta: #0f766e; }
+  [data-etapa-estado="revisao"], [data-entregavel-estado="revisao"] { --tec08-item-tinta: #0f766e; }
   [data-etapa-estado="concluida"], [data-entregavel-estado="concluido"] { --tec08-item-tinta: #5b21b6; }
   [data-etapa-estado="arquivada"], [data-entregavel-estado="arquivado"] { --tec08-item-tinta: #854d0e; }
 }
@@ -1432,7 +1432,7 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
 :is(.contrato-detalhe-documental, [data-tec08-entidade="modal"],
   [data-tec08-contexto-operacional], [data-tec08-secao-filho],
   [data-tec08-secao-contextual])[data-tec08-estado="revisao"],
-[data-etapa-estado="reaberta"], [data-entregavel-estado="revisao"],
+[data-etapa-estado="revisao"], [data-entregavel-estado="revisao"],
 [data-evidencia-estado="revisao"] {
   --pi-cor-propria: #14b8a6;
   --pi-texto-proprio: #99f6e4;
@@ -1644,7 +1644,7 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
 [data-ocorrencia-estado="EM_ANDAMENTO"] { --pi-texto-proprio: #b8d28a !important; }
 }
 [data-tec08-estado="revisao"],
-[data-etapa-estado="reaberta"],
+[data-etapa-estado="revisao"],
 [data-entregavel-estado="revisao"],
 [data-evidencia-estado="revisao"] {
   --pi-cor-propria: #14b8a6 !important;
@@ -1660,7 +1660,7 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
 }
 @media (prefers-color-scheme: dark) {
 [data-tec08-estado="revisao"],
-[data-etapa-estado="reaberta"],
+[data-etapa-estado="revisao"],
 [data-entregavel-estado="revisao"],
 [data-evidencia-estado="revisao"] { --pi-texto-proprio: #99f6e4 !important; }
 }
@@ -2017,7 +2017,8 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
 [data-pi-intencao="editar"], [data-pi-intencao="reabrir"], [data-pi-intencao="reativar"] { --pi-acao-cor: #2dd4bf; }
 [data-pi-intencao="concluir"], [data-pi-intencao="solicitar-conclusao"], [data-pi-intencao="verificar"] { --pi-acao-cor: #a78bfa; }
 [data-pi-intencao="encerrar"], [data-pi-intencao="solicitar-encerramento"] { --pi-acao-cor: #c084fc; }
-[data-pi-intencao="suspender"], [data-pi-intencao="arquivar"] { --pi-acao-cor: #fbbf24; }
+[data-pi-intencao="suspender"] { --pi-acao-cor: #fbbf24; }
+[data-pi-intencao="arquivar"] { --pi-acao-cor: #fb923c; }
 [data-pi-intencao="cancelar"], [data-pi-intencao="excluir"] { --pi-acao-cor: #f87171; }
 [data-pi-intencao]:not(:disabled) {
   color: var(--pi-acao-cor) !important;
@@ -2040,7 +2041,8 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
   [data-pi-intencao="editar"], [data-pi-intencao="reabrir"], [data-pi-intencao="reativar"] { --pi-acao-cor: #0f766e; }
   [data-pi-intencao="concluir"], [data-pi-intencao="solicitar-conclusao"], [data-pi-intencao="verificar"] { --pi-acao-cor: #6d28d9; }
   [data-pi-intencao="encerrar"], [data-pi-intencao="solicitar-encerramento"] { --pi-acao-cor: #7e22ce; }
-  [data-pi-intencao="suspender"], [data-pi-intencao="arquivar"] { --pi-acao-cor: #92400e; }
+  [data-pi-intencao="suspender"] { --pi-acao-cor: #92400e; }
+  [data-pi-intencao="arquivar"] { --pi-acao-cor: #c2410c; }
   [data-pi-intencao="cancelar"], [data-pi-intencao="excluir"] { --pi-acao-cor: #b91c1c; }
 }
 
@@ -2159,3 +2161,76 @@ select, input[type="date"], input[type="datetime-local"] { color-scheme: inherit
 
 /* Modais de ocorrências com títulos longos jamais escapam da largura do cabeçalho. */
 [data-tec08-modal] [data-pi-titulo], [role="dialog"] h2 { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+
+
+/* PATCH43 — Estados semânticos para superfícies INTERNAS de modais.
+   O token vem do contêiner dono e é redefinido por cada filho com estado
+   próprio. Nunca pintar o filho pela situação do contrato-pai. */
+[data-tec08-entidade="modal"][data-tec08-estado] :is(
+    input:not([type="checkbox"]):not([type="radio"]):not([aria-invalid="true"]),
+    textarea:not([aria-invalid="true"]), select:not([aria-invalid="true"])
+  ) {
+  border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 48%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 3%, var(--bg-primary)) !important;
+}
+[data-tec08-entidade="modal"][data-tec08-estado] :is(input, textarea, select):focus-visible {
+  outline-color: var(--pi-cor-propria, #5fd34a) !important;
+  border-color: var(--pi-cor-propria, #5fd34a) !important;
+  --tw-ring-color: var(--pi-cor-propria, #5fd34a) !important;
+}
+[data-tec08-entidade="modal"][data-tec08-estado] :is(
+    [data-tec08-formulario-contextual],
+    [data-tec08-secao-contextual]:not([data-tec08-estado]),
+    [data-pi-superficie]:not([data-tec08-estado])
+  ) {
+  border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 45%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 5%, var(--bg-primary)) !important;
+}
+[data-tec08-entidade="modal"][data-tec08-estado] [data-tec08-formulario-contextual]
+  :is(section:not([data-tec08-estado]), fieldset:not([data-tec08-estado])) {
+  border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 32%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 2%, var(--bg-primary)) !important;
+}
+/* Controles sem intenção especial herdam o foco, nunca sobrepõem Arquivar,
+   Reabrir, Concluir ou Cancelar, cuja cor depende da própria ação. */
+[data-tec08-entidade="modal"][data-tec08-estado] [data-tec08-formulario-contextual]
+  button:not([data-pi-intencao]):not([data-tec08-confirmar]):not([data-tec08-fechar-modal]):not([class*="red-"]):focus-visible {
+  outline-color: var(--pi-cor-propria, #5fd34a) !important;
+}
+/* A identidade do card de etapa em revisão é TEAL, nunca uma etapa "Reaberta"
+   verde. Cartões internos com outro estado declaram seu próprio token. */
+[data-etapa-estado="revisao"] {
+  --pi-cor-propria: #14b8a6 !important;
+  --pi-texto-proprio: #99f6e4 !important;
+}
+/* Confirmação tem identidade de AÇÃO e prevalece sobre o botão verde genérico
+   dos patches iniciais. Acessibilidade: texto branco nos fundos escuros. */
+button[data-tec08-confirmar][data-pi-intencao-confirmacao="arquivado"]:not(:disabled),
+button[data-tec08-confirmar][data-pi-intencao-confirmacao="arquivado"]:not(:disabled):hover {
+  background-color: #c2410c !important; border-color: #f97316 !important; color: #fff !important;
+}
+button[data-tec08-confirmar][data-pi-intencao-confirmacao="revisao"]:not(:disabled) {
+  background-color: #0f766e !important; border-color: #14b8a6 !important; color: #fff !important;
+}
+button[data-tec08-confirmar][data-pi-intencao-confirmacao="concluido"]:not(:disabled) {
+  background-color: #6d28d9 !important; border-color: #a78bfa !important; color: #fff !important;
+}
+button[data-tec08-confirmar][data-pi-intencao-confirmacao="finalizado"]:not(:disabled) {
+  background-color: #7e22ce !important; border-color: #c084fc !important; color: #fff !important;
+}
+button[data-tec08-confirmar][data-pi-intencao-confirmacao="cancelado"]:not(:disabled) {
+  background-color: #b91c1c !important; border-color: #ef4444 !important; color: #fff !important;
+}
+
+/* PATCH43 — Neutraliza componentes legados de verde fixo dentro do modal.
+   Os tokens são herdados do dono; cards com status próprio reatribuem os tokens. */
+[data-tec08-entidade="modal"][data-tec08-estado] :is(
+  [data-tec08-formulario-contextual], [data-tec08-secao-contextual], [data-pi-superficie]
+) :is([class*="border-brand-green"], [class*="border-green-500"]):not([data-pi-intencao]):not([data-pi-acao]) {
+  border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 50%, transparent) !important;
+}
+[data-tec08-entidade="modal"][data-tec08-estado] :is(
+  [data-tec08-formulario-contextual], [data-tec08-secao-contextual]
+) :is([class*="text-brand-neon"], [class*="text-green-400"]):not([data-pi-intencao]):not([data-pi-acao]) {
+  color: var(--pi-texto-proprio, #86ef73) !important;
+}

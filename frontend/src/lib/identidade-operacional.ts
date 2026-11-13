@@ -15,7 +15,12 @@ export interface IdentificacaoSituacao {
 /** Retorna a cor semântica da situação real do objeto; não herda a cor do contrato-pai. */
 export function estadoDoObjeto({ objeto, status, arquivado, reaberto, pendenteConclusao }: IdentificacaoSituacao): EstadoContextual {
   if (arquivado || status === 'ARQUIVADA' || status === 'ARQUIVADO') return 'arquivado';
+  // Solicitações pendentes prevalecem sobre o marcador histórico de reabertura:
+  // o usuário precisa ver a decisão que está aguardando análise, não a revisão anterior.
+  if (status === 'PENDENTE_ENCERRAMENTO') return 'finalizado';
+  if (status === 'PENDENTE_CONCLUSAO') return 'concluido';
   if (reaberto) return 'revisao';
+  if (pendenteConclusao) return 'concluido';
   if (status === 'CANCELADO') return 'cancelado';
   if (status === 'SUSPENSO') return 'suspenso';
   if (status === 'ENCERRADO' || status === 'ENCERRADA') return 'encerrado';

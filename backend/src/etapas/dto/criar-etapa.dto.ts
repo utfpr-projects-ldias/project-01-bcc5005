@@ -6,7 +6,7 @@ import { StatusEtapa } from '../status-etapa.enum.js';
 
 /** Sequência é calculada sob lock pelo servidor; contratoId vem apenas da rota. */
 export class CriarEtapaDto {
-  @IsString() @IsNotEmpty() @MaxLength(50)
+  @IsString() @IsNotEmpty() @MaxLength(36)
   nome!: string;
 
   @IsOptional() @IsString() @MaxLength(15)

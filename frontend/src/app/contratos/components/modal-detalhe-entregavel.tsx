@@ -54,6 +54,8 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, pode
   const [confirmarConclusao, setConfirmarConclusao] = useState(false);
   const [confirmarEncerramento, setConfirmarEncerramento] = useState(false);
   const [motivoEncerramento, setMotivoEncerramento] = useState('');
+  const [devolucaoPendente, setDevolucaoPendente] = useState(false);
+  const [motivoDevolucao, setMotivoDevolucao] = useState('');
   const [erroConclusao, setErroConclusao] = useState('');
   const [ajusteEntregavel, setAjusteEntregavel] = useState<{ chave: string; alterou: boolean } | null>(null);
   const voltarEvidencia = useRef<(() => void) | null>(null);
@@ -180,20 +182,28 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, pode
   const podeEditarCadastro = Boolean(podeEditar && permissoes?.editarEntregaveis);
   const apenasMetadados = Boolean(item && (bloqueioEdicao || verificado ||
     ['CONCLUIDO','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(item.statusExecucao ?? '')));
+  const pendenteDecisao = Boolean(item && ['PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(item.statusExecucao ?? ''));
+  const bloqueioFinalizacao = Boolean(item && (['PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(item.statusExecucao ?? '') || (!item.reabertoEm && ['CONCLUIDO','FINALIZADO'].includes(item.statusExecucao ?? ''))));
   const abertaParaDecisao = Boolean(item && !item.arquivadoEm && !bloqueioEdicao &&
     !['CONCLUIDO','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(item.statusExecucao ?? ''));
   return createPortal(<ModalEtapa camada={dentroModal ? "aninhada" : "principal"} contexto={editando ? 'Editando entregável' : 'Entregável do contrato'} titulo={item?.nome ?? 'Detalhes do entregável'} codigoPublico={item?.codigoPublico}
     retornoEsquerda={true} formularioLongo={editando}
-    etiqueta={item?.arquivadoEm ? 'Arquivado' : item?.reabertoEm ? 'Em revisão' : item?.statusExecucao === 'FINALIZADO' ? 'Encerrado' : item?.statusExecucao === 'PENDENTE_ENCERRAMENTO' ? 'Pendente de encerramento' : item?.statusExecucao === 'PENDENTE_CONCLUSAO' ? 'Pendente de conclusão' : ['CONCLUIDO','FINALIZADO'].includes(item?.statusExecucao ?? '') ? 'Concluído' : item?.statusExecucao === 'EM_ANDAMENTO' ? 'Em andamento' : item ? 'Planejamento' : undefined}
-    arquivado={Boolean(item?.arquivadoEm)} revisao={Boolean(item?.reabertoEm && !item?.arquivadoEm)} concluido={!item?.arquivadoEm && !item?.reabertoEm && !editando && item?.statusExecucao === 'CONCLUIDO'} estadoContextual={estadoDoObjeto({objeto:'entregavel',status:item?.statusExecucao,arquivado:Boolean(item?.arquivadoEm),reaberto:Boolean(item?.reabertoEm)})}
+    etiqueta={item?.arquivadoEm ? 'Arquivado' : item?.statusExecucao === 'PENDENTE_ENCERRAMENTO' ? 'Pendente de encerramento' : item?.statusExecucao === 'PENDENTE_CONCLUSAO' ? 'Pendente de conclusão' : item?.reabertoEm ? 'Em revisão' : item?.statusExecucao === 'FINALIZADO' ? 'Encerrado' : ['CONCLUIDO','FINALIZADO'].includes(item?.statusExecucao ?? '') ? 'Concluído' : item?.statusExecucao === 'EM_ANDAMENTO' ? 'Em andamento' : item ? 'Planejamento' : undefined}
+    arquivado={Boolean(item?.arquivadoEm)} revisao={Boolean(item?.reabertoEm && !item?.arquivadoEm && !pendenteDecisao)} concluido={!item?.arquivadoEm && !item?.reabertoEm && !editando && item?.statusExecucao === 'CONCLUIDO'} estadoContextual={estadoDoObjeto({objeto:'entregavel',status:item?.statusExecucao,arquivado:Boolean(item?.arquivadoEm),reaberto:Boolean(item?.reabertoEm)})}
 
     ocultarFechar={false}
     rotuloFechar={nivel !== 'entregavel' || editando ? 'Voltar ao nível anterior' : 'Voltar à etapa'}
     textoFechar='← Etapa'
     bloqueadoPorSubmodal={nivel !== 'entregavel'}
     acoes={!editando && item ? <>
-      {podeEditarCadastro && !bloqueioArquivo && <BotaoEditarModal rotulo="Editar entregável" onClick={() => setEditando(true)} />}
-      <MenuAcoesObjeto rotulo={item.arquivadoEm || ['CONCLUIDO','FINALIZADO'].includes(item.statusExecucao ?? '') ? 'Reabrir' : 'Fechar'} disabled={salvando}
+      {podeEditarCadastro && !bloqueioArquivo && !bloqueioFinalizacao && <BotaoEditarModal rotulo="Editar entregável" onClick={() => setEditando(true)} />}
+      {pendenteDecisao ? <div className="flex items-center gap-2" aria-label="Decisão pendente do entregável">
+        <button type="button" disabled={salvando || !permissoes?.concluirEntregaveis} onClick={() => {setMotivoDevolucao('');setDevolucaoPendente(true);}}
+          className="rounded-lg border border-red-500/60 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-500/20 dark:text-red-300 disabled:opacity-35">Cancelar</button>
+        <button type="button" disabled={salvando || !permissoes?.concluirEntregaveis || (item.statusExecucao==='PENDENTE_CONCLUSAO' && !podeConcluir)}
+          onClick={() => item.statusExecucao === 'PENDENTE_CONCLUSAO' ? setConfirmarConclusao(true) : void transicionar('aprovar-encerramento')}
+          className="rounded-lg border border-green-600/60 bg-green-600/20 px-3 py-2 text-xs font-semibold text-green-800 hover:bg-green-600/30 dark:text-green-200 disabled:opacity-35">Aprovar</button>
+      </div> : <MenuAcoesObjeto rotulo={item.arquivadoEm || ['CONCLUIDO','FINALIZADO'].includes(item.statusExecucao ?? '') ? 'Reabrir' : 'Fechar'} disabled={salvando}
         pendenteConclusao={item.statusExecucao === 'PENDENTE_CONCLUSAO' || podeSolicitarConclusao}
         acaoDireta={item.arquivadoEm && permissoes?.reativarEntregaveis ? onReativar
           : !item.arquivadoEm && !item.reabertoEm && ['CONCLUIDO','FINALIZADO'].includes(item.statusExecucao ?? '') && permissoes?.reabrirEntregaveis && !bloqueioEdicao ? onReabrir : undefined}>
@@ -210,7 +220,7 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, pode
             {item.statusExecucao === 'CONCLUIDO' && !item.reabertoEm && permissoes?.reabrirEntregaveis && !bloqueioEdicao && <BotaoAcaoModal intencao="reabrir" onClick={onReabrir}>Reabrir</BotaoAcaoModal>}
             {!item.arquivadoEm && podeArquivar && !['CONCLUIDO','FINALIZADO'].includes(item.statusExecucao ?? '') && <BotaoAcaoModal intencao="arquivar" onClick={onArquivar}>Arquivar</BotaoAcaoModal>}
             {item.arquivadoEm && permissoes?.reativarEntregaveis && <BotaoAcaoModal intencao="reativar" onClick={onReativar}>⟳ Reativar</BotaoAcaoModal>}
-          </MenuAcoesObjeto>
+          </MenuAcoesObjeto>}
           {item.arquivadoEm && permissoes?.excluirEntregaveisArquivados && <button type="button" onClick={onExcluir} disabled={salvando} title="Excluir entregável arquivado" aria-label="Excluir entregável arquivado" className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 transition hover:bg-red-500/20 disabled:opacity-40">×</button>}
     </> : undefined}
     ocupado={salvando} focoRetorno={focoRetorno} onFechar={fecharNivel}>
@@ -220,14 +230,14 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, pode
       {!consulta.carregando && !erro && !item && <p role="alert">Entregável não encontrado ou sem acesso neste contrato.</p>}
       {erroConclusao && <p role="alert" className="text-error-text">{erroConclusao}</p>}
       {item && <>
-        {editando && podeEditarCadastro && !bloqueioArquivo && apenasMetadados ? <FormularioMetadadosEntregavel item={item} ocupado={salvando}
+        {editando && podeEditarCadastro && !bloqueioArquivo && !bloqueioFinalizacao && apenasMetadados ? <FormularioMetadadosEntregavel item={item} ocupado={salvando}
           onCancelar={voltarDaEdicaoEntregavel} onSalvar={async alteracoes => {
             setSalvando(true);try {await editarEntregavel(contratoId, entregavelId, alteracoes);
               toastSucesso('Dados descritivos atualizados.');voltarDaEdicaoEntregavel();
               await Promise.allSettled([consulta.atualizar(),atualizar()]);
             } finally {setSalvando(false);}
           }}/>
-          : editando && podeEditarCadastro && !bloqueioEdicao && !verificado && !['CONCLUIDO','FINALIZADO'].includes(item.statusExecucao ?? '') ? <FormularioEntregavel key={item.id} contratoId={contratoId} etapaId={etapaId} inicial={item}
+          : editando && podeEditarCadastro && !bloqueioEdicao && !bloqueioFinalizacao && !verificado ? <FormularioEntregavel key={item.id} contratoId={contratoId} etapaId={etapaId} inicial={item}
           onSalvar={salvar} onCancelar={voltarDaEdicaoEntregavel}
           onSalvandoMudou={setSalvando}
           podeAlterarObrigatoriedade={permissoes?.alterarObrigatoriedade ?? false}
@@ -250,6 +260,10 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, pode
         </footer>}
       </>}
     </div>
+    {devolucaoPendente && <ConfirmacaoSimples titulo="Cancelar solicitação do entregável?" descricao="A solicitação será devolvida para revisão, sem perder a execução física registrada. Informe uma justificativa de 15 a 200 caracteres."
+      confirmar="Devolver para revisão" estadoContextual="revisao" cancelarVermelho ocupado={salvando} justificativa={motivoDevolucao} justificativaMinima={15}
+      onJustificativaChange={setMotivoDevolucao} onCancelar={() => setDevolucaoPendente(false)}
+      onConfirmar={async () => {setSalvando(true);setErroConclusao('');try {await transicaoAdministrativaEntregavel(contratoId,entregavelId,'devolver-solicitacao',motivoDevolucao.trim());setDevolucaoPendente(false);setMotivoDevolucao('');toastSucesso('Solicitação devolvida para revisão.');await Promise.allSettled([consulta.atualizar(),atualizar()]);}catch(erro){setErroConclusao(erro instanceof Error?erro.message:'Não foi possível devolver a solicitação.');}finally{setSalvando(false);}}}/>}
     {confirmarEncerramento && <ModalEtapa titulo="Solicitar encerramento do entregável" contexto="Execução física parcial" estadoContextual="finalizado" camada="edicao" ocupado={salvando} onFechar={() => setConfirmarEncerramento(false)}>
       <div className="space-y-4 text-sm"><p>Encerrar não significa concluir: a porcentagem executada será preservada. A solicitação pode ser feita com ocorrências pendentes; exige justificativa e aprovação posterior. Não representa execução integral.</p>
         <label className="block font-semibold">Justificativa (15 a 200 caracteres)<textarea className="mt-2 w-full rounded-lg border border-purple-500/40 bg-background p-3" rows={3} maxLength={200} value={motivoEncerramento} onChange={e => setMotivoEncerramento(e.target.value)}/></label>

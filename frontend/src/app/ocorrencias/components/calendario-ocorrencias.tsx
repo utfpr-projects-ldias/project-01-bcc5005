@@ -187,7 +187,7 @@ export function CalendarioOcorrencias({registros,aoAbrir,periodicidade='DIARIA'}
                     const atual=hojeIso===data;
                     const selecionado=diaSelecionado===data;
                     const passado=data<hojeIso;
-                    const resumo = itensDoDia.slice().sort((a,b)=>ordemStatus.indexOf(statusVisual(a, hojeIso)) - ordemStatus.indexOf(statusVisual(b, hojeIso))).slice(0,3);
+                    const resumo = ordemStatus.map(status=>({status,qtd:itensDoDia.filter(o=>statusVisual(o,hojeIso)===status).length})).filter(item=>item.qtd>0);
                     return <button type="button" key={data} data-dia-atual={atual||undefined} data-pi-dia-selecionado={selecionado || undefined} aria-pressed={selecionado}
                       onClick={() => setDiaSelecionado(data)}
                       className={`min-h-[84px] rounded-xl border p-2 text-left transition focus-visible:outline-2 focus-visible:outline-current ${selecionado ? 'pi-agenda-dia-selecionado' : atual ? 'pi-agenda-dia-atual' : 'border-current/15 bg-current/[0.03]'} ${passado?'opacity-80':''}`}>
@@ -196,8 +196,7 @@ export function CalendarioOcorrencias({registros,aoAbrir,periodicidade='DIARIA'}
                         {atual && <span className="rounded-full border border-brand-green/35 bg-brand-green/10 px-1.5 py-0.5 text-[10px] font-semibold text-brand-neon">Hoje</span>}
                       </div>
                       {itensDoDia.length > 0 ? <>
-                        <div className="mt-2 flex flex-wrap gap-1">{resumo.map(item => <span key={item.id} title={item.titulo} className={`h-2.5 w-2.5 rounded-full ${corPonto(statusVisual(item, hojeIso))}`} />)}{itensDoDia.length > 3 && <span className="text-[10px] text-foreground/55">+{itensDoDia.length - 3}</span>}</div>
-                        <p className="mt-2 text-[11px] font-medium text-foreground/75">{itensDoDia.length} ocorrência(s)</p>
+                        <div className="mt-2 flex flex-wrap gap-1" aria-label={`${itensDoDia.length} ocorrências neste dia`}>{resumo.map(item => <span key={item.status} title={`${item.qtd} ${nomeStatus(item.status).toLowerCase()}`} className={`inline-flex min-h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white ${corPonto(item.status)}`}>{item.qtd}</span>)}</div>
                       </> : <p className="mt-4 text-[11px] text-foreground/45">Sem registros</p>}
                     </button>;
                   })}

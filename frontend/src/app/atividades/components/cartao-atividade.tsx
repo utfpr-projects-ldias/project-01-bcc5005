@@ -163,6 +163,12 @@ export function PreviaContrato({ contratoId, fechar, foco }: { contratoId: strin
           {acaoReabrir && podeReabrir ?
             <button type="button" className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-slate-400/40 bg-slate-500/10 px-3 text-xs font-semibold text-foreground hover:bg-slate-500/20 focus-visible:outline-2 focus-visible:outline-green-500"
               onClick={() => enviarAcao(acaoReabrir)}><IconeReabertura className="h-4 w-4 text-green-500" /> Reabrir</button>
+            : !acaoReabrir && contrato?.conclusaoSolicitadaEm ? <div className="flex items-center gap-2" aria-label="Conclusão do contrato pendente">
+                <button type="button" className="rounded-lg border border-red-500/60 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-500/20 dark:text-red-300 disabled:opacity-35"
+                  disabled={!permitido('concluirContrato')} onClick={()=>enviarAcao('devolver-conclusao')}>Cancelar</button>
+                <button type="button" className="rounded-lg border border-green-600/60 bg-green-600/20 px-3 py-2 text-xs font-semibold text-green-800 hover:bg-green-600/30 dark:text-green-200 disabled:opacity-35"
+                  disabled={!permitido('concluirContrato')} onClick={()=>enviarAcao('aprovar-conclusao')}>Aprovar</button>
+              </div>
             : !acaoReabrir && <MenuAcoesObjeto rotulo="Fechar" disabled={!contrato} pendenteConclusao={Boolean(contrato?.conclusaoSolicitadaEm)}>
             <BotaoAcaoModal intencao="suspender" disabled={!encerramentoElegivel || !permitido('suspenderContrato')} onClick={() => enviarAcao('suspender')}>⏸ Suspender contrato</BotaoAcaoModal>
             <BotaoAcaoModal intencao="cancelar" disabled={!encerramentoElegivel || !permitido('cancelarContrato')} onClick={() => enviarAcao('cancelar')}>✕ Cancelar contrato</BotaoAcaoModal>
@@ -330,7 +336,7 @@ export function CartaoAtividade({ atividade, contratoId, permissoes, compacto = 
           <div className="flex items-center gap-2">
             {acaoDisponivel('cancelar-solicitacao') && <button type="button" className="rounded-lg border border-red-500/60 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-500/20 dark:text-red-300"
               onClick={e => solicitar('cancelar-solicitacao', e.currentTarget)}>Cancelar</button>}
-            {acaoDisponivel('aprovar-conclusao') && <button type="button" className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-500"
+            {acaoDisponivel('aprovar-conclusao') && <button type="button" className="rounded-lg border border-green-600/60 bg-green-700 px-3 py-2 text-xs font-semibold text-white hover:bg-green-600"
               onClick={e => solicitar('aprovar-conclusao', e.currentTarget)}>Aprovar</button>}
           </div>}
         {estado === 'REGISTRADA' && permissoes?.editarAtividades && <BotaoEditarModal rotulo="Editar atividade" onClick={e => {

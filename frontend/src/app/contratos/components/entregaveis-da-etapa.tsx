@@ -5,6 +5,8 @@ import { AbasRolaveis } from '@/app/components/abas-rolaveis';
 import Link from 'next/link';
 import { createPortal } from 'react-dom';
 import { ModalEtapa } from './modal-etapa';
+import { useRepositorioConsultasOpcional } from '@/app/components/provedor-consultas';
+import { CHAVES_ENTREGAVEIS } from '@/hooks/use-entregaveis';
 import { IconeStatus } from '@/app/components/icones-status';
 import { useCallback, useEffect, useId, useRef, useState, type MouseEvent } from 'react';
 import { ModalDetalheEntregavel } from './modal-detalhe-entregavel';
@@ -13,7 +15,7 @@ import { indicadoresPlanejamento } from '@/lib/indicadores-planejamento';
 import type { ResumoDocumentalEntregavel } from '@/lib/entregaveis';
 import { ajustarRestauracaoHistorico } from '@/lib/historico-modal-scroll';
 import { FormularioEntregavel } from './formulario-entregavel';
-import { criarEntregavel, listarEntregaveisArquivados, concluirEntregavel, reabrirEntregavel, alterarArquivoEntregavel, excluirEntregavelArquivado } from '@/lib/entregaveis';
+import { criarEntregavel, listarEntregaveisArquivados, detalharEntregavel, concluirEntregavel, reabrirEntregavel, alterarArquivoEntregavel, excluirEntregavelArquivado } from '@/lib/entregaveis';
 import type { DadosPlanejamentoEntregavel } from '@/lib/validacao-entregavel';
 import type { PermissoesContrato } from '@/lib/contratos';
 import { toastSucesso, toastAviso } from '@/app/components/toast-notificacoes';
@@ -28,6 +30,7 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, da
   podeEditar?: boolean; podeArquivar?: boolean; permissoes?: PermissoesContrato; documental?: Record<string, ResumoDocumentalEntregavel>;
   estadoProprioEtapa?: 'normal' | 'revisao' | 'concluido' | 'finalizado' | 'arquivado' | 'encerrado'; dentroModal?: boolean; podeVerArquivados?: boolean; paiArquivado?: boolean; paiEmRevisao?: boolean; paiConcluido?: boolean; onDetalheMudou?: (aberto: boolean) => void; atualizarDocumental?: () => void; onHierarquiaAlterada?: () => void;
 }) {
+  const cacheDetalhe = useRepositorioConsultasOpcional();
   const [aberto, setAberto] = useState(false);
   const [iniciado, setIniciado] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -59,6 +62,18 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, da
     setOcupadoArquivo(true); setAviso('');
     try {
       await alterarArquivoEntregavel(contratoId, id, acao, acao === 'reativar' ? motivoEntregavel.trim() : undefined);
+      // Recarregar a versão definitiva antes de reexibir a ficha. Isso evita
+      // renderizar o snapshot arquivado do cache no primeiro quadro do modal.
+      if (acao === 'reativar') {
+        try {
+          const atual = await detalharEntregavel(contratoId, id);
+          cacheDetalhe?.gravar(CHAVES_ENTREGAVEIS.detalhe(contratoId, id), atual);
+        } catch {
+          cacheDetalhe?.invalidar(CHAVES_ENTREGAVEIS.detalhe(contratoId, id));
+        }
+      } else {
+        cacheDetalhe?.invalidar(CHAVES_ENTREGAVEIS.detalhe(contratoId, id));
+      }
       // Primeiro atualizar a visão local em uma única pintura; consultas não
       // devem fazer o cartão reaparecer em um intervalo entre requisições.
       if (acao === 'arquivar') setOcultadosLocais(atuais => [...new Set([...atuais, id])]);
@@ -304,7 +319,7 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, da
             : comprovacaoSemConclusao ? 'border-brand-green/40 bg-background hover:border-brand-green/55 focus-visible:outline-brand-neon' : 'border-brand-green/20 bg-background hover:border-brand-green/55 focus-visible:outline-brand-neon'}`}>
           <div className="grid min-w-0 grid-cols-[2rem_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2">
             <span aria-label={completo ? 'Entregável com comprovação documental completa' : 'Entregável com comprovação pendente'} title={completo ? 'Comprovação completa' : 'Comprovação pendente'}
-              className={`mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${e.arquivadoEm ? 'border-amber-400/65 bg-amber-500/20 text-amber-200' : e.reabertoEm ? 'border-teal-600/60 bg-teal-900/20 text-teal-200' : concluidoVisual ? 'border-violet-400/65 bg-violet-500/20 text-violet-200' : comprovacaoSemConclusao ? 'border-brand-green/50 bg-brand-green/10 text-brand-neon' : 'border-brand-green/30 bg-brand-green/10 text-brand-neon/75'}`}>
+              className={`mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${e.arquivadoEm ? 'border-amber-400/65 bg-amber-500/20 text-amber-200' : e.reabertoEm ? 'border-teal-600/60 bg-teal-900/20 text-teal-200' : 'border-violet-500/60 bg-violet-500/10 text-violet-600 dark:text-violet-300'}`}>
               {completo ? <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="h-5 w-5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="m5 12 4 4L19 6" />
               </svg> : <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-4 w-4"><circle cx="12" cy="12" r="8" /></svg>}
@@ -346,7 +361,7 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, da
     </ul>}
     {detalheId && !protegido && (!erro || mostrarArquivados) && <ModalDetalheEntregavel contratoId={contratoId} etapaId={etapaId}
     entregavelId={detalheId} itemInicial={[...(dados ?? []), ...arquivados].find(item => item.id === detalheId)}
-    dentroModal={dentroModal} resumoInicial={documental?.[detalheId]} paiConcluido={paiConcluido} paiEmRevisao={paiEmRevisao} verificado={Boolean([...(dados ?? []), ...arquivados].find(e => e.id === detalheId)?.statusExecucao === 'CONCLUIDO' && ![...(dados ?? []), ...arquivados].find(e => e.id === detalheId)?.reabertoEm)} iniciarEditando={editarAoAbrir && !paiBloqueado} paiArquivado={paiArquivado} podeEditar={!paiBloqueado && Boolean(permissoes?.editarEntregaveis) && (podeEditar ?? podeCriar)} permissoes={permissoes}
+    dentroModal={dentroModal} resumoInicial={documental?.[detalheId]} paiConcluido={paiConcluido} paiEmRevisao={paiEmRevisao} verificado={Boolean([...(dados ?? []), ...arquivados].find(e => e.id === detalheId)?.statusExecucao === 'CONCLUIDO' && ![...(dados ?? []), ...arquivados].find(e => e.id === detalheId)?.reabertoEm)} iniciarEditando={editarAoAbrir && !paiBloqueado} paiArquivado={paiArquivado} podeEditar={Boolean(permissoes?.editarEntregaveis) && (podeEditar ?? podeCriar)} permissoes={permissoes}
     podeArquivar={Boolean(podeArquivar) && !paiBloqueado} onArquivar={() => setConfirmarArquivamento(detalheId)}
     onReabrir={() => setConfirmarReabertura(detalheId)} onReativar={() => setConfirmarReativacao(detalheId)}
     onExcluir={() => setConfirmarExclusao(detalheId)}

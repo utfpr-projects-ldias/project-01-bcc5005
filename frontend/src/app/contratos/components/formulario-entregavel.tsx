@@ -1,6 +1,5 @@
 'use client';
 import { useEffect, useId, useRef, useState, type Ref, type FormEvent } from 'react';
-import { useEntregaveis } from '@/hooks/use-entregaveis';
 import { ErroEntregavel, ROTULOS_TIPO, pesquisarResponsaveisEntregavel, type ResponsavelEntregavel, type Entregavel } from '@/lib/entregaveis';
 import { decimalDigitado, decimalExibicao, decimalValido } from '@/lib/campos-numericos';
 import { inicialEntregavel,
@@ -17,7 +16,6 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
   const prefixo = useId().replace(/:/g, '');
   const agendaBloqueada = Boolean(inicial?.tipo === 'RECORRENTE' && !podeReplanejarOcorrencias);
   const pesoBloqueado = Boolean(inicial && !podeConfigurarPesos);
-  const existentes = useEntregaveis(contratoId ?? '', Boolean(contratoId));
   const enviando = useRef(false);
   const [dados, setDados] = useState<RascunhoEntregavel>(() => inicialEntregavel(etapaId, inicial));
   const [mesmoDia, setMesmoDia] = useState(() => Boolean(inicial?.inicioPrevisto && inicial.inicioPrevisto === inicial.terminoPrevisto));
@@ -92,12 +90,8 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
     if (enviando.current) return; // trava síncrona contra clique duplo
     const resultado = validarEntregavel(dados, inicial);
     if (!resultado.sucesso) { setErros(resultado.erros); setErroGeral('Revise os campos destacados.'); return; }
-    const ocupados = (existentes.dados ?? []).filter(e => !e.arquivadoEm && e.id !== inicial?.id).reduce((soma, e) => soma + (Number(e.peso) || 0), 0);
-    const restante = Math.max(0, Math.round((100 - ocupados) * 100) / 100);
-    if (existentes.dados && Number(resultado.dados.peso) > restante + 0.000001) {
-      setErros(prev => ({ ...prev, peso: `Apenas ${restante.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% restante disponível para usar como peso deste entregável.` }));
-      setErroGeral('Ajuste o peso operacional.'); return;
-    }
+    // O servidor valida a distribuição apenas quando o modo é PONDERADO.
+    // A soma dos pesos cadastrados não pode bloquear o modo SIMPLES.
     enviando.current = true; setSalvando(true); onSalvandoMudou?.(true); setErros({}); setErroGeral('');
     try { await onSalvar(resultado.dados); }
     catch (erro) { setErroGeral(erro instanceof ErroEntregavel ? erro.message : 'Não foi possível salvar. O formulário foi preservado.'); }

@@ -11,7 +11,7 @@ import { ARMAZENAMENTO_ARQUIVOS, type ArmazenamentoArquivos } from '../armazenam
 import { ArmazenamentoIndisponivelError } from '../armazenamento/armazenamento-local.js';
 import { ArquivoInvalidoError, LimiteArmazenamentoError } from '../armazenamento/politica-arquivos.js';
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
-import { documentacaoVerificada, filhosEmRevisao, concluirEtapaAposFilhos, atividadesPendentesDeVerificacao } from './conclusao-documental.js';
+import { documentacaoVerificada, concluirEtapaAposFilhos, atividadesPendentesDeVerificacao } from './conclusao-documental.js';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import { EventoAuditoria } from '../auditoria/evento-auditoria.entity.js';
 import { PermissaoContrato } from '../autorizacao/permissao-contrato.entity.js';
@@ -75,9 +75,10 @@ export class EvidenciasRecebidasService {
       .setLock('pessimistic_write').where('c.id = :id', { id: contratoId }).getOne();
     if (!contrato) throw new NotFoundException('Contrato não encontrado');
     if (contrato.arquivadoEm) throw new ConflictException('Contrato arquivado: operação não permitida');
-    if ((contrato.status === 'CONCLUIDO' || contrato.status === 'ENCERRADO') ||
-      (contrato.reabertoEm === null && await documentacaoVerificada(m, contratoId) && !await filhosEmRevisao(m, contratoId)))
-      throw new ConflictException('Contrato concluído: reabra antes de alterar evidências');
+    // A documentação estar completa não é decisão formal de conclusão.
+    // Evita bloquear comprovantes de novos entregáveis em contrato ainda aberto.
+    if (['CONCLUIDO','ENCERRADO','FINALIZADO'].includes(contrato.status))
+      throw new ConflictException('Contrato finalizado: reabra-o antes de alterar evidências');
   }
   private async leituraDeArquivoPermitida(ator: UsuarioAutenticado, entregavel: Entregavel): Promise<boolean> {
     if (ator.perfil === PerfilUsuario.ADMINISTRADOR) return true;

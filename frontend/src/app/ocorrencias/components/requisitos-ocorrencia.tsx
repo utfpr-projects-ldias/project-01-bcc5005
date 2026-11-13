@@ -1,13 +1,17 @@
 'use client';
+import { AnelProgresso } from './anel-progresso';
 
 export type FormatoComprovacao = 'NENHUMA' | 'FOTO' | 'RELATORIO' | 'AMBOS';
 export type RequisitosOcorrencia = {
   minimoAtividadesVerificadas: number;
   minimoEvidenciasVerificadas: number;
+  minimoFotos: number;
+  minimoRelatorios: number;
+  minimoEvidenciasLivres: number;
   evidenciaExigida: FormatoComprovacao;
   permiteEncerramentoExcepcional: boolean;
 };
-const base = 'w-full min-w-0 rounded-xl border border-current/25 bg-background/75 px-3 py-2.5 text-sm text-foreground outline-none transition-colors focus-visible:border-brand-green focus-visible:ring-2 focus-visible:ring-brand-green/20';
+const base = 'w-full min-w-0 rounded-xl border border-current/25 bg-background/75 px-3 py-2.5 text-sm text-foreground outline-none transition-colors focus-visible:border-current focus-visible:ring-2 focus-visible:ring-current/20';
 
 function Contador({ rotulo, descricao, quantidade, onChange, minimo = 0, desabilitado = false }: {
   rotulo: string; descricao: string; quantidade: number; onChange: (valor: number) => void;
@@ -35,46 +39,62 @@ function Contador({ rotulo, descricao, quantidade, onChange, minimo = 0, desabil
 export function FormularioRequisitosOcorrencia({ valor, onChange, compacto = false }: {
   valor: RequisitosOcorrencia; onChange: (novo: RequisitosOcorrencia) => void; compacto?: boolean;
 }) {
-  const ambos = valor.evidenciaExigida === 'AMBOS';
+  const atualizar = (campo: 'minimoFotos'|'minimoRelatorios'|'minimoEvidenciasLivres', qtd: number) => {
+    const novo = {...valor,[campo]:qtd};
+    const total = novo.minimoFotos + novo.minimoRelatorios + novo.minimoEvidenciasLivres;
+    if (total > 99) return;
+    onChange({...novo, minimoEvidenciasVerificadas:total,
+      evidenciaExigida:novo.minimoFotos && novo.minimoRelatorios ? 'AMBOS' : novo.minimoFotos ? 'FOTO' : novo.minimoRelatorios ? 'RELATORIO' : 'NENHUMA'});
+  };
   return <fieldset className="min-w-0 space-y-3 rounded-xl border border-current/20 bg-current/[0.025] p-3 sm:p-4">
     <legend className="px-1 text-sm font-semibold">Requisitos para solicitar conclusão</legend>
-    {!compacto && <p className="text-xs text-foreground/65">Só contam atividades e evidências verificadas. A execução física e a comprovação continuam independentes.</p>}
+    {!compacto && <p className="text-xs text-foreground/65">Defina quantos registros verificados são necessários. Cada comprovante conta uma vez e a execução física continua independente da comprovação.</p>}
+    <p className="text-xs text-foreground/65">Total de evidências exigidas: {valor.minimoFotos+valor.minimoRelatorios+valor.minimoEvidenciasLivres} / 99</p>
     <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-      <Contador rotulo="Atividades verificadas exigidas" descricao="Mínimo de atividades aprovadas nesta ocorrência."
-        quantidade={valor.minimoAtividadesVerificadas} onChange={n => onChange({...valor,minimoAtividadesVerificadas:n})}/>
-      <Contador rotulo="Evidências verificadas exigidas" descricao="Mínimo de arquivos comprovados, conforme o formato escolhido."
-        quantidade={valor.minimoEvidenciasVerificadas} minimo={ambos ? 2 : 0} desabilitado={valor.evidenciaExigida==='NENHUMA'}
-        onChange={n => onChange({...valor,minimoEvidenciasVerificadas:n, evidenciaExigida:n===0?'NENHUMA':valor.evidenciaExigida})}/>
+      <Contador rotulo="Atividades verificadas" descricao="Quantidade mínima de atividades aprovadas." quantidade={valor.minimoAtividadesVerificadas} onChange={n => onChange({...valor,minimoAtividadesVerificadas:n})}/>
+      <Contador rotulo="Fotografias verificadas" descricao="Quantidade específica de fotos." quantidade={valor.minimoFotos} onChange={n => atualizar('minimoFotos',n)}/>
+      <Contador rotulo="Relatórios verificados" descricao="Quantidade específica de relatórios." quantidade={valor.minimoRelatorios} onChange={n => atualizar('minimoRelatorios',n)}/>
+      <Contador rotulo="Evidências de qualquer formato" descricao="Quantidade adicional, tanto foto quanto relatório." quantidade={valor.minimoEvidenciasLivres} onChange={n => atualizar('minimoEvidenciasLivres',n)}/>
     </div>
-    <label className="block text-xs font-semibold">Formato de evidência
-      <select className={`${base} pi-select mt-1 pr-10`} value={valor.evidenciaExigida}
-        onChange={e=>{const formato=e.target.value as FormatoComprovacao;
-          onChange({...valor,evidenciaExigida:formato,minimoEvidenciasVerificadas:formato==='NENHUMA'?0:Math.max(formato==='AMBOS'?2:1,valor.minimoEvidenciasVerificadas)});
-        }}>
-        <option value="NENHUMA">Nenhuma obrigatória</option>
-        <option value="FOTO">Fotografias</option><option value="RELATORIO">Relatórios</option>
-        <option value="AMBOS">Fotografias e relatórios</option>
-      </select>
-    </label>
-    {ambos && <p className="text-xs text-foreground/65">Para ambos, ao menos uma fotografia e um relatório devem estar verificados. O mínimo total também precisa ser atendido.</p>}
     <label className="flex items-start gap-2 rounded-xl border border-current/15 bg-background/40 p-3 text-sm">
-      <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 accent-brand-green" checked={valor.permiteEncerramentoExcepcional}
+      <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 accent-current" checked={valor.permiteEncerramentoExcepcional}
         onChange={e=>onChange({...valor,permiteEncerramentoExcepcional:e.target.checked})}/>
-      <span>Permitir solicitar encerramento excepcional com justificativa</span>
+      <span>Permitir solicitar encerramento administrativo com justificativa</span>
     </label>
   </fieldset>;
 }
 
-export function ResumoRequisitosOcorrencia({ minimoAtividades, minimoEvidencias, formato, verificadas = 0, fotos = 0, relatorios = 0 }:{
+export function ResumoRequisitosOcorrencia({ minimoAtividades, minimoEvidencias, formato, verificadas = 0, fotos = 0, relatorios = 0, minimoFotos, minimoRelatorios, minimoEvidenciasLivres }:{
   minimoAtividades: number; minimoEvidencias: number; formato: FormatoComprovacao;
   verificadas?: number; fotos?: number; relatorios?: number;
+  minimoFotos?:number|null; minimoRelatorios?:number|null; minimoEvidenciasLivres?:number|null;
 }) {
-  const evidenciasAtendidas = formato === 'FOTO' ? fotos : formato === 'RELATORIO' ? relatorios : fotos+relatorios;
-  return <dl className="grid min-w-0 gap-2 rounded-xl border border-current/20 bg-current/[0.025] p-3 sm:grid-cols-2" aria-label="Requisitos da ocorrência">
-    <div className="min-w-0"><dt className="text-xs text-foreground/65">Atividades verificadas</dt>
-      <dd className="mt-1 text-sm font-semibold tabular-nums">{verificadas} / {minimoAtividades} exigidas</dd></div>
-    <div className="min-w-0"><dt className="text-xs text-foreground/65">Evidências verificadas</dt>
-      <dd className="mt-1 text-sm font-semibold tabular-nums">{evidenciasAtendidas} / {minimoEvidencias} exigidas</dd>
-      <p className="mt-1 text-xs text-foreground/65">{formato==='NENHUMA'?'Sem obrigação documental':formato==='FOTO'?'Fotografias':formato==='RELATORIO'?'Relatórios':'Fotografias e relatórios'}</p></div>
-  </dl>;
+  const individuais=[minimoFotos,minimoRelatorios,minimoEvidenciasLivres].some(n=>n!=null);
+  const exigidas={fotos:minimoFotos??0,relatorios:minimoRelatorios??0,livres:minimoEvidenciasLivres??0};
+  const livresAtendidos=Math.max(0,fotos-exigidas.fotos)+Math.max(0,relatorios-exigidas.relatorios);
+  const totalEvidencias = individuais ? exigidas.fotos+exigidas.relatorios+exigidas.livres : minimoEvidencias;
+  const evidenciasAtendidas = individuais
+    ? Math.min(fotos,exigidas.fotos)+Math.min(relatorios,exigidas.relatorios)+Math.min(livresAtendidos,exigidas.livres)
+    : formato==='FOTO'?fotos:formato==='RELATORIO'?relatorios:fotos+relatorios;
+  const atividadesAtendidas=Math.min(verificadas,minimoAtividades);
+  const comprovacaoAtendida=Math.min(evidenciasAtendidas,totalEvidencias);
+  return <section aria-label="Requisitos da ocorrência" className="max-w-2xl rounded-xl border border-current/20 bg-current/[0.025] p-3 sm:p-4">
+    <h4 className="mb-3 text-sm font-semibold">Requisitos para conclusão</h4>
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div className="flex min-w-0 items-center gap-3">
+        <AnelProgresso atual={atividadesAtendidas} total={minimoAtividades} rotulo="Atividades verificadas" tamanho={80}/>
+        <div className="min-w-0"><p className="text-xs text-foreground/60">Atividades</p><p className="font-semibold tabular-nums">{verificadas} / {minimoAtividades}</p>
+          <p className="text-xs text-foreground/60">{minimoAtividades===0?'Não exigidas':'Verificadas / exigidas'}</p></div>
+      </div>
+      <div className="flex min-w-0 items-center gap-3">
+        <AnelProgresso atual={comprovacaoAtendida} total={totalEvidencias} rotulo="Evidências verificadas" tamanho={80}/>
+        <div className="min-w-0"><p className="text-xs text-foreground/60">Evidências</p><p className="font-semibold tabular-nums">{comprovacaoAtendida} / {totalEvidencias}</p>
+          <p className="text-xs text-foreground/60">{totalEvidencias===0?'Não exigidas':'Verificadas / exigidas'}</p></div>
+      </div>
+    </div>
+    {individuais && totalEvidencias>0 && <details className="mt-3 border-t border-current/15 pt-2 text-xs text-foreground/70">
+      <summary className="cursor-pointer font-medium">Detalhar formatos exigidos</summary>
+      <p className="mt-2">Fotografias: {fotos} / {exigidas.fotos} · Relatórios: {relatorios} / {exigidas.relatorios} · Adicionais: {livresAtendidos} / {exigidas.livres}</p>
+    </details>}
+  </section>;
 }

@@ -215,6 +215,16 @@ export class Ocorrencia {
   minimoAtividadesVerificadas!: number;
   @Column({ name: 'minimo_evidencias_verificadas', type: 'smallint', default: 0 })
   minimoEvidenciasVerificadas!: number;
+  /** Requisitos individuais: NULL conserva regras legadas até a primeira edição explícita. */
+  @Column({ name: 'minimo_fotos', type: 'smallint', nullable: true })
+  minimoFotos!: number | null;
+  @Column({ name: 'minimo_relatorios', type: 'smallint', nullable: true })
+  minimoRelatorios!: number | null;
+  @Column({ name: 'minimo_evidencias_livres', type: 'smallint', nullable: true })
+  minimoEvidenciasLivres!: number | null;
+  /** Peso relativo apenas dentro da série recorrente, não o peso do contrato. */
+  @Column({ name: 'peso_periodo', type: 'numeric', precision: 7, scale: 4, nullable: true })
+  pesoPeriodo!: string | null;
   @Column({ name: 'evidencia_exigida', type: 'varchar', length: 12, default: 'NENHUMA' })
   evidenciaExigida!: 'NENHUMA' | 'FOTO' | 'RELATORIO' | 'AMBOS';
   @Column({ name: 'permite_encerramento_excepcional', type: 'boolean', default: true })

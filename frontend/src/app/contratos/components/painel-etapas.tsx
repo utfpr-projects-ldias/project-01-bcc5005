@@ -528,11 +528,11 @@ export function PainelEtapas({ contratoId, habilitado, podeGerenciar, permissoes
         // retroativamente o status CONCLUIDA persistido da etapa.
         const arquivamentoHerdado = Boolean(etapa.arquivadoEm); // o arquivamento do contrato não muda o estado dos filhos
         const statusVisivel = etapa.status;
-        return <li key={etapa.id} data-etapa-estado={arquivamentoHerdado ? 'arquivada' : etapaFinalizada ? 'finalizada' : etapaEncerrada ? 'encerrada' : etapaComprovada ? 'concluida' : etapa.reabertoEm ? 'reaberta' : 'normal'} data-tec08-item-clicavel ref={(no) => { if (no) cartoesEtapa.current.set(etapa.id, no); else cartoesEtapa.current.delete(etapa.id); }}
+        return <li key={etapa.id} data-etapa-estado={arquivamentoHerdado ? 'arquivada' : etapaFinalizada ? 'finalizada' : etapaEncerrada ? 'encerrada' : etapaComprovada ? 'concluida' : etapa.reabertoEm ? 'revisao' : 'normal'} data-tec08-item-clicavel ref={(no) => { if (no) cartoesEtapa.current.set(etapa.id, no); else cartoesEtapa.current.delete(etapa.id); }}
           onClick={(evento) => { if (!(evento.target instanceof Element) || evento.target.closest('button,a,input,textarea,select,[role="dialog"]')) return; abrirModal(`detalhe:${etapa.id}`, evento.currentTarget as HTMLElement); }}
           className={`group min-w-0 rounded-xl border p-3 transition-opacity duration-150 sm:p-4 ${arquivamentoHerdado ? 'border-amber-500/65 bg-amber-500/[0.09] text-amber-100' : etapaFinalizada ? 'border-purple-500/65 bg-purple-500/[0.12] text-purple-200' : etapaEncerrada ? 'border-slate-500/60 bg-background text-foreground' : etapaComprovada
             ? 'border-violet-500/60 bg-violet-500/[0.06] opacity-90 hover:border-violet-400 hover:opacity-100'
-            : etapa.reabertoEm ? 'border-green-500/45 bg-green-900/[0.12] hover:border-green-400/55' : 'border-brand-green/25 bg-background hover:border-brand-green/55'}`}>
+            : etapa.reabertoEm ? 'border-teal-500/55 bg-teal-900/[0.10] hover:border-teal-400/65' : 'border-brand-green/25 bg-background hover:border-brand-green/55'}`}>
           {etapaFinalizada && <div className="mb-3 flex flex-wrap items-center justify-end gap-2 text-xs font-semibold text-purple-700 dark:text-purple-300"><span className="rounded-full border border-purple-500/55 bg-purple-500/20 px-2.5 py-1">Encerrada</span><span className="rounded-lg border border-purple-500/40 px-2.5 py-1 tabular-nums">{valorFisicoEtapa === null ? 'Execução não calculável' : `${valorFisicoEtapa.toLocaleString('pt-BR',{maximumFractionDigits:2})}% realizado`}</span></div>}
           <div className="flex min-w-0 flex-wrap items-start gap-3">
             <div aria-label={`Posição ${etapa.sequencia}${etapaComprovada ? ', documentação completa' : ''}`}
@@ -542,7 +542,7 @@ export function PainelEtapas({ contratoId, habilitado, podeGerenciar, permissoes
               </span>
               <span className={`flex h-8 w-8 items-center justify-center rounded-full border ${arquivamentoHerdado ? 'border-amber-400/65 bg-amber-500/20 text-amber-900 dark:text-amber-200' : etapaEncerrada ? 'border-slate-500/60 bg-slate-500/10 text-slate-700 dark:text-slate-300' : etapaComprovada
                 ? 'border-violet-400/65 bg-violet-500/20 text-violet-800 dark:text-violet-200'
-                : etapa.reabertoEm ? 'border-brand-green/30 bg-brand-green/10 text-brand-neon/75' : 'border-brand-green/30 bg-brand-green/10 text-brand-neon/75'}`}>
+                : etapa.reabertoEm ? 'border-teal-500/40 bg-teal-500/10 text-teal-300' : 'border-brand-green/30 bg-brand-green/10 text-brand-neon/75'}`}>
                 {etapaComprovada ? <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="h-5 w-5">
                   <path strokeLinecap="round" strokeLinejoin="round" d="m5 12 4 4L19 6" />
                 </svg> : <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-4 w-4">
@@ -555,16 +555,16 @@ export function PainelEtapas({ contratoId, habilitado, podeGerenciar, permissoes
               className="min-w-0 flex-1 basis-[12rem] space-y-1 text-left focus-visible:rounded-lg focus-visible:outline-2 focus-visible:outline-brand-neon">
               <span className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden">
                 <span className={`min-w-0 max-w-full break-words [overflow-wrap:anywhere] text-sm font-semibold group-hover:underline ${arquivamentoHerdado ? 'text-foreground' : etapaEncerrada ? 'text-slate-700 dark:text-slate-300' : etapaComprovada ? 'text-violet-700 dark:text-violet-200' : etapa.reabertoEm ? 'text-foreground'  : 'text-brand-neon'}`}>{etapa.nome}</span>
-                <span className={`rounded-full border px-2 py-0.5 text-[10px] ${arquivamentoHerdado ? 'border-amber-400/45 text-white/85' : etapaEncerrada ? 'border-slate-500/60 bg-slate-500/10 text-slate-700 dark:text-slate-300' : etapaComprovada ? 'border-violet-400/50 bg-violet-500/10 text-violet-700 dark:text-violet-200' : etapa.reabertoEm ? 'border-green-500/60 bg-green-500/15 text-green-300' : 'border-brand-green/25 text-foreground/75'}`}>{etapa.arquivadoEm ? 'Arquivada' : etapa.reabertoEm ? 'Reaberta' : STATUS_ETAPA[statusVisivel]}</span>
-                {etapa.reabertoEm && !etapa.arquivadoEm && <span className="rounded-full border border-foreground/20 bg-background px-2 py-0.5 text-[10px] text-foreground/80">{STATUS_ETAPA[statusVisivel]}</span>}
+                <span className={`rounded-full border px-2 py-0.5 text-[10px] ${arquivamentoHerdado ? 'border-amber-400/45 text-white/85' : etapaEncerrada ? 'border-slate-500/60 bg-slate-500/10 text-slate-700 dark:text-slate-300' : etapaComprovada ? 'border-violet-400/50 bg-violet-500/10 text-violet-700 dark:text-violet-200' : etapa.reabertoEm ? 'border-teal-500/60 bg-teal-500/15 text-teal-300' : 'border-brand-green/25 text-foreground/75'}`}>{etapa.arquivadoEm ? 'Arquivada' : etapa.reabertoEm ? 'Em revisão' : STATUS_ETAPA[statusVisivel]}</span>
+
               </span>
               <span className={`block max-w-full break-words [overflow-wrap:anywhere] text-xs ${arquivamentoHerdado ? 'text-foreground/70' : 'text-foreground/60'}`}><span className="font-mono">{rotuloCodigoPublico(etapa.codigoPublico)}</span>{etapa.codigo ? ` · ${etapa.codigo}` : ''}{intervaloPrevisto(etapa.inicioPrevisto, etapa.terminoPrevisto) ? ` · ${intervaloPrevisto(etapa.inicioPrevisto, etapa.terminoPrevisto)}` : ''}</span>
               <span className="mt-2 grid max-w-[510px] gap-3 sm:grid-cols-2">
                 {([['Entregáveis', concluidos, itens.length], ['Evidências', evidenciasVerificadas, evidenciasPrevistas]] as const).map(([rotulo, feitos, total]) => <span key={rotulo} className="block min-w-0 space-y-1">
                   <span className={`flex items-center gap-2 text-xs ${arquivamentoHerdado ? 'text-foreground/80' : 'text-foreground/75'}`}><span>{rotulo}</span><strong className="tabular-nums text-foreground">{feitos}/{total}</strong></span>
                   <span data-tec08-progresso-entidade role="img" aria-label={`${feitos} de ${total} ${rotulo.toLowerCase()} documentalmente comprovados; não é execução física`}
-                    className={`flex h-1.5 max-w-52 gap-[3px] overflow-hidden rounded-full ${arquivamentoHerdado ? 'bg-amber-500/20' : etapa.reabertoEm ? 'bg-brand-green/15' : 'bg-violet-500/15'}`}>
-                    {total > 0 ? Array.from({ length: Math.min(total, 10) }, (_, n) => <span key={n} data-tec08-progresso-preenchido={n < Math.round(feitos / total * Math.min(total,10)) ? "true" : "false"} className={`min-w-0 flex-1 rounded-sm ${n < Math.round(feitos / total * Math.min(total,10)) ? arquivamentoHerdado ? 'bg-amber-400' : etapa.reabertoEm ? 'bg-brand-green' : 'bg-violet-500' : arquivamentoHerdado ? 'bg-amber-500/20' : etapa.reabertoEm ? 'bg-brand-green/15' : 'bg-violet-500/15'}`} />) : <span className="h-full w-full rounded-full bg-violet-500/15" />}
+                    className={`flex h-1.5 max-w-52 gap-[3px] overflow-hidden rounded-full ${arquivamentoHerdado ? 'bg-amber-500/20' : etapa.reabertoEm ? 'bg-teal-500/15' : 'bg-violet-500/15'}`}>
+                    {total > 0 ? Array.from({ length: Math.min(total, 10) }, (_, n) => <span key={n} data-tec08-progresso-preenchido={n < Math.round(feitos / total * Math.min(total,10)) ? "true" : "false"} className={`min-w-0 flex-1 rounded-sm ${n < Math.round(feitos / total * Math.min(total,10)) ? arquivamentoHerdado ? 'bg-amber-400' : etapa.reabertoEm ? 'bg-teal-500' : 'bg-violet-500' : arquivamentoHerdado ? 'bg-amber-500/20' : etapa.reabertoEm ? 'bg-teal-500/15' : 'bg-violet-500/15'}`} />) : <span className="h-full w-full rounded-full bg-violet-500/15" />}
                   </span>
                 </span>)}
               </span>
@@ -588,16 +588,21 @@ export function PainelEtapas({ contratoId, habilitado, podeGerenciar, permissoes
       titulo={itemDetalhe ? `${itemDetalhe.sequencia} · ${itemDetalhe.nome}` : editor === 'nova' ? 'Nova etapa' : `Editar etapa · ${itemEditando?.nome ?? ''}`}
       contexto={itemDetalhe ? 'Etapa do contrato' : 'Planejamento do contrato'} codigoPublico={itemDetalhe?.codigoPublico}
       textoFechar="Fechar ×"
-      etiqueta={itemDetalhe ? itemDetalhe.arquivadoEm ? 'Arquivada' : itemDetalhe.conclusaoSolicitadaEm ? 'Pendente de conclusão' : itemDetalhe.encerramentoSolicitadoEm ? 'Pendente de encerramento' : itemDetalhe.reabertoEm ? 'Reaberta' : STATUS_ETAPA[itemDetalhe.status] : undefined}
+      etiqueta={itemDetalhe ? itemDetalhe.arquivadoEm ? 'Arquivada' : itemDetalhe.conclusaoSolicitadaEm ? 'Pendente de conclusão' : itemDetalhe.encerramentoSolicitadoEm ? 'Pendente de encerramento' : itemDetalhe.reabertoEm ? 'Em revisão' : STATUS_ETAPA[itemDetalhe.status] : undefined}
       rotuloFechar={itemDetalhe ? 'Voltar às etapas' : retornoEdicao ? 'Fechar edição da etapa' : 'Fechar edição da etapa'}
-      somenteIconeFechar alturaEstavel={Boolean(itemDetalhe)} arquivado={Boolean(itemDetalhe?.arquivadoEm)} concluido={Boolean(itemDetalhe && itemDetalhe.status === 'CONCLUIDA' && !itemDetalhe.reabertoEm)} revisao={Boolean(itemDetalhe?.reabertoEm)}
-      estadoContextual={editor === 'nova' ? 'normal' : !itemEditando?.arquivadoEm && !itemDetalhe?.arquivadoEm && (itemEditando?.status ?? itemDetalhe?.status) === 'PLANEJADA' ? 'andamento' : estadoDoObjeto({objeto:'etapa', status:itemEditando?.status ?? itemDetalhe?.status, arquivado:Boolean(itemEditando?.arquivadoEm || itemDetalhe?.arquivadoEm), reaberto:Boolean(itemEditando?.reabertoEm || itemDetalhe?.reabertoEm)})}
+      somenteIconeFechar alturaEstavel={Boolean(itemDetalhe)} arquivado={Boolean(itemDetalhe?.arquivadoEm)} concluido={Boolean(itemDetalhe && itemDetalhe.status === 'CONCLUIDA' && !itemDetalhe.reabertoEm)} revisao={Boolean(itemDetalhe?.reabertoEm && !itemDetalhe?.conclusaoSolicitadaEm && !itemDetalhe?.encerramentoSolicitadoEm)}
+      estadoContextual={editor === 'nova' ? 'normal' : itemDetalhe?.conclusaoSolicitadaEm ? 'concluido' : itemDetalhe?.encerramentoSolicitadoEm ? 'finalizado' : Boolean(itemEditando?.reabertoEm || itemDetalhe?.reabertoEm) ? 'revisao' : !itemEditando?.arquivadoEm && !itemDetalhe?.arquivadoEm && (itemEditando?.status ?? itemDetalhe?.status) === 'PLANEJADA' ? 'andamento' : estadoDoObjeto({objeto:'etapa', status:itemEditando?.status ?? itemDetalhe?.status, arquivado:Boolean(itemEditando?.arquivadoEm || itemDetalhe?.arquivadoEm), reaberto:Boolean(itemEditando?.reabertoEm || itemDetalhe?.reabertoEm)})}
       bloqueadoPorSubmodal={detalheEntregavelAberto}
       ocupado={salvandoFormulario} focoRetorno={gatilhoModal} onFechar={fecharNivelModal}
       acoes={itemDetalhe ? <>
-        {podeEditarEtapa && !itemDetalhe.arquivadoEm && !itemDetalhe.conclusaoSolicitadaEm && !itemDetalhe.encerramentoSolicitadoEm && !contratoBloqueado &&
+        {podeEditarEtapa && !itemDetalhe.arquivadoEm && !itemDetalhe.conclusaoSolicitadaEm && !itemDetalhe.encerramentoSolicitadoEm && (Boolean(itemDetalhe.reabertoEm) || !['CONCLUIDA','ENCERRADA','FINALIZADA'].includes(itemDetalhe.status)) && !contratoBloqueado &&
           <BotaoEditarModal rotulo="Editar etapa" onClick={() => { setRetornoEdicao(itemDetalhe.id); setEditor(itemDetalhe.id); }} />}
-        <MenuAcoesObjeto rotulo={itemDetalhe.arquivadoEm || ['CONCLUIDA','ENCERRADA','FINALIZADA'].includes(itemDetalhe.status) ? 'Reabrir' : 'Fechar'}
+        {(itemDetalhe.conclusaoSolicitadaEm || itemDetalhe.encerramentoSolicitadoEm) ? <div className="flex items-center gap-2" aria-label="Decisão pendente da etapa">
+          <button type="button" className="rounded-lg border border-red-500/60 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-500/20 dark:text-red-300 disabled:opacity-35" disabled={ocupadoArquivoEtapa || contratoBloqueado || !(itemDetalhe.conclusaoSolicitadaEm ? permissao('concluirEtapas') : permissao('encerrarEtapas'))}
+            onClick={() => { setMotivoEtapa(''); setDevolverPendente({id:itemDetalhe.id,tipo:itemDetalhe.conclusaoSolicitadaEm?'conclusao':'encerramento'}); }}>Cancelar</button>
+          <button type="button" className="rounded-lg border border-green-600/60 bg-green-600/20 px-3 py-2 text-xs font-semibold text-green-800 hover:bg-green-600/30 dark:text-green-200 disabled:opacity-35" disabled={ocupadoArquivoEtapa || contratoBloqueado || !(itemDetalhe.conclusaoSolicitadaEm ? permissao('concluirEtapas') : permissao('encerrarEtapas'))}
+            onClick={() => itemDetalhe.conclusaoSolicitadaEm ? setAprovarConclusao(itemDetalhe.id) : setAprovarEncerramento(itemDetalhe.id)}>Aprovar</button>
+        </div> : <MenuAcoesObjeto rotulo={itemDetalhe.arquivadoEm || ['CONCLUIDA','ENCERRADA','FINALIZADA'].includes(itemDetalhe.status) ? 'Reabrir' : 'Fechar'}
           disabled={ocupadoArquivoEtapa || salvandoFormulario}
           pendenteConclusao={Boolean(!['CONCLUIDA','ENCERRADA','FINALIZADA'].includes(itemDetalhe.status) && (itemDetalhe.conclusaoSolicitadaEm || etapaPodeSerConcluida(itemDetalhe,entregaveisQuery.dados,documentalQuery.dados)))}
           acaoDireta={itemDetalhe.arquivadoEm && podeReativarEtapa && !contratoBloqueado ? () => { void alterarArquivoEtapa(itemDetalhe.id, 'reativar'); }
@@ -621,17 +626,20 @@ export function PainelEtapas({ contratoId, habilitado, podeGerenciar, permissoes
           {!itemDetalhe.arquivadoEm && podeArquivarEtapa && !contratoBloqueado && !itemDetalhe.conclusaoSolicitadaEm && !itemDetalhe.encerramentoSolicitadoEm &&
             !(itemDetalhe.status==='CONCLUIDA' && !itemDetalhe.reabertoEm) &&
             <BotaoAcaoModal intencao="arquivar" disabled={ocupadoArquivoEtapa} onClick={()=>setConfirmarArquivoEtapa({id:itemDetalhe.id,acao:'arquivar'})}>Arquivar</BotaoAcaoModal>}
-        </MenuAcoesObjeto>
+        </MenuAcoesObjeto>}
         {!itemDetalhe.arquivadoEm && ['ENCERRADA','FINALIZADA'].includes(itemDetalhe.status) && podeArquivarEtapa && !contratoBloqueado && <button type="button" title="Arquivar etapa finalizada" aria-label="Arquivar etapa finalizada" onClick={() => setConfirmarArquivoEtapa({id:itemDetalhe.id, acao:'arquivar'})} disabled={ocupadoArquivoEtapa} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-orange-500/45 bg-orange-500/10 text-orange-700 dark:text-orange-300 hover:bg-orange-500/20 disabled:opacity-40"><IconeStatus tipo="arquivadas" /></button>}
       </> : undefined}>
       {itemDetalhe ? <div className="min-w-0 space-y-4" aria-label={`Detalhes da etapa ${itemDetalhe.nome}`}>
-        <dl data-tec08-secao-contextual className="grid gap-3 rounded-xl border border-brand-green/20 p-4 text-sm sm:grid-cols-2">
-          {([['Código', itemDetalhe.codigo || 'Não informado'], ['Início previsto', dataBR(itemDetalhe.inicioPrevisto)],
-            ['Término previsto', dataBR(itemDetalhe.terminoPrevisto)]] as const)
-            .map(([rotulo, valor]) => <div key={rotulo}><dt className="text-xs text-foreground/60">{rotulo}</dt><dd className="mt-1 break-words">{valor}</dd></div>)}
-        </dl>
-        {itemDetalhe.descricao && <p className="whitespace-pre-wrap break-words text-sm text-foreground/80">{itemDetalhe.descricao}</p>}
-        {itemDetalhe.observacoes && <p className="whitespace-pre-wrap break-words text-sm text-foreground/70"><strong>Observações:</strong> {itemDetalhe.observacoes}</p>}
+        <section data-tec08-secao-contextual aria-label="Informações da etapa" className="min-w-0 space-y-3 rounded-xl border border-current/20 bg-current/[0.025] p-4 text-sm">
+          <h3 className="font-semibold">Identificação e planejamento</h3>
+          <dl className="grid min-w-0 gap-x-4 gap-y-3 sm:grid-cols-3">
+            {([['Código', itemDetalhe.codigo || 'Não informado'], ['Início previsto', dataBR(itemDetalhe.inicioPrevisto)],
+              ['Término previsto', dataBR(itemDetalhe.terminoPrevisto)]] as const)
+              .map(([rotulo, valor]) => <div className="min-w-0" key={rotulo}><dt className="text-xs text-foreground/60">{rotulo}</dt><dd className="mt-1 break-words font-medium">{valor}</dd></div>)}
+          </dl>
+          {itemDetalhe.descricao && <div className="border-t border-current/15 pt-3"><p className="text-xs text-foreground/60">Descrição</p><p className="mt-1 whitespace-pre-wrap break-words text-foreground/85">{itemDetalhe.descricao}</p></div>}
+          {itemDetalhe.observacoes && <div className="border-t border-current/15 pt-3"><p className="text-xs text-foreground/60">Observações</p><p className="mt-1 whitespace-pre-wrap break-words text-foreground/80">{itemDetalhe.observacoes}</p></div>}
+        </section>
         <HistoricoEtapa contratoId={contratoId} etapaId={itemDetalhe.id} />
         {itemDetalhe.avisoVigencia && <p role="note" className="rounded-lg border border-amber-500/35 p-3 text-sm">Atenção: as datas previstas desta etapa estão fora da vigência atual do contrato. Nenhuma data foi alterada automaticamente.</p>}
         <EntregaveisDaEtapa estadoProprioEtapa={itemDetalhe.arquivadoEm ? 'arquivado' : itemDetalhe.reabertoEm ? 'revisao' : itemDetalhe.status === 'CONCLUIDA' ? 'concluido' : itemDetalhe.status === 'FINALIZADA' ? 'finalizado' : itemDetalhe.status === 'ENCERRADA' ? 'encerrado' : 'normal'} contratoId={contratoId} etapaId={itemDetalhe.id} dados={entregaveisQuery.dados}
@@ -662,7 +670,7 @@ export function PainelEtapas({ contratoId, habilitado, podeGerenciar, permissoes
         onConfirmar={() => void executarEncerramentoDireto()} />
     </div>, document.body)}
     {confirmarReaberturaEtapa && createPortal(<div className="relative z-[180]">
-      <ConfirmacaoSimples titulo={etapas?.find(item => item.id === confirmarReaberturaEtapa)?.status === 'ENCERRADA' ? 'Reabrir etapa encerrada?' : 'Reabrir etapa concluída?'} descricao="A etapa ficará marcada como Reaberta. Entregáveis e evidências não serão reabertos automaticamente. O histórico continuará preservado."
+      <ConfirmacaoSimples titulo={etapas?.find(item => item.id === confirmarReaberturaEtapa)?.status === 'ENCERRADA' ? 'Reabrir etapa encerrada?' : 'Reabrir etapa concluída?'} descricao="A etapa entrará Em revisão. Entregáveis e evidências não serão reabertos automaticamente. O histórico continuará preservado."
         confirmar="Reabrir etapa" ocupado={ocupadoArquivoEtapa} justificativa={motivoEtapa} justificativaMinima={15} onJustificativaChange={setMotivoEtapa} onCancelar={() => { setConfirmarReaberturaEtapa(null); setMotivoEtapa(''); }}
         onConfirmar={() => void executarReaberturaEtapa()} />
     </div>, document.body)}

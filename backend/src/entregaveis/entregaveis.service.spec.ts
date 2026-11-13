@@ -138,10 +138,11 @@ describe('HU07-02 — serviço integra escopo, auditoria e transações', () => 
   };
   const auditoria = { registrarResolvedorContexto: jest.fn(), registrarNaTransacao: jest.fn(async () => undefined) };
   const escopos = { registrarAdaptador: jest.fn() };
+  let modoCalculo: 'SIMPLES' | 'PONDERADO' = 'PONDERADO';
   const ctx = {
-    query: jest.fn(async (sql: string) => sql.includes('AS total') ? [{ total: '0' }] : [{ soma: '0' }]),
+    query: jest.fn(async () => [{ soma: '0' }]),
     getRepository: jest.fn((entity: { name: string }) => entity.name === 'Entregavel' ? repositorio : ({
-      findOneBy: jest.fn(async () => ({ id: etapa, ativo: true })),
+      findOneBy: jest.fn(async () => ({ id: etapa, ativo: true, modoCalculo })),
       createQueryBuilder: jest.fn(() => ({ setLock: () => ({ where: () => ({ getOne: async () => ({ id: contrato }) }) }) })),
     })),
   };
@@ -152,7 +153,7 @@ describe('HU07-02 — serviço integra escopo, auditoria e transações', () => 
     auditoria as unknown as AuditoriaService,
     escopos as unknown as ResolverEscopoContratoService,
   );
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => { jest.clearAllMocks(); modoCalculo = 'PONDERADO'; });
 
   it('registra escopo persistido e resolvedor de auditoria, sem confiar no body', async () => {
     service.onModuleInit();
@@ -171,12 +172,20 @@ describe('HU07-02 — serviço integra escopo, auditoria e transações', () => 
       entidadeTipo: 'ENTREGAVEL', entidadeId: id,
     }));
   });
-  it('rejeita mais um entregável quando os pesos ativos já somam 100%', async () => {
-    ctx.query.mockResolvedValueOnce([{ total: '100' }]);
+  it('modo ponderado rejeita peso que excede a parcela restante sem inventar conflito de replanejamento', async () => {
+    ctx.query.mockResolvedValueOnce([{ soma: '100' }]);
     const dto = { etapaId: etapa, nome: 'Entrega adicional', tipo: TipoEntregavel.UNICO,
       inicioPrevisto: '2026-11-01', peso: '1' } as CriarEntregavelDto;
-    await expect(service.criar(contrato, dto, ator)).rejects.toThrow('100% do contrato');
+    await expect(service.criar(contrato, dto, ator)).rejects.toThrow('Apenas 0% restante');
     expect(repositorio.save).not.toHaveBeenCalled();
+  });
+  it('modo simples permite novo entregável mesmo se pesos informativos somam 100%', async () => {
+    modoCalculo = 'SIMPLES';
+    const dto = { etapaId: etapa, nome: 'Novo item em média simples', tipo: TipoEntregavel.UNICO,
+      inicioPrevisto: '2026-11-01', peso: '1' } as CriarEntregavelDto;
+    const resposta = await service.criar(contrato, dto, ator);
+    expect(resposta.id).toBe(id);
+    expect(ctx.query).not.toHaveBeenCalledWith(expect.stringContaining('SUM(peso)'), expect.anything());
   });
   it('bloqueia criação acima de 100 entregáveis, incluindo arquivados', async () => {
     repositorio.count.mockResolvedValueOnce(100);

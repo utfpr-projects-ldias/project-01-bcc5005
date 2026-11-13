@@ -4,7 +4,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, IsNull, QueryFailedError, type EntityManager, type Repository } from 'typeorm';
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
-import { documentacaoVerificada, filhosEmRevisao, filhosPendentesDeConclusao } from '../entregaveis/conclusao-documental.js';
+import { documentacaoVerificada, filhosPendentesDeConclusao } from '../entregaveis/conclusao-documental.js';
 import { ordemAposArquivamento } from './ordem-apos-arquivamento.js';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
@@ -50,9 +50,10 @@ function calendarioValido(data: string): boolean {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === data;
 }
 
-function verificarDados(etapa: Pick<Etapa, 'nome' | 'codigo' | 'inicioPrevisto' | 'terminoPrevisto'>): void {
-  if (!etapa.nome.trim() || etapa.nome.length > 100) {
-    throw new BadRequestException('Nome da etapa é obrigatório e deve ter até 100 caracteres');
+function verificarDados(etapa: Pick<Etapa, 'nome' | 'codigo' | 'inicioPrevisto' | 'terminoPrevisto'>, nomeAnterior?: string): void {
+  // Nomes históricos maiores que o novo limite não são alterados ou truncados.
+  if (!etapa.nome.trim() || (etapa.nome.length > 36 && etapa.nome !== nomeAnterior)) {
+    throw new BadRequestException('Nome da etapa é obrigatório e deve ter até 36 caracteres');
   }
   if (etapa.codigo !== null && (!etapa.codigo.trim() || etapa.codigo.length > 30)) {
     throw new BadRequestException('Código da etapa inválido');
@@ -121,9 +122,10 @@ export class EtapasService {
       .where('c.id = :id', { id })
       .getOne();
     if (!contrato) throw new NotFoundException('Contrato não encontrado');
-    if (contrato.arquivadoEm || (contrato.status === 'CONCLUIDO' || contrato.status === 'ENCERRADO') ||
-      (!somenteConclusao && contrato.reabertoEm === null && await documentacaoVerificada(manager, id) && !await filhosEmRevisao(manager, id)))
-      throw new ConflictException('Reative ou reabra o contrato antes de modificar etapas');
+    // Documentação comprovada não equivale a uma decisão formal de conclusão.
+    // O planejamento só é bloqueado pelo arquivamento/status final expresso.
+    if (contrato.arquivadoEm || ['CONCLUIDO','ENCERRADO','FINALIZADO'].includes(contrato.status))
+      throw new ConflictException('Contrato arquivado ou finalizado: reative ou reabra o contrato antes de modificar etapas');
     return contrato;
   }
 
@@ -178,10 +180,11 @@ export class EtapasService {
         if (!etapa) throw new NotFoundException('Etapa não encontrada');
         if (etapa.arquivadoEm) throw new ConflictException('Reative a etapa antes de editar');
         if (etapa.conclusaoSolicitadaEm || etapa.encerramentoSolicitadoEm) throw new ConflictException('Existe solicitação pendente; devolva a decisão antes de editar a etapa');
-        const somenteMetadados = Object.keys(dto).every(chave => ['nome','codigo','descricao','observacoes'].includes(chave));
-        if ((etapa.status === StatusEtapa.CONCLUIDA || etapa.status === StatusEtapa.ENCERRADA || etapa.status === StatusEtapa.FINALIZADA ||
-          (etapa.reabertoEm === null && await documentacaoVerificada(manager, contratoId, etapaId))) && !somenteMetadados)
-          throw new ConflictException('Etapa finalizada: somente dados descritivos podem ser editados; reabra antes de mudar planejamento ou situação');
+        // Decisão de produto: finalização formal bloqueia TODA edição, inclusive textos.
+        // Um novo ciclo exige reabertura explícita e auditável.
+        if (!etapa.reabertoEm && [StatusEtapa.CONCLUIDA, StatusEtapa.ENCERRADA, StatusEtapa.FINALIZADA].includes(etapa.status))
+          throw new ConflictException('Etapa finalizada. Reabra para revisão antes de editar.');
+        const nomeAnterior = etapa.nome;
         const anterior = snapshot(etapa);
         const datasAnteriores = { inicioPrevisto: etapa.inicioPrevisto, terminoPrevisto: etapa.terminoPrevisto };
         const statusAnterior = etapa.status;
@@ -195,7 +198,7 @@ export class EtapasService {
           etapa.status = dto.status;
         }
         if (dto.observacoes !== undefined) etapa.observacoes = dto.observacoes;
-        verificarDados(etapa);
+        verificarDados(etapa, nomeAnterior);
         const salva = await repo.save(etapa);
         if (salva.status !== statusAnterior) {
           await this.auditoria.registrarNaTransacao(manager, ator, {
@@ -479,7 +482,7 @@ export class EtapasService {
       const etapa = await repo.findOneBy({ id: etapaId, contratoId });
       if (!etapa) throw new NotFoundException('Etapa não encontrada');
       if (etapa.arquivadoEm) throw new ConflictException('Reative a etapa arquivada primeiro');
-      if (etapa.reabertoEm) throw new ConflictException('Etapa já foi reaberta');
+      if (etapa.reabertoEm) throw new ConflictException('Esta etapa já está Em revisão. Use Editar para corrigir os dados permitidos.');
       if (somenteEncerrada !== (etapa.status === StatusEtapa.ENCERRADA || etapa.status === StatusEtapa.FINALIZADA))
         throw new ConflictException('Use a reabertura correspondente ao estado da etapa');
       if (somenteEncerrada && ator.perfil !== PerfilUsuario.ADMINISTRADOR) {

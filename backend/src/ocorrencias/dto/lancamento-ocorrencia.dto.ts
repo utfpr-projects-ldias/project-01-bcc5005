@@ -5,7 +5,7 @@ export class CriarLancamentoOcorrenciaDto {
   @IsUUID() id!: string;
   @IsString() @Matches(/^(?!0+(?:\.0+)?$)\d{1,12}(?:\.\d{1,3})?$/, { message: 'Quantidade deve ser positiva e ter até três decimais.' })
   quantidade!: string;
-  @IsOptional() @IsString() @MaxLength(200) justificativa?: string;
+  @IsOptional() @IsString() @MaxLength(25) justificativa?: string;
 }
 export class CorrigirLancamentoOcorrenciaDto {
   @IsString() @Matches(/^\d{1,12}(?:\.\d{1,3})?$/)

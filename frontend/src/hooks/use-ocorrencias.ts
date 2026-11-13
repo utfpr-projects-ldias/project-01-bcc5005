@@ -10,7 +10,7 @@ export type Ocorrencia = {
   periodoInicio: string | null; periodoFim: string | null;
   dataPrevista: string | null; dataRealizada: string | null;
   status: StatusOcorrencia; motivoEncerramento?: string | null; origem: OrigemOcorrencia; modoRegistro?: 'QUANTITATIVO' | 'DESCRITIVO';
-  exigeAtividade?: boolean; minimoAtividadesVerificadas?:number; minimoEvidenciasVerificadas?:number; evidenciaExigida?: 'NENHUMA'|'FOTO'|'RELATORIO'|'AMBOS'; permiteEncerramentoExcepcional?: boolean;
+  exigeAtividade?: boolean; minimoAtividadesVerificadas?:number; minimoEvidenciasVerificadas?:number; minimoFotos?:number|null; minimoRelatorios?:number|null; minimoEvidenciasLivres?:number|null; pesoPeriodo?:string|null; evidenciaExigida?: 'NENHUMA'|'FOTO'|'RELATORIO'|'AMBOS'; permiteEncerramentoExcepcional?: boolean;
   quantidadeManual?: number; quantidadeAtividadesRegistrada?: number; quantidadeAtividadesVerificada?: number;
   quantidadeRegistrada?: number; quantidadeRestante?: number | null; progressoPercentual?: number | null;
   atividadesVerificadas?: number; atividadesPendentes?: number; evidenciasFoto?: number; evidenciasRelatorio?: number;
@@ -20,7 +20,7 @@ export type Ocorrencia = {
 export type NovaOcorrenciaManual = {
   entregavelId: string; titulo: string; periodoInicio?: string;
   periodoFim?: string; dataPrevista?: string;
-  quantidadeRealizada?: string; metaQuantidade?: string; exigeAtividade?:boolean; minimoAtividadesVerificadas?:number; minimoEvidenciasVerificadas?:number; evidenciaExigida?:'NENHUMA'|'FOTO'|'RELATORIO'|'AMBOS'; permiteEncerramentoExcepcional?:boolean; modoRegistro?: 'QUANTITATIVO' | 'DESCRITIVO'; observacoes?: string;
+  quantidadeRealizada?: string; metaQuantidade?: string; exigeAtividade?:boolean; minimoAtividadesVerificadas?:number; minimoEvidenciasVerificadas?:number; minimoFotos?:number|null; minimoRelatorios?:number|null; minimoEvidenciasLivres?:number|null; pesoPeriodo?:string|null; evidenciaExigida?:'NENHUMA'|'FOTO'|'RELATORIO'|'AMBOS'; permiteEncerramentoExcepcional?:boolean; modoRegistro?: 'QUANTITATIVO' | 'DESCRITIVO'; observacoes?: string;
 };
 export type ConfiguracaoOcorrencias = {
   entregavelId: string; contratoId: string;
@@ -28,7 +28,7 @@ export type ConfiguracaoOcorrencias = {
   quantidadePrevista: string | null; unidadeMedida: string | null;
   periodicidade: string | null; inicioPrevisto: string | null; terminoPrevisto: string | null; modoVisualizacao: 'LISTA' | 'CALENDARIO';
 };
-export type EdicaoOcorrencia = Partial<Pick<Ocorrencia, 'titulo' | 'dataPrevista' | 'dataRealizada' | 'status' | 'quantidadeRealizada' | 'metaQuantidade' | 'observacoes' | 'exigeAtividade' | 'minimoAtividadesVerificadas' | 'minimoEvidenciasVerificadas' | 'evidenciaExigida' | 'permiteEncerramentoExcepcional'>>;
+export type EdicaoOcorrencia = Partial<Pick<Ocorrencia, 'titulo' | 'dataPrevista' | 'dataRealizada' | 'status' | 'quantidadeRealizada' | 'metaQuantidade' | 'observacoes' | 'exigeAtividade' | 'minimoAtividadesVerificadas' | 'minimoEvidenciasVerificadas' | 'minimoFotos' | 'minimoRelatorios' | 'minimoEvidenciasLivres' | 'pesoPeriodo' | 'evidenciaExigida' | 'permiteEncerramentoExcepcional'>>;
 
 export type LancamentoOcorrencia = {id:string;quantidade:string;justificativa:string|null;criadoEm:string;criadoPor:string;alteradoEm:string|null;alteradoPor:string|null};
 export type ComprovanteOcorrencia = {id:string;nomeOriginal:string;tipoEvidencia:string;status:string;vinculado:boolean};
@@ -40,6 +40,10 @@ async function chamadaJson<T>(url:string,init?:RequestInit):Promise<T>{
   if(!r.ok)throw new Error(await mensagemErro(r,'Não foi possível atualizar a ocorrência.'));
   return await r.json() as T;
 }
+export const editarExigenciasOcorrencia=(c:string,o:string,dados:EdicaoOcorrencia)=>
+  chamadaJson<Ocorrencia>(`${rotaOcorrencia(c,o)}/exigencias`,{method:'PATCH',body:JSON.stringify(dados)});
+export const editarPesoOcorrencia=(c:string,o:string,pesoPeriodo:string|null)=>
+  chamadaJson<Ocorrencia>(`${rotaOcorrencia(c,o)}/peso`,{method:'PATCH',body:JSON.stringify({pesoPeriodo})});
 export const listarLancamentosOcorrencia=(c:string,o:string)=>chamadaJson<LancamentoOcorrencia[]>(`${rotaOcorrencia(c,o)}/lancamentos`);
 export const criarLancamentoOcorrencia=(c:string,o:string,id:string,quantidade:string,justificativa='')=>
   chamadaJson<{id:string;quantidadeExecutada:number}>(`${rotaOcorrencia(c,o)}/lancamentos`,{method:'POST',body:JSON.stringify({id,quantidade,justificativa})});
@@ -119,6 +123,8 @@ export function useOcorrencias(contratoId: string) {
     },
     gerarOcorrenciasRecorrentes: async (entregavelId: string, requisitos?: {
       minimoAtividadesVerificadas: number; minimoEvidenciasVerificadas: number;
+      minimoFotos?:number; minimoRelatorios?:number; minimoEvidenciasLivres?:number;
+      modoRegistro?:'DESCRITIVO'|'QUANTITATIVO'; metaQuantidade?:string;
       evidenciaExigida: 'NENHUMA'|'FOTO'|'RELATORIO'|'AMBOS'; permiteEncerramentoExcepcional: boolean;
     }): Promise<number> => {
       if (!contratoId || !entregavelId) throw new Error('Selecione um contrato e um entregável recorrente.');

@@ -97,7 +97,7 @@ test('barra da comprovação preenche da esquerda para a direita por contagem, n
   }));
   render(<ConteudoEntregavel item={{ ...item, evidenciasEsperadas: evidencias }} podeCriarEvidencia />);
   const barra = await screen.findByRole('img', { name: '1 de 4 evidências obrigatórias verificadas' });
-  await waitFor(() => expect(screen.getByText('1/4 evidências obrigatórias verificadas')).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByText('1/4 evidências obrigatórias')).toBeInTheDocument());
   const segmentos = Array.from(barra.children);
   expect(segmentos).toHaveLength(4);
   expect(segmentos[0]).toHaveClass('bg-violet-500');
@@ -233,7 +233,7 @@ test('Ativas e Concluídas separam evidências sem perder a contagem obrigatóri
     { id: 'e1', tipoEvidencia: 'Relatório', descricao: null, obrigatoria: true },
     { id: 'e2', tipoEvidencia: 'Foto', descricao: null, obrigatoria: false },
   ] }} />);
-  expect(await screen.findByText('1/1 evidências obrigatórias verificadas')).toBeInTheDocument();
+  expect(await screen.findByText('1/1 evidências obrigatórias')).toBeInTheDocument();
   expect(screen.getByText('0/1 opcionais verificadas · não bloqueiam a conclusão')).toBeInTheDocument();
   expect(screen.getByRole('list', { name: 'Evidências opcionais' })).toBeInTheDocument();
   expect(screen.queryByRole('list', { name: 'Evidências obrigatórias' })).not.toBeInTheDocument();
@@ -250,7 +250,7 @@ test('clicar no espaço do cartão de evidência abre o mesmo detalhe do título
   const exemplo = { ...item, evidenciasEsperadas: [{ id: 'evid-card', tipoEvidencia: 'Relatório', descricao: 'Inspecionar', obrigatoria: true }] };
   render(<ConteudoEntregavel item={exemplo} />);
   await waitFor(() => expect(consultar).toHaveBeenCalledWith('contrato-qa', 'entregavel-qa', 'evid-card'));
-  expect(await screen.findByText('0/1 evidências obrigatórias verificadas', {}, { timeout: 3000 })).toBeInTheDocument();
+  expect(await screen.findByText('0/1 evidências obrigatórias', {}, { timeout: 3000 })).toBeInTheDocument();
   const card = await screen.findByLabelText('Abrir detalhes da evidência Relatório');
   // A área clicável do título cobre todo o cartão, inclusive espaços vazios,
   // sem sobrepor os botões de edição/arquivamento no rodapé.

@@ -83,6 +83,12 @@ export class OcorrenciasController {
     );
   }
 
+  @Post('ocorrencias/iniciar-previstas')
+  @ExigirPoliticaOperacional('ocorrencias:editar',{tipo:'contrato',parametro:'contratoId'})
+  iniciarPrevistas(@Param('contratoId') contratoId:string,@Req() req:RequisicaoAutorizada) {
+    return this.ocorrenciasService.iniciarPrevistas(contratoId,req.usuarioDominio!);
+  }
+
   @Get('ocorrencias')
   @ExigirPoliticaOperacional('ocorrencias:listar', {
     tipo: 'contrato',
@@ -116,13 +122,13 @@ export class OcorrenciasController {
     return this.ocorrenciasService.listarLancamentos(contratoId,id);
   }
   @Post('ocorrencias/:ocorrenciaId/lancamentos')
-  @ExigirPoliticaOperacional('ocorrencias:registrar',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})
+  @ExigirPoliticaOperacional('ocorrencias:visualizar',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})
   registrarLancamento(@Param('contratoId') contratoId:string,@Param('ocorrenciaId') id:string,
     @Body() dto:CriarLancamentoOcorrenciaDto,@Req() req:RequisicaoAutorizada) {
     return this.ocorrenciasService.registrarLancamento(contratoId,id,dto.id,dto.quantidade,dto.justificativa,req.usuarioDominio!);
   }
   @Patch('ocorrencias/:ocorrenciaId/lancamentos/:lancamentoId')
-  @ExigirPoliticaOperacional('ocorrencias:registrar',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})
+  @ExigirPoliticaOperacional('ocorrencias:visualizar',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})
   corrigirLancamento(@Param('contratoId') contratoId:string,@Param('ocorrenciaId') id:string,
     @Param('lancamentoId') lancamentoId:string,@Body() dto:CorrigirLancamentoOcorrenciaDto,@Req() req:RequisicaoAutorizada) {
     return this.ocorrenciasService.corrigirLancamento(contratoId,id,lancamentoId,dto.quantidade,dto.justificativa,req.usuarioDominio!);
@@ -149,6 +155,20 @@ export class OcorrenciasController {
   historico(@Param('contratoId') contratoId:string,@Param('ocorrenciaId') id:string) {
     return this.ocorrenciasService.historico(contratoId,id);
   }
+  @Patch('ocorrencias/:ocorrenciaId/exigencias')
+  @ExigirPoliticaOperacional('ocorrencias:visualizar',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})
+  atualizarExigencias(@Param('contratoId') contratoId: string, @Param('ocorrenciaId') id: string,
+    @Body() dto: AtualizarOcorrenciaDto, @Req() req: RequisicaoAutorizada) {
+    return this.ocorrenciasService.atualizar(contratoId,id,dto,req.usuarioDominio!,'EXIGENCIAS');
+  }
+
+  @Patch('ocorrencias/:ocorrenciaId/peso')
+  @ExigirPoliticaOperacional('ocorrencias:visualizar',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})
+  atualizarPeso(@Param('contratoId') contratoId: string, @Param('ocorrenciaId') id: string,
+    @Body() dto: AtualizarOcorrenciaDto, @Req() req: RequisicaoAutorizada) {
+    return this.ocorrenciasService.atualizar(contratoId,id,dto,req.usuarioDominio!,'PESO');
+  }
+
   @Post('ocorrencias/:ocorrenciaId/iniciar')
   @ExigirPoliticaOperacional('ocorrencias:editar', { tipo: 'recurso', recurso: 'ocorrencia', parametro: 'ocorrenciaId', parametroContratoPai: 'contratoId' })
   iniciar(@Param('contratoId') contratoId: string, @Param('ocorrenciaId') id: string, @Req() req: RequisicaoAutorizada) {

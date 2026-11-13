@@ -377,9 +377,9 @@ export class ContratosService {
       if (!contrato) throw new NotFoundException('Contrato não encontrado');
       if (contrato.status === 'CANCELADO') throw new ConflictException('Contrato cancelado requer reversão específica antes de arquivar');
       if (contrato.status === 'SUSPENSO') throw new ConflictException('Retome o contrato suspenso antes de arquivar');
-      if (arquivar && ((['CONCLUIDO','ENCERRADO','FINALIZADO'].includes(contrato.status)) ||
-        (contrato.reabertoEm === null && await documentacaoVerificada(manager, id))))
-        throw new ConflictException('Contrato concluído: reabra antes de arquivar.');
+      // Arquivamento administrativo não modifica status físico, evidências nem
+      // auditoria. Um contrato finalizado também pode ser arquivado pelo ADMIN.
+
       if (Boolean(contrato.arquivadoEm) === arquivar) {
         throw new ConflictException(arquivar ? 'Contrato já está arquivado' : 'Contrato não está arquivado');
       }
@@ -422,7 +422,7 @@ export class ContratosService {
 
   async consultarElegibilidadeConclusao(id: string): Promise<{apto: boolean; pendencias: string[]; solicitada: boolean}> {
     const contrato = await this.detalhar(id);
-    const bloqueado = Boolean(contrato.arquivadoEm || contrato.reabertoEm ||
+    const bloqueado = Boolean(contrato.arquivadoEm ||
       ['CONCLUIDO','FINALIZADO','ENCERRADO','SUSPENSO','CANCELADO'].includes(contrato.status));
     const pendencias = bloqueado ? ['O contrato não está aberto para solicitar conclusão.'] :
       await this.pendenciasParaConclusao(this.contratos.manager, id);
@@ -440,19 +440,23 @@ export class ContratosService {
         if (!vinculo || !permissoesEfetivas(ator.perfil, vinculo.podeEditar, vinculo.permissoesDetalhadas).editarContrato)
           throw new ForbiddenException('Sem permissão para solicitar conclusão');
       }
-      if (contrato.arquivadoEm || contrato.reabertoEm ||
+      if (contrato.arquivadoEm ||
           !['PLANEJAMENTO','EM_EXECUCAO','EM_ENCERRAMENTO'].includes(contrato.status))
         throw new ConflictException('Contrato não está aberto para conclusão');
       if (contrato.conclusaoSolicitadaEm) throw new ConflictException('Já existe uma solicitação de conclusão pendente');
       const pendencias = await this.pendenciasParaConclusao(manager, id);
       if (pendencias.length) throw new ConflictException(pendencias[0]);
+      const revisaoAnterior = contrato.reabertoEm ?? null;
+      // O pedido substitui o fechamento intermediário da revisão, sem conceder aprovação.
+      // A mesma avaliação de pendências protege ambos os caminhos.
+      contrato.reabertoEm = null;
       contrato.conclusaoSolicitadaEm = new Date();
       contrato.conclusaoSolicitadaPor = ator.id;
       const salvo = await repo.save(contrato);
       return { resultado: salvo, evento: { acao: AcaoAuditoria.CONTRATO_STATUS_ALTERADO,
         entidadeTipo: 'CONTRATO' as const, entidadeId: id,
-        dadosAnteriores: { conclusaoSolicitadaEm: null },
-        dadosPosteriores: { conclusaoSolicitadaEm: salvo.conclusaoSolicitadaEm, solicitadaPor: ator.id,
+        dadosAnteriores: { conclusaoSolicitadaEm: null, reabertoEm: revisaoAnterior },
+        dadosPosteriores: { conclusaoSolicitadaEm: salvo.conclusaoSolicitadaEm, reabertoEm: null, solicitadaPor: ator.id,
           tipo: 'SOLICITACAO_CONCLUSAO' } } };
     });
   }
@@ -827,9 +831,10 @@ export class ContratosService {
       const existente = await repo.findOneBy({ id });
       if (!existente) throw new NotFoundException('Contrato não encontrado');
       if (existente.arquivadoEm) throw new ConflictException('Contrato arquivado. Reative antes de editar.');
-      if (existente.status === 'CONCLUIDO' || existente.status === 'ENCERRADO' || existente.status === 'CANCELADO' || existente.status === 'SUSPENSO' ||
-        (existente.reabertoEm === null && await documentacaoVerificada(manager, id)))
-        throw new ConflictException('Contrato concluído: reabra antes de editar.');
+      // Não inferir conclusão a partir do checklist documental. O estado
+      // operacional só fica bloqueado após decisão expressa de encerramento.
+      if (['CONCLUIDO','ENCERRADO','FINALIZADO','CANCELADO','SUSPENSO'].includes(existente.status))
+        throw new ConflictException('Contrato finalizado, cancelado ou suspenso: reabra ou retome antes de editar.');
       if (dto.responsavelInternoId !== undefined) {
         if (ator.perfil !== PerfilUsuario.ADMINISTRADOR && dto.responsavelInternoId !== existente.responsavelInternoId) {
           throw new ForbiddenException('Somente Administrador pode alterar o responsável interno');

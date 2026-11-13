@@ -84,7 +84,7 @@ export function ConfirmacaoSimples({ titulo, descricao, confirmar, ocupado = fal
           <button ref={cancelarRef} type="button" disabled={ocupado} onClick={onCancelar}
             className={`inline-flex min-h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold transition disabled:opacity-50 focus-visible:outline-2 ${cores.foco} ${cancelarVermelho ? "border border-red-500/65 bg-red-600 text-white hover:bg-red-500" : `border ${cores.borda} hover:bg-current/10`}`}>Cancelar</button>
           <button ref={confirmarRef} type="button" aria-busy={ocupado} disabled={ocupado || Boolean(onJustificativaChange && ((justificativa ?? '').trim().length < justificativaMinima || (justificativa ?? '').trim().length > 200))} onClick={onConfirmar}
-            data-tec08-confirmar="true" data-tec08-acao-roxa={confirmacaoRoxa || undefined} data-tec08-acao-aprovar={aprovarVerde || undefined} className={`inline-flex min-h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-lg border px-3 py-2 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-65 ${corBotao} ${cores.foco}`}>
+            data-tec08-confirmar="true" data-pi-intencao-confirmacao={confirmacaoArquivo ? 'arquivado' : estadoDaAcao} data-tec08-acao-roxa={confirmacaoRoxa || undefined} data-tec08-acao-aprovar={aprovarVerde || undefined} className={`inline-flex min-h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-lg border px-3 py-2 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-65 ${corBotao} ${cores.foco}`}>
             {ocupado ? "Aguarde..." : confirmar}
           </button>
         </div>

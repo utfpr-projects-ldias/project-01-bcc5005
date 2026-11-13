@@ -30,7 +30,7 @@ export type OperacaoPermissao =
   'criarEntregaveis' | 'editarEntregaveis' | 'arquivarEntregaveis' | 'reativarEntregaveis' | 'reabrirEntregaveis' | 'concluirEntregaveis' | 'excluirEntregaveisArquivados' |
   'criarEvidencias' | 'editarEvidencias' | 'arquivarEvidencias' | 'reativarEvidencias' | 'reabrirEvidencias' | 'excluirEvidenciasArquivadas' |
   'alterarObrigatoriedade' | 'enviarComprovantes' | 'verificarComprovantes' |
-  'criarOcorrencias' | 'editarOcorrencias' | 'concluirOcorrencias' | 'reabrirOcorrencias' | 'configurarAgendaOcorrencias' | 'editarExecucaoFisica' | 'configurarPesos' |
+  'criarOcorrencias' | 'editarOcorrencias' | 'editarExigenciasOcorrencia' | 'editarPesoOcorrencia' | 'registrarExecucaoOcorrencia' | 'corrigirExecucaoOcorrencia' | 'concluirOcorrencias' | 'reabrirOcorrencias' | 'configurarAgendaOcorrencias' | 'editarExecucaoFisica' | 'configurarPesos' |
   'registrarAtividades' | 'editarAtividades' | 'verificarAtividades' | 'reabrirAtividades' | 'arquivarAtividades' | 'reativarAtividades' | 'excluirAtividadesArquivadas' |
   'editarContrato' | 'concluirContrato' | 'encerrarContrato' | 'reabrirContrato' | 'cancelarContrato' | 'reverterCancelamentoContrato' | 'suspenderContrato' | 'retomarContrato' | 'verificarDocumentos' | 'reabrirDocumentos' | 'verificarDocumentoPrincipal' | 'reabrirDocumentoPrincipal' | 'anexarDocumentos' | 'editarDocumentos' | 'arquivarDocumentos' | 'reativarDocumentos' | 'excluirDocumentosArquivados' | 'arquivarDocumentoPrincipal' | 'reativarDocumentoPrincipal' | 'excluirDocumentoPrincipal';
 export type PermissaoFuncionario = { contratoId: string; podeEditar: boolean;
@@ -38,6 +38,10 @@ export type PermissaoFuncionario = { contratoId: string; podeEditar: boolean;
 export const OPERACOES_CONTRATO: ReadonlyArray<{ chave: OperacaoPermissao; rotulo: string }> = [
   { chave: 'criarOcorrencias', rotulo: 'Cadastrar ocorrências' },
   { chave: 'editarOcorrencias', rotulo: 'Editar ocorrências abertas' },
+  { chave: 'editarExigenciasOcorrencia', rotulo: 'Editar mínimos de atividades e evidências por ocorrência' },
+  { chave: 'editarPesoOcorrencia', rotulo: 'Editar peso de uma ocorrência da série' },
+  { chave: 'registrarExecucaoOcorrencia', rotulo: 'Registrar execução manual em ocorrência' },
+  { chave: 'corrigirExecucaoOcorrencia', rotulo: 'Corrigir lançamento de execução manual' },
   { chave: 'concluirOcorrencias', rotulo: 'Aprovar conclusão de ocorrências (especial)' },
   { chave: 'reabrirOcorrencias', rotulo: 'Reabrir ocorrências aprovadas ou pendentes (especial)' },
   { chave: 'configurarAgendaOcorrencias', rotulo: 'Gerar e replanejar agenda recorrente' },
@@ -126,7 +130,7 @@ export function permissoesPadraoVinculo(
   // Acesso de edição padrão: planejar, ordenar e arquivar. Reativação, exclusão,
   // bloqueio da ordem e gestão do documento principal requerem delegação especial.
   const operacoesBasicas: OperacaoPermissao[] = [
-    'criarOcorrencias', 'editarOcorrencias', 'configurarAgendaOcorrencias', 'editarExecucaoFisica',
+    'criarOcorrencias', 'editarOcorrencias', 'editarExigenciasOcorrencia', 'editarPesoOcorrencia', 'registrarExecucaoOcorrencia', 'corrigirExecucaoOcorrencia', 'configurarAgendaOcorrencias', 'editarExecucaoFisica',
     'registrarAtividades', 'editarAtividades',
     'criarEtapas', 'editarEtapas', 'reordenarEtapas', 'arquivarEtapas',
     'criarEntregaveis', 'editarEntregaveis', 'arquivarEntregaveis',

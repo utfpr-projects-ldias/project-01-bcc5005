@@ -5,7 +5,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, ILike, In, IsNull, Not, QueryFailedError, Repository } from 'typeorm';
 
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
-import { documentacaoVerificada, filhosEmRevisao, concluirEtapaAposFilhos, atividadesPendentesDeVerificacao } from './conclusao-documental.js';
+import { documentacaoVerificada, concluirEtapaAposFilhos, atividadesPendentesDeVerificacao } from './conclusao-documental.js';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import { EventoAuditoria } from '../auditoria/evento-auditoria.entity.js';
 import { ResolverEscopoContratoService } from '../autorizacao/resolver-escopo-contrato.service.js';
@@ -53,8 +53,9 @@ function textoObrigatorio(valor: string | null, limite: number): boolean {
   return typeof valor === 'string' && valor.trim().length > 0 && valor.length <= limite;
 }
 
-export function validarPlanejamento(e: Entregavel): void {
-  if (!textoObrigatorio(e.nome, 255)) throw new BadRequestException('Nome obrigatório e limitado a 255 caracteres');
+export function validarPlanejamento(e: Entregavel, nomeAnterior?: string): void {
+  if (!e.nome?.trim() || (e.nome.length > 42 && e.nome !== nomeAnterior))
+    throw new BadRequestException('Nome obrigatório e limitado a 42 caracteres');
   for (const [campo, valor, limite] of [
     ['Código', e.codigo, 50], ['Unidade', e.unidadeMedida, 80],
     ['Descrição', e.descricao, 3000], ['Observações', e.observacoes, 3000],
@@ -283,17 +284,16 @@ export class EntregaveisService implements OnModuleInit {
       .setLock('pessimistic_write').where('c.id = :contratoId', { contratoId }).getOne();
     if (!contrato) throw new NotFoundException('Contrato não encontrado');
     if (contrato.arquivadoEm) throw new ConflictException('Contrato arquivado: planejamento bloqueado');
-    if ((contrato.status === 'CONCLUIDO' || contrato.status === 'ENCERRADO') ||
-      (!somenteConclusao && contrato.reabertoEm === null && await documentacaoVerificada(m, contratoId) && !await filhosEmRevisao(m, contratoId)))
-      throw new ConflictException('Contrato concluído: reabra antes de modificar o planejamento');
+    if (contrato.status === 'CONCLUIDO' || contrato.status === 'ENCERRADO' || contrato.status === 'FINALIZADO')
+      throw new ConflictException('Contrato finalizado: reabra o contrato antes de modificar o planejamento');
   }
 
   private async validarEtapa(m: EntityManager, contratoId: string, etapaId: string, somenteLeitura = false): Promise<void> {
     const etapa = await m.getRepository(Etapa).findOneBy({ id: etapaId, contratoId });
     if (!etapa) throw new NotFoundException('Etapa não encontrada neste contrato');
     if (!somenteLeitura && (etapa.conclusaoSolicitadaEm || etapa.encerramentoSolicitadoEm || etapa.arquivadoEm || etapa.status === 'CONCLUIDA' || etapa.status === 'ENCERRADA' ||
-      (etapa.reabertoEm === null && await documentacaoVerificada(m, contratoId, etapaId))))
-      throw new ConflictException('Reative ou reabra a etapa antes de alterar entregáveis');
+      etapa.status === 'FINALIZADA'))
+      throw new ConflictException('Etapa finalizada ou com decisão pendente: reabra ou resolva a solicitação antes de alterar entregáveis');
   }
 
   private async validarResponsavel(m: EntityManager, id: string | null): Promise<void> {
@@ -386,6 +386,11 @@ export class EntregaveisService implements OnModuleInit {
    * mesmo para requisições que não passam pelo formulário React. */
   private async validarPesoNoContrato(m: EntityManager, contratoId: string, peso: string | null | undefined, excetoId?: string) {
     if (peso == null) return;
+    // A distribuição de pesos limita apenas o modo PONDERADO. No SIMPLES,
+    // novos entregáveis continuam possíveis independentemente da soma histórica.
+    const contrato = await m.getRepository(Contrato).findOneBy({ id: contratoId });
+    if (!contrato) throw new NotFoundException('Contrato não encontrado');
+    if (contrato.modoCalculo === 'SIMPLES') return;
     const linhas = await m.query(`SELECT COALESCE(SUM(peso), 0)::text AS soma FROM "entregaveis"
       WHERE "contrato_id" = $1 AND "arquivado_em" IS NULL AND ($2::uuid IS NULL OR "id" <> $2::uuid)`,
       [contratoId, excetoId ?? null]) as Array<{ soma: string }>;
@@ -403,13 +408,9 @@ export class EntregaveisService implements OnModuleInit {
         // concorrentes. Arquivados contam: arquivar não libera capacidade.
         const quantidade = await m.getRepository(Entregavel).count({ where: { contratoId } });
         if (quantidade >= 100) throw new ConflictException('Limite de 100 entregáveis por contrato atingido.');
-        // O peso operacional representa parcelas da realização contratual.
-        // Não permitir criar um entregável extra após todo o contrato estar alocado,
-        // mesmo que o cliente tente contornar a interface omitindo o campo peso.
-        const ocupacao = await m.query(`SELECT COALESCE(SUM(peso), 0)::numeric AS total FROM entregaveis
-          WHERE contrato_id=$1 AND arquivado_em IS NULL`, [contratoId]) as Array<{ total: string }>;
-        if (Number(ocupacao[0]?.total ?? 0) >= 99.99999)
-          throw new ConflictException('Os entregáveis existentes já representam 100% do contrato. Redistribua os pesos para cadastrar outro entregável.');
+        // Quantidade de itens e soma ponderada são validações independentes.
+        // O limite real de pesos (no modo PONDERADO) é validado abaixo com
+        // mensagem específica; nunca alegar conflito de replanejamento aqui.
         await this.validarResponsavel(m, dto.responsavelId ?? null);
         await this.validarPesoNoContrato(m, contratoId, dto.peso);
         if (dto.evidenciasEsperadas?.some((item) => item.id)) {
@@ -525,6 +526,35 @@ export class EntregaveisService implements OnModuleInit {
     });
   }
 
+  /** Devolução auditada de uma solicitação; não aprova nem altera a execução física. */
+  async devolverSolicitacao(contratoId: string, id: string, motivo: string, ator: UsuarioAutenticado) {
+    const justificativa = motivo?.trim() ?? '';
+    if (justificativa.length < 15 || justificativa.length > 200)
+      throw new BadRequestException('Justifique a devolução com 15 a 200 caracteres');
+    return this.dataSource.transaction(async m => {
+      await this.bloquearContrato(m, contratoId, true);
+      await this.validarPermissaoDecisao(m, contratoId, ator);
+      const e = await m.findOne(Entregavel, { where: { contratoId, id }, lock: { mode: 'pessimistic_write' } });
+      if (!e || e.arquivadoEm) throw new NotFoundException('Entregável indisponível');
+      if (!['PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? ''))
+        throw new ConflictException('Não existe solicitação pendente para devolver');
+      const anterior = { statusExecucao: e.statusExecucao, motivoFinalizacao: e.motivoFinalizacao };
+      // Não existe EM_REVISAO no enum do entregável: o marcador reabertoEm
+      // representa a revisão sem modificar o vocabulário persistido.
+      e.statusExecucao = 'EM_ANDAMENTO' as Entregavel['statusExecucao'];
+      e.reabertoEm = new Date();
+      e.motivoFinalizacao = null;
+      const salvo = await m.save(Entregavel, e);
+      await this.auditoria.registrarNaTransacao(m, ator, {
+        acao: AcaoAuditoria.ENTREGAVEL_STATUS_ALTERADO, entidadeTipo: 'ENTREGAVEL', entidadeId: id,
+        dadosAnteriores: anterior,
+        dadosPosteriores: { statusExecucao: salvo.statusExecucao, reabertoEm: salvo.reabertoEm,
+          justificativa, decisao: 'SOLICITACAO_DEVOLVIDA', devolvidoPor: ator.id },
+      });
+      return visao(salvo, await this.itens(m, id));
+    });
+  }
+
   async solicitarEncerramento(contratoId: string, id: string, motivo: string, ator: UsuarioAutenticado) {
     const justificativa = motivo?.trim() ?? '';
     if (justificativa.length < 15 || justificativa.length > 200)
@@ -561,6 +591,7 @@ export class EntregaveisService implements OnModuleInit {
       // Cada ocorrência conserva o status histórico e continua visível no detalhe.
       const anterior = { statusExecucao: e.statusExecucao };
       e.statusExecucao = 'FINALIZADO' as Entregavel['statusExecucao'];
+      e.reabertoEm = null;
       e.finalizadoEm = new Date();
       // Nunca escreve 100% fictício em percentualExecucao: TEC09 calcula a
       // execução real com ocorrências concluídas / quantidades aprovadas.
@@ -581,8 +612,9 @@ export class EntregaveisService implements OnModuleInit {
       if (!e) throw new NotFoundException('Entregável não encontrado neste contrato');
       if (e.arquivadoEm) throw new ConflictException('Reative o entregável arquivado primeiro');
       const etapaPai = await m.getRepository(Etapa).findOneBy({ id: e.etapaId, contratoId });
-      if (!etapaPai || etapaPai.arquivadoEm || etapaPai.status === 'CONCLUIDA' ||
-        (etapaPai.reabertoEm === null && await documentacaoVerificada(m, contratoId, e.etapaId)))
+      if (!etapaPai || etapaPai.arquivadoEm ||
+        (!etapaPai.reabertoEm && (['CONCLUIDA', 'ENCERRADA', 'FINALIZADA'].includes(etapaPai.status) ||
+          await documentacaoVerificada(m, contratoId, e.etapaId))))
         throw new ConflictException('Reabra a etapa antes de reabrir seu entregável');
       if (e.reabertoEm) throw new ConflictException('Entregável já foi reaberto');
       const operacional = e.statusExecucao === 'CONCLUIDO' || e.statusExecucao === 'FINALIZADO';
@@ -619,10 +651,9 @@ export class EntregaveisService implements OnModuleInit {
         const camposInformados = Object.keys(dto).filter(campo => (dto as unknown as Record<string, unknown>)[campo] !== undefined);
         const camposMetadados = new Set(['nome','codigo','descricao','observacoes','criterioConclusao']);
         const somenteMetadados = camposInformados.every(campo => camposMetadados.has(campo));
-        const finalizado = ['CONCLUIDO','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? '') ||
-          (e.reabertoEm === null && await documentacaoVerificada(m, contratoId, e.etapaId, id));
-        if (finalizado && !somenteMetadados)
-          throw new ConflictException('Entregável finalizado: somente dados descritivos podem ser editados; reabra para alterar planejamento ou execução');
+        const finalizado = !e.reabertoEm && ['CONCLUIDO','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? '');
+        if (finalizado)
+          throw new ConflictException('Entregável com decisão pendente ou finalizado. Devolva a solicitação ou reabra antes de editar.');
         if (dto.tipo !== undefined && dto.tipo !== e.tipo)
           throw new ConflictException('O tipo do entregável é imutável. Para utilizar outro tipo, crie um novo entregável.');
         // A política entregaveis:editar NÃO delega pesos ou o replanejamento
@@ -663,6 +694,7 @@ export class EntregaveisService implements OnModuleInit {
           return visao(salvo, await this.itens(m, id));
         }
         const anterior = snapshot(e);
+        const nomeAnterior = e.nome;
         const antes = { tipo: e.tipo, etapaId: e.etapaId, periodicidade: e.periodicidade,
           configuracaoPeriodicidade: e.configuracaoPeriodicidade,
           inicioPrevisto: e.inicioPrevisto, terminoPrevisto: e.terminoPrevisto };
@@ -678,7 +710,7 @@ export class EntregaveisService implements OnModuleInit {
           }
         }
         if (e.tipo !== antes.tipo && (e.percentualExecucao != null || e.quantidadeRealizada != null || e.dataEfetivaMarco != null)) throw new ConflictException('Tipo não pode mudar após registrar execução física. Preserve o histórico.');
-        validarPlanejamento(e);
+        validarPlanejamento(e, nomeAnterior);
         await this.validarPesoNoContrato(m, contratoId, e.peso, id);
         await this.validarEtapa(m, contratoId, e.etapaId);
         await this.validarResponsavel(m, e.responsavelId);
