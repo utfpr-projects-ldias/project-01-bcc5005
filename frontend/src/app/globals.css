@@ -1982,3 +1982,28 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
   --tec08-entidade-texto: #d8b4fe;
   --tec08-entidade-borda: #a855f7;
 }
+
+/* PATCH30: cartões internos têm identidade própria, independente do contrato-pai. */
+.contrato-detalhe-documental [data-tec09-painel-execucao] [data-tec08-estado],
+.contrato-detalhe-documental #painel-etapas [data-etapa-estado] {
+  color: var(--foreground);
+}
+.contrato-detalhe-documental [data-tec09-painel-execucao] [data-tec08-estado="nao-iniciado"] {
+  --tec08-status-border: #737373; --tec08-status-heading: #d4d4d4;
+}
+.contrato-detalhe-documental [data-tec09-painel-execucao] [data-tec08-estado="andamento"] {
+  --tec08-status-border: #84cc16; --tec08-status-heading: #bef264;
+}
+.contrato-detalhe-documental [data-tec09-painel-execucao] [data-tec08-estado="concluido"] {
+  --tec08-status-border: #a78bfa; --tec08-status-heading: #c4b5fd;
+}
+.contrato-detalhe-documental [data-tec09-painel-execucao] [data-tec08-estado="finalizado"] {
+  --tec08-status-border: #a855f7; --tec08-status-heading: #d8b4fe;
+}
+.contrato-detalhe-documental [data-tec09-painel-execucao] [data-tec08-secao-contextual],
+.contrato-detalhe-documental [data-tec09-painel-execucao] article[data-tec08-estado] {
+  border-color: var(--tec08-status-border) !important;
+}
+.contrato-detalhe-documental [data-tec09-painel-execucao] article[data-tec08-estado] [data-pi-titulo] {
+  color: var(--tec08-status-heading) !important;
+}

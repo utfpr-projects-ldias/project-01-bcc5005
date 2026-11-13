@@ -27,6 +27,8 @@ export type Contrato = {
   encerradoEm?: string | null;
   encerradoPor?: string | null;
   motivoEncerramento?: string | null;
+  conclusaoSolicitadaEm?: string | null;
+  conclusaoSolicitadaPor?: string | null;
 };
 export type DadosContrato = Omit<Contrato, 'id' | 'codigoPublico' | 'ordemEtapasBloqueada' | 'arquivadoEm' | 'arquivadoPor' | 'reabertoEm' | 'encerradoEm' | 'encerradoPor' | 'motivoEncerramento'> & { retomarOperacao?: boolean };
 /** Formato apenas de leitura: o servidor gera e mantém esse valor. */
@@ -178,3 +180,10 @@ export function terminoPorMeses(inicio: string, meses: number): string | null {
 }
 
 export function dataCivil(valor: string | null | undefined): string { return valor?.slice(0, 10) ?? ''; }
+
+/** Pré-validação retornada pela API; não substitui checagem transacional na gravação. */
+export type ElegibilidadeConclusao = { apto: boolean; solicitada: boolean; pendencias: string[] };
+export const consultarElegibilidadeConclusao = (id: string, signal?: AbortSignal) =>
+  requisitar<ElegibilidadeConclusao>(`/contratos/${encodeURIComponent(id)}/elegibilidade-conclusao`, { signal });
+export const solicitarConclusaoContrato = (id: string) =>
+  requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/solicitar-conclusao`, { method: 'PATCH' });

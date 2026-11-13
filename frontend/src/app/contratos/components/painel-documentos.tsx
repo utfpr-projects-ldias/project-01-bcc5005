@@ -7,6 +7,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSy
 import { createPortal } from 'react-dom';
 import { ModalEtapa } from './modal-etapa';
 import { IconeStatus } from '@/app/components/icones-status';
+import { IconeEngrenagem } from '@/app/components/icone-engrenagem';
 import { ajustarRestauracaoHistorico } from '@/lib/historico-modal-scroll';
 import {
   CATEGORIAS_DOCUMENTO, EXTENSOES_PROVISORIAS, ErroDocumento,
@@ -16,6 +17,7 @@ import {
 import { useDocumentos, useEnviarDocumento } from '@/hooks/use-documentos';
 import { IndicadorCarregamento } from '@/app/components/indicador-carregamento';
 import { ConfirmacaoSimples } from '@/app/components/confirmacao-simples';
+import { MenuAcoesObjeto } from '@/app/components/menu-acoes-objeto';
 import { arquivarDocumento, reativarDocumento, editarDocumento, verificarDocumento, reabrirDocumento, type DocumentoContratual } from '@/lib/documentos';
 
 const categorias = Object.entries(CATEGORIAS_DOCUMENTO) as [CategoriaDocumento, string][];
@@ -221,7 +223,8 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
     if (!documento || salvandoMetadados || (somenteLeitura && !(permitirRegularizarPrincipal && documento.categoria === 'CONTRATO_PRINCIPAL')) || !permiteVerificar(documento)) return;
     setSalvandoMetadados(true); setErroMetadados('');
     try {
-      await verificarDocumento(contratoId, documento.id);
+      const verificado = await verificarDocumento(contratoId, documento.id);
+      setDocumentoDetalhe(atual => atual?.id === documento.id ? verificado : atual);
       setDocumentoVerificar(null); onDocumentoAlterado?.(); toastSucesso('Documento verificado.');
       await Promise.allSettled([consulta.atualizar(), principais.atualizar(), totalAtivos.atualizar()]);
     } catch (e) { setDocumentoVerificar(null); setErroMetadados(erroMensagem(e, 'Não foi possível verificar o documento.')); }
@@ -353,7 +356,7 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
     {totalRegistrados !== null && totalRegistrados >= 18 && <p className="text-xs text-amber-200" aria-label="Limite de documentos">{20 - totalRegistrados} arquivo(s) disponíveis.</p>}
     {limiteAtingido && <p role="alert" className="rounded-lg bg-amber-500/10 p-2 text-xs text-amber-200">Limite de 20 documentos atingido. Arquivar não libera vagas.</p>}
     <p className="text-xs text-foreground/55">Máximo de 20 documentos por contrato (inclusive arquivados) e 10 anexos arquivados. Arquivar não permite apagar o histórico.</p>
-    {podeEscrever && formularioAberto && preparado && createPortal(<ModalEtapa estadoContextual={estadoContextual}
+    {podeEscrever && formularioAberto && preparado && createPortal(<ModalEtapa estadoContextual="normal"
       titulo="Anexar documento contratual" contexto="Documentos do contrato" rotuloFechar="Fechar anexo de documento"
       ocupado={enviando} focoRetorno={gatilhoModal} onFechar={() => fecharModal()}>
       <div id="formulario-documento">
@@ -440,21 +443,26 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
       confirmar="Arquivar documento" perigoso ocupado={salvandoMetadados}
       onCancelar={() => { setDocumentoArquivar(null); setErroMetadados(''); }} onConfirmar={() => void confirmarArquivamento()} /></div>, document.body)}
 
-    {documentoDetalhe && createPortal(<ModalEtapa titulo={documentoDetalhe.nomeOriginal} contexto="Documento contratual" acoesComoMenu acoes={<>
-      {podeEditarRegistro && !documentoDetalhe.arquivadoEm && documentoDetalhe.categoria !== 'CONTRATO_PRINCIPAL' &&
-        <button type="button" disabled={somenteLeitura} onClick={() => { setDocumentoEdicao(documentoDetalhe); setCategoriaEdicao(documentoDetalhe.categoria); setDescricaoEdicao(documentoDetalhe.descricao ?? ''); setErroMetadados(''); }}>✎ Editar metadados</button>}
-      {!documentoDetalhe.arquivadoEm && !documentoDetalhe.verificadoEm && permiteVerificar(documentoDetalhe) &&
-        <button type="button" disabled={somenteLeitura || salvandoMetadados} onClick={() => setDocumentoVerificar(documentoDetalhe)}>✓ Verificar</button>}
-      {!documentoDetalhe.arquivadoEm && !!documentoDetalhe.verificadoEm && permiteReabrir(documentoDetalhe) &&
-        <button type="button" disabled={somenteLeitura || salvandoMetadados} onClick={() => setDocumentoReabrir(documentoDetalhe)}>⟳ Reabrir</button>}
-      {!documentoDetalhe.arquivadoEm && !documentoDetalhe.verificadoEm && permiteArquivar(documentoDetalhe) &&
-        <button type="button" disabled={somenteLeitura || salvandoMetadados} onClick={() => { setDocumentoArquivar(documentoDetalhe); setErroMetadados(''); }}>▣ Arquivar</button>}
-      {!!documentoDetalhe.arquivadoEm && permiteReativar(documentoDetalhe) &&
-        <button type="button" disabled={somenteLeitura || salvandoMetadados} onClick={() => setDocumentoReativar(documentoDetalhe)}>⟳ Reativar</button>}
-      <button type="button" onClick={() => void baixar(documentoDetalhe.id, documentoDetalhe.nomeOriginal)} disabled={!!baixandoId}>↓ Baixar arquivo</button>
+    {documentoDetalhe && createPortal(<ModalEtapa titulo={documentoDetalhe.nomeOriginal} contexto="Documento contratual" acoes={<>
+      {podeEditarRegistro && !somenteLeitura && !documentoDetalhe.arquivadoEm && documentoDetalhe.categoria !== 'CONTRATO_PRINCIPAL' && <button type="button" aria-label="Editar metadados do documento" title="Editar metadados do documento" onClick={() => { setDocumentoEdicao(documentoDetalhe); setCategoriaEdicao(documentoDetalhe.categoria); setDescricaoEdicao(documentoDetalhe.descricao ?? ''); setErroMetadados(''); }} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border-0 bg-transparent text-current transition hover:bg-current/10 focus-visible:outline-2 focus-visible:outline-current"><IconeEngrenagem /></button>}
+      <MenuAcoesObjeto rotulo={documentoDetalhe.arquivadoEm || !!documentoDetalhe.verificadoEm ? 'Reabrir' : 'Fechar'} disabled={somenteLeitura || salvandoMetadados}>
+        {!documentoDetalhe.arquivadoEm && !!documentoDetalhe.verificadoEm && permiteReabrir(documentoDetalhe) &&
+          <button type="button" disabled={somenteLeitura || salvandoMetadados} onClick={() => setDocumentoReabrir(documentoDetalhe)} className="rounded-lg border border-violet-500/45 bg-violet-500/15 px-3 py-2 text-left text-xs font-semibold text-violet-700 dark:text-violet-200">⟳ Reabrir</button>}
+        {!documentoDetalhe.arquivadoEm && !documentoDetalhe.verificadoEm && permiteArquivar(documentoDetalhe) &&
+          <button type="button" disabled={somenteLeitura || salvandoMetadados} onClick={() => { setDocumentoArquivar(documentoDetalhe); setErroMetadados(''); }} className="rounded-lg border border-amber-500/45 bg-amber-500/15 px-3 py-2 text-left text-xs font-semibold text-amber-700 dark:text-amber-200">▣ Arquivar</button>}
+        {!!documentoDetalhe.arquivadoEm && permiteReativar(documentoDetalhe) &&
+          <button type="button" disabled={somenteLeitura || salvandoMetadados} onClick={() => setDocumentoReativar(documentoDetalhe)} className="rounded-lg border border-amber-500/45 bg-amber-500/15 px-3 py-2 text-left text-xs font-semibold text-amber-700 dark:text-amber-200">⟳ Reativar</button>}
+      </MenuAcoesObjeto>
     </>} estadoContextual={documentoDetalhe.arquivadoEm ? 'arquivado' : documentoDetalhe.reabertoEm ? 'revisao' : documentoDetalhe.verificadoEm ? 'concluido' : 'pendente'} compacto ocupado={!!baixandoId} onFechar={() => setDocumentoDetalhe(null)}>
       <div className="space-y-3" aria-label="Detalhes do documento contratual">
-        <dl data-pi-superficie className="grid gap-3 rounded-xl border border-brand-green/20 p-4 text-sm sm:grid-cols-2">
+        {(!documentoDetalhe.arquivadoEm && !documentoDetalhe.verificadoEm && permiteVerificar(documentoDetalhe)) &&
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm text-amber-200">Pendente de verificação</span>
+            <button type="button" disabled={salvandoMetadados || (somenteLeitura && !(permitirRegularizarPrincipal && documentoDetalhe.categoria === 'CONTRATO_PRINCIPAL'))}
+              onClick={() => setDocumentoVerificar(documentoDetalhe)}
+              className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-40">✓ Verificar</button>
+          </div>}
+        <dl data-pi-superficie className={`grid gap-3 rounded-xl border p-4 text-sm sm:grid-cols-2 ${documentoDetalhe.arquivadoEm ? 'border-amber-500/40' : documentoDetalhe.reabertoEm ? 'border-teal-500/40' : documentoDetalhe.verificadoEm ? 'border-violet-500/40' : 'border-amber-500/40'}`}>
           {([['Situação', documentoDetalhe.arquivadoEm ? 'Arquivado' : documentoDetalhe.reabertoEm ? 'Em revisão' : documentoDetalhe.verificadoEm ? 'Verificado' : 'Pendente de verificação'],
              ['Categoria', CATEGORIAS_DOCUMENTO[documentoDetalhe.categoria]],
              ['Arquivo', documentoDetalhe.nomeOriginal],
@@ -466,7 +474,7 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
             <div key={rotulo} className="min-w-0"><dt className="text-xs text-foreground/60">{rotulo}</dt><dd className="mt-1 break-words">{valor}</dd></div>)}
         </dl>
         <button data-pi-acao="secundaria" type="button" onClick={() => void baixar(documentoDetalhe.id, documentoDetalhe.nomeOriginal)} disabled={!!baixandoId}
-          className="rounded-lg border border-brand-green/40 px-4 py-2 text-sm font-semibold text-brand-neon hover:bg-brand-green/10 disabled:opacity-50">Baixar arquivo</button>
+          className="rounded-lg border border-current/30 px-4 py-2 text-sm font-semibold text-foreground/80 hover:bg-foreground/10 disabled:opacity-50">Baixar arquivo</button>
       </div>
     </ModalEtapa>, document.body)}
     {documentoVerificar && createPortal(<div className="relative z-[160]"><ConfirmacaoSimples

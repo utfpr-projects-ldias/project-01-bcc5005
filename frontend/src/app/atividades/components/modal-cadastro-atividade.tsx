@@ -16,7 +16,7 @@ const vazio = (entregavelId: string): FormularioAtividade => ({
   participantes: '', local: '', duracao: '', observacoes: '', quantidadeExecucao: null, ocorrenciaIds: [],
   entregavelIds: entregavelId ? [entregavelId] : [],
 });
-const CAMPO = 'mt-1 w-full min-w-0 rounded-lg border border-brand-green/30 bg-background px-3 py-2.5 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-brand-neon';
+const CAMPO = 'mt-1 w-full min-w-0 rounded-lg border border-brand-green/30 bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-brand-neon';
 
 type Props = { contratoId: string; entregavelId?: string; origem?: HTMLElement | null; estadoContextual?: EstadoContextual;
   onFechar: () => void; onSalvo?: () => void | Promise<unknown> };
@@ -65,14 +65,15 @@ export function ModalCadastroAtividade({ contratoId, entregavelId = '', origem, 
     setForm(prev => ({ ...prev, [nome]: valor }));
 
   return createPortal(<ModalEtapa estadoContextual={estadoContextual} titulo="Nova atividade" contexto="Diário de execução"
-    ocupado={salvando} larguraAmpla camada={entregavelId ? 'edicao' : 'principal'} focoRetorno={origem} onFechar={onFechar} rotuloFechar="Fechar cadastro de atividade">
-    <form data-pi-formulario aria-label="Formulário de atividade" onSubmit={salvar} noValidate className="mx-auto max-w-4xl space-y-2.5">
+    ocupado={salvando} formularioHorizontal camada={entregavelId ? 'edicao' : 'principal'} focoRetorno={origem} onFechar={onFechar} rotuloFechar="Fechar cadastro de atividade">
+    <form data-pi-formulario aria-label="Formulário de atividade" onSubmit={salvar} noValidate className="mx-auto max-w-5xl space-y-2.5">
       <p className="text-xs text-foreground/70">Campos com * são obrigatórios. A atividade pode vincular vários entregáveis abertos do mesmo contrato.</p>
       {erro && <p role="alert" className="rounded-lg border border-error-text/40 p-3 text-sm text-error-text">{erro}</p>}
       <label className="block text-sm font-medium">Título *
         <input required maxLength={255} className={CAMPO} value={form.titulo} onChange={e => campo('titulo', e.target.value)} aria-invalid={Boolean(erros.titulo)} />
+        <span className="block text-right text-[11px] text-foreground/50">{form.titulo.length}/255</span>
       </label>{erros.titulo && <p className="text-xs text-error-text">{erros.titulo}</p>}
-      <div className="grid max-w-2xl gap-3 sm:grid-cols-2">
+      <div className="grid gap-2 sm:grid-cols-2">
         <label className="block text-sm font-medium">Data e hora *
           <input required type="datetime-local" lang="pt-BR" className={`${CAMPO} tec08-data-hora`} value={form.dataHora} onChange={e => campo('dataHora', e.target.value)} aria-invalid={Boolean(erros.dataHora)} />
         </label>
@@ -84,8 +85,9 @@ export function ModalCadastroAtividade({ contratoId, entregavelId = '', origem, 
       </div>{erros.dataHora && <p className="text-xs text-error-text">{erros.dataHora}</p>}
       <label className="block text-sm font-medium">Descrição *
         <textarea required rows={2} maxLength={5000} className={CAMPO} value={form.descricao} onChange={e => campo('descricao', e.target.value)} />
+        <span className="block text-right text-[11px] text-foreground/50">{form.descricao.length}/5000</span>
       </label>{erros.descricao && <p className="text-xs text-error-text">{erros.descricao}</p>}
-      <div className="grid max-w-2xl gap-3 sm:grid-cols-2">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <label className="block text-sm font-medium">Responsável
           <input maxLength={255} placeholder="Padrão: usuário conectado" className={CAMPO} value={form.responsavel} onChange={e => campo('responsavel', e.target.value)} />
         </label>
@@ -100,7 +102,7 @@ export function ModalCadastroAtividade({ contratoId, entregavelId = '', origem, 
         </label>
       </div>
       <label className="block text-sm font-medium">Observações
-        <textarea rows={2} maxLength={5000} className={CAMPO} value={form.observacoes} onChange={e => campo('observacoes', e.target.value)} />
+        <textarea rows={2} maxLength={5000} className={CAMPO} value={form.observacoes} onChange={e => campo('observacoes', e.target.value)} /><span className="block text-right text-[11px] text-foreground/55">{form.observacoes.length}/5000</span>
       </label>
       <fieldset className="rounded-xl border border-brand-green/25 p-3 space-y-2">
         <legend className="px-1 text-sm font-semibold">Vincular ao(s) entregável(is) *</legend>

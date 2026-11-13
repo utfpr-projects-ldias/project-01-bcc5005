@@ -21,7 +21,7 @@ const foraDoPainel = () => false;
 export function EstruturaInterna({ children }: { children: ReactNode }) {
   const rota = usePathname();
   const interna = rota === "/dashboard" || rota === "/usuario" || (rota === "/atividades" || rota.startsWith("/atividades/")) || rota === "/ocorrencias" || rota === "/execucao" || rota === "/contratos" || rota.startsWith("/contratos/") ||
-    rota === "/admin/usuarios" || rota.startsWith("/admin/usuarios/");
+    rota === "/admin" || rota === "/admin/usuarios" || rota.startsWith("/admin/usuarios/");
 
   if (!interna) return <>{children}</>;
 
@@ -39,7 +39,8 @@ function CabecalhoInterno({ rota, children }: { rota: string; children: ReactNod
   const embutido = useSyncExternalStore(semEvento, dentroPainel, foraDoPainel);
 
   let titulo = "Dashboard";
-  if (rota === "/usuario") titulo = "Minha conta";
+  if (rota === "/admin") titulo = "Administração";
+  else if (rota === "/usuario") titulo = "Minha conta";
   else if (rota === "/atividades") titulo = "Diário de atividades";
   else if (rota.startsWith("/atividades/")) titulo = "Detalhes da atividade";
   else if (rota === "/ocorrencias") titulo = "Ocorrências";
@@ -82,7 +83,7 @@ function CabecalhoInterno({ rota, children }: { rota: string; children: ReactNod
       <header className="flex min-h-11 items-center justify-between gap-2 border-b border-brand-green/20 bg-background px-4 py-1 md:px-6">
         <h1 className="min-w-0 text-base font-semibold">{titulo}</h1>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          {perfil?.ativo && <Link href="/usuario" aria-label="Abrir minha conta" title="Minha conta"
+          {perfil?.ativo && <Link href="/admin?aba=conta" aria-label="Abrir minha conta" title="Minha conta"
             className="hidden min-w-0 max-w-64 flex-col items-end rounded-lg px-2 py-0.5 leading-tight transition-colors hover:bg-brand-green/10 focus-visible:outline-2 focus-visible:outline-brand-neon sm:flex">
             <span className="max-w-full truncate text-xs font-semibold text-foreground">{perfil.nome?.trim() || 'Minha conta'}</span>
             <span className="text-[11px] text-brand-neon">{perfil.perfil === 'ADMINISTRADOR' ? 'Administrador' : perfil.perfil === 'GESTOR' ? 'Gestor' : 'Colaborador'}</span>
@@ -98,7 +99,7 @@ function CabecalhoInterno({ rota, children }: { rota: string; children: ReactNod
       </header>
       {confirmarSaida && <ConfirmacaoSimples titulo="Sair da conta?"
         descricao="Deseja realmente encerrar sua sessão neste dispositivo?"
-        confirmar="Sair da conta" perigoso ocupado={saindo}
+        confirmar="Sair da conta" aprovarVerde estadoContextual="normal" ocupado={saindo}
         onCancelar={() => setConfirmarSaida(false)} onConfirmar={() => void sair()} />}
       <MenuMobile />
       <main id="conteudo-principal" className="min-w-0 flex-1 px-4 py-5 md:px-6">

@@ -396,8 +396,10 @@ export class EvidenciasRecebidasService {
       const { entregavel, esperada } = await this.contexto(m, contratoId, entregavelId, esperadaId);
       this.validarPlanejamentoAtivo(entregavel, esperada);
       await this.etapaAtiva(m, entregavel);
-      if (!entregavel.reabertoEm && await documentacaoVerificada(m, contratoId, entregavel.etapaId, entregavelId))
-        throw new ConflictException('Reabra o entregável antes de reabrir suas evidências');
+      // Checklist documental 100% não é, por si só, conclusão física do entregável.
+      // Bloqueie apenas se a decisão de conclusão operacional realmente estiver vigente.
+      if (!entregavel.reabertoEm && entregavel.statusExecucao === StatusExecucaoEntregavel.CONCLUIDO)
+        throw new ConflictException('Reabra o entregável concluído antes de reabrir suas evidências');
       const repo = m.getRepository(ComprovanteEvidencia);
       const ultima = await repo.createQueryBuilder('c').setLock('pessimistic_write')
         .where('c.evidenciaEsperadaId = :esperadaId', { esperadaId })

@@ -95,6 +95,18 @@ export class ContratosController {
     return this.contratos.alterarBloqueioOrdem(id, dto.bloqueada, req.usuarioDominio!);
   }
 
+  @Get(':id/elegibilidade-conclusao')
+  @ExigirPolitica('contratos:visualizar', 'id')
+  elegibilidadeConclusao(@Param('id') id: string) {
+    return this.contratos.consultarElegibilidadeConclusao(id);
+  }
+
+  @Patch(':id/solicitar-conclusao')
+  @ExigirPolitica('contratos:editar', 'id')
+  solicitarConclusao(@Param('id') id: string, @Req() req: RequisicaoAutorizada) {
+    return this.contratos.solicitarConclusao(id, req.usuarioDominio!);
+  }
+
   @Patch(':id/concluir')
   @ExigirPolitica('contratos:concluir', 'id')
   concluir(@Param('id') id: string, @Req() req: RequisicaoAutorizada) {

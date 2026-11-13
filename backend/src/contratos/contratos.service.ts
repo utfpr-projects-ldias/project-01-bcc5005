@@ -116,7 +116,7 @@ export class ContratosService {
   /** Apenas IDs de contratos autorizados ao usuário. Cada checagem usa o mesmo
    * predicado SQL utilizado pela operação de conclusão. Limitar concorrência. */
   async pendentesConclusao(ator: UsuarioAutenticado): Promise<string[]> {
-    const visiveis = (await this.listar(ator)).filter(c => !c.arquivadoEm &&
+    const visiveis = (await this.listar(ator)).filter(c => Boolean(c.conclusaoSolicitadaEm) && !c.arquivadoEm &&
       c.status !== 'CONCLUIDO' && c.status !== 'ENCERRADO' && c.status !== 'SUSPENSO' && c.status !== 'CANCELADO');
     const resultado: string[] = [];
     for (let pos = 0; pos < visiveis.length; pos += 5) {
@@ -396,6 +396,67 @@ export class ContratosService {
     });
   }
 
+  /** Uma única avaliação de elegibilidade, compartilhada pelo pedido e pela aprovação.
+   * Nunca presume que uma porcentagem de execução equivale a comprovação. */
+  private async pendenciasParaConclusao(manager: EntityManager, id: string): Promise<string[]> {
+    const pendencias: string[] = [];
+    if (!await documentacaoVerificada(manager, id) || await filhosEmRevisao(manager, id))
+      pendencias.push('Existem obrigações documentais pendentes ou registros em revisão.');
+    if (await atividadesPendentesDeVerificacao(manager, id))
+      pendencias.push('Existem atividades ainda não verificadas.');
+    const etapas = await manager.query(`SELECT EXISTS (
+      SELECT 1 FROM etapas WHERE contrato_id=$1 AND arquivado_em IS NULL AND status IS DISTINCT FROM 'CONCLUIDA'
+    ) AS pendentes`, [id]) as Array<{ pendentes: boolean }>;
+    if (etapas[0]?.pendentes) pendencias.push('Todas as etapas ativas precisam estar concluídas.');
+    const entregaveis = await manager.query(`SELECT EXISTS (
+      SELECT 1 FROM entregaveis WHERE contrato_id=$1 AND arquivado_em IS NULL AND status_execucao IS DISTINCT FROM 'CONCLUIDO'
+    ) AS pendentes`, [id]) as Array<{ pendentes: boolean }>;
+    if (entregaveis[0]?.pendentes) pendencias.push('Todos os entregáveis ativos precisam estar concluídos.');
+    const principal = await manager.query(`SELECT EXISTS (
+      SELECT 1 FROM documentos_contratuais WHERE contrato_id=$1 AND categoria='CONTRATO_PRINCIPAL'
+      AND arquivado_em IS NULL AND verificado_em IS NOT NULL AND reaberto_em IS NULL
+    ) AS verificado`, [id]) as Array<{ verificado: boolean }>;
+    if (!principal[0]?.verificado) pendencias.push('Anexe e verifique o PDF principal do contrato.');
+    return pendencias;
+  }
+
+  async consultarElegibilidadeConclusao(id: string): Promise<{apto: boolean; pendencias: string[]; solicitada: boolean}> {
+    const contrato = await this.detalhar(id);
+    const bloqueado = Boolean(contrato.arquivadoEm || contrato.reabertoEm ||
+      ['CONCLUIDO','FINALIZADO','ENCERRADO','SUSPENSO','CANCELADO'].includes(contrato.status));
+    const pendencias = bloqueado ? ['O contrato não está aberto para solicitar conclusão.'] :
+      await this.pendenciasParaConclusao(this.contratos.manager, id);
+    return { apto: pendencias.length === 0 && !contrato.conclusaoSolicitadaEm,
+      pendencias, solicitada: Boolean(contrato.conclusaoSolicitadaEm) };
+  }
+
+  async solicitarConclusao(id: string, ator: UsuarioAutenticado): Promise<Contrato> {
+    return this.auditoria.executarComAuditoria(ator, async manager => {
+      const repo = manager.getRepository(Contrato);
+      const contrato = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
+      if (!contrato) throw new NotFoundException('Contrato não encontrado');
+      if (ator.perfil !== PerfilUsuario.ADMINISTRADOR) {
+        const vinculo = await manager.getRepository(PermissaoContrato).findOneBy({usuarioId: ator.id, contratoId: id});
+        if (!vinculo || !permissoesEfetivas(ator.perfil, vinculo.podeEditar, vinculo.permissoesDetalhadas).editarContrato)
+          throw new ForbiddenException('Sem permissão para solicitar conclusão');
+      }
+      if (contrato.arquivadoEm || contrato.reabertoEm ||
+          !['PLANEJAMENTO','EM_EXECUCAO','EM_ENCERRAMENTO'].includes(contrato.status))
+        throw new ConflictException('Contrato não está aberto para conclusão');
+      if (contrato.conclusaoSolicitadaEm) throw new ConflictException('Já existe uma solicitação de conclusão pendente');
+      const pendencias = await this.pendenciasParaConclusao(manager, id);
+      if (pendencias.length) throw new ConflictException(pendencias[0]);
+      contrato.conclusaoSolicitadaEm = new Date();
+      contrato.conclusaoSolicitadaPor = ator.id;
+      const salvo = await repo.save(contrato);
+      return { resultado: salvo, evento: { acao: AcaoAuditoria.CONTRATO_STATUS_ALTERADO,
+        entidadeTipo: 'CONTRATO' as const, entidadeId: id,
+        dadosAnteriores: { conclusaoSolicitadaEm: null },
+        dadosPosteriores: { conclusaoSolicitadaEm: salvo.conclusaoSolicitadaEm, solicitadaPor: ator.id,
+          tipo: 'SOLICITACAO_CONCLUSAO' } } };
+    });
+  }
+
   /** Conclusão explícita pelo responsável autorizado, somente após comprovação total.
    * Nunca confunde um checklist 100% com uma decisão operacional de conclusão. */
   async concluir(id: string, ator: UsuarioAutenticado): Promise<Contrato> {
@@ -406,6 +467,7 @@ export class ContratosService {
       if (contrato.arquivadoEm) throw new ConflictException('Reative o contrato arquivado antes de concluir');
       if (['CONCLUIDO', 'ENCERRADO', 'FINALIZADO'].includes(contrato.status) && !contrato.reabertoEm) throw new ConflictException('Contrato já possui decisão final');
       if (contrato.reabertoEm) throw new ConflictException('Encerre a revisão antes de concluir o contrato');
+      if (!contrato.conclusaoSolicitadaEm) throw new ConflictException('Solicite a conclusão antes da aprovação');
       if (contrato.status === 'SUSPENSO' || contrato.status === 'CANCELADO')
         throw new ConflictException('Contrato suspenso ou cancelado não pode ser concluído');
       if (ator.perfil !== PerfilUsuario.ADMINISTRADOR) {
@@ -434,6 +496,8 @@ export class ContratosService {
       const anterior = { status: contrato.status, reabertoEm: contrato.reabertoEm ?? null };
       contrato.status = 'CONCLUIDO' as Contrato['status'];
       contrato.reabertoEm = null;
+      contrato.conclusaoSolicitadaEm = null;
+      contrato.conclusaoSolicitadaPor = null;
       const salvo = await repo.save(contrato);
       return { resultado: salvo, evento: {
         acao: AcaoAuditoria.CONTRATO_STATUS_ALTERADO, entidadeTipo: 'CONTRATO' as const,
@@ -452,8 +516,8 @@ export class ContratosService {
     return this.auditoria.executarComAuditoria(ator, async manager => {
       const contrato = await manager.findOne(Contrato, { where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!contrato || contrato.arquivadoEm) throw new NotFoundException('Contrato indisponível');
-      if (!['PLANEJAMENTO','EM_EXECUCAO','EM_ENCERRAMENTO'].includes(contrato.status))
-        throw new ConflictException('Contrato já encerrado, suspenso ou cancelado');
+      if (!['PLANEJAMENTO','EM_EXECUCAO','EM_ENCERRAMENTO'].includes(contrato.status) || contrato.conclusaoSolicitadaEm)
+        throw new ConflictException('Contrato já encerrado, suspenso, cancelado ou aguardando aprovação');
       if (ator.perfil !== PerfilUsuario.ADMINISTRADOR) {
         const v = await manager.findOneBy(PermissaoContrato, { contratoId: id, usuarioId: ator.id });
         if (!v || !permissoesEfetivas(ator.perfil, v.podeEditar, v.permissoesDetalhadas).concluirContrato)
@@ -506,6 +570,7 @@ export class ContratosService {
       const anterior = contrato.status;
       const revisaoAnterior = contrato.reabertoEm ?? null;
       if (suspender) {
+        if (contrato.conclusaoSolicitadaEm) throw new ConflictException('Decida a solicitação de conclusão antes de suspender');
         if (!['PLANEJAMENTO', 'EM_EXECUCAO', 'EM_ENCERRAMENTO'].includes(anterior))
           throw new ConflictException('Somente contratos em planejamento ou execução podem ser suspensos');
         contrato.status = 'SUSPENSO' as Contrato['status'];
@@ -556,6 +621,7 @@ export class ContratosService {
           vinculo.permissoesDetalhadas)[chave])
           throw new ForbiddenException('Sem permissão específica para esta decisão de cancelamento');
       }
+      if (cancelar && contrato.conclusaoSolicitadaEm) throw new ConflictException('Decida a solicitação de conclusão antes de cancelar');
       if (cancelar && !['PLANEJAMENTO', 'EM_EXECUCAO'].includes(contrato.status))
         throw new ConflictException('Não é possível cancelar contrato com decisão final ou situação administrativa incompatível');
       if (!cancelar && contrato.status !== 'CANCELADO')
@@ -586,7 +652,7 @@ export class ContratosService {
       const repo = manager.getRepository(Contrato);
       const contrato = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!contrato) throw new NotFoundException('Contrato não encontrado');
-      if (contrato.arquivadoEm ||
+      if (contrato.arquivadoEm || contrato.conclusaoSolicitadaEm ||
         ['CONCLUIDO', 'ENCERRADO', 'CANCELADO', 'SUSPENSO'].includes(contrato.status))
         throw new ConflictException('Contrato não está em situação elegível ao encerramento antecipado');
       if (ator.perfil !== PerfilUsuario.ADMINISTRADOR) {
@@ -662,7 +728,7 @@ export class ContratosService {
       const repo = manager.getRepository(Contrato);
       const contrato = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!contrato) throw new NotFoundException('Contrato não encontrado');
-      if (contrato.arquivadoEm || contrato.reabertoEm ||
+      if (contrato.arquivadoEm || contrato.reabertoEm || !contrato.conclusaoSolicitadaEm ||
         contrato.status === 'CONCLUIDO' || contrato.status === 'ENCERRADO' || contrato.status === 'SUSPENSO' || contrato.status === 'CANCELADO')
         throw new ConflictException('Somente contrato pendente de conclusão pode ser devolvido para revisão');
       if (ator.perfil !== PerfilUsuario.ADMINISTRADOR) {
@@ -670,16 +736,10 @@ export class ContratosService {
         if (!vinculo || !permissoesEfetivas(ator.perfil, vinculo.podeEditar, vinculo.permissoesDetalhadas).concluirContrato)
           throw new ForbiddenException('Sem permissão para deliberar sobre a conclusão contratual');
       }
-      if (!await documentacaoVerificada(manager, id) || await filhosEmRevisao(manager, id))
-        throw new ConflictException('O contrato não está pendente de conclusão; regularize antes seus filhos');
-      const abertos = await manager.query(`SELECT EXISTS (
-        SELECT 1 FROM etapas WHERE contrato_id = $1 AND arquivado_em IS NULL
-          AND status IS DISTINCT FROM 'CONCLUIDA') OR EXISTS (
-        SELECT 1 FROM entregaveis WHERE contrato_id = $1 AND arquivado_em IS NULL
-          AND status_execucao IS DISTINCT FROM 'CONCLUIDO') AS pendentes`, [id]) as Array<{ pendentes: boolean }>;
-      if (abertos[0]?.pendentes) throw new ConflictException('O contrato não está pronto para decisão');
       const anterior = { status: contrato.status, reabertoEm: contrato.reabertoEm ?? null };
       contrato.reabertoEm = new Date();
+      contrato.conclusaoSolicitadaEm = null;
+      contrato.conclusaoSolicitadaPor = null;
       const salvo = await repo.save(contrato);
       return { resultado: salvo, evento: {
         acao: AcaoAuditoria.CONTRATO_STATUS_ALTERADO, entidadeTipo: 'CONTRATO' as const,

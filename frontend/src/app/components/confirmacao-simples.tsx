@@ -26,7 +26,13 @@ type Props = {
 export function ConfirmacaoSimples({ titulo, descricao, confirmar, ocupado = false, perigoso = false, cancelarVermelho = false, confirmacaoRoxa = false, aprovarVerde = false, estadoContextual = 'normal', onCancelar, onConfirmar, justificativa, onJustificativaChange, justificativaMinima = 15 }: Props) {
   const modalId = useId();
   const estadoDaAcao = contextoDaDecisao(`${titulo} ${confirmar}`, estadoContextual);
-  const cores = coresDecisao(estadoDaAcao);
+  // Logout: confirmação de sessão, com identidade verde do sistema.
+  const saidaVerde = /sair da conta|encerrar sessão/i.test(`${titulo} ${confirmar}`);
+  const cores = saidaVerde ? {
+    borda: 'border-brand-green/50', texto: 'text-brand-neon',
+    foco: 'focus-visible:outline-brand-green', campo: 'focus-visible:border-brand-green',
+    botao: 'border-brand-green bg-brand-green text-on-brand-green hover:brightness-110',
+  } : coresDecisao(estadoDaAcao);
   const corBotao = estadoDaAcao !== 'normal' ? cores.botao : confirmacaoRoxa
     ? 'border-violet-500 bg-violet-700 text-white hover:bg-violet-600'
     : aprovarVerde ? 'border-green-600 bg-green-800 text-white hover:bg-green-700'

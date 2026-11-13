@@ -13,7 +13,8 @@ import { IconeOcorrencias } from '@/app/components/icones-operacionais';
 import { resultadoFinalizacao } from '@/lib/finalizados';
 import { IconeStatus } from '@/app/components/icones-status';
 import { ModalDetalheEntregavel } from '@/app/contratos/components/modal-detalhe-entregavel';
-import { consultarAtividade, transicionarAtividadeApi, type Atividade } from '@/hooks/use-atividades';
+import { consultarAtividade, editarAtividadeApi, listarAtividadesVinculaveis, transicionarAtividadeApi, type Atividade } from '@/hooks/use-atividades';
+import { estadoTemporal } from '@/lib/estado-temporal';
 import { useRepositorioConsultasOpcional } from '@/app/components/provedor-consultas';
 import { CampoBuscaSugestoes } from '@/app/components/campo-busca-sugestoes';
 import { useProgresso } from '@/hooks/use-progresso';
@@ -123,6 +124,13 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, embutido
   const [atividadeSelecionada, setAtividadeSelecionada] = useState<{ id: string; foco: HTMLElement } | null>(null);
   const [atividadeDetalhe, setAtividadeDetalhe] = useState<Atividade | null>(null);
   const [atividadeErro, setAtividadeErro] = useState('');
+  const [mostrarVincular, setMostrarVincular] = useState(false);
+  const [buscaVinculo, setBuscaVinculo] = useState('');
+  const [atividadesDisponiveis, setAtividadesDisponiveis] = useState<Atividade[]>([]);
+  const [atividadeParaVincular, setAtividadeParaVincular] = useState<string>('');
+  const [consultandoVinculos, setConsultandoVinculos] = useState(false);
+  const [erroVinculo, setErroVinculo] = useState('');
+
   const cache = useRepositorioConsultasOpcional();
   const { dados: perfil } = useMeuPerfil();
   const acesso = useAcessoContrato(contratoId);
@@ -175,6 +183,20 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, embutido
   const podeReabrir = permitir('reabrirOcorrencias');
   const podeVerificarAtividade = autorizado && (administrador || Boolean(acesso.dados?.permissoes?.verificarAtividades));
   const podeSolicitarAtividade = autorizado && (administrador || Boolean(acesso.dados?.permissoes?.editarAtividades));
+  const podeVincularAtividade = podeSolicitarAtividade && Boolean(detalhe && !detalhe.substituidaEm &&
+    ['NAO_INICIADO','EM_ANDAMENTO','EM_REVISAO'].includes(detalhe.status) &&
+    abertos.some(e => e.id === detalhe.entregavelId));
+  useEffect(() => {
+    if (!mostrarVincular || !detalhe?.entregavelId) return;
+    const controlador = new AbortController();
+    setConsultandoVinculos(true); setErroVinculo('');
+    void listarAtividadesVinculaveis(contratoId, detalhe.entregavelId, controlador.signal)
+      .then(pagina => setAtividadesDisponiveis(pagina.data.filter(a => a.status === 'REGISTRADA')))
+      .catch(erro => { if (!controlador.signal.aborted) setErroVinculo(erro instanceof Error ? erro.message : 'Não foi possível consultar as atividades.'); })
+      .finally(() => { if (!controlador.signal.aborted) setConsultandoVinculos(false); });
+    return () => controlador.abort();
+  }, [mostrarVincular, detalhe?.entregavelId, contratoId]);
+
   const podeAgendar = permitir('configurarAgendaOcorrencias');
   const podeConfigurarSelecionado = entregavelDaConsulta?.tipo === 'RECORRENTE' ? podeAgendar : podeEditarPlanejamento;
   const podeEditarDetalhe = podeEditar && Boolean(detalhe && !detalhe.substituidaEm && ['NAO_INICIADO','EM_ANDAMENTO','EM_REVISAO'].includes(detalhe.status) && abertos.some(e => e.id === detalhe.entregavelId));
@@ -193,23 +215,48 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, embutido
   const podeGerar = podeAgendar && entregaveisRecorrentes.length > 0;
   const registros = useMemo(() => agenda.ocorrencias.filter(o =>
     (historico ? Boolean(o.substituidaEm) : !o.substituidaEm) &&
-    (abaOcorrencias === 'ARQUIVADAS' || abaOcorrencias === 'ATIVAS' && (modoVisualizacao === 'CALENDARIO' ? true : ['NAO_INICIADO','EM_ANDAMENTO'].includes(o.status)) || abaOcorrencias === 'REVISAO' && o.status === 'EM_REVISAO' || abaOcorrencias === 'PENDENTE' && ['PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(o.status) || abaOcorrencias === 'CONCLUIDAS' && resultadoFinalizacao('ocorrencia', o.status) !== null) &&
+    (abaOcorrencias === 'ARQUIVADAS' || abaOcorrencias === 'ATIVAS' && (modoVisualizacao === 'CALENDARIO' ? true : ['NAO_INICIADO','EM_ANDAMENTO'].includes(estadoTemporal(o.status, o.periodoInicio || o.dataPrevista))) || abaOcorrencias === 'REVISAO' && o.status === 'EM_REVISAO' || abaOcorrencias === 'PENDENTE' && ['PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(o.status) || abaOcorrencias === 'CONCLUIDAS' && resultadoFinalizacao('ocorrencia', o.status) !== null) &&
     (!entregavelFiltro || o.entregavelId === entregavelFiltro) &&
     (!etapaFiltro || entregaveis.some(e => e.id === o.entregavelId && e.etapaId === etapaFiltro)) &&
     (abaOcorrencias !== 'ATIVAS' || !dataInicial || (o.dataPrevista || o.periodoInicio || '') >= dataInicial) &&
     (abaOcorrencias !== 'ATIVAS' || !dataFinal || (o.dataPrevista || o.periodoFim || '') <= dataFinal) &&
-    (abaOcorrencias !== 'ATIVAS' || situacaoFiltro === 'TODAS' || o.status === situacaoFiltro) &&
+    (abaOcorrencias !== 'ATIVAS' || situacaoFiltro === 'TODAS' || estadoTemporal(o.status, o.periodoInicio || o.dataPrevista) === situacaoFiltro) &&
     (!busca.trim() || o.titulo.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').includes(busca.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR')))
   ).slice().sort((a,b) => (a.dataPrevista ?? a.periodoInicio ?? '9999').localeCompare(b.dataPrevista ?? b.periodoInicio ?? '9999')),
   [agenda.ocorrencias, entregavelFiltro, etapaFiltro, dataInicial, dataFinal, entregaveis, situacaoFiltro, busca, historico, abaOcorrencias, modoVisualizacao]);
   const sugestoesBusca = useMemo(() => agenda.ocorrencias.filter(o =>
     (historico ? Boolean(o.substituidaEm) : !o.substituidaEm) &&
-    (abaOcorrencias === 'ARQUIVADAS' || abaOcorrencias === 'ATIVAS' && (modoVisualizacao === 'CALENDARIO' ? true : ['NAO_INICIADO', 'EM_ANDAMENTO'].includes(o.status)) ||
+    (abaOcorrencias === 'ARQUIVADAS' || abaOcorrencias === 'ATIVAS' && (modoVisualizacao === 'CALENDARIO' ? true : ['NAO_INICIADO', 'EM_ANDAMENTO'].includes(estadoTemporal(o.status, o.periodoInicio || o.dataPrevista))) ||
       abaOcorrencias === 'REVISAO' && o.status === 'EM_REVISAO' || abaOcorrencias === 'PENDENTE' && ['PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(o.status) || abaOcorrencias === 'CONCLUIDAS' && resultadoFinalizacao('ocorrencia', o.status) !== null) &&
     (!contextoEntregavel || o.entregavelId === entregavelIdInicial)).map(o => o.titulo), [agenda.ocorrencias, historico, abaOcorrencias, contextoEntregavel, entregavelIdInicial, modoVisualizacao]);
   const concluidas = registros.filter(o => o.status === 'CONCLUIDO').length;
   const encerradas = registros.filter(o => o.status === 'ENCERRADA').length;
-  const andamento = registros.filter(o => o.status === 'EM_ANDAMENTO').length;
+  const andamento = registros.filter(o => estadoTemporal(o.status, o.periodoInicio || o.dataPrevista) === 'EM_ANDAMENTO').length;
+
+  function abrirVinculo() {
+    if (!podeVincularAtividade || !detalhe) return;
+    setErroVinculo(''); setBuscaVinculo(''); setAtividadeParaVincular('');
+    setAtividadesDisponiveis([]); setMostrarVincular(true);
+  }
+  async function confirmarVinculo() {
+    if (!podeVincularAtividade || !detalhe || !atividadeParaVincular || ocupado) return;
+    setOcupado(true); setErroVinculo('');
+    try {
+      // Leia o estado atual antes da mutação para não sobrescrever outros vínculos.
+      const atividade = await consultarAtividade(contratoId, atividadeParaVincular);
+      if (atividade.status !== 'REGISTRADA' || !atividade.entregaveis.some(e => e.id === detalhe.entregavelId))
+        throw new Error('A atividade precisa estar registrada e associada ao entregável desta ocorrência.');
+      const anteriores = atividade.ocorrenciaIds ?? atividade.ocorrencias?.map(o=>o.id) ?? [];
+      if (anteriores.includes(detalhe.id)) throw new Error('Esta atividade já está vinculada à ocorrência.');
+      await editarAtividadeApi(contratoId, atividade.id, { ocorrenciaIds: [...new Set([...anteriores, detalhe.id])] });
+      cache?.invalidar(['atividades', contratoId]);
+      await agenda.atualizar();
+      const atualizado = await agenda.consultarDetalhe(detalhe.id);
+      setDetalhe(atualizado); setMostrarVincular(false); setAtividadeParaVincular(''); setBuscaVinculo('');
+      setSucesso('Atividade vinculada à ocorrência.');
+    } catch (falha) { setErroVinculo(falha instanceof Error ? falha.message : 'Não foi possível vincular a atividade.'); }
+    finally { setOcupado(false); }
+  }
 
   function abrirAtividade(id: string, foco: HTMLElement) {
     setAtividadeSelecionada({ id, foco }); setAtividadeDetalhe(null); setAtividadeErro('');
@@ -413,13 +460,18 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, embutido
     {sucesso && <p role="status" className="rounded-lg border border-brand-green/30 bg-brand-green/10 p-3 text-sm text-foreground">{sucesso}</p>}
     <div className="flex flex-wrap items-center justify-between gap-3"><h4 data-pi-titulo className="text-base font-semibold">{historico ? 'Histórico arquivado' : 'Registros'}</h4><p className="text-xs text-foreground/65">{agendaConfiavel ? `${registros.length} ${registros.length === 1 ? 'ocorrência encontrada' : 'ocorrências encontradas'}` : 'Consulta indisponível'}</p></div>
     {!contratoId ? <p className="rounded-xl border border-dashed border-brand-green/20 p-6 text-sm text-foreground/65">Selecione um contrato para consultar as ocorrências.</p>
-      : agenda.loading ? <p role="status" className="rounded-xl border border-brand-green/20 p-5 text-sm">Carregando ocorrências...</p>
+      : agenda.loading ? <div role="status" aria-label="Carregando ocorrências" className="min-h-[480px] space-y-3 rounded-xl border border-current/15 p-4 animate-pulse">
+          <div className="h-10 w-1/2 rounded-lg bg-foreground/10" />
+          <div className="grid grid-cols-7 gap-2">{Array.from({length: 28},(_,i) =>
+            <div key={i} className="h-16 rounded-lg bg-foreground/5" />)}</div>
+        </div>
       : agenda.erro ? <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-500/30 p-4 text-sm text-error-text"><span>{agenda.erro}</span><button type="button" className={BOTAO} onClick={() => { void agenda.atualizar(); }}>Tentar novamente</button></div>
       : registros.length === 0 ? <p data-pi-superficie className="rounded-xl border border-dashed border-brand-green/25 p-6 text-sm text-foreground/65">{historico ? 'Nenhuma ocorrência arquivada neste entregável ou contrato.' : 'Nenhuma ocorrência nesta situação corresponde aos filtros.'}</p>
       : modoVisualizacao === 'CALENDARIO' ? <CalendarioOcorrencias registros={registros} periodicidade={entregavelDaConsulta?.periodicidade ?? 'DIARIA'} aoAbrir={abrirDetalhe} />
       : <ul aria-label="Lista de ocorrências" className="grid gap-3">{registros.map(o => {
-        const cor = o.substituidaEm ? {titulo:'Arquivada',borda:'border-amber-500/40',fundo:'bg-amber-500/[0.11]',texto:'text-amber-600 dark:text-amber-300',badge:'bg-amber-500/10'} : ESTADOS[o.status] ?? ESTADOS.NAO_INICIADO;
-        return <li key={o.id} data-ocorrencia-estado={o.status} className="relative min-w-0"><button type="button" aria-label={`Ver detalhes da ocorrência ${tituloApresentacao(o, periodos[o.entregavelId])}`} onClick={e => abrirDetalhe(o, e.currentTarget)}
+        const visual = estadoTemporal(o.status, o.periodoInicio || o.dataPrevista);
+        const cor = o.substituidaEm ? {titulo:'Arquivada',borda:'border-amber-500/40',fundo:'bg-amber-500/[0.11]',texto:'text-amber-600 dark:text-amber-300',badge:'bg-amber-500/10'} : ESTADOS[visual] ?? ESTADOS.NAO_INICIADO;
+        return <li key={o.id} data-ocorrencia-estado={estadoTemporal(o.status, o.periodoInicio || o.dataPrevista)} className="relative min-w-0"><button type="button" aria-label={`Ver detalhes da ocorrência ${tituloApresentacao(o, periodos[o.entregavelId])}`} onClick={e => abrirDetalhe(o, e.currentTarget)}
           className={`pi-ocorrencia-card group w-full min-w-0 space-y-3 rounded-xl border p-4 text-left outline-none transition-colors duration-200 hover:brightness-100 focus-visible:ring-2 focus-visible:ring-current/45 sm:p-5 ${cor.borda} ${cor.fundo} ${cor.texto}`}>
           <span className="flex flex-wrap items-start justify-between gap-3"><span className={`min-w-0 flex-1 break-words font-semibold ${cor.texto}`}>{tituloApresentacao(o, periodos[o.entregavelId])}</span><span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${cor.borda} ${cor.badge} ${cor.texto}`}>{cor.titulo}</span></span>
           <span className="flex flex-wrap items-center gap-3 text-sm text-foreground/75">
@@ -532,9 +584,10 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, embutido
           <button data-pi-acao="primaria" type="submit" className={PRINCIPAL} disabled={!podeCriar || ocupado || (form.modoRegistro === 'QUANTITATIVO' && quantidadeDireta !== null) || !form.titulo.trim() || !form.entregavelId || (form.modoRegistro === 'QUANTITATIVO' && Number(form.metaQuantidade) <= 0)}>{ocupado ? 'Salvando...' : 'Registrar ocorrência'}</button></div>
       </form>
     </ModalEtapa>}
-    {detalhe && <ModalEtapa titulo={tituloApresentacao(detalhe, periodos[detalhe.entregavelId])} compacto etiqueta={detalhe.substituidaEm ? 'Arquivada' : (ESTADOS[detalhe.status] ?? ESTADOS.NAO_INICIADO).titulo} contexto="Detalhes da ocorrência" rotuloFechar="Fechar detalhes da ocorrência" ocupado={ocupado} focoRetorno={focoRetorno} onFechar={() => { setDetalhe(null); setEditando(false); setMostrarReabertura(false); setErro(''); }} estadoContextual={detalhe.substituidaEm ? 'arquivado' : (ESTADOS[detalhe.status] ?? ESTADOS.NAO_INICIADO).modal}
+    {detalhe && <ModalEtapa titulo={tituloApresentacao(detalhe, periodos[detalhe.entregavelId])} compacto etiqueta={detalhe.substituidaEm ? 'Arquivada' : (ESTADOS[estadoTemporal(detalhe.status, detalhe.periodoInicio || detalhe.dataPrevista)] ?? ESTADOS.NAO_INICIADO).titulo} contexto="Detalhes da ocorrência" rotuloFechar="Fechar detalhes da ocorrência" ocupado={ocupado} focoRetorno={focoRetorno} onFechar={() => { setDetalhe(null); setEditando(false); setMostrarReabertura(false); setErro(''); }} estadoContextual={detalhe.substituidaEm ? 'arquivado' : (ESTADOS[estadoTemporal(detalhe.status, detalhe.periodoInicio || detalhe.dataPrevista)] ?? ESTADOS.NAO_INICIADO).modal}
       retornoEsquerda mostrarXComVoltar somenteIconeFechar
       acoes={<>
+      {!editando && podeEditarDetalhe && <button type="button" aria-label="Editar ocorrência"  title="Editar ocorrência" disabled={ocupado} onClick={() => setEditando(true)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border-0 bg-transparent text-current transition hover:bg-current/10 focus-visible:outline-2 focus-visible:outline-current"><IconeEngrenagem /></button>}
       {podeEditar && ['NAO_INICIADO','EM_ANDAMENTO','EM_REVISAO'].includes(detalhe.status) && <MenuAcoesObjeto rotulo="Fechar" disabled={ocupado}>
           <button type="button" disabled={ocupado || !podeSolicitarConclusao}
             title={semAtividadeVerificada ? 'É necessária ao menos uma atividade verificada, sem outras pendentes.' : undefined}
@@ -549,10 +602,8 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, embutido
         {podeReabrir && <button type="button" className="rounded-lg border border-red-500/50 bg-red-600/15 px-3 py-2 text-sm font-semibold text-red-200 transition hover:bg-red-600/25 disabled:opacity-40" disabled={ocupado} onClick={e => { setFocoReabertura(e.currentTarget); setMotivoReabertura(''); setMostrarReabertura(true); }} title="Cancelar a solicitação e devolver à revisão">✕ Cancelar</button>}
         {podeConcluir && <button type="button" className={`rounded-lg border px-3 py-2 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-40 ${detalhe.status === 'PENDENTE_ENCERRAMENTO' ? 'border-purple-500 bg-purple-700' : 'border-violet-500 bg-violet-700'}`} disabled={ocupado} onClick={() => void transicionar(detalhe.status === 'PENDENTE_ENCERRAMENTO' ? 'aprovar-encerramento' : 'concluir')}>✓ Aprovar</button>}
       </>}
-      {!editando && podeEditarDetalhe && <button type="button" aria-label="Editar ocorrência"  title="Editar ocorrência" disabled={ocupado} onClick={() => setEditando(true)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border-0 bg-transparent text-current transition hover:bg-current/10 focus-visible:outline-2 focus-visible:outline-current"><IconeEngrenagem /></button>}
     </>}>
       {erro && <p role="alert" className="text-sm text-error-text">{erro}</p>}
-      {!editando && semAtividadeVerificada && ['NAO_INICIADO','EM_ANDAMENTO','EM_REVISAO'].includes(detalhe.status) && <p role="note" className="text-xs text-foreground/65">Para solicitar conclusão, vincule ao menos uma atividade e verifique todas as atividades vinculadas.</p>}
       {!editando ? <div data-pi-superficie className="grid gap-x-4 gap-y-3 rounded-xl border p-3 text-sm sm:grid-cols-2">
         <p><strong>Registro:</strong> {detalhe.origem === 'RECORRENTE' ? 'Recorrente por período' : (detalhe.modoRegistro === 'DESCRITIVO' || detalhe.origem === 'MANUAL_DESCRITIVA') ? 'Descritivo, sem quantidade' : 'Quantitativo por unidades'}</p>
         <p><strong>Entregável:</strong> {nomes[detalhe.entregavelId] ?? 'Vinculado ao contrato'}</p>
@@ -573,11 +624,43 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, embutido
         <label className="block text-sm">Observações<textarea maxLength={3000} rows={3} className={CAMPO} value={formEdicao.observacoes} onChange={e => setFormEdicao(v => ({ ...v, observacoes: e.target.value }))}/></label>
         <div className="flex flex-wrap justify-end gap-2"><button data-pi-acao="secundaria" className={BOTAO} type="button" disabled={ocupado} onClick={() => setEditando(false)}>Cancelar edição</button><button data-pi-acao="primaria" className={PRINCIPAL} type="submit" disabled={ocupado || !podeEditarDetalhe}>{ocupado ? 'Salvando...' : 'Salvar alterações'}</button></div>
       </form>}
-      {!editando && !detalhe.substituidaEm && <footer className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-current/20 pt-3" aria-label="Ações da ocorrência">
+      {!editando && <div className="mt-4 rounded-2xl border border-current/20 bg-current/[0.025] p-2">
+        <button type="button" onClick={abrirVinculo} disabled={!podeVincularAtividade || ocupado}
+          aria-label="Vincular atividade à ocorrência" title={!podeVincularAtividade ? 'Sem permissão ou ocorrência indisponível para novos vínculos' : 'Selecionar uma atividade registrada do mesmo entregável'}
+          className="group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-current/[0.07] focus-visible:outline-2 focus-visible:outline-current disabled:cursor-not-allowed disabled:opacity-35">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-current/30 bg-current/[0.07] text-2xl font-medium transition group-hover:scale-105" aria-hidden="true">+</span>
+          <span className="min-w-0 flex-1"><strong className="block text-sm">Vincular atividade</strong><span className="block text-xs text-foreground/65">Associe uma atividade existente a este período.</span></span>
+          <span aria-hidden="true" className="text-lg text-foreground/45">›</span>
+        </button>
+      </div>}
+      {!editando && !detalhe.substituidaEm && podeReabrir && ['CONCLUIDO','ENCERRADA'].includes(detalhe.status) && <footer className="mt-3 flex justify-end" aria-label="Ações de reabertura da ocorrência">
 
         {podeReabrir && ['CONCLUIDO','ENCERRADA'].includes(detalhe.status) && <button type="button" className="rounded-lg border border-emerald-500/50 bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500" disabled={ocupado} onClick={e => {setFocoReabertura(e.currentTarget);setMotivoReabertura('');setMostrarReabertura(true);}}>⟳ Reabrir</button>}
 
       </footer>}
+    </ModalEtapa>}
+    {detalhe && mostrarVincular && <ModalEtapa titulo="Vincular atividade" contexto={tituloApresentacao(detalhe, periodos[detalhe.entregavelId])}
+      estadoContextual={(ESTADOS[detalhe.status] ?? ESTADOS.NAO_INICIADO).modal} camada="edicao" estreito ocupado={ocupado}
+      onFechar={() => { if (!ocupado) {setMostrarVincular(false); setErroVinculo('');} }}>
+      <div className="space-y-4">
+        <p className="text-sm text-foreground/70">Selecione uma atividade já registrada neste entregável. A vinculação não conclui a ocorrência nem duplica quantidades.</p>
+        <div className="rounded-xl border border-current/20 bg-current/[0.025] p-3">
+          <label className="mb-2 block text-xs font-semibold" htmlFor="atividade-vinculo-pesquisa">Pesquisar atividade</label>
+          <CampoBuscaSugestoes rotulo="Pesquisar atividade" valor={buscaVinculo} placeholder="Digite o título da atividade..." onChange={valor=>{
+            setBuscaVinculo(valor);
+            const encontrada=atividadesDisponiveis.find(a=>`${a.titulo} · ${a.id.slice(0,8)}`===valor);
+            setAtividadeParaVincular(encontrada?.id ?? '');
+          }} opcoes={atividadesDisponiveis.filter(a=>!detalhe.atividades?.some(v=>v.id===a.id)).map(a=>`${a.titulo} · ${a.id.slice(0,8)}`)} maximo={5} />
+          {consultandoVinculos && <p role="status" className="mt-2 text-xs text-foreground/70">Consultando atividades...</p>}
+          {!consultandoVinculos && atividadesDisponiveis.length === 0 && !erroVinculo && <p className="mt-2 text-xs text-foreground/70">Nenhuma atividade registrada disponível neste entregável.</p>}
+          {atividadeParaVincular && <p className="mt-3 rounded-lg border border-current/25 bg-current/[0.06] p-2 text-xs font-semibold">✓ Atividade selecionada</p>}
+        </div>
+        {erroVinculo && <p role="alert" className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-error-text">{erroVinculo}</p>}
+        <div className="flex justify-end gap-2 border-t border-current/15 pt-3">
+          <button type="button" className={BOTAO} disabled={ocupado} onClick={()=>setMostrarVincular(false)}>Cancelar</button>
+          <button type="button" data-pi-acao="primaria" className={PRINCIPAL} disabled={ocupado || !atividadeParaVincular || !podeVincularAtividade} onClick={()=>void confirmarVinculo()}>{ocupado?'Vinculando...':'Confirmar vínculo'}</button>
+        </div>
+      </div>
     </ModalEtapa>}
     {detalhe && mostrarEncerramento && <ModalEtapa titulo="Solicitar encerramento administrativo" contexto={detalhe.titulo} estreito camada="edicao" estadoContextual="finalizado" ocupado={ocupado} onFechar={() => setMostrarEncerramento(false)}>
       <div className="space-y-4"><p className="text-sm text-foreground/75">O encerramento não conclui a execução física. O progresso efetivamente comprovado será preservado.</p>

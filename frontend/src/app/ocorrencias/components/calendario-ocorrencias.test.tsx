@@ -23,7 +23,8 @@ test('conclusão histórica permanece clicável e encerramento administrativo co
     item('A','2026-11-01','2026-11-30','CONCLUIDO'),
     item('B','2026-12-01','2026-12-31','ENCERRADA'),
   ]} aoAbrir={abrir}/>);
-  expect(screen.getByText('Contém encerramento administrativo')).toBeInTheDocument();
+  expect(screen.getByText('Encerramento registrado')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Próximo período'}));
   fireEvent.click(screen.getByRole('button',{name:/Abrir ocorrência Ocorrência B/}));
   expect(abrir).toHaveBeenCalledTimes(1);
 });

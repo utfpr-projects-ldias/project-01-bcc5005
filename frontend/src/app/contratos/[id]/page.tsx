@@ -11,7 +11,7 @@ import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { chaveTexto } from '@/lib/repositorio-consultas';
 import { ConfirmacaoSimples } from '@/app/components/confirmacao-simples';
 import { IndicadorAvancoFinalizado } from '../components/indicador-avanco-finalizado';
-import { arquivarContrato, concluirContrato, finalizarContrato, devolverContratoParaRevisao, fecharRevisaoContrato, reabrirContrato, encerrarContratoAntecipadamente, cancelarContrato, reverterCancelamentoContrato, suspenderContrato, retomarContrato } from '@/lib/contratos';
+import { solicitarConclusaoContrato, consultarElegibilidadeConclusao, arquivarContrato, concluirContrato, finalizarContrato, devolverContratoParaRevisao, fecharRevisaoContrato, reabrirContrato, encerrarContratoAntecipadamente, cancelarContrato, reverterCancelamentoContrato, suspenderContrato, retomarContrato } from '@/lib/contratos';
 import { useRepositorioConsultas } from '@/app/components/provedor-consultas';
 import { useParams } from 'next/navigation';
 import { useMeuPerfil } from '@/hooks/use-meu-perfil';
@@ -60,6 +60,7 @@ export default function DetalheContratoPage() {
   const [confirmarArquivo, setConfirmarArquivo] = useState(false);
   const [confirmarReabertura, setConfirmarReabertura] = useState(false);
   const [confirmarConclusao, setConfirmarConclusao] = useState(false);
+  const [confirmarSolicitacao, setConfirmarSolicitacao] = useState(false);
   const [confirmarFinalizacao, setConfirmarFinalizacao] = useState(false);
   const [motivoFinalizacao, setMotivoFinalizacao] = useState('');
   const [confirmarDevolucao, setConfirmarDevolucao] = useState(false);
@@ -95,6 +96,8 @@ export default function DetalheContratoPage() {
   const entregaveisDocumentais = useEntregaveis(id, Boolean(contrato));
   const resumoDocumental = useResumoDocumentalContrato(id, Boolean(contrato));
   const principalQuery = useDocumentos(id, 'CONTRATO_PRINCIPAL', 1, Boolean(contrato));
+  const elegibilidadeQuery = useConsulta(['contratos','elegibilidade-conclusao',id],
+    (signal) => consultarElegibilidadeConclusao(id, signal), {habilitada: Boolean(contrato), validadeMs: 8000});
   const principalVerificado = Boolean(Array.isArray(principalQuery.dados?.itens) &&
     principalQuery.dados.itens.some(d => d.verificadoEm && !d.reabertoEm && !d.arquivadoEm));
   // Estados distintos: carregar, não anexado, aguardando verificação, verificado.
@@ -114,6 +117,9 @@ export default function DetalheContratoPage() {
   const tituloFechamento = houveAjustes ? 'Enviar ajustes para aprovação' : 'Fechar novamente';
   function registrarAtualizacaoHistorico() {
     cache.invalidar(['contratos', 'historico-revisao', id]);
+    cache.invalidar(['contratos', 'elegibilidade-conclusao', id]);
+    void elegibilidadeQuery.atualizar().catch(() => {});
+    void principalQuery.atualizar().catch(() => {});
     setVersaoHistorico(atual => atual + 1);
   }
   const documentalmenteConcluido = Boolean(contrato && contratoDocumentalmenteConcluido(
@@ -124,24 +130,28 @@ export default function DetalheContratoPage() {
   const encerrado = Boolean(contrato && contrato.status === 'ENCERRADO' && !contrato.reabertoEm);
   const cancelado = contrato?.status === 'CANCELADO';
   const suspenso = contrato?.status === 'SUSPENSO';
-  const podeSuspender = Boolean(contrato && !contrato.arquivadoEm && !suspenso && ['PLANEJAMENTO','EM_EXECUCAO','EM_ENCERRAMENTO'].includes(contrato.status) && (administrador || acessoQuery.dados?.permissoes?.suspenderContrato));
+  const podeSuspender = Boolean(contrato && !contrato.conclusaoSolicitadaEm && !contrato.arquivadoEm && !suspenso && ['PLANEJAMENTO','EM_EXECUCAO','EM_ENCERRAMENTO'].includes(contrato.status) && (administrador || acessoQuery.dados?.permissoes?.suspenderContrato));
   const podeRetomar = Boolean(contrato && !contrato.arquivadoEm && suspenso && (administrador || acessoQuery.dados?.permissoes?.retomarContrato));
-  const podeCancelarContrato = Boolean(contrato && !contrato.arquivadoEm && !cancelado &&
+  const podeCancelarContrato = Boolean(contrato && !contrato.conclusaoSolicitadaEm && !contrato.arquivadoEm && !cancelado &&
     ['PLANEJAMENTO', 'EM_EXECUCAO'].includes(contrato.status) &&
     (administrador || acessoQuery.dados?.permissoes?.cancelarContrato));
   const podeReverterCancelamento = Boolean(contrato && !contrato.arquivadoEm && cancelado &&
     (administrador || acessoQuery.dados?.permissoes?.reverterCancelamentoContrato));
   const podeDeliberar = Boolean(administrador || acessoQuery.dados?.permissoes?.concluirContrato);
   const pendenciasQuery = usePendentesConclusao(Boolean(perfil?.ativo && contrato));
-  const pendenteConclusao = Boolean(contrato && !contrato.arquivadoEm && !concluido &&
-    contrato.status !== 'ENCERRADO' && contrato.status !== 'SUSPENSO' && contrato.status !== 'CANCELADO' && documentalmenteConcluido &&
-    !contrato.reabertoEm);
+  const pendenteConclusao = Boolean(contrato?.conclusaoSolicitadaEm && !contrato.arquivadoEm &&
+    !contrato.reabertoEm && !['CONCLUIDO','FINALIZADO','ENCERRADO','SUSPENSO','CANCELADO'].includes(contrato.status));
+  const podeSolicitarConclusao = Boolean(contrato && !pendenteConclusao && !contrato.arquivadoEm &&
+    (administrador || acessoQuery.dados?.permissoes?.editarContrato) && elegibilidadeQuery.dados?.apto);
+  const motivoIndisponibilidadeConclusao = elegibilidadeQuery.carregando ? 'Verificando requisitos...' :
+    elegibilidadeQuery.erro ? 'Falha ao verificar os requisitos da conclusão.' :
+    elegibilidadeQuery.dados?.pendencias?.[0] ?? 'A conclusão não está disponível para este contrato.';
   const emRevisao = Boolean(contrato?.reabertoEm && !contrato.arquivadoEm && !suspenso && !cancelado && !encerrado && !pendenteConclusao);
   const revisaoConcluivel = emRevisao && documentalmenteConcluido;
   const podeConcluir = pendenteConclusao;
   const podeFecharRevisao = revisaoConcluivel && Boolean(etapasDocumentais.dados?.filter(e => !e.arquivadoEm).every(e => !e.reabertoEm && e.status === 'CONCLUIDA'));
   const bloqueioOperacional = concluido || encerrado || cancelado || suspenso || pendenteConclusao;
-  const podeEncerrar = Boolean(contrato && !contrato.arquivadoEm && !['CONCLUIDO', 'ENCERRADO', 'SUSPENSO', 'CANCELADO'].includes(contrato.status) &&
+  const podeEncerrar = Boolean(contrato && !contrato.conclusaoSolicitadaEm && !contrato.arquivadoEm && !['CONCLUIDO', 'ENCERRADO', 'SUSPENSO', 'CANCELADO'].includes(contrato.status) &&
     (administrador || acessoQuery.dados?.permissoes?.encerrarContrato));
   // A etapa pode ser reaberta enquanto o contrato aguarda conclusão explícita;
   // o bloqueio integral só ocorre após o status operacional CONCLUIDO.
@@ -193,6 +203,9 @@ export default function DetalheContratoPage() {
         else if (acao === 'reabrir' && contrato && ['CONCLUIDO','FINALIZADO','ENCERRADO'].includes(contrato.status) && (administrador || acessoQuery.dados?.permissoes?.reabrirContrato)) setConfirmarReabertura(true);
         else if (acao === 'encerrar' && podeEncerrar) setAbrirEncerramento(true);
         else if (acao === 'finalizar' && podeDeliberar && contrato && !contrato.arquivadoEm && !['SUSPENSO','CANCELADO','CONCLUIDO','FINALIZADO','ENCERRADO'].includes(contrato.status)) setConfirmarFinalizacao(true);
+        else if (acao === 'solicitar-conclusao' && podeSolicitarConclusao) setConfirmarSolicitacao(true);
+        else if (acao === 'aprovar-conclusao' && pendenteConclusao && podeDeliberar) setConfirmarConclusao(true);
+        else if (acao === 'devolver-conclusao' && pendenteConclusao && podeDeliberar) setConfirmarDevolucao(true);
       }
     }
     window.addEventListener('message', receber);
@@ -200,7 +213,7 @@ export default function DetalheContratoPage() {
   // Ações do modal contextual sempre usam a autorização e a situação atuais.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [painelInterno, id, podeAbrirEdicao, contrato?.id, contrato?.status, contrato?.arquivadoEm, editarAberto,
-      podeSuspender, podeCancelarContrato, podeReverterCancelamento, podeRetomar, podeEncerrar, podeDeliberar, administrador, acessoQuery.dados?.permissoes?.reabrirContrato]);
+      podeSuspender, podeCancelarContrato, podeReverterCancelamento, podeRetomar, podeEncerrar, podeDeliberar, podeSolicitarConclusao, pendenteConclusao, administrador, acessoQuery.dados?.permissoes?.reabrirContrato]);
   function fecharEdicao() {
     if (salvandoEdicao || alterandoArquivo) return;
     if (confirmarArquivo) { setConfirmarArquivo(false); return; }
@@ -329,6 +342,21 @@ export default function DetalheContratoPage() {
     } catch (e) { setErroArquivo(e instanceof Error ? e.message : 'Falha ao atualizar situação.'); }
     finally { setAlterandoArquivo(false); }
   }
+  async function executarSolicitacaoConclusao() {
+    if (!contrato || !podeSolicitarConclusao || alterandoArquivo) return;
+    setAlterandoArquivo(true); setErroArquivo('');
+    try {
+      const atualizado = await solicitarConclusaoContrato(contrato.id);
+      cache.gravar(chaveTexto(['contratos','detalhe',contrato.id]), atualizado);
+      comunicarDecisaoContrato(atualizado);
+      setConfirmarSolicitacao(false);
+      cache.invalidar(['contratos','lista']); cache.invalidar(['contratos','pendentes']);
+      cache.invalidar(['contratos','elegibilidade-conclusao', contrato.id]);
+      await Promise.allSettled([contratoQuery.atualizar(), elegibilidadeQuery.atualizar()]);
+      toastSucesso('Conclusão solicitada. Aguardando aprovação autorizada.');
+    } catch (erro) { setErroArquivo(erro instanceof Error ? erro.message : 'Não foi possível solicitar conclusão.'); }
+    finally { setAlterandoArquivo(false); }
+  }
   async function executarConclusao() {
     if (!contrato || contrato.arquivadoEm || !podeConcluir || alterandoArquivo ||
       !(administrador || acessoQuery.dados?.permissoes?.concluirContrato)) return;
@@ -341,7 +369,8 @@ export default function DetalheContratoPage() {
       cache.invalidar(['contratos', 'detalhe', contrato.id]); cache.invalidar(['execucao', contrato.id]);
       cache.invalidar(['contratos', 'lista']);
       cache.invalidar(['contratos', 'pendentes']);
-      await Promise.allSettled([contratoQuery.atualizar(), principalQuery.atualizar()]);
+      cache.invalidar(['contratos', 'elegibilidade-conclusao', contrato.id]);
+      await Promise.allSettled([contratoQuery.atualizar(), principalQuery.atualizar(), elegibilidadeQuery.atualizar()]);
       toastSucesso('Contrato concluído após confirmação autorizada.');
     } catch (erro) { setErroArquivo(erro instanceof Error ? erro.message : 'Não foi possível concluir o contrato.'); }
     finally { setAlterandoArquivo(false); }
@@ -536,7 +565,7 @@ export default function DetalheContratoPage() {
           {emRevisao && <><span className="rounded-full border border-teal-500/55 bg-teal-500/10 px-3 py-1 text-xs font-semibold text-foreground">Em revisão</span><span className="rounded-full border border-foreground/20 bg-background px-2.5 py-1 text-xs text-foreground/80">{faseEmRevisao(contrato.status)}</span></>}
           {finalizado && <IndicadorAvancoFinalizado contratoId={contrato.id} />}
           {finalizado && <span className="rounded-full border border-purple-500/60 bg-purple-500/20 px-3 py-1 text-xs font-semibold text-purple-700 dark:text-purple-200">Encerrado — execução parcial</span>}
-          {pendenteConclusao && <span className="rounded-full border border-yellow-400/60 bg-yellow-500/10 px-3 py-1 text-xs font-semibold text-yellow-700 dark:text-yellow-200">Pendente de conclusão</span>}
+          {pendenteConclusao && <span className="rounded-full border border-violet-400/60 bg-violet-500/10 px-3 py-1 text-xs font-semibold text-violet-300">Pendente de conclusão</span>}
           <span data-tec08-modo-contrato className="hidden rounded-full bg-brand-green/10 px-3 py-1 text-xs font-medium sm:inline-flex">{MODOS[contrato.modoCalculo]}</span>
         </div>
       </header>}
@@ -640,7 +669,7 @@ export default function DetalheContratoPage() {
               onOrdemAlterada={async () => { registrarAtualizacaoHistorico(); await contratoQuery.atualizar(); }} />
           </section>
           <section data-tec08-aba-contrato role="tabpanel" id="painel-documentos" aria-labelledby="tab-documentos" hidden={abaContrato !== 'documentos'} className={abaContrato !== 'documentos' ? 'hidden' : 'space-y-4'}>
-            <PainelDocumentos key={`documentos:${contrato.id}`} contratoId={contrato.id} estadoContextual={contrato.arquivadoEm ? 'arquivado' : cancelado ? 'cancelado' : suspenso ? 'suspenso' : finalizado ? 'finalizado' : encerrado ? 'encerrado' : emRevisao ? 'revisao' : (concluido || pendenteConclusao) ? 'concluido' : 'normal'} onDocumentoAlterado={registrarAtualizacaoHistorico} habilitado={!!perfil?.ativo} somenteLeitura={Boolean(contrato.arquivadoEm || bloqueioOperacional)} permitirRegularizarPrincipal={Boolean(pendenteConclusao && !principalVerificado)}
+            <PainelDocumentos key={`documentos:${contrato.id}`} contratoId={contrato.id} estadoContextual={contrato.arquivadoEm ? 'arquivado' : cancelado ? 'cancelado' : suspenso ? 'suspenso' : finalizado ? 'finalizado' : encerrado ? 'encerrado' : emRevisao ? 'revisao' : (concluido || pendenteConclusao) ? 'concluido' : 'normal'} onDocumentoAlterado={registrarAtualizacaoHistorico} habilitado={!!perfil?.ativo} somenteLeitura={Boolean(contrato.arquivadoEm || bloqueioOperacional)} permitirRegularizarPrincipal={Boolean(!contrato.arquivadoEm && !['CANCELADO','SUSPENSO','ENCERRADO','CONCLUIDO','FINALIZADO'].includes(contrato.status) && !principalVerificado)}
               podeAnexar={Boolean((administrador || acessoQuery.dados?.permissoes?.anexarDocumentos))}
               podeEditarMetadados={Boolean((administrador || acessoQuery.dados?.permissoes?.editarDocumentos))}
               podeArquivarDocumentos={Boolean((administrador || acessoQuery.dados?.permissoes?.arquivarDocumentos))}
@@ -657,14 +686,18 @@ export default function DetalheContratoPage() {
         </div>
 
       </div>
-        <footer className="mt-4 flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-brand-green/20 bg-background/70 px-4 py-3" aria-label="Observações e ações do contrato">
-          <p className="min-w-0 flex-1 truncate text-xs text-foreground/65" title={contrato.observacoes ?? ''}>{contrato.observacoes || 'Sem observações adicionais'}</p>
+        {(!painelInterno || Boolean(contrato.observacoes?.trim())) && <footer data-tec08-contexto-operacional data-tec08-estado={contrato.arquivadoEm ? 'arquivado' : cancelado ? 'cancelado' : suspenso ? 'suspenso' : finalizado ? 'finalizado' : encerrado ? 'encerrado' : emRevisao ? 'revisao' : (concluido || pendenteConclusao) ? 'concluido' : 'normal'} className="mt-4 flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border bg-background/70 px-4 py-3" aria-label="Observações e ações do contrato">
+          {Boolean(contrato.observacoes?.trim()) && <p className="min-w-0 flex-1 truncate text-xs text-foreground/65" title={contrato.observacoes ?? ''}>{contrato.observacoes}</p>}
         <div className="flex min-w-0 items-center justify-end gap-2">
           {!painelInterno && <MenuAcoesObjeto rotulo="Fechar contrato" disabled={alterandoArquivo}>
            {podeSuspender && <button type="button" disabled={alterandoArquivo} onClick={() => setConfirmarSuspensao(true)}>⏸ Suspender contrato</button>}
            {podeCancelarContrato && <button type="button" disabled={alterandoArquivo} onClick={() => setCancelamentoAberto(true)}>✕ Cancelar contrato</button>}
            {podeEncerrar && <button type="button" disabled={alterandoArquivo} onClick={() => setAbrirEncerramento(true)}>⚑ Encerrar antecipadamente</button>}
-          {!finalizado && !concluido && !encerrado && !cancelado && !suspenso && !contrato.arquivadoEm && podeDeliberar && <button type="button" className="rounded-lg border border-purple-500/55 bg-purple-500/20 px-3 py-2 text-xs font-semibold text-purple-700 dark:text-purple-200" onClick={() => setConfirmarFinalizacao(true)}>Finalizar contrato</button>}
+          {!finalizado && !concluido && !encerrado && !cancelado && !suspenso && !contrato.arquivadoEm && !pendenteConclusao && (administrador || acessoQuery.dados?.permissoes?.editarContrato) &&
+            <button type="button" disabled={!podeSolicitarConclusao || alterandoArquivo} title={!podeSolicitarConclusao ? motivoIndisponibilidadeConclusao : 'Solicitar aprovação da conclusão integral'}
+              className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-violet-300 hover:bg-violet-500/10 disabled:cursor-not-allowed disabled:text-foreground/35" onClick={() => setConfirmarSolicitacao(true)}>
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="m7 11 2 2 3-4M14 10h4M7 17h11"/></svg>Solicitar conclusão
+            </button>}
           {pendenteConclusao && podeDeliberar ? <>
             <button type="button" data-tec08-decisao="rejeitar" onClick={() => setConfirmarDevolucao(true)} disabled={alterandoArquivo}
               aria-label="Não aprovar conclusão" title="Não aprovar e devolver o contrato para revisão"
@@ -673,7 +706,7 @@ export default function DetalheContratoPage() {
               title={principalQuery.carregando ? 'Consultando a situação do PDF principal' : !principalVerificado ? pendenciaPrincipal : 'Aprovar conclusão do contrato'}
               aria-label="Aprovar conclusão do contrato"
               aria-describedby={!principalVerificado ? 'aviso-pdf-principal-conclusao' : undefined}
-              className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-300 ${principalVerificado ? 'border-green-500 bg-green-700 text-white hover:bg-green-600' : 'border-green-500/75 bg-green-950/45 text-green-200 disabled:cursor-not-allowed'}`}><span aria-hidden="true">✓</span> Aprovar</button>
+              className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-300 ${principalVerificado ? 'border-violet-500 bg-violet-700 text-white hover:bg-violet-600' : 'border-violet-500/45 bg-violet-950/20 text-violet-200/40 disabled:cursor-not-allowed'}`}><span aria-hidden="true">✓</span> Aprovar</button>
           </> : contrato.arquivadoEm ? null : (concluido || encerrado) && (administrador || acessoQuery.dados?.permissoes?.reabrirContrato) ? (
             <button type="button" onClick={() => setConfirmarReabertura(true)} disabled={alterandoArquivo}
               className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-emerald-500/60 bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-teal-900 focus-visible:outline-2 focus-visible:outline-teal-300 disabled:opacity-50" aria-label="Reabrir contrato concluído"><span aria-hidden="true">⟳</span> Reabrir contrato</button>
@@ -699,7 +732,7 @@ export default function DetalheContratoPage() {
 
           </MenuAcoesObjeto>}
         </div>
-        </footer>
+        </footer>}
     </> : <Aviso erro>Contrato não encontrado.</Aviso>}
     {editarAberto && contrato && podeAbrirEdicao && <ModalEtapa titulo={`Editar contrato · ${contrato.numeroContrato}`}
       estadoContextual={contrato.arquivadoEm ? "arquivado" : cancelado ? "cancelado" : suspenso ? "suspenso" : encerrado ? "encerrado" : emRevisao ? "revisao" : (concluido || pendenteConclusao) ? "concluido" : "normal"}
@@ -788,10 +821,15 @@ export default function DetalheContratoPage() {
       confirmar="Reabrir contrato" cancelarVermelho={false} ocupado={alterandoArquivo}
       justificativa={motivoDecisao} onJustificativaChange={setMotivoDecisao}
       onCancelar={() => setConfirmarReversaoCancelamento(false)} onConfirmar={() => void executarCancelamento(true)} />}
+    {confirmarSolicitacao && contrato && <ConfirmacaoSimples
+      titulo="Solicitar conclusão do contrato?"
+      descricao="A execução e os documentos obrigatórios foram verificados. O pedido será registrado e ficará aguardando a decisão de quem possui permissão para aprovar."
+      confirmar="Solicitar conclusão" confirmacaoRoxa ocupado={alterandoArquivo} cancelarVermelho={false}
+      onCancelar={() => setConfirmarSolicitacao(false)} onConfirmar={() => void executarSolicitacaoConclusao()} />}
     {confirmarConclusao && contrato && <ConfirmacaoSimples
       titulo="Aprovar conclusão do contrato?"
       descricao="Aprovar confirma definitivamente a conclusão. É obrigatório ter PDF principal ativo e verificado, etapas e entregáveis concluídos. A decisão será auditada."
-      confirmar="Aprovar conclusão" aprovarVerde cancelarVermelho ocupado={alterandoArquivo}
+      confirmar="Aprovar conclusão" confirmacaoRoxa cancelarVermelho ocupado={alterandoArquivo}
       onCancelar={() => setConfirmarConclusao(false)} onConfirmar={() => void executarConclusao()} />}
     {confirmarDevolucao && contrato && <ConfirmacaoSimples
       titulo="Não aprovar a conclusão do contrato?"
@@ -805,8 +843,9 @@ export default function DetalheContratoPage() {
       justificativa={motivoDecisao} onJustificativaChange={setMotivoDecisao}
       onCancelar={() => setConfirmarFechamentoRevisao(false)} onConfirmar={() => void executarFechamentoRevisao()} />}
     {confirmarReabertura && contrato && <ConfirmacaoSimples
-      titulo="Reabrir contrato concluído ou encerrado?" descricao="O contrato será marcado como Reaberto. Etapas, entregáveis e evidências continuarão no estado atual e precisarão de reabertura específica. O histórico será preservado."
-      confirmar="Reabrir contrato" ocupado={alterandoArquivo} justificativa={motivoDecisao} onJustificativaChange={setMotivoDecisao} onCancelar={() => setConfirmarReabertura(false)}
+      titulo={encerrado ? 'Reabrir contrato encerrado?' : 'Reabrir contrato concluído?'}
+      descricao={`O contrato deixará de ficar ${encerrado ? 'Encerrado' : 'Concluído'} e passará para Em revisão. Etapas, entregáveis e evidências continuarão no estado atual e poderão ser reabertos separadamente. O histórico será preservado.`}
+      confirmar="Reabrir contrato" estadoContextual={encerrado ? 'encerrado' : 'concluido'} ocupado={alterandoArquivo} justificativa={motivoDecisao} onJustificativaChange={setMotivoDecisao} onCancelar={() => setConfirmarReabertura(false)}
       onConfirmar={() => void executarReabertura()} />}
     {confirmarArquivo && contrato && <ConfirmacaoSimples
       titulo='Arquivar contrato?'

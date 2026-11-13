@@ -18,6 +18,7 @@ import { rotuloCodigoPublico } from '@/lib/codigos-publicos';
 import { etapaPodeSerConcluida } from '@/lib/situacao-documental-etapa';
 import { ConfirmacaoSimples } from '@/app/components/confirmacao-simples';
 import { ModalEtapa } from './modal-etapa';
+import { IconeEngrenagem } from '@/app/components/icone-engrenagem';
 import { ajustarRestauracaoHistorico } from '@/lib/historico-modal-scroll';
 import { toastSucesso, toastAviso } from '@/app/components/toast-notificacoes';
 import { useRepositorioConsultasOpcional } from '@/app/components/provedor-consultas';
@@ -571,23 +572,25 @@ export function PainelEtapas({ contratoId, habilitado, podeGerenciar, permissoes
       estadoContextual={editor === 'nova' ? 'normal' : (itemEditando?.arquivadoEm || itemDetalhe?.arquivadoEm) ? 'arquivado' : (itemEditando?.reabertoEm || itemDetalhe?.reabertoEm) ? 'revisao' : (itemEditando?.status === 'FINALIZADA' || itemDetalhe?.status === 'FINALIZADA') ? 'finalizado' : (itemEditando?.status === 'ENCERRADA' || itemDetalhe?.status === 'ENCERRADA') ? 'encerrado' : (itemEditando?.status === 'CONCLUIDA' || itemDetalhe?.status === 'CONCLUIDA') ? 'concluido' : 'normal'}
       bloqueadoPorSubmodal={detalheEntregavelAberto}
       ocupado={salvandoFormulario} focoRetorno={gatilhoModal} onFechar={fecharNivelModal}
-      acoesComoMenu acoes={itemDetalhe ? <>
-        {!itemDetalhe.arquivadoEm && !['CONCLUIDA','ENCERRADA','FINALIZADA'].includes(itemDetalhe.status) && permissao('concluirEtapas') && !contratoBloqueado && <button type="button" className="rounded-lg border border-purple-500/55 bg-purple-500/15 px-3 py-2 text-xs font-semibold text-purple-700 dark:text-purple-200" onClick={() => {setMotivoFinalizacaoEtapa(''); setConfirmarFinalizacaoEtapa(itemDetalhe.id);}}>Finalizar etapa</button>}
-        {itemDetalhe.reabertoEm && !itemDetalhe.arquivadoEm && !contratoBloqueado && permissao('concluirEtapas') &&
-          etapaPodeSerConcluida(itemDetalhe, entregaveisQuery.dados, documentalQuery.dados) &&
-          <button type="button" disabled={ocupadoArquivoEtapa} onClick={() => setConfirmarConclusaoEtapa(itemDetalhe.id)}
-            className="rounded-lg border border-violet-500/50 bg-violet-700 px-3 py-2 text-xs font-semibold text-white">Concluir etapa</button>}
-        {!itemDetalhe.arquivadoEm && !itemDetalhe.reabertoEm && (itemDetalhe.status === 'CONCLUIDA' || itemDetalhe.status === 'ENCERRADA') &&
-          (itemDetalhe.status === 'ENCERRADA' ? podeReabrirEtapaEncerrada : podeReabrirEtapa) && !contratoBloqueado &&
-          <button type="button" className="rounded-lg border border-emerald-500/60 bg-emerald-600 px-3 py-2 text-xs font-semibold text-white" disabled={ocupadoArquivoEtapa} onClick={() => setConfirmarReaberturaEtapa(itemDetalhe.id)}>⟳ Reabrir</button>}
-        {!itemDetalhe.arquivadoEm && podeArquivarEtapa && !contratoBloqueado &&
-          !(itemDetalhe.status === 'CONCLUIDA' && !itemDetalhe.reabertoEm) &&
-          <button type="button" className="rounded-lg border border-amber-500/50 bg-amber-500/15 px-3 py-2 text-xs font-semibold" disabled={ocupadoArquivoEtapa} onClick={() => setConfirmarArquivoEtapa({id:itemDetalhe.id, acao:'arquivar'})}><span className="inline-flex items-center gap-1.5"><IconeStatus tipo="arquivadas"/>Arquivar</span></button>}
-        {itemDetalhe.arquivadoEm && podeReativarEtapa && !contratoBloqueado &&
-          <button type="button" className="rounded-lg border border-amber-500/50 bg-amber-500/15 px-3 py-2 text-xs font-semibold" disabled={ocupadoArquivoEtapa} onClick={() => setConfirmarArquivoEtapa({id:itemDetalhe.id, acao:'reativar'})}>⟳ Reativar</button>}
+      acoes={itemDetalhe ? <>
         {podeEditarEtapa && !itemDetalhe.arquivadoEm && !contratoBloqueado &&
           !(['CONCLUIDA','ENCERRADA'].includes(itemDetalhe.status) && !itemDetalhe.reabertoEm) &&
-          <button type="button" data-tec08-editar-entidade className="rounded-lg border border-current/30 bg-current/[0.09] px-3 py-2 text-xs font-semibold" onClick={() => { setRetornoEdicao(itemDetalhe.id); setEditor(itemDetalhe.id); }}>✎ Editar</button>}
+          <button type="button" aria-label="Editar etapa" title="Editar etapa" className="inline-flex h-9 w-9 items-center justify-center rounded-lg border-0 bg-transparent text-current transition hover:bg-current/10 focus-visible:outline-2 focus-visible:outline-current" onClick={() => { setRetornoEdicao(itemDetalhe.id); setEditor(itemDetalhe.id); }}><IconeEngrenagem /></button>}
+        <MenuAcoesObjeto rotulo={itemDetalhe.arquivadoEm || ['CONCLUIDA','ENCERRADA','FINALIZADA'].includes(itemDetalhe.status) ? 'Reabrir' : 'Fechar'} disabled={ocupadoArquivoEtapa || salvandoFormulario}>
+          {!itemDetalhe.arquivadoEm && !['CONCLUIDA','ENCERRADA','FINALIZADA'].includes(itemDetalhe.status) && permissao('concluirEtapas') && !contratoBloqueado && <button type="button" className="rounded-lg border border-purple-500/55 bg-purple-500/15 px-3 py-2 text-xs font-semibold text-purple-700 dark:text-purple-200" onClick={() => {setMotivoFinalizacaoEtapa(''); setConfirmarFinalizacaoEtapa(itemDetalhe.id);}}>Finalizar etapa</button>}
+          {itemDetalhe.reabertoEm && !itemDetalhe.arquivadoEm && !contratoBloqueado && permissao('concluirEtapas') &&
+            etapaPodeSerConcluida(itemDetalhe, entregaveisQuery.dados, documentalQuery.dados) &&
+            <button type="button" disabled={ocupadoArquivoEtapa} onClick={() => setConfirmarConclusaoEtapa(itemDetalhe.id)}
+              className="rounded-lg border border-violet-500/50 bg-violet-700 px-3 py-2 text-xs font-semibold text-white">Concluir etapa</button>}
+          {!itemDetalhe.arquivadoEm && !itemDetalhe.reabertoEm && (itemDetalhe.status === 'CONCLUIDA' || itemDetalhe.status === 'ENCERRADA') &&
+            (itemDetalhe.status === 'ENCERRADA' ? podeReabrirEtapaEncerrada : podeReabrirEtapa) && !contratoBloqueado &&
+            <button type="button" className="rounded-lg border border-emerald-500/60 bg-emerald-600 px-3 py-2 text-xs font-semibold text-white" disabled={ocupadoArquivoEtapa} onClick={() => setConfirmarReaberturaEtapa(itemDetalhe.id)}>⟳ Reabrir</button>}
+          {!itemDetalhe.arquivadoEm && podeArquivarEtapa && !contratoBloqueado &&
+            !(itemDetalhe.status === 'CONCLUIDA' && !itemDetalhe.reabertoEm) &&
+            <button type="button" className="rounded-lg border border-amber-500/50 bg-amber-500/15 px-3 py-2 text-xs font-semibold" disabled={ocupadoArquivoEtapa} onClick={() => setConfirmarArquivoEtapa({id:itemDetalhe.id, acao:'arquivar'})}><span className="inline-flex items-center gap-1.5"><IconeStatus tipo="arquivadas"/>Arquivar</span></button>}
+          {itemDetalhe.arquivadoEm && podeReativarEtapa && !contratoBloqueado &&
+            <button type="button" className="rounded-lg border border-amber-500/50 bg-amber-500/15 px-3 py-2 text-xs font-semibold" disabled={ocupadoArquivoEtapa} onClick={() => setConfirmarArquivoEtapa({id:itemDetalhe.id, acao:'reativar'})}>⟳ Reativar</button>}
+        </MenuAcoesObjeto>
       </> : undefined}>
       {itemDetalhe ? <div className="min-w-0 space-y-4" aria-label={`Detalhes da etapa ${itemDetalhe.nome}`}>
         <dl data-tec08-secao-contextual className="grid gap-3 rounded-xl border border-brand-green/20 p-4 text-sm sm:grid-cols-2">

@@ -49,6 +49,11 @@ async function requisitar<T>(url: string, init?: RequestInit): Promise<T> {
   return await resposta.json() as T;
 }
 
+export async function listarAtividadesVinculaveis(contratoId: string, entregavelId: string, signal?: AbortSignal): Promise<ListaAtividades> {
+  const params = new URLSearchParams({ entregavelId, status: 'REGISTRADA', page: '1', limit: '100' });
+  return requisitar<ListaAtividades>(`${base(contratoId)}?${params}`, { signal });
+}
+
 export function consultarAtividade(contratoId: string, id: string, signal?: AbortSignal): Promise<Atividade> {
   return requisitar<Atividade>(`${base(contratoId)}/${encodeURIComponent(id)}`, { signal });
 }

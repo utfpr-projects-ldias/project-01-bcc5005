@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { useRepositorioConsultasOpcional } from '@/app/components/provedor-consultas';
+import { useRepositorioConsultasOpcional, useConsulta } from '@/app/components/provedor-consultas';
 import { ModalEtapa } from '@/app/contratos/components/modal-etapa';
 import { MenuAcoesObjeto } from '@/app/components/menu-acoes-objeto';
 import { IconeEngrenagem } from '@/app/components/icone-engrenagem';
@@ -15,7 +15,7 @@ import { justificativaAtividadeSchema } from '@/lib/validacao-atividade';
 import { transicionarAtividadeApi, type Atividade, type EstadoAtividade } from '@/hooks/use-atividades';
 import type { Entregavel } from '@/lib/entregaveis';
 import { chaveTexto } from '@/lib/repositorio-consultas';
-import type { Contrato } from '@/lib/contratos';
+import { consultarElegibilidadeConclusao, type Contrato } from '@/lib/contratos';
 import { contextoDaDecisao, coresDecisao } from '@/lib/cores-decisoes';
 import { ModalEdicaoAtividade } from './modal-edicao-atividade';
 
@@ -85,11 +85,13 @@ export function PreviaContrato({ contratoId, fechar, foco }: { contratoId: strin
   const contrato = contratoConfirmado ?? consulta.dados?.find(item => item.id === contratoId);
   const cacheContrato = useRepositorioConsultasOpcional();
   const progresso = useProgresso(contratoId);
+  const elegibilidade = useConsulta(['contratos','elegibilidade-conclusao',contratoId],
+    (signal) => consultarElegibilidadeConclusao(contratoId, signal), { validadeMs: 8000 });
   const acessoContrato = useAcessoContrato(contratoId);
   const { dados: usuario } = useMeuPerfil();
   const admin = usuario?.perfil === 'ADMINISTRADOR';
   const permitido = (chave: 'suspenderContrato' | 'cancelarContrato' | 'encerrarContrato' | 'concluirContrato' | 'retomarContrato' | 'reverterCancelamentoContrato' | 'reabrirContrato') => Boolean(admin || acessoContrato.dados?.permissoes?.[chave]);
-  const encerramentoElegivel = Boolean(contrato && !contrato.arquivadoEm && !['SUSPENSO','CANCELADO','CONCLUIDO','FINALIZADO','ENCERRADO'].includes(contrato.status));
+  const encerramentoElegivel = Boolean(contrato && !contrato.arquivadoEm && !contrato.conclusaoSolicitadaEm && !['SUSPENSO','CANCELADO','CONCLUIDO','FINALIZADO','ENCERRADO'].includes(contrato.status));
   const enviarAcao = (acao: string) => iframeRef.current?.contentWindow?.postMessage({tipo:'pi:acao-contrato',contratoId,acao},window.location.origin);
   const acaoReabrir = contrato?.status === 'CANCELADO' ? 'reverter-cancelamento'
     : contrato?.status === 'SUSPENSO' ? 'retomar'
@@ -97,9 +99,10 @@ export function PreviaContrato({ contratoId, fechar, foco }: { contratoId: strin
   const podeReabrir = acaoReabrir === 'reverter-cancelamento' ? permitido('reverterCancelamentoContrato')
     : acaoReabrir === 'retomar' ? permitido('retomarContrato')
     : acaoReabrir === 'reabrir' ? permitido('reabrirContrato') : false;
-  const estadoModalContrato = estadoContextualContrato(contrato);
+  const estadoModalContrato = estadoContextualContrato(contrato, Boolean(contrato?.conclusaoSolicitadaEm));
   const corPainel = estadoModalContrato === 'revisao' ? 'border-teal-500/45 bg-teal-500/[0.05] text-teal-600 dark:text-teal-200'
     : estadoModalContrato === 'finalizado' ? 'border-purple-500/45 bg-purple-500/[0.05] text-purple-700 dark:text-purple-200'
+    : estadoModalContrato === 'encerrado' ? 'border-slate-500/45 bg-slate-500/[0.05] text-slate-700 dark:text-slate-300'
     : estadoModalContrato === 'concluido' ? 'border-violet-500/45 bg-violet-500/[0.05] text-violet-700 dark:text-violet-200'
     : estadoModalContrato === 'arquivado' ? 'border-amber-500/45 bg-amber-500/[0.05] text-amber-700 dark:text-amber-200'
     : estadoModalContrato === 'suspenso' ? 'border-yellow-500/45 bg-yellow-500/[0.05] text-yellow-700 dark:text-yellow-200'
@@ -116,6 +119,7 @@ export function PreviaContrato({ contratoId, fechar, foco }: { contratoId: strin
       cacheContrato?.gravar(chaveTexto(['contratos', 'detalhe', contratoId]), atualizado);
       cacheContrato?.invalidar(['contratos', 'lista']);
       cacheContrato?.invalidar(['contratos', 'pendentes']);
+      cacheContrato?.invalidar(['contratos','elegibilidade-conclusao', contratoId]);
       cacheContrato?.invalidar(['execucao', contratoId]);
     }
     window.addEventListener('message', receber);
@@ -147,7 +151,15 @@ export function PreviaContrato({ contratoId, fechar, foco }: { contratoId: strin
             <button type="button" disabled={!encerramentoElegivel || !permitido('suspenderContrato')} className="!bg-amber-600/20 !text-amber-200 disabled:!bg-slate-600/15 disabled:!text-foreground/40" onClick={() => enviarAcao('suspender')}>⏸ Suspender contrato</button>
             <button type="button" disabled={!encerramentoElegivel || !permitido('cancelarContrato')} className="!bg-red-600/20 !text-red-200 disabled:!bg-slate-600/15 disabled:!text-foreground/40" onClick={() => enviarAcao('cancelar')}>✕ Cancelar contrato</button>
             <button type="button" disabled={!encerramentoElegivel || !permitido('encerrarContrato')} className="!bg-violet-600/20 !text-violet-200 disabled:!bg-slate-600/15 disabled:!text-foreground/40" onClick={() => enviarAcao('encerrar')}>⚑ Encerrar antecipadamente</button>
-            <button type="button" disabled={!encerramentoElegivel || !permitido('concluirContrato')} className="!bg-purple-600/20 !text-purple-200 disabled:!bg-slate-600/15 disabled:!text-foreground/40" onClick={() => enviarAcao('finalizar')}>⚑ Finalizar contrato</button>
+            <button type="button" disabled={!encerramentoElegivel || !!contrato?.conclusaoSolicitadaEm || !elegibilidade.dados?.apto || !(admin || acessoContrato.dados?.permissoes?.editarContrato)}
+              title={elegibilidade.dados?.pendencias?.[0] ?? 'Solicitar avaliação de conclusão integral'}
+              className="!bg-transparent !text-violet-300 hover:!bg-violet-500/10 disabled:!text-foreground/35" onClick={() => enviarAcao('solicitar-conclusao')}>
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="inline-block h-4 w-4 align-middle"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="m7 11 2 2 3-4M14 10h4M7 17h11"/></svg> Solicitar conclusão
+            </button>
+            {Boolean(contrato?.conclusaoSolicitadaEm) && permitido('concluirContrato') && <>
+              <button type="button" className="!bg-transparent !text-red-300 hover:!bg-red-500/10" onClick={() => enviarAcao('devolver-conclusao')}>✕ Devolver solicitação</button>
+              <button type="button" className="!bg-transparent !text-violet-300 hover:!bg-violet-500/10" onClick={() => enviarAcao('aprovar-conclusao')}>✓ Aprovar conclusão</button>
+            </>}
           </MenuAcoesObjeto>}
           <button ref={fecharRef} type="button" aria-label="Fechar detalhes do contrato" onClick={fechar} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-xl pi-contrato-acento hover:bg-current/10">×</button>
         </div>
@@ -171,14 +183,16 @@ export function PreviaContrato({ contratoId, fechar, foco }: { contratoId: strin
             contratoSuspenso={estadoModalContrato === 'suspenso'}
             contratoCancelado={estadoModalContrato === 'cancelado'} />
           <section aria-label="Execução física" className={`space-y-3 rounded-xl border p-3 ${corPainel}`}>
-            <h3 className="text-sm font-semibold text-current">Execução física</h3>
-            <p className="text-xs text-foreground/65">Acompanhe o avanço dos entregáveis. A comprovação documental é independente.</p>
-            <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs text-foreground/65">Avanço do contrato</span>
+            <header className="space-y-1">
+              <h3 className="text-sm font-semibold text-current">Execução física</h3>
+              <p className="text-xs text-foreground/65">Acompanhe o avanço dos entregáveis. A comprovação documental é independente.</p>
+            </header>
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-current/15 bg-background/35 px-3 py-2"><span className="text-xs text-foreground/65">Avanço do contrato</span>
               <strong className="text-xl tabular-nums text-current">{percentual(progresso.progresso?.avanco)}</strong></div>
             <p className="text-xs text-foreground/65">Modo: <strong>{progresso.progresso?.modoCalculo === 'PONDERADO' ? 'Ponderado' : 'Simples'}</strong> · {progresso.progresso?.entregaveis.length ?? 0} entregável(is)</p>
             <div className="space-y-2 border-t border-current/15 pt-2">
-              {top.map(ent => <div key={ent.entregavelId} className="flex items-center justify-between gap-3 rounded-lg border border-current/20 p-2 text-xs">
-                <span className="min-w-0 truncate" title={ent.nome}>{ent.nome}</span><strong className="shrink-0 tabular-nums">{percentual(ent.percentualExecucao)}</strong>
+              {top.map(ent => <div key={ent.entregavelId} className="flex items-center justify-between gap-3 rounded-xl border border-current/18 bg-background/40 px-3 py-2.5 text-xs">
+                <span className="min-w-0 truncate font-medium" title={ent.nome}>{ent.nome}</span><strong className="shrink-0 tabular-nums">{percentual(ent.percentualExecucao)}</strong>
               </div>)}
               {!top.length && <p className="text-xs text-foreground/60">Nenhum entregável com progresso disponível.</p>}
               {(progresso.progresso?.entregaveis.length ?? 0) > 3 && <p className="text-xs text-foreground/55">Exibindo os três primeiros entregáveis.</p>}
@@ -297,17 +311,17 @@ export function CartaoAtividade({ atividade, contratoId, permissoes, compacto = 
             {acaoDisponivel('aprovar-conclusao') && <button type="button" className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-500"
               onClick={e => solicitar('aprovar-conclusao', e.currentTarget)}>Aprovar</button>}
           </div>}
-        {(['solicitar-conclusao','reabrir','arquivar','reativar','excluir'] as const).some(acaoDisponivel) && <MenuAcoesObjeto rotulo={estado === 'VERIFICADA' || estado === 'ARQUIVADA' ? 'Reabrir' : 'Fechar'}>
-          {(['solicitar-conclusao','reabrir','arquivar','reativar','excluir'] as const).filter(acaoDisponivel).map(acao =>
-            <button key={acao} type="button" aria-label={`${ROTULO[acao]} atividade`} className="w-full rounded-lg border border-current/20 px-3 py-2 text-left text-xs font-semibold hover:bg-current/10"
-              onClick={e => solicitar(acao, e.currentTarget)}><Icone nome={acao}/>{' '}{ROTULO[acao]}</button>)}
-        </MenuAcoesObjeto>}
         {estado === 'REGISTRADA' && permissoes?.editarAtividades && <button type="button" aria-label="Editar atividade" title="Editar atividade"
           className="inline-flex h-9 w-9 items-center justify-center rounded-lg border-0 bg-transparent text-current hover:bg-current/10" onClick={e => {
             setDetalheAberto(false);
             if (onEditar) onEditar(atividade, e.currentTarget);
             else { setGatilhoEdicao(e.currentTarget); setEdicaoAberta(true); }
           }}><IconeEngrenagem/></button>}
+        {(['solicitar-conclusao','reabrir','arquivar','reativar','excluir'] as const).some(acaoDisponivel) && <MenuAcoesObjeto rotulo={estado === 'VERIFICADA' || estado === 'ARQUIVADA' ? 'Reabrir' : 'Fechar'}>
+          {(['solicitar-conclusao','reabrir','arquivar','reativar','excluir'] as const).filter(acaoDisponivel).map(acao =>
+            <button key={acao} type="button" aria-label={`${ROTULO[acao]} atividade`} className="w-full rounded-lg border border-current/20 px-3 py-2 text-left text-xs font-semibold hover:bg-current/10"
+              onClick={e => solicitar(acao, e.currentTarget)}><Icone nome={acao}/>{' '}{ROTULO[acao]}</button>)}
+        </MenuAcoesObjeto>}
       </>}>
       <div className="space-y-4 text-sm" data-testid="detalhe-atividade-modal">
         <div className="flex flex-wrap items-center justify-between gap-3"><span className={`rounded-full border px-3 py-1 text-xs ${situacao.estilo}`}>{situacao.titulo}</span>

@@ -67,6 +67,7 @@ function contratoBase(
     observacoes: null,
     arquivadoEm: null, arquivadoPor: null, ordemEtapasBloqueada: false,
     reabertoEm: null, encerradoEm: null, encerradoPor: null, motivoEncerramento: null,
+    conclusaoSolicitadaEm: null, conclusaoSolicitadaPor: null,
     ...alteracoes,
   };
 }
@@ -573,9 +574,16 @@ test('código público: esgotamento da sequência não cria contrato e devolve 4
 
 
 describe('Conclusão operacional explícita do contrato', () => {
+  it('recusa aprovação direta sem solicitação registrada', async () => {
+    const c = montarCenario();
+    Object.assign(c.repositorio, {findOne: jest.fn(async () => contratoBase())});
+    await expect(c.service.concluir(ID_CONTRATO, ator)).rejects.toBeInstanceOf(ConflictException);
+    expect(c.repositorio.save).not.toHaveBeenCalled();
+  });
+
   it('recusa conclusão quando não existem comprovantes completos, sem gravar estado', async () => {
     const c = montarCenario();
-    const atual = contratoBase();
+    const atual = contratoBase({ conclusaoSolicitadaEm: new Date('2026-11-06T19:00:00Z') });
     Object.assign(c.repositorio, { findOne: jest.fn(async () => atual) });
     Object.assign(c.manager, { query: jest.fn(async () => [{ etapas: 1, entregaveis: 1, evidencias: 2,
       verificadas: 1, etapas_sem_entregavel: 0, entregaveis_sem_evidencia: 0 }]) });
@@ -594,7 +602,7 @@ describe('Conclusão operacional explícita do contrato', () => {
 
   it('nega a conclusão a GESTOR sem delegação granular, mesmo que a documentação esteja completa', async () => {
     const c = montarCenario();
-    const atual = contratoBase();
+    const atual = contratoBase({ conclusaoSolicitadaEm: new Date('2026-11-06T19:00:00Z') });
     Object.assign(c.repositorio, { findOne: jest.fn(async () => atual) });
     const gestor = { ...ator, perfil: 'GESTOR' } as UsuarioAutenticado;
     await expect(c.service.concluir(ID_CONTRATO, gestor)).rejects.toBeInstanceOf(ForbiddenException);
@@ -604,7 +612,7 @@ describe('Conclusão operacional explícita do contrato', () => {
 
   it('recusa conclusão definitiva quando não existe PDF principal verificado', async () => {
     const c = montarCenario();
-    Object.assign(c.repositorio, { findOne: jest.fn(async () => contratoBase({ reabertoEm: null })) });
+    Object.assign(c.repositorio, { findOne: jest.fn(async () => contratoBase({ reabertoEm: null, conclusaoSolicitadaEm: new Date('2026-11-06T19:00:00Z') })) });
     Object.assign(c.manager, { query: jest.fn(async (sql: string) => sql.includes('FROM documentos_contratuais') ? [{ verificado: false }] : [{ etapas: 1, entregaveis: 1, evidencias: 1,
       verificadas: 1, etapas_sem_entregavel: 0, entregaveis_sem_evidencia: 0, pendentes: false }]) });
     await expect(c.service.concluir(ID_CONTRATO, ator)).rejects.toBeInstanceOf(ConflictException);
@@ -613,7 +621,7 @@ describe('Conclusão operacional explícita do contrato', () => {
 
   it('permite ao ADMIN concluir após revisão encerrada e PDF principal verificado, com auditoria', async () => {
     const c = montarCenario();
-    const atual = contratoBase({ reabertoEm: null });
+    const atual = contratoBase({ reabertoEm: null, conclusaoSolicitadaEm: new Date('2026-11-06T19:00:00Z') });
     Object.assign(c.repositorio, { findOne: jest.fn(async () => atual) });
     Object.assign(c.manager, { query: jest.fn(async (sql: string) => sql.includes('FROM documentos_contratuais') ? [{ verificado: true }] : [{ etapas: 1, entregaveis: 1, evidencias: 1,
       verificadas: 1, etapas_sem_entregavel: 0, entregaveis_sem_evidencia: 0, pendentes: false }]) });
@@ -622,6 +630,42 @@ describe('Conclusão operacional explícita do contrato', () => {
     expect(concluido.reabertoEm).toBeNull();
     expect(c.eventos[0]).toMatchObject({ acao: AcaoAuditoria.CONTRATO_STATUS_ALTERADO,
       dadosPosteriores: { status: 'CONCLUIDO', reabertoEm: null, motivo: 'CONCLUSAO_EXPLICITA' } });
+  });
+});
+
+describe('Solicitação contratual antes da aprovação (Patch 31)', () => {
+  const consultar = (sql: string) => {
+    if (sql.includes('COUNT(DISTINCT')) return [{ etapas: 1, entregaveis: 1, evidencias: 1,
+      verificadas: 1, etapas_sem_entregavel: 0, entregaveis_sem_evidencia: 0 }];
+    if (sql.includes('FROM documentos_contratuais')) return [{ verificado: true }];
+    return [{ pendentes: false, possui_revisao: false }];
+  };
+  it('registra pedido auditado sem concluir automaticamente o contrato', async () => {
+    const c = montarCenario();
+    const atual = contratoBase();
+    Object.assign(c.repositorio, { findOne: jest.fn(async () => atual) });
+    Object.assign(c.manager, { query: jest.fn(async (sql: string) => consultar(sql)) });
+    const pedido = await c.service.solicitarConclusao(ID_CONTRATO, ator);
+    expect(pedido.status).toBe(PLANEJAMENTO);
+    expect(pedido.conclusaoSolicitadaPor).toBe(ator.id);
+    expect(pedido.conclusaoSolicitadaEm).toBeInstanceOf(Date);
+    expect(c.eventos[0]?.dadosPosteriores).toMatchObject({ tipo: 'SOLICITACAO_CONCLUSAO' });
+  });
+  it('impede solicitações duplicadas', async () => {
+    const c = montarCenario();
+    Object.assign(c.repositorio, { findOne: jest.fn(async () => contratoBase({
+      conclusaoSolicitadaEm: new Date(), conclusaoSolicitadaPor: ator.id,
+    })) });
+    await expect(c.service.solicitarConclusao(ID_CONTRATO, ator)).rejects.toBeInstanceOf(ConflictException);
+    expect(c.repositorio.save).not.toHaveBeenCalled();
+  });
+  it('não registra pedido sem comprovação do PDF principal', async () => {
+    const c = montarCenario();
+    Object.assign(c.repositorio, { findOne: jest.fn(async () => contratoBase()) });
+    Object.assign(c.manager, { query: jest.fn(async (sql: string) =>
+      sql.includes('FROM documentos_contratuais') ? [{ verificado: false }] : consultar(sql)) });
+    await expect(c.service.solicitarConclusao(ID_CONTRATO, ator)).rejects.toBeInstanceOf(ConflictException);
+    expect(c.repositorio.save).not.toHaveBeenCalled();
   });
 });
 
@@ -777,7 +821,7 @@ describe('Encerramento explícito da revisão contratual (TEC08)', () => {
 describe('Decisão independente de aprovação ou devolução à revisão (TEC08)', () => {
   function preparar() {
     const c = montarCenario();
-    Object.assign(c.repositorio, { findOne: jest.fn(async () => contratoBase({ reabertoEm: null })) });
+    Object.assign(c.repositorio, { findOne: jest.fn(async () => contratoBase({ reabertoEm: null, conclusaoSolicitadaEm: new Date('2026-11-08T10:00:00Z') })) });
     Object.assign(c.manager, { query: jest.fn(async (sql: string) => {
       if (sql.includes('COUNT(DISTINCT')) return [{ etapas: 1, entregaveis: 1, evidencias: 1,
         verificadas: 1, etapas_sem_entregavel: 0, entregaveis_sem_evidencia: 0 }];

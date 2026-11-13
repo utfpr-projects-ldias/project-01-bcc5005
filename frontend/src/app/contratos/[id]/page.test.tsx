@@ -150,8 +150,9 @@ test('contrato arquivado não oferece edição ou arquivamento no detalhe; reati
   expect(screen.queryByRole('button', { name: 'Arquivar contrato' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Alterar situação autorizada' })).not.toBeInTheDocument();
 });
-test('ADMIN com documentação completa vê Pendente de conclusão e ação autorizada', () => {
+test('ADMIN com solicitação registrada vê Pendente de conclusão e ação autorizada', () => {
   perfil.mockReturnValue(retorno({ ativo: true, perfil: 'ADMINISTRADOR' }));
+  contratoQuery.mockReturnValue(retorno({ ...contrato, conclusaoSolicitadaEm: '2026-11-08T10:00:00Z' }));
   const etapa = { id:'etapa-1', contratoId:'contrato-real', status:'CONCLUIDA', arquivadoEm:null, reabertoEm:null };
   const entregavel = { id:'entregavel-1', contratoId:'contrato-real', etapaId:'etapa-1', statusExecucao:'CONCLUIDO', evidenciasEsperadas:[{id:'e-1', arquivadoEm:null}], arquivadoEm:null, reabertoEm:null };
   (useEtapas as jest.Mock).mockReturnValue(retorno([etapa]));

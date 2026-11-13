@@ -99,6 +99,13 @@ export class Contrato {
   @Column({ name: 'observacoes', type: 'text', nullable: true })
   observacoes!: string | null;
 
+  /** Pedido formal de conclusão (não altera o status até aprovação). */
+  @Column({ name: 'conclusao_solicitada_em', type: 'timestamptz', nullable: true })
+  conclusaoSolicitadaEm!: Date | null;
+
+  @Column({ name: 'conclusao_solicitada_por', type: 'uuid', nullable: true })
+  conclusaoSolicitadaPor!: string | null;
+
   /** Trava de reordenação é estado global do contrato, não preferência de sessão. */
   @Column({ name: 'ordem_etapas_bloqueada', type: 'boolean', default: false })
   ordemEtapasBloqueada!: boolean;

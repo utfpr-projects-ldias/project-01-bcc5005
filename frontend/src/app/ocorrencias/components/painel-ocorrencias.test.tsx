@@ -7,7 +7,7 @@ import { useEtapas } from '@/hooks/use-etapas';
 import { useMeuPerfil } from '@/hooks/use-meu-perfil';
 import { useOcorrencias } from '@/hooks/use-ocorrencias';
 import { useProgresso } from '@/hooks/use-progresso';
-import { consultarAtividade } from '@/hooks/use-atividades';
+import { consultarAtividade, listarAtividadesVinculaveis } from '@/hooks/use-atividades';
 
 jest.mock('@/hooks/use-contratos', () => ({ useAcessoContrato: jest.fn() }));
 jest.mock('@/hooks/use-entregaveis', () => ({ useEntregaveis: jest.fn() }));
@@ -15,7 +15,7 @@ jest.mock('@/hooks/use-etapas', () => ({ useEtapas: jest.fn() }));
 jest.mock('@/hooks/use-meu-perfil', () => ({ useMeuPerfil: jest.fn() }));
 jest.mock('@/hooks/use-ocorrencias', () => ({ useOcorrencias: jest.fn() }));
 jest.mock('@/hooks/use-progresso', () => ({ useProgresso: jest.fn() }));
-jest.mock('@/hooks/use-atividades', () => ({ consultarAtividade: jest.fn() }));
+jest.mock('@/hooks/use-atividades', () => ({ consultarAtividade: jest.fn(), listarAtividadesVinculaveis: jest.fn(), editarAtividadeApi: jest.fn() }));
 jest.mock('@/app/contratos/components/modal-detalhe-entregavel', () => ({ ModalDetalheEntregavel: ({ entregavelId }: { entregavelId: string }) => <section role="dialog" aria-label="Planejamento do entregável">{entregavelId}</section> }));
 jest.mock('@/app/contratos/components/modal-etapa', () => ({ ModalEtapa: ({ titulo, children, estadoContextual, acoes }: { titulo: string; children: ReactNode; estadoContextual?: string; acoes?: ReactNode }) => <section role="dialog" aria-label={titulo} data-estado={estadoContextual}><header>{acoes}</header>{children}</section> }));
 
@@ -46,7 +46,7 @@ test('agenda vinculada usa cores do status real e abre detalhes pelo cartão', (
 });
 
 test('situação não iniciada mantém cores neutras sem confundir com conclusão', () => {
-  ocorrencias.mockReturnValue({ ocorrencias: [{ ...ocorrencia, status: 'NAO_INICIADO' }], loading: false, erro: null,
+  ocorrencias.mockReturnValue({ ocorrencias: [{ ...ocorrencia, status: 'NAO_INICIADO', periodoInicio: '2030-10-01', periodoFim: '2030-10-31', dataPrevista: '2030-11-05' }], loading: false, erro: null,
     criarOcorrenciaManual: jest.fn(), editarOcorrencia: jest.fn() });
   render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" />);
   const card = screen.getByRole('button', { name: /Ver detalhes da ocorrência Medição de outubro/ });
@@ -84,7 +84,7 @@ test('filtro de situação usa enum do backend, não valores antigos de frontend
 
 test('contrato em revisão colore painel e cadastro; filho não iniciado tem estado neutro próprio', () => {
   (useEntregaveis as jest.Mock).mockReturnValue({ dados: [{ id: 'e-1', etapaId: 'etapa-1', tipo: 'QUANTITATIVO', nome: 'Medições', statusExecucao: 'NAO_INICIADO', arquivadoEm: null }] });
-  ocorrencias.mockReturnValue({ ocorrencias: [{ ...ocorrencia, status: 'NAO_INICIADO' }], loading: false, erro: null });
+  ocorrencias.mockReturnValue({ ocorrencias: [{ ...ocorrencia, status: 'NAO_INICIADO', periodoInicio: '2030-10-01', periodoFim: '2030-10-31', dataPrevista: '2030-11-05' }], loading: false, erro: null });
   render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" estadoContextual="revisao" embutido />);
   expect(screen.getByRole('region', { name: 'Ocorrências do contrato' })).toHaveAttribute('data-tec08-estado', 'revisao');
   const cadastrar = screen.getByRole('button', { name: /Nova ocorrência/ });
@@ -139,7 +139,7 @@ test('recorrente diária usa calendário automaticamente, sem escolha lista/cale
   expect(screen.getByLabelText(/Calendário diaria de ocorrências/)).toHaveAttribute('data-periodicidade', 'DIARIA');
   expect(screen.getByRole('button', { name: /Abrir ocorrência Medição de outubro/ })).toBeInTheDocument();
   expect(screen.queryByRole('radio', { name: /Lista/ })).not.toBeInTheDocument();
-  expect(screen.getByText(/Todos os períodos concluídos/)).toBeInTheDocument();
+  expect(screen.getByText(/Concluído/)).toBeInTheDocument();
 });
 
 test('recorrente sem agenda oferece geração manual com confirmação explícita', async () => {
@@ -307,4 +307,32 @@ test('sem permissão de reabrir não oferece cancelar solicitação', () => {
   fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência/ }));
   expect(screen.queryByRole('button', { name: 'Cancelar' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: /Aprovar/ })).toBeEnabled();
+});
+
+test('vínculo de atividade é bloqueado para conta sem permissão de editar atividades', async () => {
+  ocorrencias.mockReturnValue({ ocorrencias: [ocorrencia], loading: false, erro: null,
+    consultarDetalhe: jest.fn().mockResolvedValue({ ...ocorrencia, atividades: [] }) });
+  render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" />);
+  fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência/ }));
+  const botao = await screen.findByRole('button', { name: 'Vincular atividade à ocorrência' });
+  expect(botao).toBeDisabled();
+});
+
+test('conta autorizada abre seleção pesquisável sem conferir acesso a outro contrato', async () => {
+  (useAcessoContrato as jest.Mock).mockReturnValue({ dados: { permissoes: {
+    criarOcorrencias: true, editarOcorrencias: true, editarAtividades: true,
+    concluirOcorrencias: true, reabrirOcorrencias: true, configurarAgendaOcorrencias: true,
+  }}, erro: null });
+  ocorrencias.mockReturnValue({ ocorrencias: [ocorrencia], loading: false, erro: null,
+    consultarDetalhe: jest.fn().mockResolvedValue({ ...ocorrencia, atividades: [] }) });
+  (listarAtividadesVinculaveis as jest.Mock).mockResolvedValue({ data: [{
+    id: 'a-1', titulo: 'Inspeção técnica', status: 'REGISTRADA', entregaveis: [{ id: 'e-1', nome: 'Medições' }],
+    ocorrenciaIds: [],
+  }], meta: { total: 1, page: 1, lastPage: 1 } });
+  render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" />);
+  fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência/ }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Vincular atividade à ocorrência' }));
+  expect(screen.getByRole('dialog', { name: 'Vincular atividade' })).toBeInTheDocument();
+  await waitFor(() => expect(listarAtividadesVinculaveis).toHaveBeenCalledWith('c-1','e-1',expect.any(AbortSignal)));
+  expect(screen.getByRole('combobox',{name:'Pesquisar atividade'})).toBeInTheDocument();
 });

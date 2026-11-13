@@ -154,7 +154,7 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, pode
   const abertaParaDecisao = Boolean(item && !item.arquivadoEm && !bloqueioEdicao &&
     !['CONCLUIDO','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(item.statusExecucao ?? ''));
   return createPortal(<ModalEtapa camada={dentroModal ? "aninhada" : "principal"} contexto={editando ? 'Editando entregável' : 'Entregável do contrato'} titulo={item?.nome ?? 'Detalhes do entregável'} codigoPublico={item?.codigoPublico}
-    retornoEsquerda={true} mostrarXComVoltar formularioLongo={editando}
+    retornoEsquerda={true} formularioLongo={editando}
     etiqueta={item?.arquivadoEm ? 'Arquivado' : item?.reabertoEm ? 'Em revisão' : item?.statusExecucao === 'FINALIZADO' ? 'Encerrado' : item?.statusExecucao === 'PENDENTE_ENCERRAMENTO' ? 'Pendente de encerramento' : item?.statusExecucao === 'PENDENTE_CONCLUSAO' ? 'Pendente de conclusão' : ['CONCLUIDO','FINALIZADO'].includes(item?.statusExecucao ?? '') ? 'Concluído' : item?.statusExecucao === 'EM_ANDAMENTO' ? 'Em andamento' : item ? 'Planejamento' : undefined}
     arquivado={Boolean(item?.arquivadoEm)} revisao={Boolean(item?.reabertoEm && !item?.arquivadoEm)} concluido={!item?.arquivadoEm && !item?.reabertoEm && !editando && ['CONCLUIDO','FINALIZADO'].includes(item?.statusExecucao ?? '')} estadoContextual={item?.arquivadoEm ? 'arquivado' : item?.reabertoEm ? 'revisao' : item?.statusExecucao === 'FINALIZADO' ? 'finalizado' : ['CONCLUIDO','FINALIZADO'].includes(item?.statusExecucao ?? '') ? 'concluido' : 'normal'}
 
@@ -163,6 +163,7 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, pode
     textoFechar='← Etapa'
     bloqueadoPorSubmodal={nivel !== 'entregavel'}
     acoes={!editando && item ? <>
+      {podeEditarCadastro && !bloqueioEdicao && !verificado && !['CONCLUIDO','FINALIZADO'].includes(item.statusExecucao ?? '') && <button type="button" className="inline-flex h-9 w-9 items-center justify-center rounded-lg border-0 bg-transparent text-current transition hover:bg-current/10 focus-visible:outline-2 focus-visible:outline-current" onClick={() => setEditando(true)} aria-label="Editar entregável" title="Editar entregável"><IconeEngrenagem /></button>}
       <MenuAcoesObjeto rotulo={item.arquivadoEm || ['CONCLUIDO','FINALIZADO'].includes(item.statusExecucao ?? '') ? 'Reabrir' : 'Fechar'} disabled={salvando}>
             {abertaParaDecisao && permissoes?.editarEntregaveis && <>
               <button type="button" disabled={salvando || !podeSolicitarConclusao}
@@ -181,7 +182,6 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, pode
             {item.arquivadoEm && permissoes?.reativarEntregaveis && <button type="button" className="rounded-lg bg-emerald-600 px-3 py-2 text-white" onClick={onReativar}>⟳ Reativar</button>}
             {item.arquivadoEm && permissoes?.excluirEntregaveisArquivados && <button type="button" className="rounded-lg border border-red-500/45 bg-red-500/10 px-3 py-2 text-red-300" onClick={onExcluir}>▣ Excluir</button>}
           </MenuAcoesObjeto>
-      {podeEditarCadastro && !bloqueioEdicao && !verificado && !['CONCLUIDO','FINALIZADO'].includes(item.statusExecucao ?? '') && <button type="button" className="inline-flex h-9 w-9 items-center justify-center rounded-lg border-0 bg-transparent text-current transition hover:bg-current/10 focus-visible:outline-2 focus-visible:outline-current" onClick={() => setEditando(true)} aria-label="Editar entregável" title="Editar entregável"><IconeEngrenagem /></button>}
     </> : undefined}
     ocupado={salvando} focoRetorno={focoRetorno} onFechar={fecharNivel}>
     <div className="min-w-0 space-y-4" data-testid="modal-detalhe-entregavel">

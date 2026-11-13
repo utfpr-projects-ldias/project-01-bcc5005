@@ -6,9 +6,11 @@ import { useMeuPerfil } from '@/hooks/use-meu-perfil';
 import { useRepositorioConsultasOpcional } from '@/app/components/provedor-consultas';
 import type { EstadoContextual } from '@/lib/estado-visivel-contrato';
 import { ModalEtapa } from '@/app/contratos/components/modal-etapa';
+import { IconeEngrenagem } from '@/app/components/icone-engrenagem';
 import { PainelOcorrencias } from '@/app/ocorrencias/components/painel-ocorrencias';
 import { CampoBuscaSugestoes } from '@/app/components/campo-busca-sugestoes';
 import { useProgresso, type ProgressoContrato, type ProgressoEntregavel, type AtualizacaoExecucao } from '@/hooks/use-progresso';
+import { estadoTemporal } from '@/lib/estado-temporal';
 
 const INPUT = 'mt-1.5 w-full min-w-0 rounded-lg border border-current/25 bg-background px-3 py-2.5 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-current/25 disabled:opacity-50';
 const BOTAO = 'inline-flex min-h-10 items-center justify-center rounded-lg border border-current/30 bg-background/40 px-3 py-2 text-sm font-semibold hover:bg-foreground/5 disabled:cursor-not-allowed disabled:opacity-45';
@@ -17,8 +19,9 @@ const PRIMARIO = 'inline-flex min-h-10 items-center justify-center rounded-lg px
 const rotulosTipo: Record<string, string> = { UNICO: 'Único', QUANTITATIVO: 'Quantitativo', RECORRENTE: 'Recorrente', CONTINUO: 'Contínuo', MARCO: 'Marco' };
 const percent = (v: number | null) => v == null ? 'Não calculável' : `${v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}%`;
 const civilBR = (v: string | null | undefined) => v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v.split('-').reverse().join('/') : 'Não informada';
-const statusFisico = (e: ProgressoEntregavel) => e.statusFisico === 'CONCLUIDO' ? 'Concluída' : e.statusFisico === 'EM_ANDAMENTO' ? 'Em andamento' : e.statusFisico === 'NAO_INICIADO' ? 'Não iniciada' : 'Aguardando dados';
-const estadoFisico = (e: ProgressoEntregavel): EstadoContextual => (e.statusEntregavel ?? e.statusFisico) === 'FINALIZADO' ? 'finalizado' : (e.statusEntregavel ?? e.statusFisico) === 'CONCLUIDO' ? 'concluido' : (e.statusEntregavel ?? e.statusFisico) === 'EM_ANDAMENTO' ? 'andamento' : 'nao-iniciado';
+const statusVisivel = (e: ProgressoEntregavel) => estadoTemporal(e.statusFisico, e.inicioPrevisto);
+const statusFisico = (e: ProgressoEntregavel) => statusVisivel(e) === 'CONCLUIDO' ? 'Concluída' : statusVisivel(e) === 'EM_ANDAMENTO' ? 'Em andamento' : statusVisivel(e) === 'NAO_INICIADO' ? 'Não iniciada' : 'Aguardando dados';
+const estadoFisico = (e: ProgressoEntregavel): EstadoContextual => e.statusEntregavel === 'FINALIZADO' ? 'finalizado' : (e.statusEntregavel === 'CONCLUIDO' || statusVisivel(e) === 'CONCLUIDO') ? 'concluido' : (statusVisivel(e) === 'EM_ANDAMENTO' || e.statusEntregavel === 'EM_ANDAMENTO') ? 'andamento' : 'nao-iniciado';
 const textoFonte = (e: ProgressoEntregavel) => e.fonte === 'AGENDA' ? 'Agenda de ocorrências recorrentes' : e.fonte === 'OCORRENCIAS' ? 'Ocorrências quantitativas' : e.fonte === 'CONFLITO_QUANTIDADE' ? 'Quantidade precisa de conciliação' : 'Registro de execução do entregável';
 const numero = (valor: string | null) => valor == null ? 'Não informado' : Number(valor).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
 
@@ -86,8 +89,8 @@ export function PainelExecucao({ contratoId, entregavelId, estadoContextual = 'n
     filtroFisico === 'TODOS' ||
     (filtroFisico === 'CONCLUIDO' && ['CONCLUIDO', 'FINALIZADO'].includes(e.statusEntregavel ?? '')) ||
     (!['CONCLUIDO', 'FINALIZADO'].includes(e.statusEntregavel ?? '') &&
-      ((filtroFisico === 'NAO_INICIADO' && ['NAO_INICIADO', 'NAO_AVALIADO'].includes(e.statusFisico)) ||
-       (filtroFisico === 'EM_ANDAMENTO' && e.statusFisico === 'EM_ANDAMENTO')))
+      ((filtroFisico === 'NAO_INICIADO' && ['NAO_INICIADO', 'NAO_AVALIADO'].includes(statusVisivel(e))) ||
+       (filtroFisico === 'EM_ANDAMENTO' && statusVisivel(e) === 'EM_ANDAMENTO')))
   );
   // Dentro do modal do entregável, nunca reproduzir o cartão do próprio
   // entregável nem abrir um segundo modal de execução idêntico.
@@ -180,7 +183,7 @@ export function PainelExecucao({ contratoId, entregavelId, estadoContextual = 'n
 
     {detalhe && <ModalEtapa alturaEstavel titulo={detalhe.nome} contexto="Execução física do entregável" estadoContextual={estadoFisico(detalhe)} ocupado={salvando} focoRetorno={gatilho} onFechar={fechar} rotuloFechar="Fechar detalhes da execução"
       acoes={podeEditar && detalhe.editavel && detalhe.tipo !== 'RECORRENTE' && !['OCORRENCIAS', 'CONFLITO_QUANTIDADE'].includes(detalhe.fonte) && !editandoExecucao ?
-        <button type="button" data-pi-acao="contextual" className="rounded-lg border border-current/30 bg-current/[0.12] px-3 py-2 text-xs font-semibold" onClick={() => setEditandoExecucao(true)}>✎ Editar</button> : undefined}>
+        <button type="button" aria-label="Editar execução" title="Editar execução" className="inline-flex h-9 w-9 items-center justify-center rounded-lg border-0 bg-transparent text-current transition hover:bg-current/10 focus-visible:outline-2 focus-visible:outline-current" onClick={() => setEditandoExecucao(true)}><IconeEngrenagem /></button> : undefined}>
       <div className="space-y-4" data-tec08-estado={estadoFisico(detalhe)} data-tec08-secao-contextual>
         <div className="flex gap-1 rounded-xl border border-current/20 p-1" role="tablist" aria-label="Detalhes de execução do entregável">
           <button type="button" role="tab" aria-selected={abaDetalhe === 'AVANCO'} className={`rounded-lg px-3 py-2 text-sm font-semibold ${abaDetalhe === 'AVANCO' ? 'bg-current/20 underline underline-offset-4' : 'hover:bg-current/10'}`} onClick={() => setAbaDetalhe('AVANCO')}>Avanço físico</button>
