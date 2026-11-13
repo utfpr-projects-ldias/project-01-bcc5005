@@ -28,6 +28,8 @@ test('peso operacional obrigatório aceita soma provisória e impede valor acima
   fireEvent.click(screen.getByRole('button', { name: 'Cadastrar entregável' }));
   expect(gravar).not.toHaveBeenCalled();
   fireEvent.change(screen.getByLabelText('Peso operacional (%) *'), { target: { value: '101' } });
+  expect(screen.getByLabelText('Peso operacional (%) *')).toHaveValue('100');
+  fireEvent.change(screen.getByLabelText('Peso operacional (%) *'), { target: { value: '0' } });
   fireEvent.click(screen.getByRole('button', { name: 'Cadastrar entregável' }));
   expect(gravar).not.toHaveBeenCalled();
   fireEvent.change(screen.getByLabelText('Peso operacional (%) *'), { target: { value: '18.25' } });
@@ -101,7 +103,7 @@ test('e-mail apenas digitado, sem opção selecionada, não cria vínculo automa
 });
 
 
-test('dropdown de responsáveis lista até vinte e-mails com nome e permite mouse, teclado e remoção', async () => {
+test('dropdown de responsáveis lista e-mails compactos e permite mouse, teclado e remoção', async () => {
   const pessoas = [
     { id: '11111111-1111-4111-8111-111111111111', nome: 'Ana QA', email: 'ana@empresa.test' },
     { id: '22222222-2222-4222-8222-222222222222', nome: 'Bruno QA', email: 'bruno@empresa.test' },
@@ -111,7 +113,7 @@ test('dropdown de responsáveis lista até vinte e-mails com nome e permite mous
   render(<FormularioEntregavel contratoId="contrato-a" etapaId="etapa-a" onSalvar={gravar} onCancelar={cancelar} />);
   fireEvent.click(screen.getByRole('button', { name: 'Abrir lista de responsáveis' }));
   await waitFor(() => expect(within(screen.getByRole('listbox', { name: 'E-mails encontrados' })).getAllByRole('option')).toHaveLength(3));
-  expect(screen.getByText('Ana QA')).toBeInTheDocument();
+  expect(screen.queryByText('Ana QA')).not.toBeInTheDocument();
   expect(screen.getByText(/refine pelo e-mail/i)).toBeInTheDocument();
   const campo = screen.getByRole('combobox', { name: 'Buscar responsável por e-mail' });
   fireEvent.keyDown(campo, { key: 'ArrowDown' });
@@ -135,7 +137,7 @@ test('responsável cadastral pode ser Administrador ativo, sem incluí-lo em Fun
   fireEvent.change(screen.getByRole('combobox', { name: 'Buscar responsável por e-mail' }), { target: { value: 'admin@' } });
   const opcao = await screen.findByRole('option', { name: /admin@teste.local/ });
   fireEvent.click(opcao);
-  expect(screen.getByText('Admin de QA')).toBeInTheDocument();
+  expect(screen.getByText('admin@teste.local')).toBeInTheDocument();
   expect(screen.queryByText(usuario.id)).not.toBeInTheDocument();
 });
 

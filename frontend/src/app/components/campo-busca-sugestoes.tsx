@@ -4,8 +4,8 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 
 /** Popup com sugestões sobreposto: não aumenta o modal nem desmonta o formulário abaixo. */
-export function CampoBuscaSugestoes({ valor, onChange, opcoes, rotulo, placeholder = 'Digite para pesquisar...', maximo = 5 }: {
-  valor: string; onChange: (valor: string) => void; opcoes: string[]; rotulo: string; placeholder?: string; maximo?: number;
+export function CampoBuscaSugestoes({ valor, onChange, opcoes, rotulo, placeholder = 'Digite para pesquisar...', maximo = 5, contextual = false }: {
+  valor: string; onChange: (valor: string) => void; opcoes: string[]; rotulo: string; placeholder?: string; maximo?: number; contextual?: boolean;
 }) {
   const id = useId();
   const campo = useRef<HTMLInputElement>(null);
@@ -42,14 +42,14 @@ export function CampoBuscaSugestoes({ valor, onChange, opcoes, rotulo, placehold
         onFocus={() => { setAberta(true); setIndice(0); }} onClick={() => setAberta(true)} onKeyDown={teclado}
         onChange={e => { onChange(e.target.value); setIndice(0); setAberta(true); }}
         onBlur={() => setAberta(false)}
-        className="w-full min-w-0 rounded-xl border border-brand-green/30 bg-background px-4 py-3 text-sm text-foreground outline-none focus-visible:border-brand-green focus-visible:ring-2 focus-visible:ring-brand-green/20" />
+        className={`w-full min-w-0 rounded-xl border bg-background px-4 py-3 text-sm text-foreground outline-none ${contextual ? "border-current/25 focus-visible:border-current/60 focus-visible:ring-2 focus-visible:ring-current/15" : "border-brand-green/30 focus-visible:border-brand-green focus-visible:ring-2 focus-visible:ring-brand-green/20"}`} />
       <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/60"><circle cx="11" cy="11" r="7"/><path d="m16 16 5 5"/></svg>
     </div>
     {aberta && posicao && typeof document !== 'undefined' && createPortal(<div role="listbox" id={`${id}-opcoes`} aria-label={`Sugestões: ${rotulo}`}
-      style={{ position: 'fixed', ...posicao }} className="z-[260] overflow-y-auto rounded-xl border border-brand-green/40 bg-background p-1 shadow-2xl">
+      style={{ position: 'fixed', ...posicao }} className={`z-[260] overflow-y-auto rounded-xl border bg-background p-1 shadow-2xl ${contextual ? "border-current/30" : "border-brand-green/40"}`}>
       {sugestoes.map((s, i) => <button type="button" role="option" aria-selected={s === valor} id={`${id}-opcao-${i}`} key={`${s}-${i}`}
         onMouseDown={e => e.preventDefault()} onClick={() => selecionar(s)} onMouseEnter={() => setIndice(i)}
-        className={`block w-full truncate rounded-lg px-3 py-2 text-left text-sm ${indice === i ? 'bg-brand-green/15 text-foreground' : 'hover:bg-brand-green/10'}`}>{s}</button>)}
+        className={`block w-full truncate rounded-lg px-3 py-2 text-left text-sm ${contextual ? indice === i ? 'bg-current/15 text-foreground' : 'hover:bg-current/10' : indice === i ? 'bg-brand-green/15 text-foreground' : 'hover:bg-brand-green/10'}`}>{s}</button>)}
       {sugestoes.length === 0 && <p className="px-3 py-2 text-xs text-foreground/65">Nenhuma opção encontrada.</p>}
     </div>, document.body)}
   </div>;

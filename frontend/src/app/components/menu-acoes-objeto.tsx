@@ -1,13 +1,14 @@
 'use client';
 import { Children, Fragment, isValidElement, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { IconeConclusao, IconeReabertura } from './icones-ciclo-vida';
 
 function temAcaoDisponivel(conteudo: ReactNode): boolean {
   return Children.toArray(conteudo).some(filho => {
     if (isValidElement(filho) && filho.type === Fragment) {
       return temAcaoDisponivel((filho.props as { children?: ReactNode }).children);
     }
-    return filho !== null && filho !== undefined && filho !== false;
+    return filho !== null && filho !== undefined;
   });
 }
 
@@ -21,6 +22,7 @@ export function MenuAcoesObjeto({ children, rotulo = 'Fechar', disabled = false,
 }) {
   const [aberto, setAberto] = useState(false);
   const temOpcoes = Boolean(acaoDireta) || temAcaoDisponivel(children);
+  const reabertura = rotulo.toLocaleLowerCase('pt-BR').startsWith('reabrir');
   const botao = useRef<HTMLButtonElement>(null);
   const painel = useRef<HTMLDivElement>(null);
   const [posicao, setPosicao] = useState({top: 0, left: 0, acima: false});
@@ -65,8 +67,8 @@ export function MenuAcoesObjeto({ children, rotulo = 'Fechar', disabled = false,
            left: Math.max(12, Math.min(r.right - 274, window.innerWidth - 286)), acima: false });
          setAberto(v => !v);
        }}
-      className={`inline-flex min-h-9 shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-2 disabled:opacity-50 ${pendenteConclusao ? 'border-violet-500/65 bg-violet-500/15 text-violet-300 hover:bg-violet-500/25 focus-visible:outline-violet-400' : acaoDireta ? 'border-teal-500/40 bg-teal-500/10 text-teal-200 hover:bg-teal-500/20 focus-visible:outline-teal-400' : 'border-slate-400/40 bg-slate-500/15 text-foreground hover:bg-slate-500/25 focus-visible:outline-brand-neon'}`}>
-      {pendenteConclusao ? <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="m7.5 12 3 3 6-6" /></svg> : acaoDireta ? <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M3.5 10a9 9 0 1 1 1.9 7M3.5 4v6h6"/></svg> : <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>}
+      className={`inline-flex min-h-9 shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-2 disabled:opacity-50 ${'border-slate-400/40 bg-slate-500/10 text-foreground hover:bg-slate-500/20 focus-visible:outline-violet-400'}`}>
+      {pendenteConclusao ? <IconeConclusao className="h-[17px] w-[17px] shrink-0 text-violet-400" /> : (reabertura || acaoDireta) ? <IconeReabertura className="h-[17px] w-[17px] shrink-0 text-green-500" /> : <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>}
       {rotulo}
       {!acaoDireta && <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m6 9 6 6 6-6"/></svg>}
     </button>

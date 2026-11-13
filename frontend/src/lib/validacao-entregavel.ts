@@ -56,13 +56,13 @@ export function mudouEstrutura(r: RascunhoEntregavel, inicial?: Entregavel): boo
     r.inicioPrevisto !== (inicial.inicioPrevisto ?? '') || r.terminoPrevisto !== (inicial.terminoPrevisto ?? '') ||
     r.etapaId !== inicial.etapaId);
 }
-export function validarEntregavel(r: RascunhoEntregavel): { sucesso: true; dados: DadosPlanejamentoEntregavel } | { sucesso: false; erros: ErrosEntregavel } {
+export function validarEntregavel(r: RascunhoEntregavel, inicial?: Entregavel): { sucesso: true; dados: DadosPlanejamentoEntregavel } | { sucesso: false; erros: ErrosEntregavel } {
   const erros: ErrosEntregavel = {};
   const nome = r.nome.trim();
-  if (!nome || nome.length > 120) erros.nome = 'Informe o nome (até 120 caracteres).';
-  for (const [campo, maximo] of [['codigo', 30], ['descricao', 1200], ['unidadeMedida', 80], ['criterioConclusao', 1500], ['observacoes', 1000]] as const) {
+  if (!nome || (nome.length > 42 && nome !== inicial?.nome)) erros.nome = 'Informe o nome (até 42 caracteres).';
+  for (const [campo, maximo] of [['codigo', 15], ['descricao', 220], ['unidadeMedida', 40], ['criterioConclusao', 350], ['observacoes', 120]] as const) {
     const t = r[campo];
-    if (t && (!t.trim() || t.length > maximo)) erros[campo] = `Revise o campo (até ${maximo} caracteres e sem valor somente com espaços).`;
+    if (t && (!t.trim() || (t.length > maximo && t !== (inicial?.[campo] ?? '')))) erros[campo] = `Revise o campo (até ${maximo} caracteres e sem valor somente com espaços).`;
   }
   if (!TIPOS.includes(r.tipo)) erros.tipo = 'Escolha um tipo de entregável válido.';
   if (r.responsavelId.trim() && !uuid4(r.responsavelId.trim())) erros.responsavelId = 'Selecione um funcionário ativo ou deixe em branco.';
@@ -84,13 +84,14 @@ export function validarEntregavel(r: RascunhoEntregavel): { sucesso: true; dados
   if (['CONTINUO', 'MARCO'].includes(r.tipo) && !r.criterioConclusao.trim()) {
     erros.criterioConclusao = 'O critério textual é obrigatório para Contínuo e Marco.';
   }
-  if (!r.peso.trim() || !decimal(r.peso.trim(), 3, 2) || Number(r.peso.trim()) > 100) {
-    erros.peso = 'Informe peso de 0% a 100%, com até duas casas decimais.';
+  if (!r.peso.trim() || !decimal(r.peso.trim().replace(',', '.'), 3, 2) || Number(r.peso.trim().replace(',', '.')) > 100 ||
+      (Number(r.peso.trim().replace(',', '.')) <= 0 && !(inicial?.peso != null && Number(inicial.peso) === 0 && Number(r.peso.trim().replace(',', '.')) === 0))) {
+    erros.peso = 'Informe peso maior que zero e até 100%, com até duas casas decimais.';
   }
   if (r.evidenciasEsperadas.length > 10) erros.evidenciasEsperadas = 'Máximo de 10 itens.';
   r.evidenciasEsperadas.forEach((e, indice) => {
-    if (!e.tipoEvidencia.trim() || e.tipoEvidencia.length > 100) erros[`evidencias.${indice}.tipoEvidencia`] = 'Informe o tipo da evidência (até 100 caracteres).';
-    if (e.descricao && (!e.descricao.trim() || e.descricao.length > (e.id ? 3000 : 130))) erros[`evidencias.${indice}.descricao`] = 'Orientações inválidas (até 130 caracteres).';
+    if (!e.tipoEvidencia.trim() || (e.tipoEvidencia.length > 50 && e.tipoEvidencia !== inicial?.evidenciasEsperadas.find(item => item.id === e.id)?.tipoEvidencia)) erros[`evidencias.${indice}.tipoEvidencia`] = 'Informe o tipo da evidência (até 50 caracteres).';
+    if (e.descricao && (!e.descricao.trim() || (e.descricao.length > 65 && e.descricao !== inicial?.evidenciasEsperadas.find(item => item.id === e.id)?.descricao))) erros[`evidencias.${indice}.descricao`] = 'Orientações inválidas (até 65 caracteres).';
   });
   if (Object.keys(erros).length) return { sucesso: false, erros };
   return { sucesso: true, dados: {
@@ -101,7 +102,7 @@ export function validarEntregavel(r: RascunhoEntregavel): { sucesso: true; dados
     unidadeMedida: r.tipo === 'QUANTITATIVO' ? opcional(r.unidadeMedida) : null,
     periodicidade: r.tipo === 'RECORRENTE' && r.periodicidade ? r.periodicidade as PeriodicidadeEntregavel : null,
     configuracaoPeriodicidade: r.tipo === 'RECORRENTE' && r.periodicidade ? { versao: 1 } : null,
-    peso: opcional(r.peso), criterioConclusao: opcional(r.criterioConclusao), observacoes: opcional(r.observacoes),
+    peso: opcional(r.peso.replace(',', '.')), criterioConclusao: opcional(r.criterioConclusao), observacoes: opcional(r.observacoes),
     evidenciasEsperadas: r.evidenciasEsperadas.map((e) => ({
       ...(e.id ? { id: e.id } : {}), tipoEvidencia: e.tipoEvidencia.trim(), descricao: opcional(e.descricao ?? ''), obrigatoria: e.obrigatoria,
     })),

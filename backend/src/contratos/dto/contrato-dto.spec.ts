@@ -7,7 +7,7 @@ import { ModoCalculo } from '../modo-calculo.enum.js';
 import { StatusContrato } from '../status-contrato.enum.js';
 
 const base = {
-  numeroContrato: '2026/001',
+  numeroContrato: '2026001',
   orgaoContratante: 'UTFPR',
   objeto: 'Prestação de serviços',
   inicioVigencia: '2026-10-17',

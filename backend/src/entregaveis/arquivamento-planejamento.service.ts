@@ -122,7 +122,7 @@ export class ArquivamentoPlanejamentoService {
                 dadosAnteriores: antes,
                 dadosPosteriores: { ...depois, motivo: 'CONCLUSAO_DOS_ENTREGAVEIS' },
               });
-            })) conclusoes.push('etapa');
+            }, ator.id)) conclusoes.push('etapa');
           }
         }
       }

@@ -76,14 +76,17 @@ async function requisitar<T>(path: string, init?: RequestInit): Promise<T> {
     // Mostrar motivos de conflito de domínio para orientar decisões como Retomar.
     // Nunca refletir SQL, stack trace ou HTML de falha na interface.
     let detalheConflito: string | null = null;
-    if (resp.status === 409) {
+    if (resp.status === 400 || resp.status === 409) {
       try {
         const corpo: unknown = await resp.json();
         if (corpo && typeof corpo === 'object' && 'message' in corpo) {
           const mensagemApi = (corpo as { message?: unknown }).message;
-          if (typeof mensagemApi === 'string' && mensagemApi.length <= 200 &&
-              !/[<>\n\r]/.test(mensagemApi) && !/sql|select|insert|stack|query|database|postgres|password/i.test(mensagemApi)) {
-            detalheConflito = mensagemApi;
+          const mensagens = typeof mensagemApi === 'string' ? [mensagemApi] :
+            Array.isArray(mensagemApi) && mensagemApi.every(m => typeof m === 'string') ? mensagemApi : [];
+          const texto = mensagens.join(' · ');
+          if (texto.length > 0 && texto.length <= 200 &&
+              !/[<>\n\r]/.test(texto) && !/sql|select|insert|stack|query|database|postgres|password/i.test(texto)) {
+            detalheConflito = texto;
           }
         }
       } catch { /* mantém mensagem segura de fallback */ }

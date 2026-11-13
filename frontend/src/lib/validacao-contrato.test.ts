@@ -2,7 +2,7 @@ import { duracaoMesesSchema, validarContrato } from './validacao-contrato';
 import type { DadosContrato } from './contratos';
 
 const base: DadosContrato = {
-  numeroContrato: '  QA-001  ', processoAdministrativo: null, orgaoContratante: ' UTFPR ',
+  numeroContrato: '  2026001  ', processoAdministrativo: null, orgaoContratante: ' UTFPR ',
   unidadeResponsavel: null, objeto: 'Serviços', descricao: null,
   dataAssinatura: null, inicioVigencia: '2026-10-17', terminoVigencia: '2027-10-16',
   status: 'PLANEJAMENTO', responsavelInternoId: null, fiscalGestor: null,
@@ -13,7 +13,7 @@ test('Zod normaliza obrigatórios e aceita opcionais nulos', () => {
   const result = validarContrato(base);
   expect(result.sucesso).toBe(true);
   if (result.sucesso) {
-    expect(result.dados.numeroContrato).toBe('QA-001');
+    expect(result.dados.numeroContrato).toBe('2026001');
     expect(result.dados.orgaoContratante).toBe('UTFPR');
     expect(result.dados.observacoes).toBeNull();
   }
@@ -25,8 +25,8 @@ test('Zod rejeita texto obrigatório vazio, descrições longas e status inventa
   expect(result.sucesso).toBe(false);
   if (!result.sucesso) {
     expect(result.erros.numeroContrato).toMatch(/obrigatório/);
-    expect(result.erros.descricao).toMatch(/1500/);
-    expect(result.erros.observacoes).toMatch(/1000/);
+    expect(result.erros.descricao).toMatch(/500/);
+    expect(result.erros.observacoes).toMatch(/200/);
     expect(result.erros.status).toBeDefined();
   }
 });
@@ -46,4 +46,25 @@ test('duração em meses é validada com Zod', () => {
   expect(duracaoMesesSchema.safeParse('0').success).toBe(false);
   expect(duracaoMesesSchema.safeParse('1.5').success).toBe(false);
   expect(duracaoMesesSchema.safeParse('1201').success).toBe(false);
+});
+
+
+test('Patch37: texto legado maior preservado ao editar outro campo; novo texto rejeitado', () => {
+  const antigo = { ...base, numeroContrato: 'X'.repeat(75), observacoes: 'O'.repeat(700) };
+  const alterado = { ...antigo, objeto: 'Objeto ajustado' };
+  const ok = validarContrato(alterado, antigo);
+  expect(ok.sucesso).toBe(true);
+  if (ok.sucesso) {
+    expect(ok.dados.numeroContrato).toBe(antigo.numeroContrato);
+    expect(ok.dados.observacoes).toBe(antigo.observacoes);
+  }
+  expect(validarContrato({ ...alterado, numeroContrato: 'Y'.repeat(75) }, antigo).sucesso).toBe(false);
+});
+
+test('contrato novo aceita somente número; antigo alfanumérico continua editável sem mudança de identificação', () => {
+  expect(validarContrato({ ...base, numeroContrato: '2026/001' }).sucesso).toBe(false);
+  const antigo = { ...base, numeroContrato: '2026/001' };
+  const editado = validarContrato({ ...antigo, objeto: 'Serviço alterado' }, antigo);
+  expect(editado.sucesso).toBe(true);
+  if (editado.sucesso) expect(editado.dados.numeroContrato).toBe('2026/001');
 });

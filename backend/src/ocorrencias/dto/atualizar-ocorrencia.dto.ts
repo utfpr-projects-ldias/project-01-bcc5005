@@ -1,6 +1,9 @@
 import {
   IsEnum,
+  IsIn,
   IsOptional,
+  IsBoolean,
+  IsInt, Min, Max,
   IsString,
   Matches,
   MaxLength,
@@ -8,9 +11,15 @@ import {
 import { StatusOcorrencia } from '../status-ocorrencia.enum.js';
 
 export class AtualizarOcorrenciaDto {
+  @IsOptional() @IsBoolean() exigeAtividade?: boolean;
+  @IsOptional() @IsInt() @Min(0) @Max(99) minimoAtividadesVerificadas?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(99) minimoEvidenciasVerificadas?: number;
+  @IsOptional() @IsIn(['NENHUMA','FOTO','RELATORIO','AMBOS']) evidenciaExigida?: 'NENHUMA'|'FOTO'|'RELATORIO'|'AMBOS';
+  @IsOptional() @IsBoolean() permiteEncerramentoExcepcional?: boolean;
+
   @IsOptional()
   @IsString()
-  @MaxLength(120)
+  @MaxLength(50)
   titulo?: string;
 
   @IsOptional()
@@ -42,6 +51,6 @@ export class AtualizarOcorrenciaDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(1000)
+  @MaxLength(200)
   observacoes?: string | null;
 }

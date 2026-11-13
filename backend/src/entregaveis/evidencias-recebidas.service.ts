@@ -354,7 +354,7 @@ export class EvidenciasRecebidasService {
         dadosAnteriores: antes,
         dadosPosteriores: { ...depois, motivo: 'COMPROVACAO_COMPLETA' },
       });
-    })) conclusoes.push('etapa');
+    }, ator.id)) conclusoes.push('etapa');
     // Um contrato documentalmente completo aguarda conclusão operacional explícita.
     // A ação PATCH /contratos/:id/concluir verifica a permissão e registra auditoria.
     return conclusoes;

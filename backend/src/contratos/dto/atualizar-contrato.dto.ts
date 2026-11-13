@@ -31,34 +31,35 @@ export class AtualizarContratoDto {
   @ValidateIf((_, v) => v !== undefined)
   @IsString()
   @IsNotEmpty()
-  @MaxLength(100)
+  @MaxLength(25)
+  @Matches(/^\d{1,25}$/, { message: "Número do contrato deve conter apenas algarismos (até 25)." })
   numeroContrato?: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(100)
+  @MaxLength(25)
   processoAdministrativo?: string | null;
 
   @ValidateIf((_, v) => v !== undefined)
   @IsString()
   @IsNotEmpty()
-  @MaxLength(160)
+  @MaxLength(30)
   orgaoContratante?: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(160)
+  @MaxLength(30)
   unidadeResponsavel?: string | null;
 
   @ValidateIf((_, v) => v !== undefined)
   @IsString()
   @IsNotEmpty()
-  @MaxLength(500)
+  @MaxLength(50)
   objeto?: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(1500)
+  @MaxLength(500)
   descricao?: string | null;
 
   @IsOptional()
@@ -86,7 +87,7 @@ export class AtualizarContratoDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(160)
+  @MaxLength(25)
   fiscalGestor?: string | null;
 
   @ValidateIf((_, v) => v !== undefined)
@@ -95,6 +96,6 @@ export class AtualizarContratoDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(1000)
+  @MaxLength(200)
   observacoes?: string | null;
 }

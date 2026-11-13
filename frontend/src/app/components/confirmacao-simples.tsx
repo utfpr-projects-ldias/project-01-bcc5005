@@ -26,15 +26,22 @@ type Props = {
 /** Confirmação da própria interface, sem window.confirm ou dependência externa. */
 export function ConfirmacaoSimples({ titulo, descricao, confirmar, ocupado = false, perigoso = false, cancelarVermelho = false, confirmacaoRoxa = false, aprovarVerde = false, estadoContextual = 'normal', preservarCorOrigem = false, onCancelar, onConfirmar, justificativa, onJustificativaChange, justificativaMinima = 15 }: Props) {
   const modalId = useId();
-  const estadoDaAcao = preservarCorOrigem ? estadoContextual : contextoDaDecisao(`${titulo} ${confirmar}`, estadoContextual);
+  const contextoReabertura = /\b(reabrir|reativar|retomar|reverter)\b/i.test(`${titulo} ${confirmar}`);
+  // Na reabertura, o destino é revisão: a ação não herda a cor do estado anterior.
+  const estadoDaAcao = contextoReabertura ? 'revisao' : preservarCorOrigem ? estadoContextual : contextoDaDecisao(`${titulo} ${confirmar}`, estadoContextual);
   // Logout: confirmação de sessão, com identidade verde do sistema.
   const saidaVerde = /sair da conta|encerrar sessão/i.test(`${titulo} ${confirmar}`);
-  const cores = saidaVerde ? {
+  const cores = /^arquivar\b/i.test(`${titulo} ${confirmar}`.trim()) ? {
+    borda: 'border-orange-500/60', texto: 'text-orange-700 dark:text-orange-300',
+    foco: 'focus-visible:outline-orange-500', campo: 'focus-visible:border-orange-500',
+    botao: 'border-orange-600 bg-orange-600 text-white hover:bg-orange-500',
+  } : saidaVerde ? {
     borda: 'border-brand-green/50', texto: 'text-brand-neon',
     foco: 'focus-visible:outline-brand-green', campo: 'focus-visible:border-brand-green',
     botao: 'border-brand-green bg-brand-green text-on-brand-green hover:brightness-110',
   } : coresDecisao(estadoDaAcao);
-  const corBotao = estadoDaAcao !== 'normal' ? cores.botao : confirmacaoRoxa
+  const confirmacaoArquivo = /^arquivar\b/i.test(`${titulo} ${confirmar}`.trim());
+  const corBotao = confirmacaoArquivo ? 'border-orange-600 bg-orange-600 text-white hover:bg-orange-500 focus-visible:outline-orange-500' : estadoDaAcao !== 'normal' ? cores.botao : confirmacaoRoxa
     ? 'border-violet-500 bg-violet-700 text-white hover:bg-violet-600'
     : aprovarVerde ? 'border-green-600 bg-green-800 text-white hover:bg-green-700'
     : perigoso ? 'border-red-500 bg-red-700 text-white hover:bg-red-600' : cores.botao;

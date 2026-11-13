@@ -178,9 +178,10 @@ export class EtapasService {
         if (!etapa) throw new NotFoundException('Etapa não encontrada');
         if (etapa.arquivadoEm) throw new ConflictException('Reative a etapa antes de editar');
         if (etapa.conclusaoSolicitadaEm || etapa.encerramentoSolicitadoEm) throw new ConflictException('Existe solicitação pendente; devolva a decisão antes de editar a etapa');
-        if (etapa.status === StatusEtapa.CONCLUIDA || etapa.status === StatusEtapa.ENCERRADA || etapa.status === StatusEtapa.FINALIZADA ||
-          (etapa.reabertoEm === null && await documentacaoVerificada(manager, contratoId, etapaId)))
-          throw new ConflictException('Etapa concluída: reabra antes de editar');
+        const somenteMetadados = Object.keys(dto).every(chave => ['nome','codigo','descricao','observacoes'].includes(chave));
+        if ((etapa.status === StatusEtapa.CONCLUIDA || etapa.status === StatusEtapa.ENCERRADA || etapa.status === StatusEtapa.FINALIZADA ||
+          (etapa.reabertoEm === null && await documentacaoVerificada(manager, contratoId, etapaId))) && !somenteMetadados)
+          throw new ConflictException('Etapa finalizada: somente dados descritivos podem ser editados; reabra antes de mudar planejamento ou situação');
         const anterior = snapshot(etapa);
         const datasAnteriores = { inicioPrevisto: etapa.inicioPrevisto, terminoPrevisto: etapa.terminoPrevisto };
         const statusAnterior = etapa.status;

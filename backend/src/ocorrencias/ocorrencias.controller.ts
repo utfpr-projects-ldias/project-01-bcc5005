@@ -1,5 +1,6 @@
 import {
   Body,
+  Delete,
   Controller,
   Get,
   HttpCode,
@@ -22,6 +23,7 @@ import { CriarOcorrenciaManualDto } from './dto/criar-ocorrencia-manual.dto.js';
 import { AtualizarOcorrenciaDto } from './dto/atualizar-ocorrencia.dto.js';
 import { JustificativaDecisaoDto } from '../contratos/dto/justificativa-decisao.dto.js';
 import { ReabrirOcorrenciaDto } from './dto/reabrir-ocorrencia.dto.js';
+import { CriarLancamentoOcorrenciaDto, CorrigirLancamentoOcorrenciaDto, VincularComprovanteOcorrenciaDto } from './dto/lancamento-ocorrencia.dto.js';
 
 @Controller('contratos/:contratoId')
 @UsePipes(
@@ -57,6 +59,7 @@ export class OcorrenciasController {
       entregavelId,
       Boolean(dto.forcarRegeneracaoFuturas),
       req.usuarioDominio!,
+      dto,
     );
   }
 
@@ -104,6 +107,52 @@ export class OcorrenciasController {
     @Param('ocorrenciaId') ocorrenciaId: string,
   ) {
     return this.ocorrenciasService.detalhar(contratoId, ocorrenciaId);
+  }
+
+
+  @Get('ocorrencias/:ocorrenciaId/lancamentos')
+  @ExigirPoliticaOperacional('ocorrencias:visualizar',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})
+  lancamentos(@Param('contratoId') contratoId:string,@Param('ocorrenciaId') id:string) {
+    return this.ocorrenciasService.listarLancamentos(contratoId,id);
+  }
+  @Post('ocorrencias/:ocorrenciaId/lancamentos')
+  @ExigirPoliticaOperacional('ocorrencias:registrar',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})
+  registrarLancamento(@Param('contratoId') contratoId:string,@Param('ocorrenciaId') id:string,
+    @Body() dto:CriarLancamentoOcorrenciaDto,@Req() req:RequisicaoAutorizada) {
+    return this.ocorrenciasService.registrarLancamento(contratoId,id,dto.id,dto.quantidade,dto.justificativa,req.usuarioDominio!);
+  }
+  @Patch('ocorrencias/:ocorrenciaId/lancamentos/:lancamentoId')
+  @ExigirPoliticaOperacional('ocorrencias:registrar',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})
+  corrigirLancamento(@Param('contratoId') contratoId:string,@Param('ocorrenciaId') id:string,
+    @Param('lancamentoId') lancamentoId:string,@Body() dto:CorrigirLancamentoOcorrenciaDto,@Req() req:RequisicaoAutorizada) {
+    return this.ocorrenciasService.corrigirLancamento(contratoId,id,lancamentoId,dto.quantidade,dto.justificativa,req.usuarioDominio!);
+  }
+  @Get('ocorrencias/:ocorrenciaId/evidencias')
+  @ExigirPoliticaOperacional('ocorrencias:visualizar',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})
+  listarComprovantes(@Param('contratoId') contratoId:string,@Param('ocorrenciaId') id:string) {
+    return this.ocorrenciasService.listarComprovantes(contratoId,id);
+  }
+  @Post('ocorrencias/:ocorrenciaId/evidencias')
+  @ExigirPoliticaOperacional('ocorrencias:vincular-evidencia',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})
+  vincularComprovante(@Param('contratoId') contratoId:string,@Param('ocorrenciaId') id:string,
+    @Body() dto:VincularComprovanteOcorrenciaDto,@Req() req:RequisicaoAutorizada) {
+    return this.ocorrenciasService.vincularComprovante(contratoId,id,dto.comprovanteId,req.usuarioDominio!);
+  }
+  @Delete('ocorrencias/:ocorrenciaId/evidencias/:comprovanteId')
+  @ExigirPoliticaOperacional('ocorrencias:vincular-evidencia',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})
+  desvincularComprovante(@Param('contratoId') contratoId:string,@Param('ocorrenciaId') id:string,
+    @Param('comprovanteId') comprovanteId:string,@Req() req:RequisicaoAutorizada) {
+    return this.ocorrenciasService.desvincularComprovante(contratoId,id,comprovanteId,req.usuarioDominio!);
+  }
+  @Get('ocorrencias/:ocorrenciaId/historico')
+  @ExigirPoliticaOperacional('ocorrencias:visualizar',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})
+  historico(@Param('contratoId') contratoId:string,@Param('ocorrenciaId') id:string) {
+    return this.ocorrenciasService.historico(contratoId,id);
+  }
+  @Post('ocorrencias/:ocorrenciaId/iniciar')
+  @ExigirPoliticaOperacional('ocorrencias:editar', { tipo: 'recurso', recurso: 'ocorrencia', parametro: 'ocorrenciaId', parametroContratoPai: 'contratoId' })
+  iniciar(@Param('contratoId') contratoId: string, @Param('ocorrenciaId') id: string, @Req() req: RequisicaoAutorizada) {
+    return this.ocorrenciasService.iniciar(contratoId, id, req.usuarioDominio!);
   }
 
   @Post('ocorrencias/:ocorrenciaId/solicitar-conclusao')

@@ -91,24 +91,29 @@ export async function filhosPendentesDeConclusao(m: EntityManager, contratoId: s
 }
 
 
-/** Fecha automaticamente a etapa depois da última conclusão efetiva dos filhos.
- * O contrato continua SEMPRE aguardando confirmação manual. Não fecha um pai
- * com filhos em revisão, arquivos pendentes, ou sem entregáveis/evidências. */
+/** Solicita automaticamente a PRIMEIRA conclusão da etapa quando todos os filhos
+ * estiverem elegíveis. NUNCA aprova a própria solicitação, nem reinscreve uma
+ * etapa reaberta/em revisão: nestes casos exige solicitação manual explícita.
+ * Auditoria e solicitação são gravadas na mesma transação do gatilho. */
 export async function concluirEtapaAposFilhos(
   m: EntityManager, contratoId: string, etapaId: string,
-  auditar: (antes: { status: StatusEtapa; reabertoEm: Date | null },
-    depois: { status: StatusEtapa; reabertoEm: null }) => Promise<void>,
+  auditar: (antes: { status: StatusEtapa; reabertoEm: Date | null; conclusaoSolicitadaEm: Date | null },
+    depois: { status: StatusEtapa; reabertoEm: Date | null; conclusaoSolicitadaEm: Date | null; conclusaoSolicitadaPor: string | null }) => Promise<void>,
+  solicitanteId: string | null = null,
 ): Promise<boolean> {
   const repo = m.getRepository(Etapa);
   const etapa = await repo.findOneBy({ id: etapaId, contratoId });
-  if (!etapa || etapa.arquivadoEm || etapa.status === StatusEtapa.ENCERRADA || (etapa.status === StatusEtapa.CONCLUIDA && !etapa.reabertoEm)) return false;
+  if (!etapa || etapa.arquivadoEm || etapa.conclusaoSolicitadaEm || etapa.encerramentoSolicitadoEm ||
+      etapa.reabertoEm || [StatusEtapa.CONCLUIDA, StatusEtapa.ENCERRADA, StatusEtapa.FINALIZADA].includes(etapa.status)) return false;
   if (!await documentacaoVerificada(m, contratoId, etapaId) ||
       await filhosPendentesDeConclusao(m, contratoId, etapaId)) return false;
-  const antes = { status: etapa.status, reabertoEm: etapa.reabertoEm ?? null };
-  etapa.status = StatusEtapa.CONCLUIDA;
-  etapa.reabertoEm = null;
+  const antes = { status: etapa.status, reabertoEm: etapa.reabertoEm ?? null,
+    conclusaoSolicitadaEm: etapa.conclusaoSolicitadaEm ?? null };
+  etapa.conclusaoSolicitadaEm = new Date();
+  etapa.conclusaoSolicitadaPor = solicitanteId;
   await repo.save(etapa);
-  await auditar(antes, { status: etapa.status, reabertoEm: null });
+  await auditar(antes, { status: etapa.status, reabertoEm: etapa.reabertoEm ?? null,
+    conclusaoSolicitadaEm: etapa.conclusaoSolicitadaEm, conclusaoSolicitadaPor: solicitanteId });
   return true;
 }
 

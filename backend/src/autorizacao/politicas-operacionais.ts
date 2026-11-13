@@ -39,6 +39,7 @@ export const POLITICAS_OPERACIONAIS = {
   'ocorrencias:criar': { recurso: 'ocorrencia', classe: 'planejamento', escopo: 'contrato' },
   'ocorrencias:editar': { recurso: 'ocorrencia', classe: 'planejamento', escopo: 'recurso' },
   'ocorrencias:registrar': { recurso: 'ocorrencia', classe: 'operacional', escopo: 'recurso' },
+  'ocorrencias:vincular-evidencia': { recurso: 'ocorrencia', classe: 'operacional', escopo: 'recurso' },
   'ocorrencias:concluir': { recurso: 'ocorrencia', classe: 'operacional', escopo: 'recurso' },
   'ocorrencias:reabrir': { recurso: 'ocorrencia', classe: 'operacional', escopo: 'recurso' },
   'ocorrencias:replanejar': { recurso: 'entregavel', classe: 'planejamento', escopo: 'recurso' },

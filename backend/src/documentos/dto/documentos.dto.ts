@@ -8,7 +8,7 @@ export class CriarDocumentoDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(140)
+  @MaxLength(70)
   @Matches(/\S/, { message: 'Descrição não pode conter somente espaços' })
   descricao?: string;
 }
@@ -20,7 +20,7 @@ export class EditarDocumentoDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(140)
+  @MaxLength(70)
   @Matches(/\S/, { message: 'Descrição não pode conter somente espaços' })
   descricao?: string | null;
 }

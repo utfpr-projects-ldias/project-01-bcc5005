@@ -51,13 +51,19 @@ async function requisitar<T>(caminho: string, init?: RequestInit): Promise<T> {
   }
   if (!resposta.ok) {
     const mensagens: Record<number, string> = {
-      400: 'Confira os campos informados e tente novamente.',
+      400: 'Dados inválidos: confira a justificativa (15 a 200 caracteres) e os campos enviados.',
       401: 'Sua sessão expirou. Entre novamente.',
       403: 'Você não tem permissão para esta operação.',
       404: 'Contrato ou etapa indisponível. Atualize a página.',
       409: 'As etapas foram alteradas por outra pessoa. Atualize a lista antes de tentar novamente.',
     };
-    throw new ErroEtapa(resposta.status, mensagens[resposta.status] ?? 'Não foi possível concluir a operação. Tente novamente.');
+    let detalhe: unknown;
+    try { detalhe = await resposta.json(); } catch { /* resposta sem JSON */ }
+    const mensagemServidor = detalhe && typeof detalhe === 'object'
+      ? ('message' in detalhe ? (detalhe as { message?: unknown }).message : 'error' in detalhe ? (detalhe as { error?: unknown }).error : null) : null;
+    const mensagem = typeof mensagemServidor === 'string' ? mensagemServidor
+      : Array.isArray(mensagemServidor) ? mensagemServidor.filter((v): v is string => typeof v === 'string').join(' ') : '';
+    throw new ErroEtapa(resposta.status, mensagem || mensagens[resposta.status] || 'Não foi possível concluir a operação. Tente novamente.');
   }
   return (await resposta.json()) as T;
 }
@@ -68,7 +74,7 @@ export const listarEtapas = (contratoId: string) => requisitar<Etapa[]>(caminho(
 export const criarEtapa = (contratoId: string, dados: DadosEtapa) => requisitar<Etapa>(caminho(contratoId), {
   method: 'POST', body: JSON.stringify(dados),
 });
-export const editarEtapa = (contratoId: string, etapaId: string, dados: DadosEtapa) => requisitar<Etapa>(
+export const editarEtapa = (contratoId: string, etapaId: string, dados: Partial<DadosEtapa>) => requisitar<Etapa>(
   `${caminho(contratoId)}/${encodeURIComponent(etapaId)}`, { method: 'PATCH', body: JSON.stringify(dados) },
 );
 export const solicitarConclusaoEtapa = (c:string,e:string) => requisitar<Etapa>(`${caminho(c)}/${encodeURIComponent(e)}/solicitar-conclusao`,{method:'PATCH'});

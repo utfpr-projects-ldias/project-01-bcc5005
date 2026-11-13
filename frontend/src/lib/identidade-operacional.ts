@@ -45,8 +45,8 @@ export const CLASSES_ACAO_MENU: Record<IntencaoAcao, string> = {
   encerrar: 'border-purple-500/40 text-purple-700 dark:text-purple-200 hover:bg-purple-500/15',
   suspender: 'border-amber-500/40 text-amber-800 dark:text-amber-200 hover:bg-amber-500/15',
   cancelar: 'border-red-500/40 text-red-700 dark:text-red-200 hover:bg-red-500/15',
-  arquivar: 'border-amber-500/40 text-amber-800 dark:text-amber-200 hover:bg-amber-500/15',
-  reabrir: 'border-teal-500/40 text-teal-700 dark:text-teal-200 hover:bg-teal-500/15',
+  arquivar: 'border-orange-500/55 text-orange-700 dark:text-orange-300 hover:bg-orange-500/15 focus-visible:outline-orange-500',
+  reabrir: 'border-slate-500/35 text-foreground hover:bg-slate-500/15',
   reativar: 'border-teal-500/40 text-teal-700 dark:text-teal-200 hover:bg-teal-500/15',
   excluir: 'border-red-500/40 text-red-700 dark:text-red-200 hover:bg-red-500/15',
 };

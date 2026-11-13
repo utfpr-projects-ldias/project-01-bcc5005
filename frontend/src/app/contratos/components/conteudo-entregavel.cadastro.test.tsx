@@ -72,7 +72,7 @@ test('cadastro exige seleção de Foto ou Relatório e restringe extensões acei
   expect(arquivo).toHaveAttribute('accept', '.png,.jpg,.jpeg,.webp');
   fireEvent.change(tipo, { target: { value: 'Relatório' } });
   expect(arquivo).toHaveAttribute('accept', '.pdf,.doc,.docx,.txt');
-  expect(within(modal).getByRole('textbox', { name: /Orientações/ })).toHaveAttribute('maxLength', '130');
+  expect(within(modal).getByRole('textbox', { name: /Orientações/ })).toHaveAttribute('maxLength', '65');
 });
 
 test('cadastro não cria evidência com formato incompatível', async () => {

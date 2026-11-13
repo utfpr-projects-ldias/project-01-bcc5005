@@ -24,3 +24,15 @@ test('pesquisa tem resposta controlada e opções acessíveis ao teclado', () =>
   fireEvent.change(campo, { target: { value: 'Giu' } });
   expect(screen.getByRole('option', { name: 'Giulia' })).toBeInTheDocument(); 
 });
+
+test('contexto de ocorrência preserva estilos herdados e mantém sugestões em portal fixo', () => {
+  render(<CampoBuscaSugestoes valor="" onChange={jest.fn()} opcoes={[]} rotulo="Vincular atividade" contextual />);
+  const campo = screen.getByRole('combobox', { name: 'Vincular atividade' });
+  expect(campo.className).toContain('border-current/25');
+  expect(campo.className).not.toContain('border-brand-green');
+  fireEvent.focus(campo);
+  const lista = screen.getByRole('listbox');
+  expect(lista).toHaveStyle({ position: 'fixed' });
+  expect(lista.className).not.toContain('border-brand-green');
+  expect(screen.getByText('Nenhuma opção encontrada.')).toBeInTheDocument();
+});

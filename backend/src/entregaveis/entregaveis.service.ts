@@ -491,7 +491,7 @@ export class EntregaveisService implements OnModuleInit {
           dadosAnteriores: anterior,
           dadosPosteriores: { ...posterior, motivo: 'CONCLUSAO_DOS_ENTREGAVEIS' },
         });
-      });
+      }, ator.id);
       return { ...visao(e, await this.itens(m, id)), conclusoes: etapaConcluida ? ['entregável', 'etapa'] : ['entregável'] };
     });
   }
@@ -535,25 +535,10 @@ export class EntregaveisService implements OnModuleInit {
       if (!e || e.arquivadoEm) throw new NotFoundException('Entregável indisponível');
       if (['PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO','CONCLUIDO','FINALIZADO'].includes(e.statusExecucao ?? ''))
         throw new ConflictException('Já existe uma solicitação ou decisão final');
-      const fisico = await aptidaoFisicaParaConclusao(m, e);
-      if (fisico.apto && await documentacaoVerificada(m, contratoId, e.etapaId, id))
-        throw new ConflictException('A conclusão está disponível. Solicite conclusão em vez de encerramento.');
-      const ocorrencias = await m.findBy(Ocorrencia, { contratoId, entregavelId: id, substituidaEm: IsNull() });
-      if (e.tipo !== TipoEntregavel.UNICO && !ocorrencias.length)
-        throw new ConflictException('Cadastre as ocorrências obrigatórias para este tipo');
-      if (ocorrencias.some(o => !['CONCLUIDO','ENCERRADA'].includes(o.status)))
-        throw new ConflictException('Resolva as ocorrências antes de solicitar encerramento');
-      if (e.tipo === TipoEntregavel.RECORRENTE && e.inicioPrevisto && e.terminoPrevisto && e.periodicidade) {
-        const inicioAgenda = e.agendaInicioFuturo ?? e.inicioPrevisto;
-        const configuracao = await m.findOneBy(ConfiguracaoOcorrencias, { entregavelId: id, contratoId });
-        const fimAgenda = e.agendaInicioFuturo ? configuracao?.terminoPrevisto ?? e.terminoPrevisto : e.terminoPrevisto;
-        if (!fimAgenda) throw new ConflictException('Agenda recorrente sem término definido');
-        let periodos: ReturnType<typeof calcularPeriodosRecorrentes>;
-        try { periodos = calcularPeriodosRecorrentes(inicioAgenda, fimAgenda, e.periodicidade); }
-        catch { throw new ConflictException('A agenda recorrente precisa ser regularizada'); }
-        if (!avaliarAgendaRecorrente(ocorrencias, periodos, inicioAgenda).completa)
-          throw new ConflictException('Gere a agenda recorrente completa antes de encerrar');
-      }
+      // Encerramento ADMINISTRATIVO: permite interromper uma execução parcial,
+      // inclusive sem ocorrências cadastradas ou com ocorrências em andamento.
+      // Não confundir com conclusão física (que possui validações próprias).
+      // As ocorrências e respectivas quantidades permanecem auditáveis e intactas.
       const anterior = { statusExecucao: e.statusExecucao };
       e.statusExecucao = 'PENDENTE_ENCERRAMENTO' as Entregavel['statusExecucao'];
       e.motivoFinalizacao = justificativa;
@@ -572,9 +557,8 @@ export class EntregaveisService implements OnModuleInit {
       const e = await m.findOne(Entregavel, { where: { contratoId, id }, lock: { mode: 'pessimistic_write' } });
       if (!e || e.arquivadoEm) throw new NotFoundException('Entregável indisponível');
       if (e.statusExecucao !== 'PENDENTE_ENCERRAMENTO') throw new ConflictException('Não há encerramento aguardando aprovação');
-      const ocorrencias = await m.findBy(Ocorrencia, { contratoId, entregavelId: id, substituidaEm: IsNull() });
-      if (ocorrencias.some(o => !['CONCLUIDO','ENCERRADA'].includes(o.status)))
-        throw new ConflictException('Há ocorrências ainda não resolvidas');
+      // Aprovar encerramento não aprova/encerra ocorrências nem altera suas medições.
+      // Cada ocorrência conserva o status histórico e continua visível no detalhe.
       const anterior = { statusExecucao: e.statusExecucao };
       e.statusExecucao = 'FINALIZADO' as Entregavel['statusExecucao'];
       e.finalizadoEm = new Date();
@@ -632,9 +616,13 @@ export class EntregaveisService implements OnModuleInit {
       return await this.dataSource.transaction(async (m) => {
         await this.bloquearContrato(m, contratoId);
         const e = await this.registro(m, contratoId, id);
-        if (['CONCLUIDO','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? '') ||
-          (e.reabertoEm === null && await documentacaoVerificada(m, contratoId, e.etapaId, id)))
-          throw new ConflictException('Entregável concluído: reabra antes de editar');
+        const camposInformados = Object.keys(dto).filter(campo => (dto as unknown as Record<string, unknown>)[campo] !== undefined);
+        const camposMetadados = new Set(['nome','codigo','descricao','observacoes','criterioConclusao']);
+        const somenteMetadados = camposInformados.every(campo => camposMetadados.has(campo));
+        const finalizado = ['CONCLUIDO','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? '') ||
+          (e.reabertoEm === null && await documentacaoVerificada(m, contratoId, e.etapaId, id));
+        if (finalizado && !somenteMetadados)
+          throw new ConflictException('Entregável finalizado: somente dados descritivos podem ser editados; reabra para alterar planejamento ou execução');
         if (dto.tipo !== undefined && dto.tipo !== e.tipo)
           throw new ConflictException('O tipo do entregável é imutável. Para utilizar outro tipo, crie um novo entregável.');
         // A política entregaveis:editar NÃO delega pesos ou o replanejamento
@@ -658,6 +646,21 @@ export class EntregaveisService implements OnModuleInit {
             throw new ForbiddenException('Sem permissão para alterar o peso operacional.');
           if (mudaAgenda && !permissoes.configurarAgendaOcorrencias)
             throw new ForbiddenException('Sem permissão para replanejar ocorrências recorrentes.');
+        }
+        // Atualizações textuais não provocam replanejamento de ocorrências,
+        // recálculo de pesos ou revalidação de um checklist legado.
+        if (somenteMetadados) {
+          const anteriorTexto = snapshot(e);
+          for (const campo of camposInformados) {
+            const valor = (dto as unknown as Record<string, unknown>)[campo];
+            (e as unknown as Record<string, unknown>)[campo] = typeof valor === 'string' ? valor.trim() : valor;
+          }
+          const salvo = await m.getRepository(Entregavel).save(e);
+          await this.auditoria.registrarNaTransacao(m, ator, {
+            acao: AcaoAuditoria.ENTREGAVEL_EDITADO, entidadeTipo: 'ENTREGAVEL', entidadeId: id,
+            dadosAnteriores: anteriorTexto, dadosPosteriores: snapshot(salvo),
+          });
+          return visao(salvo, await this.itens(m, id));
         }
         const anterior = snapshot(e);
         const antes = { tipo: e.tipo, etapaId: e.etapaId, periodicidade: e.periodicidade,

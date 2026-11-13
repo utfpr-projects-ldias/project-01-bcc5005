@@ -2134,3 +2134,28 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
   border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 55%, transparent) !important;
   background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 7%, var(--bg-primary)) !important;
 }
+
+/* Patch40 — barras de rolagem neutras e legíveis em TODOS os modais,
+   listboxes, sidebars e elementos com overflow, inclusive no Firefox. */
+:root { --pi-scroll-track: #d8e9ce; --pi-scroll-thumb: #73846d; --pi-scroll-hover: #52674c; color-scheme: light; }
+@media (prefers-color-scheme: dark) {
+  :root { --pi-scroll-track: #111a13; --pi-scroll-thumb: #49604c; --pi-scroll-hover: #72876f; color-scheme: dark; }
+}
+html, body, * { scrollbar-width: thin; scrollbar-color: var(--pi-scroll-thumb) var(--pi-scroll-track); }
+*::-webkit-scrollbar { width: 9px; height: 9px; }
+*::-webkit-scrollbar-track { background: var(--pi-scroll-track); border-radius: 10px; }
+*::-webkit-scrollbar-thumb { background: var(--pi-scroll-thumb); border: 2px solid var(--pi-scroll-track); border-radius: 10px; }
+*::-webkit-scrollbar-thumb:hover { background: var(--pi-scroll-hover); }
+*::-webkit-scrollbar-corner { background: var(--pi-scroll-track); }
+/* Select nativo também respeita a paleta do sistema no menu de opções. */
+select, input[type="date"], input[type="datetime-local"] { color-scheme: inherit; }
+/* Botão de confirmação de uma decisão em revisão tem a mesma cor do cabeçalho. */
+[data-tec08-estado="revisao"] button[data-tec08-confirmar]:not(:disabled) {
+  background-color: #0f766e !important;
+  border-color: #14b8a6 !important;
+  color: #fff !important;
+}
+[data-tec08-estado="revisao"] button[data-tec08-confirmar]:not(:disabled):hover { background-color: #0d9488 !important; }
+
+/* Modais de ocorrências com títulos longos jamais escapam da largura do cabeçalho. */
+[data-tec08-modal] [data-pi-titulo], [role="dialog"] h2 { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }

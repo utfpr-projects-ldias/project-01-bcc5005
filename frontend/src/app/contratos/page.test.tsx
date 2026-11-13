@@ -172,7 +172,7 @@ test('filtros compactos: selects com mesma largura e abas junto ao título Contr
   expect(screen.getByLabelText('Filtrar por situação').parentElement).toHaveClass('order-2', 'min-[500px]:order-2');
   expect(screen.getByLabelText('Pesquisar contrato').closest('.order-1')).toHaveClass('lg:order-4');
   expect(screen.getByRole('button', { name: 'Cadastrar contrato' })).toBeEnabled();
-  expect(screen.getByRole('button', { name: 'Ordenar contratos' })).toHaveTextContent('Padrão');
+  expect(screen.getByRole('button', { name: 'Ordenar contratos' })).toHaveTextContent('Início mais recente');
 });
 
 

@@ -10,7 +10,7 @@ export type ProgressoEntregavel = {
 };
 export type ProgressoContrato = {
   contratoId: string; statusContrato?: string; situacaoAdministrativa?: string; avancoSimples: number | null; avancoPonderado: number | null;
-  modoCalculo: string; versaoPesos: string; avanco: number | null; configuracaoPendente: boolean; editavelPesos: boolean;
+  modoCalculo: 'SIMPLES' | 'PONDERADO'; versaoPesos: string; avanco: number | null; configuracaoPendente: boolean; editavelPesos: boolean;
   pesosValidos: boolean; somaPesos: number | null; entregaveis: ProgressoEntregavel[];
 };
 export type AtualizacaoExecucao = {

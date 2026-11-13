@@ -85,7 +85,7 @@ export default function MinhaContaPage() {
         <div><h2 className="font-semibold">Alterar meu nome</h2><p className="mt-1 text-xs text-foreground/60">Identificação exibida em seu perfil e no cabeçalho.</p></div>
         <label className="block text-sm" htmlFor="conta-nome">Nome completo</label>
         <input className={campo} id="conta-nome" value={nome} onChange={e => setNome(e.target.value)}
-          placeholder={perfil.nome ?? 'Nome e sobrenome'} maxLength={160} required autoComplete="name" />
+          placeholder={perfil.nome ?? 'Nome e sobrenome'} maxLength={25} required autoComplete="name" />
         <button type="submit" className={botao} disabled={enviando}>{enviando ? 'Salvando...' : 'Atualizar nome'}</button>
       </form>
     </>}
@@ -94,7 +94,7 @@ export default function MinhaContaPage() {
       <form onSubmit={enviarEmail} aria-label="Alterar meu e-mail" className="space-y-4 rounded-xl border border-brand-green/30 p-5">
         <h2 className="font-semibold">Alterar meu e-mail</h2>
         <label className="block text-sm" htmlFor="conta-email">Novo e-mail</label>
-        <input className={campo} id="conta-email" type="email" autoComplete="email" required maxLength={320} value={email} onChange={(e) => setEmail(e.target.value)} />
+        <input className={campo} id="conta-email" type="email" autoComplete="email" required maxLength={254} value={email} onChange={(e) => setEmail(e.target.value)} />
         <label className="block text-sm" htmlFor="conta-senha-email">Senha atual</label>
         <input className={campo} id="conta-senha-email" type="password" maxLength={256} autoComplete="current-password" required value={senhaEmail} onChange={(e) => setSenhaEmail(e.target.value)} />
         <button className={botao} type="submit" disabled={enviando}> {enviando ? 'Salvando...' : 'Atualizar e-mail'} </button>

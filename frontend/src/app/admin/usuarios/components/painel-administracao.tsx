@@ -24,7 +24,7 @@ import { chaveTexto } from '@/lib/repositorio-consultas';
 import { CHAVES_FUNCIONARIOS } from '@/hooks/use-funcionarios';
 import { CHAVE_PERFIL } from '@/hooks/use-meu-perfil';
 
-const nomeCompleto = z.string().min(3, "Informe nome e sobrenome.").max(160, "Nome muito longo.")
+const nomeCompleto = z.string().min(3, "Informe nome e sobrenome.").max(25, "Nome completo: máximo de 25 caracteres.")
   .regex(/^\p{L}[\p{L}\p{M}'’.-]*(?:[ \t]+\p{L}[\p{L}\p{M}'’.-]*)+$/u,
     "Informe nome e sobrenome válidos.");
 const regraSenha = z.string().min(12, "A senha precisa ter ao menos 12 caracteres.")
@@ -33,7 +33,7 @@ const regraSenha = z.string().min(12, "A senha precisa ter ao menos 12 caractere
     "Use maiúscula, minúscula, número e símbolo.");
 const cadastroSchema = z.object({
   nome: nomeCompleto,
-  email: z.email("Informe um e-mail válido.").max(320, "E-mail muito longo."),
+  email: z.email("Informe um e-mail válido.").max(254, "E-mail: máximo de 254 caracteres."),
   perfil: z.enum(["GESTOR", "COLABORADOR"]),
   senhaInicial: regraSenha,
   confirmarSenha: z.string(),
@@ -440,7 +440,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                 <form className="space-y-4" noValidate onSubmit={(e) => void salvarEdicao(e)}>
                   <div>
                     <label htmlFor="edicao-nome" className="mb-1 block text-sm">Nome completo</label>
-                    <input id="edicao-nome" className={campo} value={edicao.nome} onChange={(e) => setEdicao((s) => ({ ...s, nome: e.target.value }))} maxLength={160} aria-describedby={!editando.nome ? "aviso-nome-legado" : undefined} />
+                    <input id="edicao-nome" className={campo} value={edicao.nome} onChange={(e) => setEdicao((s) => ({ ...s, nome: e.target.value }))} maxLength={25} aria-describedby={!editando.nome ? "aviso-nome-legado" : undefined} />
                     {!editando.nome && <p id="aviso-nome-legado" className="text-xs text-foreground/60">Nome legado opcional nesta edição. Ao preencher, informe nome e sobrenome.</p>}
                   </div>
                   {editando.perfil !== "ADMINISTRADOR" && <>
@@ -462,7 +462,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                       <form onSubmit={(e) => void salvarEmail(e)} className="mt-4 space-y-3">
                         <p className="text-xs text-foreground/65">E-mail atual: {editando.email}</p>
                         <label htmlFor="edicao-email" className="block text-sm">Novo e-mail</label>
-                        <input id="edicao-email" type="email" className={campo} value={emailNovo} maxLength={320} required onChange={(e) => setEmailNovo(e.target.value)} />
+                        <input id="edicao-email" type="email" className={campo} value={emailNovo} maxLength={254} required onChange={(e) => setEmailNovo(e.target.value)} />
                         <button className={acao} type="submit" disabled={enviando || emailNovo.trim().toLowerCase() === editando.email}>{enviando ? <IndicadorCarregamento compacto texto="Atualizando..." /> : "Confirmar mudança de e-mail"}</button>
                       </form>
                     </details>
@@ -557,11 +557,11 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
             ) : vista === "cadastro" ? (
               <form onSubmit={(e) => void cadastrar(e)} noValidate className="space-y-4">
                 <div><label htmlFor="usuario-nome" className="mb-1 block text-sm">Nome completo</label>
-                  <input id="usuario-nome" className={campo} value={form.nome} onChange={(e) => setForm((s) => ({ ...s, nome: e.target.value }))} aria-invalid={!!erros.nome} maxLength={160} />
+                  <input id="usuario-nome" className={campo} value={form.nome} onChange={(e) => setForm((s) => ({ ...s, nome: e.target.value }))} aria-invalid={!!erros.nome} maxLength={25} />
                   {erros.nome && <p role="alert" className="text-xs text-error-text">{erros.nome}</p>}
                 </div>
                 <div><label htmlFor="usuario-email" className="mb-1 block text-sm">E-mail</label>
-                  <input id="usuario-email" type="email" className={campo} value={form.email} onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))} aria-invalid={!!erros.email} maxLength={320} />
+                  <input id="usuario-email" type="email" className={campo} value={form.email} onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))} aria-invalid={!!erros.email} maxLength={254} />
                   {erros.email && <p role="alert" className="text-xs text-error-text">{erros.email}</p>}
                 </div>
                 <div><label htmlFor="usuario-perfil" className="mb-1 block text-sm">Perfil</label>

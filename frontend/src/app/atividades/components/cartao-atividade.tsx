@@ -1,5 +1,7 @@
 'use client';
 
+import { IconeReabertura } from '@/app/components/icones-ciclo-vida';
+
 import { BotaoAcaoModal } from '@/app/components/botoes-modal';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
@@ -21,6 +23,7 @@ import { consultarElegibilidadeConclusao, type Contrato } from '@/lib/contratos'
 import { contextoDaDecisao, coresDecisao } from '@/lib/cores-decisoes';
 import { estadoDoObjeto } from '@/lib/identidade-operacional';
 import { ModalEdicaoAtividade } from './modal-edicao-atividade';
+import { ModalEvidenciasAtividade } from './modal-evidencias-atividade';
 
 type Acao = 'solicitar-conclusao' | 'aprovar-conclusao' | 'cancelar-solicitacao' | 'reabrir' | 'arquivar' | 'reativar' | 'excluir';
 export type PermissoesAtividade = Partial<Record<'editarAtividades' | 'verificarAtividades' | 'reabrirAtividades' |
@@ -95,6 +98,7 @@ export function PreviaContrato({ contratoId, fechar, foco }: { contratoId: strin
   const admin = usuario?.perfil === 'ADMINISTRADOR';
   const permitido = (chave: 'suspenderContrato' | 'cancelarContrato' | 'encerrarContrato' | 'concluirContrato' | 'retomarContrato' | 'reverterCancelamentoContrato' | 'reabrirContrato') => Boolean(admin || acessoContrato.dados?.permissoes?.[chave]);
   const encerramentoElegivel = Boolean(contrato && !contrato.arquivadoEm && !contrato.conclusaoSolicitadaEm && !['SUSPENSO','CANCELADO','CONCLUIDO','FINALIZADO','ENCERRADO'].includes(contrato.status));
+  const arquivoPermitido = Boolean(admin && contrato && !contrato.arquivadoEm && !['CONCLUIDO','FINALIZADO','ENCERRADO','SUSPENSO','CANCELADO'].includes(contrato.status) && !contrato.conclusaoSolicitadaEm);
   const enviarAcao = (acao: string) => iframeRef.current?.contentWindow?.postMessage({tipo:'pi:acao-contrato',contratoId,acao},window.location.origin);
   const acaoReabrir = contrato?.status === 'CANCELADO' ? 'reverter-cancelamento'
     : contrato?.status === 'SUSPENSO' ? 'retomar'
@@ -115,7 +119,16 @@ export function PreviaContrato({ contratoId, fechar, foco }: { contratoId: strin
   useEffect(() => {
     function receber(evento: MessageEvent) {
       if (evento.origin !== window.location.origin || evento.source !== iframeRef.current?.contentWindow) return;
-      if (evento.data?.tipo !== 'pi:contrato-atualizado' || evento.data?.contratoId !== contratoId) return;
+      if (evento.data?.contratoId !== contratoId) return;
+      if (evento.data?.tipo === 'pi:estrutura-operacional-atualizada') {
+        cacheContrato?.invalidar(['contratos', 'elegibilidade-conclusao', contratoId]);
+        cacheContrato?.invalidar(['execucao', contratoId]);
+        cacheContrato?.invalidar(['contratos', 'pendentes']);
+        cacheContrato?.invalidar(['etapas', 'contrato', contratoId]);
+        cacheContrato?.invalidar(['entregaveis', 'contrato', contratoId]);
+        return;
+      }
+      if (evento.data?.tipo !== 'pi:contrato-atualizado') return;
       const atualizado = evento.data?.contrato as Contrato | undefined;
       if (!atualizado || atualizado.id !== contratoId) return;
       setContratoConfirmado(atualizado);
@@ -148,21 +161,24 @@ export function PreviaContrato({ contratoId, fechar, foco }: { contratoId: strin
             <p className="max-w-[65vw] truncate text-xs text-foreground/65">{contrato?.objeto ?? 'Visão contextual do contrato'}</p></div></div>
         <div className="flex shrink-0 items-center justify-end gap-2">
           {acaoReabrir && podeReabrir ?
-            <button type="button" className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-teal-500/65 bg-teal-500/10 px-3 text-xs font-semibold text-teal-200 hover:bg-teal-500/20 focus-visible:outline-2 focus-visible:outline-teal-400"
-              onClick={() => enviarAcao(acaoReabrir)}>⟳ Reabrir</button>
+            <button type="button" className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-slate-400/40 bg-slate-500/10 px-3 text-xs font-semibold text-foreground hover:bg-slate-500/20 focus-visible:outline-2 focus-visible:outline-green-500"
+              onClick={() => enviarAcao(acaoReabrir)}><IconeReabertura className="h-4 w-4 text-green-500" /> Reabrir</button>
             : !acaoReabrir && <MenuAcoesObjeto rotulo="Fechar" disabled={!contrato} pendenteConclusao={Boolean(contrato?.conclusaoSolicitadaEm)}>
             <BotaoAcaoModal intencao="suspender" disabled={!encerramentoElegivel || !permitido('suspenderContrato')} onClick={() => enviarAcao('suspender')}>⏸ Suspender contrato</BotaoAcaoModal>
             <BotaoAcaoModal intencao="cancelar" disabled={!encerramentoElegivel || !permitido('cancelarContrato')} onClick={() => enviarAcao('cancelar')}>✕ Cancelar contrato</BotaoAcaoModal>
-            <BotaoAcaoModal intencao="encerrar" disabled={!encerramentoElegivel || !permitido('encerrarContrato')} onClick={() => enviarAcao('encerrar')}>⚑ Encerrar antecipadamente</BotaoAcaoModal>
+            <BotaoAcaoModal intencao="encerrar" disabled={!encerramentoElegivel || Boolean(elegibilidade.dados?.apto) || !permitido('encerrarContrato')} onClick={() => enviarAcao('encerrar')}>⚑ Encerrar antecipadamente</BotaoAcaoModal>
             <BotaoAcaoModal intencao="solicitar-conclusao" disabled={!encerramentoElegivel || !!contrato?.conclusaoSolicitadaEm || !elegibilidade.dados?.apto || !(admin || acessoContrato.dados?.permissoes?.editarContrato)}
               title={elegibilidade.dados?.pendencias?.[0] ?? 'Solicitar avaliação de conclusão integral'}
               onClick={() => enviarAcao('solicitar-conclusao')}>
-              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="inline-block h-4 w-4 align-middle"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="m7 11 2 2 3-4M14 10h4M7 17h11"/></svg> Solicitar conclusão
+              Solicitar conclusão
             </BotaoAcaoModal>
             {Boolean(contrato?.conclusaoSolicitadaEm) && permitido('concluirContrato') && <>
               <BotaoAcaoModal intencao="cancelar" onClick={() => enviarAcao('devolver-conclusao')}>✕ Devolver solicitação</BotaoAcaoModal>
-              <BotaoAcaoModal intencao="concluir" onClick={() => enviarAcao('aprovar-conclusao')}>✓ Aprovar conclusão</BotaoAcaoModal>
+              <BotaoAcaoModal intencao="concluir" onClick={() => enviarAcao('aprovar-conclusao')}>Aprovar conclusão</BotaoAcaoModal>
             </>}
+            {admin && !contrato?.arquivadoEm && <BotaoAcaoModal intencao="arquivar" disabled={!arquivoPermitido} title={!arquivoPermitido ? 'Reabra ou regularize a situação do contrato antes de arquivar, conforme regras do backend.' : 'Arquivar contrato preservando o histórico'} onClick={() => enviarAcao('arquivar')}>
+              Arquivar
+            </BotaoAcaoModal>}
           </MenuAcoesObjeto>}
           <button ref={fecharRef} type="button" aria-label="Fechar detalhes do contrato" onClick={fechar} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-xl pi-contrato-acento hover:bg-current/10">×</button>
         </div>
@@ -226,6 +242,7 @@ export function CartaoAtividade({ atividade, contratoId, permissoes, compacto = 
   const [detalheAberto, setDetalheAberto] = useState(abrirDetalhesInicialmente);
   const [carregandoCard, setCarregandoCard] = useState(false);
   const [listaEntregaveisAberta, setListaEntregaveisAberta] = useState(false);
+  const [evidenciasAbertas, setEvidenciasAbertas] = useState(false);
   const [edicaoAberta, setEdicaoAberta] = useState(false);
   const [gatilhoEdicao, setGatilhoEdicao] = useState<HTMLButtonElement | null>(null);
   const justificativaAjudaId = useId();
@@ -260,6 +277,8 @@ export function CartaoAtividade({ atividade, contratoId, permissoes, compacto = 
         cache?.invalidar(['contratos']);
       }
       onAtualizada?.();
+      window.dispatchEvent(new CustomEvent('pi:estrutura-operacional-atualizada', { detail: { contratoId } }));
+      if (window.parent !== window) window.parent.postMessage({ tipo: 'pi:estrutura-operacional-atualizada', contratoId }, window.location.origin);
       setPendente(null); setMotivo('');
     } catch (e) { setErro(e instanceof Error ? e.message : 'Não foi possível executar a operação.'); }
     finally { setOcupado(false); }
@@ -304,12 +323,12 @@ export function CartaoAtividade({ atividade, contratoId, permissoes, compacto = 
     </div>}
 
     </div>
-    {detalheAberto && !listaEntregaveisAberta && createPortal(<ModalEtapa titulo={atividade.titulo} contexto="Detalhes da atividade" estadoContextual={estadoModal} camada={dentroEntregavel ? "evidencia" : "principal"} compacto
+    {detalheAberto && !listaEntregaveisAberta && !evidenciasAbertas && createPortal(<ModalEtapa titulo={atividade.titulo} contexto="Detalhes da atividade" estadoContextual={estadoModal} camada={dentroEntregavel ? "evidencia" : "principal"} compacto
       ocupado={false} onFechar={() => setDetalheAberto(false)} rotuloFechar="Fechar detalhes da atividade"
       acoes={<>
         {estado === 'PENDENTE_CONCLUSAO' && (permissoes?.editarAtividades || permissoes?.verificarAtividades) &&
           <div className="flex items-center gap-2">
-            {acaoDisponivel('cancelar-solicitacao') && <button type="button" className="rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs font-semibold hover:bg-amber-500/20"
+            {acaoDisponivel('cancelar-solicitacao') && <button type="button" className="rounded-lg border border-red-500/60 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-500/20 dark:text-red-300"
               onClick={e => solicitar('cancelar-solicitacao', e.currentTarget)}>Cancelar</button>}
             {acaoDisponivel('aprovar-conclusao') && <button type="button" className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-500"
               onClick={e => solicitar('aprovar-conclusao', e.currentTarget)}>Aprovar</button>}
@@ -325,9 +344,9 @@ export function CartaoAtividade({ atividade, contratoId, permissoes, compacto = 
             : estado === 'ARQUIVADA' && acaoDisponivel('reativar') ? () => solicitar('reativar', null) : undefined}>
           {(['solicitar-conclusao','reabrir','arquivar','reativar','excluir'] as const).filter(acao => acao !== 'excluir' && acaoDisponivel(acao)).map(acao =>
             <BotaoAcaoModal key={acao} intencao={acao} aria-label={`${ROTULO[acao]} atividade`}
-              onClick={e => solicitar(acao, e.currentTarget)}><Icone nome={acao}/>{ROTULO[acao]}</BotaoAcaoModal>)}
+              onClick={e => solicitar(acao, e.currentTarget)}>{acao !== 'solicitar-conclusao' && acao !== 'reabrir' ? <Icone nome={acao}/> : null}{ROTULO[acao]}</BotaoAcaoModal>)}
         </MenuAcoesObjeto>}
-        {estado === 'VERIFICADA' && acaoDisponivel('arquivar') && acaoDisponivel('reabrir') && <button type="button" onClick={() => solicitar('arquivar', null)} title="Arquivar atividade verificada" aria-label="Arquivar atividade verificada" className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"><Icone nome="arquivar" /></button>}
+        {estado === 'VERIFICADA' && acaoDisponivel('arquivar') && acaoDisponivel('reabrir') && <button type="button" onClick={() => solicitar('arquivar', null)} title="Arquivar atividade verificada" aria-label="Arquivar atividade verificada" className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-orange-500/45 bg-orange-500/10 text-orange-700 dark:text-orange-300 hover:bg-orange-500/20"><Icone nome="arquivar" /></button>}
         {estado === 'ARQUIVADA' && acaoDisponivel('excluir') && <button type="button" onClick={() => solicitar('excluir', null)} title="Excluir atividade arquivada" aria-label="Excluir atividade arquivada" className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20">×</button>}
       </>}>
       <div className="space-y-4 text-sm" data-testid="detalhe-atividade-modal">
@@ -339,6 +358,14 @@ export function CartaoAtividade({ atividade, contratoId, permissoes, compacto = 
           {([['Responsável', atividade.responsavel], ['Duração', atividade.duracao], ['Local', atividade.local], ['Participantes', atividade.participantes?.join(', ')], ['Observações', atividade.observacoes]] as const).map(([nome, valor]) =>
             <div key={nome} className="min-w-0"><dt className="text-xs text-foreground/60">{nome}</dt><dd className="mt-1 whitespace-pre-wrap break-words">{valor || 'Não informado'}</dd></div>)}
         </dl>
+        <div className={`rounded-xl border p-3 ${cores.borda} ${cores.fundo}`}>
+          <button type="button" aria-label="Vincular evidência à atividade" onClick={() => setEvidenciasAbertas(true)}
+            className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition hover:bg-current/10 focus-visible:outline-2 focus-visible:outline-current">
+            <span aria-hidden="true" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-current/30 text-xl">+</span>
+            <span className="min-w-0 flex-1"><strong className="block text-sm">Vincular evidência</strong>
+              <span className="block text-xs text-foreground/65">Consulte comprovantes existentes e associe-os a esta atividade.</span></span>
+          </button>
+        </div>
         {atividade.entregaveis.length > 0 && <div className={`flex flex-wrap items-center justify-start border-t pt-3 ${cores.linha}`}>
           <button type="button" onClick={() => setListaEntregaveisAberta(true)}
             className={`inline-flex min-h-10 max-w-full items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 ${cores.botao}`}>
@@ -347,6 +374,13 @@ export function CartaoAtividade({ atividade, contratoId, permissoes, compacto = 
         </div>}
       </div>
     </ModalEtapa>, document.body)}
+    {evidenciasAbertas && <ModalEvidenciasAtividade contratoId={contratoId} atividadeId={atividade.id}
+      atividadeTitulo={atividade.titulo} podeVincular={estado === 'REGISTRADA' && Boolean(permissoes?.editarAtividades)}
+      onFechar={() => setEvidenciasAbertas(false)} onVinculado={() => {
+        cache?.invalidar(['atividades', contratoId]); onAtualizada?.();
+        window.dispatchEvent(new CustomEvent('pi:estrutura-operacional-atualizada', { detail: { contratoId } }));
+        if (window.parent !== window) window.parent.postMessage({ tipo: 'pi:estrutura-operacional-atualizada', contratoId }, window.location.origin);
+      }} />}
     {listaEntregaveisAberta && createPortal(<ModalEtapa titulo="Entregáveis vinculados" contexto={`Atividade: ${atividade.titulo}`} estadoContextual={estadoModal}
       camada={dentroEntregavel ? 'evidencia' : 'principal'} compacto ocupado={false} somenteIconeFechar
       rotuloFechar="Fechar lista de entregáveis"
@@ -388,7 +422,7 @@ export function CartaoAtividade({ atividade, contratoId, permissoes, compacto = 
           <p id={`${justificativaAjudaId}-contador`} aria-live="polite" className="text-right text-xs tabular-nums text-foreground/60">{motivo.length}/200 caracteres</p>
         </div>}
         {erro && <p role="alert" className="rounded-lg border border-error-text/35 p-2 text-sm text-error-text">{erro}</p>}
-        <div className={`flex justify-end gap-2 border-t ${coresModalAcao.borda} pt-3`}><button type="button" onClick={() => setPendente(null)} disabled={ocupado} className={`rounded-lg border ${coresModalAcao.borda} px-3 py-2 text-sm`}>Cancelar</button>
+        <div className="flex justify-end gap-2 pt-3"><button type="button" onClick={() => setPendente(null)} disabled={ocupado} className="rounded-lg border border-red-500/60 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-500/20 focus-visible:outline-2 focus-visible:outline-red-400 dark:text-red-300 disabled:opacity-50">Cancelar</button>
           <button type="submit" aria-busy={ocupado} disabled={ocupado} className={`rounded-lg px-4 py-2 text-sm font-semibold ${coresModalAcao.botao}`}>{ocupado ? 'Processando...' : `Confirmar ${ROTULO[pendente].toLowerCase()}`}</button></div>
       </form>
     </ModalEtapa>, document.body)}

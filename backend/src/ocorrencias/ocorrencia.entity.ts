@@ -207,6 +207,19 @@ export class Ocorrencia {
   })
   quantidadeRealizada!: string | null;
 
+  /** Critérios locais configuráveis: execução e comprovação permanecem independentes. */
+  @Column({ name: 'exige_atividade', type: 'boolean', default: true })
+  exigeAtividade!: boolean;
+  /** Quantidades mínimas verificadas exigidas para a solicitação de conclusão (0 = opcional). */
+  @Column({ name: 'minimo_atividades_verificadas', type: 'smallint', default: 0 })
+  minimoAtividadesVerificadas!: number;
+  @Column({ name: 'minimo_evidencias_verificadas', type: 'smallint', default: 0 })
+  minimoEvidenciasVerificadas!: number;
+  @Column({ name: 'evidencia_exigida', type: 'varchar', length: 12, default: 'NENHUMA' })
+  evidenciaExigida!: 'NENHUMA' | 'FOTO' | 'RELATORIO' | 'AMBOS';
+  @Column({ name: 'permite_encerramento_excepcional', type: 'boolean', default: true })
+  permiteEncerramentoExcepcional!: boolean;
+
   /** Encerramento administrativo não representa realização física ou aprovação de quantidade. */
   @Column({ name: 'motivo_encerramento', type: 'text', nullable: true })
   motivoEncerramento!: string | null;

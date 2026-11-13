@@ -336,3 +336,40 @@ test('conta autorizada abre seleção pesquisável sem conferir acesso a outro c
   await waitFor(() => expect(listarAtividadesVinculaveis).toHaveBeenCalledWith('c-1','e-1',expect.any(AbortSignal)));
   expect(screen.getByRole('combobox',{name:'Pesquisar atividade'})).toBeInTheDocument();
 });
+
+
+test('ocorrência em revisão permanece visível na aba Ativas e no filtro Em revisão', () => {
+  ocorrencias.mockReturnValue({ ocorrencias: [{ ...ocorrencia, status: 'EM_REVISAO' }], loading: false, erro: null });
+  render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" />);
+  expect(screen.getByRole('tab', { name: 'Ativas' })).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByRole('button', { name: /Ver detalhes da ocorrência Medição de outubro/ })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /Mais filtros/ }));
+  const filtro = screen.getByRole('combobox', { name: 'Filtrar situação das ocorrências' });
+  expect(within(filtro).getByRole('option', { name: 'Em revisão' })).toBeInTheDocument();
+  fireEvent.change(filtro, { target: { value: 'EM_REVISAO' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }));
+  expect(screen.getByRole('button', { name: /Ver detalhes da ocorrência Medição de outubro/ })).toBeInTheDocument();
+});
+
+
+test('cadastro manual oferece mínimos verificáveis por quantidade com valores iniciais 0', () => {
+  render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" />);
+  fireEvent.click(screen.getByRole('button', { name: /Nova ocorrência/ }));
+  const dialogo = screen.getByRole('dialog', { name: 'Nova ocorrência' });
+  expect(within(dialogo).getByRole('spinbutton', { name: 'Atividades verificadas exigidas' })).toHaveAttribute('placeholder','0');
+  expect(within(dialogo).getByRole('spinbutton', { name: 'Evidências verificadas exigidas' })).toHaveAttribute('placeholder','0');
+  fireEvent.click(within(dialogo).getByRole('button', { name: 'Aumentar atividades verificadas exigidas' }));
+  expect(within(dialogo).getByRole('spinbutton', { name: 'Atividades verificadas exigidas' })).toHaveValue(1);
+});
+
+test('detalhes da ocorrência exibem status de requisitos verificáveis sem aprovar automaticamente', () => {
+  ocorrencias.mockReturnValue({ ocorrencias: [{ ...ocorrencia, minimoAtividadesVerificadas:2,
+      minimoEvidenciasVerificadas:1,evidenciaExigida:'RELATORIO',atividadesVerificadas:1,evidenciasRelatorio:0 }],
+    loading:false,erro:null, consultarDetalhe: jest.fn().mockResolvedValue({ ...ocorrencia,
+      minimoAtividadesVerificadas:2,minimoEvidenciasVerificadas:1,evidenciaExigida:'RELATORIO',
+      atividadesVerificadas:1,evidenciasRelatorio:0 }) });
+  render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" />);
+  fireEvent.click(screen.getByRole('button',{name:/Ver detalhes da ocorrência/}));
+  expect(screen.getByText('1 / 2 exigidas')).toBeInTheDocument();
+  expect(screen.getByText('0 / 1 exigidas')).toBeInTheDocument();
+});

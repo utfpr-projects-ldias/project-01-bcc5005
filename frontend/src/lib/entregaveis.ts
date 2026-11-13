@@ -19,7 +19,7 @@ export type Entregavel = {
   nome: string; descricao: string | null; tipo: TipoEntregavel;
   responsavelId: string | null;
   responsavel?: { nome: string | null; email: string } | null;
-  inicioPrevisto: string | null; terminoPrevisto: string | null;
+  inicioPrevisto: string | null; terminoPrevisto: string | null; agendaInicioFuturo?: string | null;
   quantidadePrevista: string | null; quantidadeRealizada: string | null;
   unidadeMedida: string | null; periodicidade: PeriodicidadeEntregavel | null;
   configuracaoPeriodicidade: { versao: 1 } | null;
@@ -116,7 +116,18 @@ async function alterarEntregavel<T>(caminho: string, metodo: 'POST' | 'PATCH', d
       404: 'Contrato, etapa ou entregável não encontrado neste vínculo.',
       409: 'Conflito de replanejamento: há ocorrências vinculadas ou dados concorrentes. Nenhum registro foi apagado. Atualize antes de tentar novamente.',
     };
-    throw new ErroEntregavel(resposta.status, mensagens[resposta.status] ?? 'Falha ao salvar o planejamento. Tente novamente.');
+    let descricao = mensagens[resposta.status] ?? 'Falha ao salvar o planejamento. Tente novamente.';
+    if (resposta.status === 400 || resposta.status === 409) {
+      const corpo: unknown = await resposta.json().catch(() => null);
+      const mensagem = corpo && typeof corpo === 'object' && 'message' in corpo
+        ? (corpo as { message?: unknown }).message : null;
+      const texto = typeof mensagem === 'string' ? mensagem
+        : Array.isArray(mensagem) ? mensagem.filter((v): v is string => typeof v === 'string').join(' ') : '';
+      // Mensagens de regra de negócio, não detalhes SQL/stack/validação interna.
+      if (/^(Apenas \d|O tipo do entregável|Peso operacional|Entregável concluído|O peso|A soma dos pesos)/i.test(texto)) descricao = texto.slice(0, 220);
+      else if (resposta.status === 400) descricao = 'Verifique se o peso do entregável cabe no percentual restante do contrato e se os campos alterados respeitam os limites.';
+    }
+    throw new ErroEntregavel(resposta.status, descricao);
   }
   return await resposta.json() as T;
 }

@@ -429,7 +429,7 @@ test('Ativas mostra pendentes e revisões, sem duplicar concluídos e arquivados
 test('Finalizados reúne Concluído e Encerrado com cores próprias; Ativas não duplica nenhum dos dois', () => {
   render(<EntregaveisDaEtapa {...props} dados={[
     { ...e, id: 'completo', nome: 'Entrega concluída', statusExecucao: 'CONCLUIDO' },
-    { ...e, id: 'encerrado', nome: 'Entrega encerrada', statusExecucao: 'FINALIZADO', percentualExecucao: 83.33 },
+    { ...e, id: 'encerrado', nome: 'Entrega encerrada', statusExecucao: 'FINALIZADO', percentualExecucao: '83.33' },
     { ...e, id: 'aberto', nome: 'Entrega em andamento', statusExecucao: 'EM_ANDAMENTO' },
   ]} />);
   expect(screen.queryByRole('link', { name: 'Entrega concluída' })).not.toBeInTheDocument();

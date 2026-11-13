@@ -18,7 +18,7 @@ export type PermissoesGranulares = Partial<Record<ChavePermissao, boolean>>;
 export const ACAO_PERMISSAO: Readonly<Record<string, ChavePermissao>> = {
   'ocorrencias:gerar': 'configurarAgendaOcorrencias', 'ocorrencias:replanejar': 'configurarAgendaOcorrencias',
   'ocorrencias:criar': 'criarOcorrencias', 'ocorrencias:editar': 'editarOcorrencias',
-  'ocorrencias:registrar': 'editarOcorrencias', 'ocorrencias:concluir': 'concluirOcorrencias',
+  'ocorrencias:registrar': 'editarExecucaoFisica', 'ocorrencias:vincular-evidencia': 'enviarComprovantes', 'ocorrencias:concluir': 'concluirOcorrencias',
   'ocorrencias:reabrir': 'reabrirOcorrencias',
   'pesos:atualizar': 'configurarPesos',
   'execucao:atualizar': 'editarExecucaoFisica',

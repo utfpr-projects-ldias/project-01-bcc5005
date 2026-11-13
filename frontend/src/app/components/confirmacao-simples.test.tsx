@@ -54,8 +54,8 @@ test('decisão de reabertura exige justificativa de 15 a 200 caracteres e manté
 });
 
 
-test('reabertura pode preservar a cor de origem de um contrato encerrado', () => {
+test('reabertura usa a cor da revisão mesmo partindo de contrato encerrado', () => {
   render(<ConfirmacaoSimples titulo="Reabrir contrato encerrado?" descricao="Retornar à revisão" confirmar="Reabrir contrato"
     estadoContextual="encerrado" preservarCorOrigem onCancelar={jest.fn()} onConfirmar={jest.fn()} />);
-  expect(screen.getByRole('dialog')).toHaveAttribute('data-tec08-estado', 'encerrado');
+  expect(screen.getByRole('dialog')).toHaveAttribute('data-tec08-estado', 'revisao');
 });

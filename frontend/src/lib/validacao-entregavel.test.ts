@@ -84,15 +84,16 @@ test('checklist permite 10 evidências e rejeita a décima primeira', () => {
 });
 
 
-test('novas orientações do checklist têm no máximo 130 caracteres; preserva histórico legado', () => {
+test('novas orientações do checklist têm no máximo 65 caracteres; preserva histórico legado', () => {
   const r = modelo('UNICO');
-  r.evidenciasEsperadas = [{ chave: 'novo', tipoEvidencia: 'Foto', descricao: 'x'.repeat(131), obrigatoria: true }];
+  r.evidenciasEsperadas = [{ chave: 'novo', tipoEvidencia: 'Foto', descricao: 'x'.repeat(66), obrigatoria: true }];
   expect(validarEntregavel(r).sucesso).toBe(false);
-  r.evidenciasEsperadas[0].descricao = 'x'.repeat(130);
+  r.evidenciasEsperadas[0].descricao = 'x'.repeat(65);
   expect(validarEntregavel(r).sucesso).toBe(true);
   r.evidenciasEsperadas[0].id = 'uuid-legado';
   r.evidenciasEsperadas[0].descricao = 'x'.repeat(200);
-  expect(validarEntregavel(r).sucesso).toBe(true);
+  expect(validarEntregavel(r).sucesso).toBe(false);
+  expect(validarEntregavel(r, { evidenciasEsperadas: [{ id: 'uuid-legado', descricao: 'x'.repeat(200), tipoEvidencia: 'Foto', obrigatoria: true }] } as Entregavel).sucesso).toBe(true);
 });
 
 test('início previsto obrigatório e término para recorrente/contínuo', () => {
@@ -106,4 +107,16 @@ test('início previsto obrigatório e término para recorrente/contínuo', () =>
   const semFim = validarEntregavel(continuo);
   expect(semFim.sucesso).toBe(false);
   if (!semFim.sucesso) expect(semFim.erros.terminoPrevisto).toContain('término');
+});
+
+test('peso novo não pode ser zero, mas peso legado zero pode permanecer inalterado durante outra edição', () => {
+  const r = modelo('UNICO'); r.peso = '0';
+  expect(validarEntregavel(r).sucesso).toBe(false);
+  const antigo = { ...r, id: 'id-legado', peso: '0' } as unknown as Entregavel;
+  const editado = { ...r, nome: 'Nome alterado' };
+  expect(validarEntregavel(editado, antigo).sucesso).toBe(true);
+  r.peso = '20,50';
+  const convertido = validarEntregavel(r);
+  expect(convertido.sucesso).toBe(true);
+  if (convertido.sucesso) expect(convertido.dados.peso).toBe('20.50');
 });

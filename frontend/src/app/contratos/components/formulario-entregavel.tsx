@@ -2,6 +2,7 @@
 import { useEffect, useId, useRef, useState, type Ref, type FormEvent } from 'react';
 import { useEntregaveis } from '@/hooks/use-entregaveis';
 import { ErroEntregavel, ROTULOS_TIPO, pesquisarResponsaveisEntregavel, type ResponsavelEntregavel, type Entregavel } from '@/lib/entregaveis';
+import { decimalDigitado, decimalExibicao, decimalValido } from '@/lib/campos-numericos';
 import { inicialEntregavel,
   validarEntregavel, type DadosPlanejamentoEntregavel, type ErrosEntregavel, type RascunhoEntregavel } from '@/lib/validacao-entregavel';
 
@@ -89,7 +90,7 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
   async function enviar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
     if (enviando.current) return; // trava síncrona contra clique duplo
-    const resultado = validarEntregavel(dados);
+    const resultado = validarEntregavel(dados, inicial);
     if (!resultado.sucesso) { setErros(resultado.erros); setErroGeral('Revise os campos destacados.'); return; }
     const ocupados = (existentes.dados ?? []).filter(e => !e.arquivadoEm && e.id !== inicial?.id).reduce((soma, e) => soma + (Number(e.peso) || 0), 0);
     const restante = Math.max(0, Math.round((100 - ocupados) * 100) / 100);
@@ -111,17 +112,17 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
         <h4 className="font-semibold text-brand-neon">Informações do entregável</h4>
     <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_2fr]">
       <div><label className="mb-1 block text-sm" htmlFor={formId('codigo')}>Código (opcional)</label>
-        <input id={formId('codigo')} className={estilo} maxLength={30} value={dados.codigo} {...campoErro('codigo')} onChange={(e) => atualizar('codigo', e.target.value)} />{mensagem('codigo')}</div>
+        <input id={formId('codigo')} className={estilo} maxLength={15} value={dados.codigo} {...campoErro('codigo')} onChange={(e) => atualizar('codigo', e.target.value)} />{mensagem('codigo')}<span className="mt-1 block text-right text-[11px] text-foreground/60">{dados.codigo.length}/15</span></div>
       <div><label className="mb-1 block text-sm" htmlFor={formId('nome')}>Nome *</label>
-        <input id={formId('nome')} className={estilo} maxLength={120} value={dados.nome} {...campoErro('nome')} onChange={(e) => atualizar('nome', e.target.value)} />{mensagem('nome')}</div>
+        <input id={formId('nome')} className={estilo} maxLength={42} value={dados.nome} {...campoErro('nome')} onChange={(e) => atualizar('nome', e.target.value)} />{mensagem('nome')}<span className="mt-1 block text-right text-[11px] text-foreground/60">{dados.nome.length}/42</span></div>
     </div>
     <div className="space-y-2">
       <p className="block text-sm font-semibold">Responsável pelo entregável (opcional)</p>
       <p className="text-xs text-foreground/70">Escolha a pessoa que acompanhará esta entrega. O acesso ao contrato é configurado separadamente.</p>
       {responsavelEscolhido ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brand-green/45 bg-brand-green/10 px-3 py-3">
         <div className="min-w-0"><p className="text-xs font-medium text-foreground/65">Responsável atribuído</p>
-          <p className="break-all font-semibold text-brand-neon">{responsavelEscolhido.email || 'Usuário cadastrado'}</p>
-          {responsavelEscolhido.nome && <p className="text-xs text-foreground/70">{responsavelEscolhido.nome}</p>}
+          <p className="max-w-full truncate font-semibold text-brand-neon" title={responsavelEscolhido.email}>{responsavelEscolhido.email || 'Usuário cadastrado'}</p>
+
         </div>
         <button type="button" disabled={salvando} onClick={limparResponsavel}
           className="rounded-lg border border-brand-green/45 px-3 py-2 text-sm transition-colors hover:bg-brand-green/20 focus-visible:outline-2 focus-visible:outline-brand-neon disabled:opacity-50">Remover atribuição</button>
@@ -175,8 +176,7 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
             className={`block w-full cursor-pointer rounded-md px-3 py-2 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-brand-neon ${indice === indiceDestacado ? 'bg-brand-green/25' : 'hover:bg-brand-green/20'}`}
             onMouseDown={(e) => e.preventDefault()} onMouseEnter={() => setIndiceDestacado(indice)}
             onClick={() => escolherResponsavel(usuario)}>
-            <span className="block break-all font-medium">{usuario.email}</span>
-            {usuario.nome && <span className="block text-xs text-foreground/65">{usuario.nome}</span>}
+            <span className="block max-w-full truncate font-medium" title={usuario.email}>{usuario.email}</span>
           </button>)}
           {!consultandoResponsavel && !aguardandoBusca && totalResponsaveis > opcoesVisiveis.length && <p className="border-t border-brand-green/20 px-3 py-2 text-xs text-foreground/65">
             Mostrando até {opcoesVisiveis.length} de {totalResponsaveis} contas ativas; refine pelo e-mail.
@@ -190,11 +190,11 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
       {mensagem('responsavelId')}
     </div>
     <div><label className="mb-1 block text-sm" htmlFor={formId('descricao')}>Descrição (opcional)</label>
-      <textarea id={formId('descricao')} className={estilo} rows={3} maxLength={1200} value={dados.descricao}
-        onChange={(e) => atualizar('descricao', e.target.value)} />{mensagem('descricao')}</div>
+      <textarea id={formId('descricao')} className={estilo} rows={3} maxLength={220} value={dados.descricao}
+        onChange={(e) => atualizar('descricao', e.target.value)} />{mensagem('descricao')}<span className="mt-1 block text-right text-[11px] text-foreground/60">{dados.descricao.length}/220</span></div>
     <div><label className="mb-1 block text-sm" htmlFor={formId('observacoes')}>Observações (opcional)</label>
-      <textarea id={formId('observacoes')} className={estilo} rows={2} maxLength={1000} value={dados.observacoes}
-        onChange={(e) => atualizar('observacoes', e.target.value)} />{mensagem('observacoes')}</div>
+      <textarea id={formId('observacoes')} className={estilo} rows={2} maxLength={120} value={dados.observacoes}
+        onChange={(e) => atualizar('observacoes', e.target.value)} />{mensagem('observacoes')}<span className="mt-1 block text-right text-[11px] text-foreground/60">{dados.observacoes.length}/120</span></div>
       </section>
       <section className="min-w-0 space-y-4 rounded-xl border border-brand-green/25 bg-brand-green/[0.04] p-3 sm:p-4" aria-label="Planejamento do entregável">
         <h4 className="font-semibold text-brand-neon">Planejamento do entregável</h4>
@@ -215,8 +215,8 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
         <input id={formId('quantidadePrevista')} placeholder="Ex.: 20" maxLength={18} inputMode="decimal" className={estilo} value={dados.quantidadePrevista}
           onChange={e => atualizar('quantidadePrevista', e.target.value)} {...campoErro('quantidadePrevista')} />{mensagem('quantidadePrevista')}</div>
       <div><label className="mb-1 block text-sm" htmlFor={formId('unidadeMedida')}>Unidade de medida *</label>
-        <input id={formId('unidadeMedida')} placeholder="Ex.: computadores limpos" maxLength={80} className={estilo} value={dados.unidadeMedida}
-          onChange={e => atualizar('unidadeMedida', e.target.value)} {...campoErro('unidadeMedida')} />{mensagem('unidadeMedida')}</div>
+        <input id={formId('unidadeMedida')} placeholder="Ex.: computadores limpos" maxLength={40} className={estilo} value={dados.unidadeMedida}
+          onChange={e => atualizar('unidadeMedida', e.target.value)} {...campoErro('unidadeMedida')} />{mensagem('unidadeMedida')}<span className="mt-1 block text-right text-[11px] text-foreground/60">{dados.unidadeMedida.length}/40</span></div>
     </div>}
     {dados.tipo === 'RECORRENTE' && <div><label className="mb-1 block text-sm" htmlFor={formId('periodicidade')}>Periodicidade *</label>
       <select id={formId('periodicidade')} disabled={agendaBloqueada} className={`${estilo} disabled:cursor-not-allowed disabled:bg-slate-500/15 disabled:opacity-55`} value={dados.periodicidade}
@@ -224,15 +224,15 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
         <option value="">Selecione</option>
         {([['DIARIA','Diária'],['SEMANAL','Semanal'],['MENSAL','Mensal'],['TRIMESTRAL','Trimestral'],['SEMESTRAL','Semestral'],['ANUAL','Anual']] as const).map(([v,t])=><option key={v} value={v}>{t}</option>)}
       </select>{mensagem('periodicidade')}{agendaBloqueada && <p className="mt-1 text-xs text-foreground/65">Somente leitura: requer permissão de replanejamento.</p>}</div>}
-    <div className={`grid gap-4 ${mesmoDia && ['UNICO','MARCO'].includes(dados.tipo) ? '' : 'sm:grid-cols-2'}`}>
-      <div><label className="mb-1 block text-sm" htmlFor={formId('inicioPrevisto')}>{mesmoDia && ['UNICO','MARCO'].includes(dados.tipo) ? 'Data prevista *' : 'Início previsto *'}</label>
+    <div className={`grid gap-4 ${mesmoDia && ['UNICO','MARCO','QUANTITATIVO'].includes(dados.tipo) ? '' : 'sm:grid-cols-2'}`}>
+      <div><label className="mb-1 block text-sm" htmlFor={formId('inicioPrevisto')}>{mesmoDia && ['UNICO','MARCO','QUANTITATIVO'].includes(dados.tipo) ? 'Data prevista *' : 'Início previsto *'}</label>
         <input id={formId('inicioPrevisto')} type="date" disabled={agendaBloqueada} className={`${estilo} disabled:cursor-not-allowed disabled:bg-slate-500/15 disabled:opacity-55`} value={dados.inicioPrevisto} {...campoErro('inicioPrevisto')}
           onChange={(e) => atualizar('inicioPrevisto', e.target.value)} />{mensagem('inicioPrevisto')}</div>
-      {!(mesmoDia && ['UNICO','MARCO'].includes(dados.tipo)) && <div><label className="mb-1 block text-sm" htmlFor={formId('terminoPrevisto')}>Término previsto</label>
+      {!(mesmoDia && ['UNICO','MARCO','QUANTITATIVO'].includes(dados.tipo)) && <div><label className="mb-1 block text-sm" htmlFor={formId('terminoPrevisto')}>Término previsto</label>
         <input id={formId('terminoPrevisto')} type="date" disabled={agendaBloqueada} className={`${estilo} disabled:cursor-not-allowed disabled:bg-slate-500/15 disabled:opacity-55`} value={dados.terminoPrevisto} {...campoErro('terminoPrevisto')}
           onChange={(e) => atualizar('terminoPrevisto', e.target.value)} />{mensagem('terminoPrevisto')}</div>}
     </div>
-    {['UNICO','MARCO'].includes(dados.tipo) && <>
+    {['UNICO','MARCO','QUANTITATIVO'].includes(dados.tipo) && <>
     <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground/80">
       <input type="checkbox" checked={mesmoDia} onChange={evento => {
         const marcado = evento.target.checked;
@@ -244,12 +244,12 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
     </>}
     <div><label className="mb-1 block text-sm" htmlFor={formId('peso')}>Peso operacional (%) *</label>
       <input id={formId('peso')} maxLength={6} disabled={pesoBloqueado} className={`${estilo} max-w-32 disabled:cursor-not-allowed disabled:bg-slate-500/15 disabled:opacity-55`} inputMode="decimal" value={dados.peso} {...campoErro('peso')}
-        placeholder="Ex.: 20" onChange={(e) => atualizar('peso', e.target.value)} />{mensagem('peso')}
+        placeholder="Ex.: 20,00" onChange={(e) => atualizar('peso', decimalDigitado(e.target.value))} onBlur={() => { if (dados.peso && decimalValido(dados.peso, 100, Boolean(inicial?.peso != null && Number(inicial.peso) === 0))) atualizar('peso', decimalExibicao(dados.peso)); }} />{mensagem('peso')}<span className="mt-1 block text-right text-[11px] text-foreground/60">Até 100,00%</span>
       <p className="mt-1 text-xs text-foreground/65">% dos 100% que representa o contrato para este entregável.</p>
       {pesoBloqueado && <p className="mt-1 text-xs text-foreground/65">Somente leitura: requer permissão Configurar pesos.</p>}</div>
     <div><label className="mb-1 block text-sm" htmlFor={formId('criterioConclusao')}>Critério de conclusão {['CONTINUO','MARCO'].includes(dados.tipo) ? '*' : '(opcional)'}</label>
-      <textarea id={formId('criterioConclusao')} className={estilo} rows={3} maxLength={1500} value={dados.criterioConclusao} {...campoErro('criterioConclusao')}
-        onChange={(e) => atualizar('criterioConclusao', e.target.value)} />{mensagem('criterioConclusao')}</div>
+      <textarea id={formId('criterioConclusao')} className={estilo} rows={3} maxLength={350} value={dados.criterioConclusao} {...campoErro('criterioConclusao')}
+        onChange={(e) => atualizar('criterioConclusao', e.target.value)} />{mensagem('criterioConclusao')}<span className="mt-1 block text-right text-[11px] text-foreground/60">{dados.criterioConclusao.length}/350</span></div>
       </section>
     </div>
     {erroGeral && <p role="alert" className="rounded-lg border border-red-500/45 p-3 text-sm text-error-text">{erroGeral}</p>}

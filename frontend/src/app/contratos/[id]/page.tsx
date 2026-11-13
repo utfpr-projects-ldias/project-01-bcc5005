@@ -35,6 +35,7 @@ import { IconeAtividades, IconeOcorrencias } from '@/app/components/icones-opera
 import { FormularioContrato } from '../components/formulario-contrato';
 import { ModalEtapa } from '../components/modal-etapa';
 import { MenuAcoesObjeto } from '@/app/components/menu-acoes-objeto';
+import { IconeConclusao, IconeReabertura } from '@/app/components/icones-ciclo-vida';
 
 type Par = [titulo: string, valor: string | null | undefined];
 function dataBR(valor: string | null | undefined): string {
@@ -122,8 +123,25 @@ export default function DetalheContratoPage() {
     cache.invalidar(['contratos', 'elegibilidade-conclusao', id]);
     void elegibilidadeQuery.atualizar().catch(() => {});
     void principalQuery.atualizar().catch(() => {});
+    void etapasDocumentais.atualizar().catch(() => {});
+    void entregaveisDocumentais.atualizar().catch(() => {});
+    void resumoDocumental.atualizar().catch(() => {});
+    cache.invalidar(['execucao', id]);
+    cache.invalidar(['contratos', 'pendentes']);
     setVersaoHistorico(atual => atual + 1);
+    if (window.parent !== window)
+      window.parent.postMessage({ tipo: 'pi:estrutura-operacional-atualizada', contratoId: id }, window.location.origin);
   }
+  const refAtualizacaoOperacional = useRef(registrarAtualizacaoHistorico);
+  useEffect(() => { refAtualizacaoOperacional.current = registrarAtualizacaoHistorico; });
+  useEffect(() => {
+    function atualizar(evento: Event) {
+      const contratoAtualizado = (evento as CustomEvent<{ contratoId: string }>).detail?.contratoId;
+      if (contratoAtualizado === id) refAtualizacaoOperacional.current();
+    }
+    window.addEventListener('pi:estrutura-operacional-atualizada', atualizar);
+    return () => window.removeEventListener('pi:estrutura-operacional-atualizada', atualizar);
+  }, [id]);
   const documentalmenteConcluido = Boolean(contrato && contratoDocumentalmenteConcluido(
     { ...contrato, reabertoEm: null }, etapasDocumentais.dados, entregaveisDocumentais.dados, resumoDocumental.dados));
   const administrador = perfil?.perfil === 'ADMINISTRADOR';
@@ -206,6 +224,7 @@ export default function DetalheContratoPage() {
         else if (acao === 'encerrar' && podeEncerrar) setAbrirEncerramento(true);
         else if (acao === 'finalizar' && podeDeliberar && contrato && !contrato.arquivadoEm && !['SUSPENSO','CANCELADO','CONCLUIDO','FINALIZADO','ENCERRADO'].includes(contrato.status)) setConfirmarFinalizacao(true);
         else if (acao === 'solicitar-conclusao' && podeSolicitarConclusao) setConfirmarSolicitacao(true);
+        else if (acao === 'arquivar' && administrador && contrato && !contrato.arquivadoEm && !bloqueioOperacional) setConfirmarArquivo(true);
         else if (acao === 'aprovar-conclusao' && pendenteConclusao && podeDeliberar) setConfirmarConclusao(true);
         else if (acao === 'devolver-conclusao' && pendenteConclusao && podeDeliberar) setConfirmarDevolucao(true);
       }
@@ -317,9 +336,30 @@ export default function DetalheContratoPage() {
         if (!podeEditar) throw new Error('Sem permissão para editar o cadastro deste contrato.');
         // Planejamento e Em execução são fases operacionais comuns. Mesmo ao
         // alterá-las, a revisão permanece aberta; não há confirmação extra.
-        await mutacoes.editar(contrato.id, dados);
-        registrarAtualizacaoHistorico();
-        toastSucesso('Contrato atualizado. Alteração preservada na rastreabilidade.');
+        // Enviar apenas mudanças efetivas. O PATCH é parcial: não reenviar
+        // valores legados acima dos novos limites nem apagar vínculos opcionais.
+        const campos = ['numeroContrato','processoAdministrativo','orgaoContratante',
+          'unidadeResponsavel','objeto','descricao','dataAssinatura','inicioVigencia',
+          'terminoVigencia','status','responsavelInternoId','fiscalGestor','modoCalculo','observacoes'] as const;
+        const alteracoes: Partial<DadosContrato> = {};
+        for (const campo of campos) {
+          const anterior = ['dataAssinatura','inicioVigencia','terminoVigencia'].includes(campo)
+            ? dataCivil(contrato[campo]) || null : contrato[campo];
+          if ((dados[campo] ?? null) !== (anterior ?? null)) {
+            (alteracoes as Record<string, unknown>)[campo] = dados[campo];
+          }
+        }
+        if (Object.keys(alteracoes).length === 0) {
+          toastAviso('Nenhuma alteração identificada no contrato.');
+        } else {
+          const atualizado = await mutacoes.editar(contrato.id, alteracoes);
+          comunicarDecisaoContrato(atualizado);
+          registrarAtualizacaoHistorico();
+          // Refazer a consulta após persistência para os demais componentes
+          // (painel interno, cartões e editor) lerem o mesmo estado.
+          await contratoQuery.atualizar().catch(() => {});
+          toastSucesso('Contrato atualizado. Alteração preservada na rastreabilidade.');
+        }
       }
       // Navegação permanece no contrato; a consulta é invalidada pela mutação.
       const marcador = marcadorEdicao.current;
@@ -627,18 +667,18 @@ export default function DetalheContratoPage() {
                 </button>)}
               </nav>
               <div id="secao-geral-informacoes" role="tabpanel" hidden={abaGeral!=='informacoes'} className={abaGeral==='informacoes'?'space-y-4':'hidden'}>
-                <div>
+                <div className="min-w-0 rounded-xl border border-current/20 bg-transparent p-3 sm:p-4">
                   <h3 className="mb-3 text-sm font-semibold text-current">Identificação</h3>
-                  <dl className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    {([['Objeto contratual',contrato.objeto],['Número',contrato.numeroContrato],['Código',rotuloCodigoPublico(contrato.codigoPublico)],['Órgão contratante',contrato.orgaoContratante],['Processo administrativo',contrato.processoAdministrativo],['Unidade responsável',contrato.unidadeResponsavel]] as Par[]).map(([rotulo,valor])=><div key={rotulo} className={`min-w-0 rounded-xl border border-current/15 bg-background/45 px-3 py-3 ${rotulo==='Objeto contratual'?'sm:col-span-2':''}`}>
-                      <dt className="text-xs text-foreground/60">{rotulo}</dt><dd className="mt-1 whitespace-pre-wrap break-words text-sm font-medium [overflow-wrap:anywhere]">{valor||'Não informado'}</dd>
+                  <dl className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+                    {([['Objeto contratual',contrato.objeto],['Número',contrato.numeroContrato],['Código',rotuloCodigoPublico(contrato.codigoPublico)],['Órgão contratante',contrato.orgaoContratante],['Processo administrativo',contrato.processoAdministrativo],['Unidade responsável',contrato.unidadeResponsavel]] as Par[]).map(([rotulo,valor])=><div key={rotulo} className={`min-w-0 border-b border-current/10 pb-3 ${rotulo==='Objeto contratual'?'sm:col-span-2':''}`}>
+                      <dt className="text-xs text-foreground/60">{rotulo}</dt><dd className="mt-1 max-h-24 overflow-y-auto whitespace-pre-wrap break-words text-sm font-medium [overflow-wrap:anywhere]">{valor||'Não informado'}</dd>
                     </div>)}
                   </dl>
+                  {(contrato.descricao?.trim()||contrato.observacoes?.trim())&&<dl className="mt-3 grid min-w-0 gap-x-6 gap-y-3 sm:grid-cols-2">
+                    {contrato.descricao?.trim()&&<div className="min-w-0"><dt className="mb-1 text-xs text-foreground/60">Descrição</dt><dd className="max-h-32 overflow-y-auto whitespace-pre-wrap break-words text-sm text-foreground/85 [overflow-wrap:anywhere]">{contrato.descricao}</dd></div>}
+                    {contrato.observacoes?.trim()&&<div className="min-w-0"><dt className="mb-1 text-xs text-foreground/60">Observações</dt><dd className="max-h-32 overflow-y-auto whitespace-pre-wrap break-words text-sm text-foreground/85 [overflow-wrap:anywhere]">{contrato.observacoes}</dd></div>}
+                  </dl>}
                 </div>
-                {(contrato.descricao?.trim()||contrato.observacoes?.trim())&&<div className="grid gap-3 sm:grid-cols-2">
-                  {contrato.descricao?.trim()&&<div className="min-w-0 rounded-xl border border-current/15 bg-background/45 p-3"><h4 className="mb-2 text-xs font-semibold text-current">Descrição</h4><p className="max-h-52 overflow-y-auto whitespace-pre-wrap break-words text-sm text-foreground/85 [overflow-wrap:anywhere]">{contrato.descricao}</p></div>}
-                  {contrato.observacoes?.trim()&&<div className="min-w-0 rounded-xl border border-current/15 bg-background/45 p-3"><h4 className="mb-2 text-xs font-semibold text-current">Observações</h4><p className="max-h-52 overflow-y-auto whitespace-pre-wrap break-words text-sm text-foreground/75 [overflow-wrap:anywhere]">{contrato.observacoes}</p></div>}
-                </div>}
               </div>
               <div id="secao-geral-vigencia" role="tabpanel" hidden={abaGeral!=='vigencia'} className={abaGeral==='vigencia'?'space-y-3':'hidden'}>
                 <h3 className="text-sm font-semibold text-current">Vigência e responsáveis</h3>
@@ -699,7 +739,7 @@ export default function DetalheContratoPage() {
           {!finalizado && !concluido && !encerrado && !cancelado && !suspenso && !contrato.arquivadoEm && !pendenteConclusao && (administrador || acessoQuery.dados?.permissoes?.editarContrato) &&
             <BotaoAcaoModal intencao="solicitar-conclusao" disabled={!podeSolicitarConclusao || alterandoArquivo} title={!podeSolicitarConclusao ? motivoIndisponibilidadeConclusao : 'Solicitar aprovação da conclusão integral'}
               onClick={() => setConfirmarSolicitacao(true)}>
-              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="m7 11 2 2 3-4M14 10h4M7 17h11"/></svg>Solicitar conclusão
+              Solicitar conclusão
             </BotaoAcaoModal>}
           {pendenteConclusao && podeDeliberar ? <>
             <button type="button" data-tec08-decisao="rejeitar" onClick={() => setConfirmarDevolucao(true)} disabled={alterandoArquivo}
@@ -709,14 +749,14 @@ export default function DetalheContratoPage() {
               title={principalQuery.carregando ? 'Consultando a situação do PDF principal' : !principalVerificado ? pendenciaPrincipal : 'Aprovar conclusão do contrato'}
               aria-label="Aprovar conclusão do contrato"
               aria-describedby={!principalVerificado ? 'aviso-pdf-principal-conclusao' : undefined}
-              className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-300 ${principalVerificado ? 'border-violet-500 bg-violet-700 text-white hover:bg-violet-600' : 'border-violet-500/45 bg-violet-950/20 text-violet-200/40 disabled:cursor-not-allowed'}`}><span aria-hidden="true">✓</span> Aprovar</button>
+              className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-300 ${principalVerificado ? 'border-violet-500 bg-violet-700 text-white hover:bg-violet-600' : 'border-violet-500/45 bg-violet-950/20 text-violet-200/40 disabled:cursor-not-allowed'}`}><IconeConclusao className="h-4 w-4 shrink-0 text-violet-300" /> Aprovar</button>
           </> : contrato.arquivadoEm ? null : (concluido || encerrado) && (administrador || acessoQuery.dados?.permissoes?.reabrirContrato) ? (
             <button type="button" onClick={() => setConfirmarReabertura(true)} disabled={alterandoArquivo}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-emerald-500/60 bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-teal-900 focus-visible:outline-2 focus-visible:outline-teal-300 disabled:opacity-50" aria-label="Reabrir contrato concluído"><span aria-hidden="true">⟳</span> Reabrir contrato</button>
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-400/40 bg-slate-500/10 px-3 text-xs font-semibold text-foreground hover:bg-slate-500/20 focus-visible:outline-2 focus-visible:outline-green-500 disabled:opacity-50" aria-label="Reabrir contrato concluído"><IconeReabertura className="h-4 w-4 text-green-500" /> Reabrir</button>
           ) : podeFecharRevisao && podeEditar ? (
             <button type="button" data-tec08-decisao="fechamento" aria-label={tituloFechamento} disabled={alterandoArquivo}
               onClick={() => setConfirmarFechamentoRevisao(true)}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-violet-400/55 bg-violet-700 px-3 text-xs font-semibold text-white hover:bg-violet-600 focus-visible:outline-2 focus-visible:outline-violet-300 disabled:opacity-50"><span aria-hidden="true">✓</span>{tituloFechamento}</button>
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-violet-400/55 bg-violet-700 px-3 text-xs font-semibold text-white hover:bg-violet-600 focus-visible:outline-2 focus-visible:outline-violet-300 disabled:opacity-50"><IconeConclusao className="h-4 w-4 shrink-0 text-violet-400" />{tituloFechamento}</button>
           ) : suspenso ? (
             podeRetomar && <button type="button" onClick={() => setConfirmarRetomada(true)} disabled={alterandoArquivo}
               aria-label="Retomar contrato suspenso" title="Retomar preservando prazos e progresso"
@@ -729,7 +769,7 @@ export default function DetalheContratoPage() {
               Encerramento é selecionado no formulário, nunca por botão separado. */}
           {!contrato.arquivadoEm && administrador && !bloqueioOperacional &&
             <button type="button" onClick={() => setConfirmarArquivo(true)} disabled={alterandoArquivo}
-              aria-label="Arquivar contrato" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-amber-500/45 bg-amber-500/10 px-3 text-xs font-semibold text-foreground hover:bg-amber-500/20 disabled:opacity-50">
+              aria-label="Arquivar contrato" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-orange-500/50 bg-orange-500/10 px-3 text-xs font-semibold text-orange-700 dark:text-orange-300 hover:bg-orange-500/20 disabled:opacity-50">
               <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4 shrink-0"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v12h14V8M9 13h6"/></svg> Arquivar
             </button>}
 

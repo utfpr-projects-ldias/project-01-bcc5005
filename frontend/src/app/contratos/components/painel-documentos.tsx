@@ -210,8 +210,14 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
     if (somenteLeitura || !documentoEdicao || !podeEditarRegistro || documentoEdicao.categoria === 'CONTRATO_PRINCIPAL' || salvandoMetadados) return;
     setSalvandoMetadados(true); setErroMetadados('');
     try {
-      await editarDocumento(contratoId, documentoEdicao.id, { categoria: categoriaEdicao, descricao: descricaoEdicao });
-      void Promise.allSettled([consulta.atualizar(), principais.atualizar(), totalAtivos.atualizar(), totalArquivados.atualizar()]);
+      if (descricaoEdicao !== (documentoEdicao.descricao ?? '') && descricaoEdicao.length > 70) {
+        throw new Error('Descrição nova ou alterada: máximo de 70 caracteres. O texto antigo será preservado até ser editado.');
+      }
+      await editarDocumento(contratoId, documentoEdicao.id, {
+        categoria: categoriaEdicao,
+        ...(descricaoEdicao !== (documentoEdicao.descricao ?? '') ? { descricao: descricaoEdicao } : {}),
+      });
+      await Promise.allSettled([consulta.atualizar(), principais.atualizar(), totalAtivos.atualizar(), totalArquivados.atualizar()]);
       setDocumentoEdicao(null);
       onDocumentoAlterado?.();
       toastSucesso('Documento atualizado.');
@@ -276,8 +282,8 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
     setErroFormulario('');
     const invalido = validarSelecaoDocumento(arquivo, categoriaEnvio);
     if (invalido) { setErroFormulario(invalido); return; }
-    if (descricao.length > 140 || (descricao.trim() === '' && descricao.length > 0)) {
-      setErroFormulario('Descrição inválida (máximo de 140 caracteres, sem espaços isolados).'); return;
+    if (descricao.length > 70 || (descricao.trim() === '' && descricao.length > 0)) {
+      setErroFormulario('Descrição inválida (máximo de 70 caracteres, sem espaços isolados).'); return;
     }
     enviandoRef.current = true;
     setEnviando(true);
@@ -398,9 +404,9 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
           {arquivo && <p className="min-w-0 break-all text-xs text-foreground/70">Selecionado: {arquivo.name} ({formatarTamanhoDocumento(arquivo.size)})</p>}
           <div className="space-y-1">
             <label htmlFor="descricao-documento-envio" className="block text-sm font-medium">Descrição (opcional)</label>
-            <textarea id="descricao-documento-envio" rows={2} maxLength={140} className={campos} value={descricao} disabled={enviando}
+            <textarea id="descricao-documento-envio" rows={2} maxLength={70} className={campos} value={descricao} disabled={enviando}
               onChange={e => { setDescricao(e.target.value); setErroFormulario(''); }} />
-            <p className="text-xs text-foreground/55">{descricao.length}/140 caracteres</p>
+            <p className="text-xs text-foreground/55">{descricao.length}/70 caracteres</p>
           </div>
           {erroFormulario && <p role="alert" className="break-words text-sm text-error-text">{erroFormulario}</p>}
           {enviando && <div role="progressbar" aria-label="Envio em andamento" aria-valuetext="Enviando e verificando arquivo" className="rounded-lg border border-brand-green/30 p-3 text-sm">
@@ -428,7 +434,7 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
           </select>
         </label>
         <label className="block text-sm">Descrição
-          <textarea className={`${campos} mt-1`} rows={2} maxLength={140} value={descricaoEdicao} onChange={e => setDescricaoEdicao(e.target.value)} />
+          <textarea className={`${campos} mt-1`} rows={2} maxLength={Math.max(70, documentoEdicao?.descricao?.length ?? 0)} value={descricaoEdicao} onChange={e => setDescricaoEdicao(e.target.value)} />
         </label>
         </>}
         {erroMetadados && <p role="alert" className="text-xs text-error-text">{erroMetadados}</p>}
@@ -451,7 +457,7 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
         {!documentoDetalhe.arquivadoEm && !!documentoDetalhe.verificadoEm && permiteReabrir(documentoDetalhe) &&
           <BotaoAcaoModal intencao="reabrir" disabled={somenteLeitura || salvandoMetadados} onClick={() => setDocumentoReabrir(documentoDetalhe)}>⟳ Reabrir</BotaoAcaoModal>}
         {!documentoDetalhe.arquivadoEm && !documentoDetalhe.verificadoEm && permiteArquivar(documentoDetalhe) &&
-          <BotaoAcaoModal intencao="arquivar" disabled={somenteLeitura || salvandoMetadados} onClick={() => { setDocumentoArquivar(documentoDetalhe); setErroMetadados(''); }}>▣ Arquivar</BotaoAcaoModal>}
+          <BotaoAcaoModal intencao="arquivar" disabled={somenteLeitura || salvandoMetadados} onClick={() => { setDocumentoArquivar(documentoDetalhe); setErroMetadados(''); }}>Arquivar</BotaoAcaoModal>}
         {!!documentoDetalhe.arquivadoEm && permiteReativar(documentoDetalhe) &&
           <BotaoAcaoModal intencao="reativar" disabled={somenteLeitura || salvandoMetadados} onClick={() => setDocumentoReativar(documentoDetalhe)}>⟳ Reativar</BotaoAcaoModal>}
       </MenuAcoesObjeto>

@@ -15,6 +15,8 @@ import { Etapa } from '../etapas/etapa.entity.js';
 import { Ocorrencia } from '../ocorrencias/ocorrencia.entity.js';
 import { OrigemOcorrencia } from '../ocorrencias/origem-ocorrencia.enum.js';
 import { StatusOcorrencia } from '../ocorrencias/status-ocorrencia.enum.js';
+import { resumoMedicao, proximoStatusAutomatico } from '../ocorrencias/medicao-ocorrencia.js';
+import type { MedicaoAtividadeDto } from './dto/medicao-atividade.dto.js';
 import { AtividadeEntity } from './atividade.entity.js';
 import type { CreateAtividadeDto } from './dto/create-atividade.dto.js';
 import type { UpdateAtividadeDto } from './dto/update-atividade.dto.js';
@@ -105,8 +107,8 @@ export class AtividadesService implements OnModuleInit {
     if ([StatusOcorrencia.PENDENTE_CONCLUSAO, StatusOcorrencia.CONCLUIDO, StatusOcorrencia.PENDENTE_ENCERRAMENTO, StatusOcorrencia.ENCERRADA].includes(o.status)) {
       throw new ConflictException('Ocorrência pendente ou concluída: somente após reabertura autorizada é permitido alterar atividades vinculadas');
     }
-    if (quantidade != null && (o.origem !== OrigemOcorrencia.MANUAL_QUANTITATIVA || o.modoRegistro === 'DESCRITIVO')) {
-      throw new BadRequestException('Quantidade de atividade é exclusiva de ocorrência quantitativa');
+    if (quantidade != null && (o.modoRegistro !== 'QUANTITATIVO' || o.metaQuantidade == null)) {
+      throw new BadRequestException('Quantidade só pode ser informada para ocorrência com meta quantitativa');
     }
   }
 
@@ -128,46 +130,45 @@ export class AtividadesService implements OnModuleInit {
     return vinculadas;
   }
 
-  private async recalcularOcorrencia(manager: EntityManager, id: string | null | undefined, ator: UsuarioAutenticado) {
-    if (!id) return;
-    const o = await manager.findOne(Ocorrencia, { where: { id }, lock: { mode: 'pessimistic_write' } });
-    if (!o || o.substituidaEm) return;
-    if ([StatusOcorrencia.PENDENTE_CONCLUSAO, StatusOcorrencia.CONCLUIDO, StatusOcorrencia.PENDENTE_ENCERRAMENTO, StatusOcorrencia.ENCERRADA].includes(o.status)) throw new ConflictException('Ocorrência bloqueada até reabertura');
-    // Ocorrência descritiva não possui meta nem quantidade. Atividade associada
-    // indica início de execução, mas NÃO cria avanço físico ou conclusão automática.
-    if (o.metaQuantidade == null && o.modoRegistro === 'DESCRITIVO') {
-      const total: Array<{ total: string }> = await manager.query(
-        `SELECT COUNT(*)::text AS total FROM atividades a WHERE a."excluidaEm" IS NULL AND a.status <> 'ARQUIVADA'
-          AND (a."ocorrenciaId"=$1 OR EXISTS (SELECT 1 FROM "atividade_ocorrencias" v
-            WHERE v."atividadeId"=a.id AND v."ocorrenciaId"=$1))`, [id]);
-      const novo = o.status === StatusOcorrencia.EM_REVISAO ? StatusOcorrencia.EM_REVISAO
-        : Number(total[0]?.total ?? 0) > 0 ? StatusOcorrencia.EM_ANDAMENTO : StatusOcorrencia.NAO_INICIADO;
-      if (novo !== o.status) {
-        const antes = o.status;
-        o.status = novo;
-        await manager.save(Ocorrencia, o);
-        await this.auditoria.registrarNaTransacao(manager, ator, {
-          acao: AcaoAuditoria.OCORRENCIA_STATUS_ALTERADO, entidadeTipo: 'OCORRENCIA', entidadeId: id,
-          dadosAnteriores: { status: antes }, dadosPosteriores: { status: novo, motivo: 'atividades vinculadas' },
-        });
-      }
-      return;
+  private async salvarMedicoes(manager: EntityManager, contratoId:string, atividadeId:string,
+    medicoes: MedicaoAtividadeDto[] | undefined, ocorrencias: Ocorrencia[]) {
+    if (medicoes === undefined) return;
+    const ids = new Set(ocorrencias.map(o=>o.id));
+    if (medicoes.some(m => !ids.has(m.ocorrenciaId)))
+      throw new BadRequestException('A quantidade só pode ser registrada em ocorrência vinculada à atividade');
+    if (new Set(medicoes.map(m=>m.ocorrenciaId)).size !== medicoes.length)
+      throw new BadRequestException('Informe cada ocorrência no máximo uma vez');
+    const porId = new Map(ocorrencias.map(o=>[o.id,o]));
+    for (const m of medicoes) {
+      const oc = porId.get(m.ocorrenciaId);
+      if (!oc || oc.modoRegistro !== 'QUANTITATIVO' || oc.metaQuantidade == null)
+        throw new BadRequestException('Medição exige uma ocorrência quantitativa com meta');
     }
-    if (o.metaQuantidade == null) return; // compatibilidade com registros quantitativos legados
-    const linhas: Array<{ total: string }> = await manager.query(`SELECT COALESCE(SUM(quantidade_execucao),0)::text AS total FROM atividades WHERE "ocorrenciaId"=$1 AND "excluidaEm" IS NULL AND status <> 'ARQUIVADA'`, [id]);
-    const executada = Number(linhas[0]?.total ?? '0');
-    const meta = Number(o.metaQuantidade);
-    if (executada > meta) throw new ConflictException(`Quantidade executada (${executada}) excede a meta desta ocorrência (${meta})`);
-    // A meta atingida habilita a SOLICITAÇÃO; não bloqueia a verificação das
-    // atividades antes de o responsável solicitar a conclusão.
-    const status = o.status === StatusOcorrencia.EM_REVISAO ? StatusOcorrencia.EM_REVISAO : executada > 0 ? StatusOcorrencia.EM_ANDAMENTO : StatusOcorrencia.NAO_INICIADO;
-    if (o.status === status) return;
-    const anterior = o.status;
-    o.status = status;
-    await manager.save(Ocorrencia, o);
-    await this.auditoria.registrarNaTransacao(manager, ator, {
-      acao: AcaoAuditoria.OCORRENCIA_STATUS_ALTERADO, entidadeTipo: 'OCORRENCIA', entidadeId: id,
-      dadosAnteriores: { status: anterior }, dadosPosteriores: { status, quantidadeExecutada: executada, metaQuantidade: meta },
+    await manager.query(`DELETE FROM atividade_ocorrencia_medicoes WHERE atividade_id=$1 AND contrato_id=$2`,
+      [atividadeId,contratoId]);
+    for (const item of medicoes) await manager.query(`INSERT INTO atividade_ocorrencia_medicoes
+      (atividade_id,ocorrencia_id,contrato_id,quantidade) VALUES ($1,$2,$3,$4)`,
+      [atividadeId,item.ocorrenciaId,contratoId,item.quantidade]);
+  }
+
+  private async recalcularOcorrencia(manager: EntityManager,id: string | null | undefined,ator:UsuarioAutenticado) {
+    if (!id) return;
+    const o = await manager.findOne(Ocorrencia,{where:{id},lock:{mode:'pessimistic_write'}});
+    if (!o || o.substituidaEm) return;
+    if ([StatusOcorrencia.PENDENTE_CONCLUSAO,StatusOcorrencia.CONCLUIDO,StatusOcorrencia.PENDENTE_ENCERRAMENTO,
+      StatusOcorrencia.ENCERRADA].includes(o.status)) throw new ConflictException('Ocorrência bloqueada até reabertura');
+    const r = await resumoMedicao(manager,o);
+    if (o.metaQuantidade != null && r.quantidadeRegistrada > Number(o.metaQuantidade))
+      throw new ConflictException(`Quantidade registrada (${r.quantidadeRegistrada}) excede a meta desta ocorrência (${o.metaQuantidade})`);
+    const novo = proximoStatusAutomatico(o,r) as StatusOcorrencia;
+    if (o.status === novo) return;
+    const anterior=o.status;o.status=novo;
+    await manager.save(Ocorrencia,o);
+    await this.auditoria.registrarNaTransacao(manager,ator,{
+      acao:AcaoAuditoria.OCORRENCIA_STATUS_ALTERADO,entidadeTipo:'OCORRENCIA',entidadeId:id,
+      dadosAnteriores:{status:anterior},dadosPosteriores:{status:novo,quantidadeExecutada:r.quantidadeExecutada,
+        quantidadeRegistrada:r.quantidadeRegistrada, situacaoComprovacao:r.situacaoComprovacao,
+        motivo:novo===StatusOcorrencia.PENDENTE_CONCLUSAO?'PRONTA_AGUARDANDO_APROVACAO':'ATIVIDADES_RECALCULADAS'},
     });
   }
 
@@ -180,6 +181,10 @@ export class AtividadesService implements OnModuleInit {
       const idsOcorrencias = dto.ocorrenciaIds ?? (dto.ocorrenciaId ? [dto.ocorrenciaId] : []);
       const ocorrencias = await this.verificarOcorrencias(manager, contratoId, idsOcorrencias,
         entregaveis, dto.ocorrenciaId, dto.quantidadeExecucao);
+      if (dto.medicoes) for (const item of dto.medicoes)
+        await this.validarOcorrencia(manager, contratoId, item.ocorrenciaId, entregaveis, item.quantidade);
+      if (dto.medicoes && dto.quantidadeExecucao != null)
+        throw new BadRequestException('Não misture a medição única legada com quantidades por ocorrência');
       const registro = manager.create(AtividadeEntity, {
         contratoId, titulo: dto.titulo.trim(), dataHora, descricao: dto.descricao.trim(), tipo: dto.tipo.trim(),
         responsavelId: ator.id, responsavel: dto.responsavel?.trim() || ator.nome || ator.email,
@@ -188,6 +193,7 @@ export class AtividadesService implements OnModuleInit {
         quantidadeExecucao: dto.quantidadeExecucao ?? null,
       });
       const salvo = await manager.save(AtividadeEntity, registro);
+      await this.salvarMedicoes(manager, contratoId, salvo.id, dto.medicoes, ocorrencias);
       for (const id of new Set([salvo.ocorrenciaId, ...ocorrencias.map(o => o.id)])) await this.recalcularOcorrencia(manager, id, ator);
       return { resultado: salvo, evento: {
         acao: AcaoAuditoria.ATIVIDADE_CRIADA, entidadeTipo: 'ATIVIDADE' as const, entidadeId: salvo.id,
@@ -264,7 +270,13 @@ export class AtividadesService implements OnModuleInit {
   async findOne(contratoId: string, id: string) {
     const registro = await this.repo.findOne({ where: { id, contratoId, excluidaEm: IsNull() }, relations: { entregaveis: true, ocorrencias: true } });
     if (!registro) throw new NotFoundException('Atividade não encontrada');
-    return registro;
+    const medidas: Array<{ocorrenciaId:string;quantidade:string}> = await this.repo.manager.query(
+      `SELECT ocorrencia_id AS "ocorrenciaId",quantidade::text AS quantidade
+       FROM atividade_ocorrencia_medicoes WHERE atividade_id=$1 AND contrato_id=$2`,[id,contratoId]);
+    const legado = registro.ocorrenciaId && registro.quantidadeExecucao != null &&
+      !medidas.some(m=>m.ocorrenciaId===registro.ocorrenciaId)
+      ? [{ocorrenciaId:registro.ocorrenciaId,quantidade:String(registro.quantidadeExecucao)}] : [];
+    return { ...registro, medicoes:[...medidas,...legado] };
   }
 
   async update(contratoId: string, id: string, dto: UpdateAtividadeDto, ator: UsuarioAutenticado) {
@@ -299,7 +311,14 @@ export class AtividadesService implements OnModuleInit {
       }
       registro.ocorrencias = await this.verificarOcorrencias(manager, contratoId, idsSolicitados,
         registro.entregaveis, registro.ocorrenciaId, dto.quantidadeExecucao === undefined ? registro.quantidadeExecucao : dto.quantidadeExecucao);
+      if (dto.medicoes && dto.quantidadeExecucao != null)
+        throw new BadRequestException('Não misture a medição legada com quantidades por ocorrência');
       if (dto.quantidadeExecucao !== undefined) registro.quantidadeExecucao = dto.quantidadeExecucao;
+      if (dto.medicoes !== undefined) {
+        for (const item of dto.medicoes)
+          await this.validarOcorrencia(manager, contratoId, item.ocorrenciaId, registro.entregaveis, item.quantidade);
+        registro.quantidadeExecucao = null;
+      }
       if (!registro.ocorrenciaId && registro.quantidadeExecucao != null) throw new BadRequestException('Quantidade de execução exige ocorrência vinculada');
       await this.validarOcorrencia(manager, contratoId, registro.ocorrenciaId, registro.entregaveis, registro.quantidadeExecucao);
       for (const secundaria of registro.ocorrencias ?? []) if (secundaria.id !== registro.ocorrenciaId)
@@ -314,6 +333,7 @@ export class AtividadesService implements OnModuleInit {
       if (dto.duracao !== undefined) registro.duracao = dto.duracao.trim() || null;
       if (dto.observacoes !== undefined) registro.observacoes = dto.observacoes.trim() || null;
       const salvo = await manager.save(AtividadeEntity, registro);
+      await this.salvarMedicoes(manager, contratoId, salvo.id, dto.medicoes, registro.ocorrencias ?? []);
       for (const ocorrenciaId of new Set([...ocorrenciasAnteriores, ...idsSolicitados, antes.ocorrenciaId, salvo.ocorrenciaId]))
         await this.recalcularOcorrencia(manager, ocorrenciaId, ator);
       const mudouVinculos = JSON.stringify(ocorrenciasAnteriores.slice().sort()) !== JSON.stringify(idsSolicitados.slice().sort()) || antes.ocorrenciaId !== (salvo.ocorrenciaId ?? null) || JSON.stringify(anteriores) !== JSON.stringify(salvo.entregaveis.map(e => e.id).sort());
@@ -368,6 +388,10 @@ export class AtividadesService implements OnModuleInit {
       // entregáveis que ficaram sem pendências. O contrato nunca fecha sozinho.
       ...(acao === AcaoAuditoria.ATIVIDADE_VERIFICADA && registro.entregaveis.length > 0 ? {
         aposEvento: async (m: EntityManager) => {
+          // A quantidade só passa a medir execução depois da verificação.
+          // Mesmo contrato/transação, sem janela de duplicação entre aprovações.
+          for (const ocorrenciaId of new Set([salvo.ocorrenciaId, ...(salvo.ocorrencias ?? []).map(o => o.id)]))
+            await this.recalcularOcorrencia(m, ocorrenciaId, ator);
           const etapas = new Set<string>();
           for (const entregavelId of [...new Set(registro.entregaveis.map(e => e.id))].sort()) {
             const concluido = await concluirEntregavelAposAtividade(m, contratoId, entregavelId, async (e, anterior) => {
@@ -388,7 +412,7 @@ export class AtividadesService implements OnModuleInit {
                 dadosAnteriores: antesEtapa,
                 dadosPosteriores: { ...depoisEtapa, motivo: 'ULTIMA_ATIVIDADE_VERIFICADA' },
               });
-            });
+            }, ator.id);
           }
         },
       } : {}),

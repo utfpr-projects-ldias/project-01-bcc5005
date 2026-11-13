@@ -431,7 +431,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
           </select>
         </div>
         <label className="block space-y-1">Orientações (opcional)
-          <textarea value={novaDescricao} maxLength={130} onChange={e => setNovaDescricao(e.target.value)}
+          <textarea value={novaDescricao} maxLength={65} onChange={e => setNovaDescricao(e.target.value)}
             className="block min-h-20 w-full rounded-lg border border-brand-green/40 bg-background p-2" /></label>
         {comprovantesHabilitados && <div className="space-y-2">
           <label htmlFor={`arquivo-inicial-${item.id}`} className="block font-medium">Comprovante inicial (opcional)</label>
@@ -527,9 +527,9 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
       {selecionada.arquivadoEm && podeReativarEvidencia && !bloqueadoPorPai &&
         <BotaoAcaoModal intencao="reativar" disabled={ocupadoArquivo} onClick={() => setConfirmarReativacao(selecionada.id)}>⟳ Reativar</BotaoAcaoModal>}
       {!selecionada.arquivadoEm && planejamentoHabilitado && podeReabrirEvidencia && estadoEvidencias[selecionada.id]?.status === 'VERIFICADA' && !bloqueadoPorPai && !paiArquivado &&
-        <BotaoAcaoModal intencao="reabrir" disabled={arquivandoItem} onClick={() => setConfirmarReabertura(selecionada.id)}>⟳ Reabrir</BotaoAcaoModal>}
+        <BotaoAcaoModal intencao="reabrir" disabled={arquivandoItem} onClick={() => setConfirmarReabertura(selecionada.id)}>Reabrir</BotaoAcaoModal>}
       {!selecionada.arquivadoEm && planejamentoHabilitado && podeArquivarEvidencia && estadoEvidencias[selecionada.id]?.status !== 'VERIFICADA' && !bloqueadoPorPai && !paiArquivado &&
-        <BotaoAcaoModal intencao="arquivar" disabled={ocupadoArquivo} onClick={() => setConfirmarArquivamento(selecionada.id)}>▣ Arquivar</BotaoAcaoModal>}
+        <BotaoAcaoModal intencao="arquivar" disabled={ocupadoArquivo} onClick={() => setConfirmarArquivamento(selecionada.id)}>Arquivar</BotaoAcaoModal>}
       </MenuAcoesObjeto>
       {selecionada.arquivadoEm && podeExcluirEvidenciaArquivada && !bloqueadoPorPai &&
         <button type="button" title="Excluir evidência arquivada" aria-label="Excluir evidência arquivada" disabled={ocupadoArquivo} onClick={() => setConfirmarExclusao(selecionada.id)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/35 bg-red-500/10 text-red-300 hover:bg-red-500/20 disabled:opacity-40">×</button>}

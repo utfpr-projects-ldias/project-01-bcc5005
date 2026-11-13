@@ -192,7 +192,6 @@ export default function ContratosListPage() {
               {(['PLANEJAMENTO','EM_EXECUCAO'] as const).map(k => <option key={k} value={k}>{STATUS[k]}</option>)}
               {(['SUSPENSO','CANCELADO'] as const).map(k => <option key={k} value={k}>{STATUS[k]}</option>)}
             </select>
-            <div className="mt-2"><SeletorOrdenacaoContratos valor={ordem} onChange={setOrdem}/></div>
           </div>
           <div className="min-w-0 order-3 min-[500px]:order-3">
             <label htmlFor="campo-busca" className="mb-1 block text-xs font-medium text-foreground/70">Buscar por</label>
@@ -216,7 +215,7 @@ export default function ContratosListPage() {
             className="order-5 h-10 shrink-0 rounded-lg border border-brand-green/20 px-3 text-xs text-foreground/70 hover:bg-brand-green/10">Limpar filtros</button>}
         </div>
       </div>}
-      <p className="text-sm text-foreground/60">{visiveis.length} contrato(s) {filtroArquivo === 'arquivados' ? 'arquivado(s)' : filtroArquivo === 'concluidos' ? 'finalizado(s)' : filtroArquivo === 'pendentes' ? 'pendente(s) de conclusão' : filtroArquivo === 'revisao' ? 'em revisão' : filtroArquivo === 'cancelados' ? 'cancelado(s)' : filtroArquivo === 'suspensos' ? 'suspenso(s)' : filtroArquivo === 'todos' ? 'no total' : 'ativos'}</p>
+      <div className="flex flex-wrap items-end justify-between gap-3"><div className="w-full max-w-[240px] min-w-0"><SeletorOrdenacaoContratos valor={ordem} onChange={setOrdem}/></div><p className="pb-2 text-sm text-foreground/60">{visiveis.length} contrato(s) {filtroArquivo === 'arquivados' ? 'arquivado(s)' : filtroArquivo === 'concluidos' ? 'finalizado(s)' : filtroArquivo === 'pendentes' ? 'pendente(s) de conclusão' : filtroArquivo === 'revisao' ? 'em revisão' : filtroArquivo === 'cancelados' ? 'cancelado(s)' : filtroArquivo === 'suspensos' ? 'suspenso(s)' : filtroArquivo === 'todos' ? 'no total' : 'ativos'}</p></div>
       {filtroArquivo === 'pendentes' && (buscandoPendentes || pendentesQuery.erro) ? <Aviso>{buscandoPendentes ? 'Consultando pendências de conclusão...' : 'Não foi possível consultar os contratos pendentes. Atualize a página.'}</Aviso> : !contratos.length ? <Aviso>Nenhum contrato cadastrado ou atribuído à sua conta.</Aviso> : !visiveis.length ? <Aviso>Nenhum resultado para os filtros escolhidos.</Aviso> :
         <ul className="grid grid-cols-1 gap-3 xl:grid-cols-2">{visiveis.map(c => {
           const situacao = situacaoVisivelContrato(c, idsPendentes.includes(c.id));

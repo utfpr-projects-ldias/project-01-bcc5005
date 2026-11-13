@@ -1,5 +1,6 @@
 'use client';
 
+import { decimalDigitado, decimalExibicao, decimalParaApi, decimalValido } from '@/lib/campos-numericos';
 import { useId, useMemo, useState, type FormEvent } from 'react';
 import { useAcessoContrato } from '@/hooks/use-contratos';
 import { useMeuPerfil } from '@/hooks/use-meu-perfil';
@@ -152,7 +153,7 @@ export function PainelExecucao({ contratoId, entregavelId, estadoContextual = 'n
           <div className="text-right text-xs text-foreground/70"><p>Modo: <strong>{dados.modoCalculo === 'PONDERADO' ? 'Ponderado' : 'Simples'}</strong></p><p>{lista.length} entregável(is)</p></div>
         </div>
         {naoCalculaveis.length > 0 && <p role="status" className="rounded-xl border border-amber-500/35 bg-amber-500/5 p-3 text-sm text-foreground/80">
-          O avanço ainda não pode ser calculado integralmente: {naoCalculaveis.length} {naoCalculaveis.length === 1 ? 'entregável precisa' : 'entregáveis precisam'} de dados válidos de execução. Para recorrentes, é necessária uma agenda completa e conciliada.
+          O avanço ainda não pode ser calculado integralmente: {naoCalculaveis.length} {naoCalculaveis.length === 1 ? 'entregável precisa' : 'entregáveis precisam'} de dados válidos de execução. A soma de pesos igual a 100% não significa que a execução foi realizada. Para recorrentes, é necessária uma agenda completa e conciliada; para os demais tipos, registre a execução efetiva e aprove as ocorrências quando aplicável.
         </p>}
       </>}
 
@@ -240,11 +241,11 @@ function EditorPesos({ dados, salvarPeso, alterarModo }: {
   const [avisoPeso, setAvisoPeso] = useState(false);
   const itens = dados.entregaveis.filter(e => e.nome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(pesquisa.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()));
   const itensVisiveis = itens.slice(0, 5);
-  const inicio = (e: ProgressoEntregavel) => { setEditando(e.entregavelId); setRascunho(e.pesoOperacional == null ? '' : String(Number(e.pesoOperacional)));  setErro(''); };
+  const inicio = (e: ProgressoEntregavel) => { setEditando(e.entregavelId); setRascunho(e.pesoOperacional == null ? '' : decimalExibicao(e.pesoOperacional));  setErro(''); };
   async function confirmar(e: ProgressoEntregavel) {
-    const normalizado = rascunho.trim().replace(',', '.');
-    if (!/^(?:100(?:\.0{1,2})?|\d{1,2}(?:\.\d{1,2})?)$/.test(normalizado)) {
-      setErro('Informe um peso de 0% a 100%, com até duas casas decimais.'); return;
+    const normalizado = decimalParaApi(rascunho);
+    if (!decimalValido(rascunho, 100, false)) {
+      setErro('Informe peso maior que zero e até 100%, com até duas casas decimais.'); return;
     }
     setOcupado(true); setErro('');
     try {
@@ -281,7 +282,7 @@ function EditorPesos({ dados, salvarPeso, alterarModo }: {
           {editando === e.entregavelId
             ? <form className="flex min-w-0 flex-wrap items-center justify-end gap-2" onSubmit={ev => { ev.preventDefault(); void confirmar(e); }}>
                 <label className="flex w-28 items-center gap-1 border-b border-current/50 focus-within:border-current">
-                  <input aria-label={`Novo peso de ${e.nome}`} type="text" inputMode="decimal" maxLength={6} autoFocus value={rascunho} onChange={ev => setRascunho(ev.target.value)} placeholder="Ex.: 20" disabled={ocupado} className="w-full min-w-0 bg-transparent py-1 text-right text-sm font-semibold outline-none" /><span className="text-xs text-foreground/70">%</span>
+                  <input aria-label={`Novo peso de ${e.nome}`} type="text" inputMode="decimal" maxLength={6} autoFocus value={rascunho} onChange={ev => setRascunho(decimalDigitado(ev.target.value))} onBlur={() => { if (rascunho && decimalValido(rascunho, 100, true)) setRascunho(decimalExibicao(rascunho)); }} placeholder="Ex.: 20,00" disabled={ocupado} className="w-full min-w-0 bg-transparent py-1 text-right text-sm font-semibold outline-none" /><span className="text-xs text-foreground/70">%</span>
                 </label>
                 <button type="button" disabled={ocupado} className="rounded-lg border border-red-500/45 bg-red-500/10 px-2.5 py-2 text-xs font-bold text-red-700 hover:bg-red-500/15 dark:text-red-300" onClick={() => { setEditando(null); setErro(''); }}>Cancelar</button>
                 <button type="submit" disabled={ocupado} data-pi-acao="primaria" className="rounded-lg px-2.5 py-2 text-xs font-bold disabled:opacity-50">Confirmar</button>

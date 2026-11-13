@@ -52,12 +52,12 @@ test('cadastro vazio mostra erro da aplicação em vez do balão de validação 
 
 test('limites de caracteres e mensagens explicativas de modo de cálculo', () => {
   render(<FormularioContrato responsaveis={[]} onSalvar={jest.fn()} />);
-  expect(screen.getByLabelText('Objeto *')).toHaveAttribute('maxLength', '500');
+  expect(screen.getByLabelText('Objeto *')).toHaveAttribute('maxLength', '50');
   expect(screen.queryByLabelText('Modo de cálculo físico *')).not.toBeInTheDocument();
   expect(screen.getByText(/é configurado na aba Execução/)).toBeInTheDocument();
   fireEvent.click(screen.getByText(/Informações complementares/));
-  expect(screen.getByLabelText('Descrição')).toHaveAttribute('maxLength', '1500');
-  expect(screen.getByLabelText('Observações')).toHaveAttribute('maxLength', '1000');
+  expect(screen.getByLabelText('Descrição')).toHaveAttribute('maxLength', '500');
+  expect(screen.getByLabelText('Observações')).toHaveAttribute('maxLength', '200');
 });
 
 test('edicao nao reutiliza silenciosamente termino antigo em duracao ambigua', async () => {
@@ -83,7 +83,7 @@ test('responsável fora da lista aparece como Não atribuído sem expor ID nem a
   expect(seletor).toHaveValue('');
   expect(seletor).toHaveTextContent('Não atribuído');
   expect(seletor).not.toHaveTextContent(/identificador reservado/i);
-  fireEvent.change(screen.getByLabelText('Número do contrato *'), { target: { value: '123/2026' } });
+  fireEvent.change(screen.getByLabelText('Número do contrato *'), { target: { value: '1232026' } });
   fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
   await waitFor(() => expect(salvar).toHaveBeenCalledTimes(1));
   expect(salvar.mock.calls[0][0].responsavelInternoId).toBe(idAnterior);
@@ -108,7 +108,7 @@ test('responsável ativo presente na lista segue identificado pelo nome, sem fal
   render(<FormularioContrato inicial={{ ...inicial, responsavelInternoId: id }} responsaveis={[responsavel]} onSalvar={jest.fn()} />);
   const seletor = screen.getByLabelText('Responsável pelo contrato (opcional)');
   expect(seletor).toHaveValue(id);
-  expect(seletor).toHaveTextContent('Gestor Exemplo');
+  expect(seletor).toHaveTextContent('gestor@example.com');
   expect(seletor).not.toHaveTextContent(/identificador reservado/i);
 });
 
@@ -152,7 +152,7 @@ test('editar texto ou fase durante revisão mantém a revisão sem retomar opera
   const revisao = { ...inicial, status: 'PLANEJAMENTO' as const, reabertoEm: '2026-11-08T09:00:00Z' };
   const tela = render(<FormularioContrato inicial={revisao} responsaveis={[]} onSalvar={salvar} />);
   expect(screen.getByLabelText('Status operacional *')).toHaveValue('PLANEJAMENTO');
-  fireEvent.change(screen.getByLabelText('Número do contrato *'), { target: { value: 'Contrato corrigido' } });
+  fireEvent.change(screen.getByLabelText('Número do contrato *'), { target: { value: '2026002' } });
   fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
   await waitFor(() => expect(salvar).toHaveBeenCalledTimes(1));
   expect(salvar.mock.calls[0][0]).not.toHaveProperty('retomarOperacao');
@@ -175,4 +175,12 @@ test('diferencia visualmente cadastro verde de edição contextual sem alterar a
   render(<FormularioContrato inicial={inicial} responsaveis={[]} onSalvar={jest.fn()} />);
   expect(screen.getByRole('form', { name: 'Editar dados do contrato' })).toHaveAttribute('data-tec08-edicao', 'true');
   expect(screen.getByRole('button', { name: 'Salvar alterações' })).toHaveAttribute('aria-busy', 'false');
+});
+
+test('campo número só admite algarismos em novo cadastro', () => {
+  render(<FormularioContrato responsaveis={[]} onSalvar={jest.fn()} />);
+  const numero = screen.getByLabelText('Número do contrato *') as HTMLInputElement;
+  fireEvent.change(numero, { target: { value: '2026/001-A' } });
+  expect(numero.value).toBe('2026001');
+  expect(numero).toHaveAttribute('inputMode', 'numeric');
 });

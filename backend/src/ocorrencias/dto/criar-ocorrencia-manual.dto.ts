@@ -2,15 +2,23 @@ import {
   IsNotEmpty,
   IsIn,
   IsOptional,
+  IsBoolean,
+  IsInt, Min, Max,
   IsString,
   Matches,
   MaxLength,
 } from 'class-validator';
 
 export class CriarOcorrenciaManualDto {
+  @IsOptional() @IsBoolean() exigeAtividade?: boolean;
+  @IsOptional() @IsInt() @Min(0) @Max(99) minimoAtividadesVerificadas?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(99) minimoEvidenciasVerificadas?: number;
+  @IsOptional() @IsIn(['NENHUMA','FOTO','RELATORIO','AMBOS']) evidenciaExigida?: 'NENHUMA'|'FOTO'|'RELATORIO'|'AMBOS';
+  @IsOptional() @IsBoolean() permiteEncerramentoExcepcional?: boolean;
+
   @IsString()
   @IsNotEmpty()
-  @MaxLength(120)
+  @MaxLength(50)
   titulo!: string;
 
   @IsOptional()
@@ -51,6 +59,6 @@ export class CriarOcorrenciaManualDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(1000)
+  @MaxLength(200)
   observacoes?: string | null;
 }

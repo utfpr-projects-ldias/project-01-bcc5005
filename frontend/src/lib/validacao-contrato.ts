@@ -4,9 +4,9 @@ import type { DadosContrato } from './contratos';
 /** Limites de UX alinhados aos DTOs do NestJS. Textos longos: convenção da equipe,
  * não limites estipulados pelo PRD; podem ser refinados com o cliente. */
 export const LIMITES_CONTRATO = {
-  numeroContrato: 100, processoAdministrativo: 100, orgaoContratante: 160,
-  unidadeResponsavel: 160, objeto: 500, descricao: 1500,
-  fiscalGestor: 160, observacoes: 1000,
+  numeroContrato: 25, processoAdministrativo: 25, orgaoContratante: 30,
+  unidadeResponsavel: 30, objeto: 50, descricao: 500,
+  fiscalGestor: 25, observacoes: 200,
 } as const;
 
 function dataCivilValida(valor: string): boolean {
@@ -26,7 +26,7 @@ const textoOpcional = (rotulo: string, max: number) => z.string().trim()
   .max(max, `${rotulo}: máximo de ${max} caracteres.`).nullable();
 
 export const contratoSchema = z.object({
-  numeroContrato: textoObrigatorio('Número do contrato', LIMITES_CONTRATO.numeroContrato),
+  numeroContrato: textoObrigatorio('Número do contrato', LIMITES_CONTRATO.numeroContrato).regex(/^\d+$/, 'Use somente números no número do contrato.'),
   processoAdministrativo: textoOpcional('Processo administrativo', LIMITES_CONTRATO.processoAdministrativo),
   orgaoContratante: textoObrigatorio('Órgão contratante', LIMITES_CONTRATO.orgaoContratante),
   unidadeResponsavel: textoOpcional('Unidade responsável', LIMITES_CONTRATO.unidadeResponsavel),
@@ -48,19 +48,33 @@ export const duracaoMesesSchema = z.coerce.number().int('A duração deve ser in
 
 export type ErrosContrato = Partial<Record<keyof DadosContrato | 'meses', string>>;
 
-export function validarContrato(dados: DadosContrato):
+/** Valores legados maiores que o limite novo permanecem legíveis e não são
+ * reenviados quando outro campo é alterado. Textos novos/alterados obedecem
+ * integralmente ao limite reduzido. */
+export function validarContrato(dados: DadosContrato, inicial?: Partial<DadosContrato>):
   | { sucesso: true; dados: DadosContrato }
   | { sucesso: false; erros: ErrosContrato } {
-  const resultado = contratoSchema.safeParse(dados);
+  const legado: Partial<Record<keyof DadosContrato, string>> = {};
+  const paraValidar = { ...dados };
+  if (inicial) for (const chave of Object.keys(LIMITES_CONTRATO) as Array<keyof typeof LIMITES_CONTRATO>) {
+    const atual = dados[chave];
+    const anterior = inicial[chave];
+    if (typeof atual === 'string' && atual === anterior &&
+      (atual.length > LIMITES_CONTRATO[chave] || (chave === 'numeroContrato' && !/^\d+$/.test(atual)))) {
+      legado[chave] = atual;
+      (paraValidar as unknown as Record<string, unknown>)[chave] = chave === 'numeroContrato' ? '1' : atual.slice(0, LIMITES_CONTRATO[chave]);
+    }
+  }
+  const resultado = contratoSchema.safeParse(paraValidar);
   if (resultado.success) {
     const d = resultado.data;
     return { sucesso: true, dados: {
-      ...d,
-      processoAdministrativo: d.processoAdministrativo || null,
-      unidadeResponsavel: d.unidadeResponsavel || null,
-      descricao: d.descricao || null,
-      fiscalGestor: d.fiscalGestor || null,
-      observacoes: d.observacoes || null,
+      ...d, ...legado,
+      processoAdministrativo: legado.processoAdministrativo ?? (d.processoAdministrativo || null),
+      unidadeResponsavel: legado.unidadeResponsavel ?? (d.unidadeResponsavel || null),
+      descricao: legado.descricao ?? (d.descricao || null),
+      fiscalGestor: legado.fiscalGestor ?? (d.fiscalGestor || null),
+      observacoes: legado.observacoes ?? (d.observacoes || null),
     } };
   }
   const erros: ErrosContrato = {};

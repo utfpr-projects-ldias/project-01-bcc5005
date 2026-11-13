@@ -9,14 +9,14 @@ export type Atividade = {
   id: string; contratoId: string; titulo: string; dataHora: string; descricao: string;
   tipo: string; responsavel: string | null; participantes: string[] | null;
   local: string | null; duracao: string | null; observacoes: string | null;
-  ocorrenciaId?: string | null; ocorrenciaIds?: string[]; ocorrencias?: {id: string; entregavelId: string; titulo: string; status: string; inicioPeriodo?: string | null; terminoPeriodo?: string | null}[]; quantidadeExecucao?: string | null;
+  ocorrenciaId?: string | null; ocorrenciaIds?: string[]; medicoes?: { ocorrenciaId: string; quantidade: string }[]; ocorrencias?: {id: string; entregavelId: string; titulo: string; status: string; inicioPeriodo?: string | null; terminoPeriodo?: string | null}[]; quantidadeExecucao?: string | null;
   entregaveis: { id: string; nome: string; codigoPublico?: number }[];
   status: EstadoAtividade; verificadaEm: string | null; arquivadaEm: string | null; excluidaEm?: string | null;
 };
 export type DadosAtividade = {
   contratoId: string; titulo: string; dataHora: string; descricao: string; tipo: string;
   responsavel?: string; participantes?: string[]; local?: string; duracao?: string;
-  observacoes?: string; ocorrenciaId?: string | null; ocorrenciaIds?: string[]; entregavelIds: string[];
+  observacoes?: string; ocorrenciaId?: string | null; ocorrenciaIds?: string[]; medicoes?: { ocorrenciaId: string; quantidade: string }[]; entregavelIds: string[];
 };
 export type FiltrosAtividade = { ocorrenciaId?: string; dataInicio?: string; dataFim?: string; etapaId?: string; entregavelId?: string; responsavelId?: string; status?: FiltroEstadoAtividade; page?: number; limit?: number };
 type ListaAtividades = { data: Atividade[]; meta: { total: number; page: number; lastPage: number } };
@@ -52,6 +52,20 @@ async function requisitar<T>(url: string, init?: RequestInit): Promise<T> {
 export async function listarAtividadesVinculaveis(contratoId: string, entregavelId: string, signal?: AbortSignal): Promise<ListaAtividades> {
   const params = new URLSearchParams({ entregavelId, status: 'REGISTRADA', page: '1', limit: '100' });
   return requisitar<ListaAtividades>(`${base(contratoId)}?${params}`, { signal });
+}
+
+export type ComprovanteAtividade = {
+  id: string; nomeOriginal: string; tipoEvidencia: string; status: 'VERIFICADA'; entregavelId: string; vinculado: boolean;
+};
+export function listarEvidenciasAtividade(contratoId: string, atividadeId: string): Promise<{
+  vinculadas: ComprovanteAtividade[]; disponiveis: ComprovanteAtividade[];
+}> {
+  return requisitar(`${base(contratoId)}/${encodeURIComponent(atividadeId)}/evidencias`);
+}
+export function vincularEvidenciaAtividade(contratoId: string, atividadeId: string, comprovanteId: string) {
+  return requisitar<{ vinculado: boolean }>(`${base(contratoId)}/${encodeURIComponent(atividadeId)}/evidencias`, {
+    method: 'POST', body: JSON.stringify({ comprovanteId }),
+  });
 }
 
 export function consultarAtividade(contratoId: string, id: string, signal?: AbortSignal): Promise<Atividade> {
