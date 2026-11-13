@@ -25,32 +25,33 @@ import { StatusContrato } from '../status-contrato.enum.js';
 export class CriarContratoDto {
   @IsString()
   @IsNotEmpty()
-  @MaxLength(100)
+  @MaxLength(25)
+  @Matches(/^\d{1,25}$/, { message: "Número do contrato deve conter apenas algarismos (até 25)." })
   numeroContrato!: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(100)
+  @MaxLength(25)
   processoAdministrativo?: string | null;
 
   @IsString()
   @IsNotEmpty()
-  @MaxLength(255)
+  @MaxLength(30)
   orgaoContratante!: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(255)
+  @MaxLength(30)
   unidadeResponsavel?: string | null;
 
   @IsString()
   @IsNotEmpty()
-  @MaxLength(500)
+  @MaxLength(50)
   objeto!: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(1500)
+  @MaxLength(400)
   descricao?: string | null;
 
   @IsOptional()
@@ -75,7 +76,7 @@ export class CriarContratoDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(255)
+  @MaxLength(25)
   fiscalGestor?: string | null;
 
   @IsEnum(ModoCalculo)
@@ -83,6 +84,6 @@ export class CriarContratoDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(1000)
+  @MaxLength(200)
   observacoes?: string | null;
 }

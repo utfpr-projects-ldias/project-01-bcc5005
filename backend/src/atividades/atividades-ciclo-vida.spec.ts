@@ -12,11 +12,11 @@ import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
 const contrato = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const usuario = { id, email: 'qa@example.invalid', supertokensUserId: 'qa', perfil: PerfilUsuario.ADMINISTRADOR };
-function montar(estado: 'REGISTRADA' | 'VERIFICADA' | 'ARQUIVADA') {
+function montar(estado: 'REGISTRADA' | 'PENDENTE_CONCLUSAO' | 'VERIFICADA' | 'ARQUIVADA') {
   const item = Object.assign(new AtividadeEntity(), {
     id, contratoId: contrato, titulo: 'Reunião', dataHora: new Date('2026-11-09T12:00:00Z'), tipo: 'Reunião',
     descricao: 'Execução', responsavel: 'QA', status: estado, entregaveis: [],
-    verificadaEm: estado === 'REGISTRADA' ? null : new Date(),
+    verificadaEm: ['REGISTRADA', 'PENDENTE_CONCLUSAO'].includes(estado) ? null : new Date(),
     arquivadaEm: estado === 'ARQUIVADA' ? new Date() : null,
   });
   const manager = {
@@ -36,12 +36,14 @@ function montar(estado: 'REGISTRADA' | 'VERIFICADA' | 'ARQUIVADA') {
 describe('HU08-05-01 — estados e auditoria transacional de atividades', () => {
   it('verificar e arquivar exigem passos distintos; edição após verificação é bloqueada', async () => {
     const c = montar('REGISTRADA');
+    await c.service.solicitarConclusao(contrato, id, usuario);
+    expect(c.item.status).toBe('PENDENTE_CONCLUSAO');
     await c.service.verificar(contrato, id, usuario, 'Conferido pelo gestor');
     expect(c.item.status).toBe('VERIFICADA');
     expect(c.manager.findOne).toHaveBeenNthCalledWith(1, AtividadeEntity,
       expect.objectContaining({ lock: { mode: 'pessimistic_write' } }));
     expect(c.manager.findOne).toHaveBeenNthCalledWith(2, AtividadeEntity,
-      expect.objectContaining({ relations: { entregaveis: true } }));
+      expect.objectContaining({ relations: { entregaveis: true, ocorrencias: true } }));
     const chamadas = c.manager.findOne.mock.calls as unknown as Array<[unknown, Record<string, unknown>]>;
     expect(chamadas[0][1]).not.toHaveProperty('relations');
     expect(chamadas[1][1]).not.toHaveProperty('lock');
@@ -62,13 +64,26 @@ describe('HU08-05-01 — estados e auditoria transacional de atividades', () => 
     expect(c.item.status).toBe('REGISTRADA');
     expect(c.item.verificadaEm).toBeNull();
   });
-  it('arquivar antes da verificação falha; verificar sem motivo é permitido', async () => {
+  it('arquivar antes da aprovação falha; aprovação sem motivo é permitida após solicitação', async () => {
     const c = montar('REGISTRADA');
     await expect(c.service.arquivar(contrato, id, usuario, 'Motivo suficientemente longo')).rejects.toBeInstanceOf(ConflictException);
+    await expect(c.service.verificar(contrato, id, usuario, '')).rejects.toBeInstanceOf(ConflictException);
+    await c.service.solicitarConclusao(contrato, id, usuario);
     await c.service.verificar(contrato, id, usuario, '');
     expect(c.item.status).toBe('VERIFICADA');
-    expect(c.manager.save).toHaveBeenCalledTimes(1);
+    expect(c.manager.save).toHaveBeenCalledTimes(2);
     expect(c.registrar).toHaveBeenCalledWith(expect.objectContaining({ acao: AcaoAuditoria.ATIVIDADE_VERIFICADA }));
+  });
+  it('cancelar solicitação exige justificativa e não verifica a atividade', async () => {
+    const c = montar('REGISTRADA');
+    await c.service.solicitarConclusao(contrato, id, usuario);
+    expect(c.item.verificadaEm).toBeNull();
+    expect(c.registrar).toHaveBeenCalledWith(expect.objectContaining({ acao: AcaoAuditoria.ATIVIDADE_CONCLUSAO_SOLICITADA }));
+    await expect(c.service.cancelarSolicitacao(contrato, id, usuario, 'Curta')).rejects.toBeInstanceOf(BadRequestException);
+    await c.service.cancelarSolicitacao(contrato, id, usuario, 'Solicitação feita por engano');
+    expect(c.item.status).toBe('REGISTRADA');
+    expect(c.item.verificadaEm).toBeNull();
+    expect(c.registrar).toHaveBeenCalledWith(expect.objectContaining({ acao: AcaoAuditoria.ATIVIDADE_SOLICITACAO_CANCELADA }));
   });
   it('exclusão lógica exige arquivamento, motivo e registra evento sem apagar vínculos', async () => {
     const c = montar('REGISTRADA');

@@ -24,8 +24,8 @@ export const TIPOS: TipoEntregavel[] = ['UNICO', 'QUANTITATIVO', 'RECORRENTE', '
 export const PERIODICIDADES: PeriodicidadeEntregavel[] = ['DIARIA', 'SEMANAL', 'MENSAL', 'TRIMESTRAL', 'SEMESTRAL', 'ANUAL'];
 export const DESCRICOES_TIPO: Record<TipoEntregavel, string> = {
   UNICO: 'Uma obrigação pontual. O andamento será registrado pelo módulo de execução.',
-  QUANTITATIVO: 'Obrigação mensurável: quantidade prevista positiva e unidade são necessárias.',
-  RECORRENTE: 'Obrigação periódica. Defina a frequência para orientar o planejamento; o acompanhamento por ocorrências ainda não está disponível.',
+  QUANTITATIVO: 'Obrigação mensurável. Informe meta e unidade; o progresso depende de ocorrências aprovadas.',
+  RECORRENTE: 'Serviço periódico. Defina frequência e período para gerar a agenda de ocorrências.',
   CONTINUO: 'Atividade mantida ao longo do período. O tempo decorrido não representa progresso automático.',
   MARCO: 'Marco contratual atingido em uma condição verificável. A data efetiva será tratada na execução.',
 };
@@ -45,7 +45,7 @@ export function inicialEntregavel(etapaId: string, item?: Entregavel): RascunhoE
     tipo: item?.tipo ?? 'UNICO', responsavelId: item?.responsavelId ?? '',
     inicioPrevisto: item?.inicioPrevisto ?? '', terminoPrevisto: item?.terminoPrevisto ?? '',
     quantidadePrevista: item?.quantidadePrevista ?? '', unidadeMedida: item?.unidadeMedida ?? '',
-    periodicidade: item?.periodicidade ?? '', peso: item?.peso ?? '',
+    periodicidade: item?.periodicidade ?? '', peso: item?.peso == null ? '' : String(Number(item.peso)),
     criterioConclusao: item?.criterioConclusao ?? '', observacoes: item?.observacoes ?? '',
     evidenciasEsperadas: (item?.evidenciasEsperadas ?? []).map((e, indice) => ({ ...e, chave: `existente-${indice}-${e.id}` })),
   };
@@ -56,48 +56,53 @@ export function mudouEstrutura(r: RascunhoEntregavel, inicial?: Entregavel): boo
     r.inicioPrevisto !== (inicial.inicioPrevisto ?? '') || r.terminoPrevisto !== (inicial.terminoPrevisto ?? '') ||
     r.etapaId !== inicial.etapaId);
 }
-export function validarEntregavel(r: RascunhoEntregavel): { sucesso: true; dados: DadosPlanejamentoEntregavel } | { sucesso: false; erros: ErrosEntregavel } {
+export function validarEntregavel(r: RascunhoEntregavel, inicial?: Entregavel): { sucesso: true; dados: DadosPlanejamentoEntregavel } | { sucesso: false; erros: ErrosEntregavel } {
   const erros: ErrosEntregavel = {};
   const nome = r.nome.trim();
-  if (!nome || nome.length > 255) erros.nome = 'Informe o nome (até 255 caracteres).';
-  for (const [campo, maximo] of [['codigo', 50], ['descricao', 3000], ['unidadeMedida', 80], ['criterioConclusao', 5000], ['observacoes', 3000]] as const) {
+  if (!nome || (nome.length > 42 && nome !== inicial?.nome)) erros.nome = 'Informe o nome (até 42 caracteres).';
+  for (const [campo, maximo] of [['codigo', 15], ['descricao', 220], ['unidadeMedida', 40], ['criterioConclusao', 350], ['observacoes', 120]] as const) {
     const t = r[campo];
-    if (t && (!t.trim() || t.length > maximo)) erros[campo] = `Revise o campo (até ${maximo} caracteres e sem valor somente com espaços).`;
+    if (t && (!t.trim() || (t.length > maximo && t !== (inicial?.[campo] ?? '')))) erros[campo] = `Revise o campo (até ${maximo} caracteres e sem valor somente com espaços).`;
   }
   if (!TIPOS.includes(r.tipo)) erros.tipo = 'Escolha um tipo de entregável válido.';
   if (r.responsavelId.trim() && !uuid4(r.responsavelId.trim())) erros.responsavelId = 'Selecione um funcionário ativo ou deixe em branco.';
-  if (r.inicioPrevisto && !dataValida(r.inicioPrevisto)) erros.inicioPrevisto = 'Data civil inválida.';
+  if (!r.inicioPrevisto) erros.inicioPrevisto = 'Informe a data de início prevista.';
+  else if (!dataValida(r.inicioPrevisto)) erros.inicioPrevisto = 'Data civil inválida.';
   if (r.terminoPrevisto && !dataValida(r.terminoPrevisto)) erros.terminoPrevisto = 'Data civil inválida.';
   if (r.inicioPrevisto && r.terminoPrevisto && r.terminoPrevisto < r.inicioPrevisto) erros.terminoPrevisto = 'O término não pode anteceder o início.';
   if (r.tipo === 'QUANTITATIVO') {
-    const qtd = r.quantidadePrevista.trim();
-    if (!decimal(qtd, 15, 3) || Number(qtd) <= 0) erros.quantidadePrevista = 'Informe quantidade maior que zero (até 3 casas decimais).';
-    if (!r.unidadeMedida.trim() || r.unidadeMedida.length > 80) erros.unidadeMedida = 'Informe a unidade de medida (até 80 caracteres).';
+    if (!decimal(r.quantidadePrevista.trim(), 15, 3) || Number(r.quantidadePrevista) <= 0)
+      erros.quantidadePrevista = 'Informe quantidade prevista positiva (até três casas).';
+    if (!r.unidadeMedida.trim()) erros.unidadeMedida = 'Informe a unidade de medida.';
   }
-  if (r.tipo === 'RECORRENTE' && !PERIODICIDADES.includes(r.periodicidade as PeriodicidadeEntregavel)) {
-    erros.periodicidade = 'Escolha uma periodicidade fixa suportada.';
+  if (r.tipo === 'CONTINUO' && !r.terminoPrevisto) erros.terminoPrevisto = 'Informe o término previsto do serviço contínuo.';
+  if (r.tipo === 'RECORRENTE') {
+    if (!r.periodicidade) erros.periodicidade = 'Selecione a periodicidade.';
+    if (!r.inicioPrevisto || !r.terminoPrevisto)
+      erros.inicioPrevisto = 'Defina início e término da agenda recorrente.';
   }
   if (['CONTINUO', 'MARCO'].includes(r.tipo) && !r.criterioConclusao.trim()) {
     erros.criterioConclusao = 'O critério textual é obrigatório para Contínuo e Marco.';
   }
-  if (r.peso.trim() && (!decimal(r.peso.trim(), 3, 4) || Number(r.peso.trim()) > 100)) {
-    erros.peso = 'Peso entre 0 e 100, com até 4 casas decimais.';
+  if (!r.peso.trim() || !decimal(r.peso.trim().replace(',', '.'), 3, 2) || Number(r.peso.trim().replace(',', '.')) > 100 ||
+      (Number(r.peso.trim().replace(',', '.')) <= 0 && !(inicial?.peso != null && Number(inicial.peso) === 0 && Number(r.peso.trim().replace(',', '.')) === 0))) {
+    erros.peso = 'Informe peso maior que zero e até 100%, com até duas casas decimais.';
   }
   if (r.evidenciasEsperadas.length > 10) erros.evidenciasEsperadas = 'Máximo de 10 itens.';
   r.evidenciasEsperadas.forEach((e, indice) => {
-    if (!e.tipoEvidencia.trim() || e.tipoEvidencia.length > 100) erros[`evidencias.${indice}.tipoEvidencia`] = 'Informe o tipo da evidência (até 100 caracteres).';
-    if (e.descricao && (!e.descricao.trim() || e.descricao.length > (e.id ? 3000 : 130))) erros[`evidencias.${indice}.descricao`] = 'Orientações inválidas (até 130 caracteres).';
+    if (!e.tipoEvidencia.trim() || (e.tipoEvidencia.length > 50 && e.tipoEvidencia !== inicial?.evidenciasEsperadas.find(item => item.id === e.id)?.tipoEvidencia)) erros[`evidencias.${indice}.tipoEvidencia`] = 'Informe o tipo da evidência (até 50 caracteres).';
+    if (e.descricao && (!e.descricao.trim() || (e.descricao.length > 65 && e.descricao !== inicial?.evidenciasEsperadas.find(item => item.id === e.id)?.descricao))) erros[`evidencias.${indice}.descricao`] = 'Orientações inválidas (até 65 caracteres).';
   });
   if (Object.keys(erros).length) return { sucesso: false, erros };
   return { sucesso: true, dados: {
     etapaId: r.etapaId, nome, tipo: r.tipo, codigo: opcional(r.codigo), descricao: opcional(r.descricao),
     responsavelId: opcional(r.responsavelId), inicioPrevisto: opcional(r.inicioPrevisto),
     terminoPrevisto: opcional(r.terminoPrevisto),
-    quantidadePrevista: r.tipo === 'QUANTITATIVO' ? r.quantidadePrevista.trim() : null,
+    quantidadePrevista: r.tipo === 'QUANTITATIVO' ? opcional(r.quantidadePrevista) : null,
     unidadeMedida: r.tipo === 'QUANTITATIVO' ? opcional(r.unidadeMedida) : null,
-    periodicidade: r.tipo === 'RECORRENTE' ? r.periodicidade as PeriodicidadeEntregavel : null,
-    configuracaoPeriodicidade: r.tipo === 'RECORRENTE' ? { versao: 1 } : null,
-    peso: opcional(r.peso), criterioConclusao: opcional(r.criterioConclusao), observacoes: opcional(r.observacoes),
+    periodicidade: r.tipo === 'RECORRENTE' && r.periodicidade ? r.periodicidade as PeriodicidadeEntregavel : null,
+    configuracaoPeriodicidade: r.tipo === 'RECORRENTE' && r.periodicidade ? { versao: 1 } : null,
+    peso: opcional(r.peso.replace(',', '.')), criterioConclusao: opcional(r.criterioConclusao), observacoes: opcional(r.observacoes),
     evidenciasEsperadas: r.evidenciasEsperadas.map((e) => ({
       ...(e.id ? { id: e.id } : {}), tipoEvidencia: e.tipoEvidencia.trim(), descricao: opcional(e.descricao ?? ''), obrigatoria: e.obrigatoria,
     })),

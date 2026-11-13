@@ -169,7 +169,7 @@ html { scrollbar-gutter: stable; }
  * Evita que uma etapa concluída dentro de contrato em revisão fique verde.
  * Não interfere nas cores dos botões globais fora da janela. */
 /* Seleção de aba normal ("Entregáveis"/"Evidências") também usa o estado
- * da janela; selos Concluídas e Arquivados mantêm suas semânticas próprias. */
+ * da janela; selos Finalizadas e Arquivados mantêm suas semânticas próprias. */
 
 /* TEC08 — abas: hover e foco NUNCA pintam outra situação de negócio.
    Apenas a aba selecionada recebe o contexto do pai (ou o âmbar de Arquivados). */
@@ -711,11 +711,11 @@ button[data-tec08-confirmar][data-tec08-acao-aprovar]:not(:disabled):hover {back
 }
 /* Coloração local das etapas — título/borda, não ações de arquivar/excluir. */
 [data-etapa-estado="normal"] { border-color: rgb(95 211 74 / .4) !important; }
-[data-etapa-estado="reaberta"] { border-color: rgb(20 184 166 / .6) !important; }
+[data-etapa-estado="revisao"] { border-color: rgb(20 184 166 / .6) !important; }
 [data-etapa-estado="concluida"] { border-color: rgb(167 139 250 / .65) !important; }
 [data-etapa-estado="arquivada"] { border-color: rgb(217 119 6 / .65) !important; }
 [data-etapa-estado="encerrada"] { border-color: rgb(100 116 139 / .65) !important; }
-[data-etapa-estado="reaberta"] > div button span[class*="text-brand-neon"] { color: #99f6e4 !important; }
+[data-etapa-estado="revisao"] > div button span[class*="text-brand-neon"] { color: #99f6e4 !important; }
 @media (prefers-color-scheme: light) {
   :is(.contrato-detalhe-documental, [data-tec08-entidade="modal"], [data-tec08-contexto-operacional])[data-tec08-estado="revisao"] { --tec08-status-heading: #0f766e; }
   :is(.contrato-detalhe-documental, [data-tec08-entidade="modal"], [data-tec08-contexto-operacional])[data-tec08-estado="concluido"] { --tec08-status-heading: #5b21b6; }
@@ -723,7 +723,7 @@ button[data-tec08-confirmar][data-tec08-acao-aprovar]:not(:disabled):hover {back
   :is(.contrato-detalhe-documental, [data-tec08-entidade="modal"], [data-tec08-contexto-operacional])[data-tec08-estado="arquivado"] { --tec08-status-heading: #854d0e; }
   :is(.contrato-detalhe-documental, [data-tec08-entidade="modal"], [data-tec08-contexto-operacional])[data-tec08-estado="cancelado"] { --tec08-status-heading: #991b1b; }
   :is(.contrato-detalhe-documental, [data-tec08-entidade="modal"], [data-tec08-contexto-operacional])[data-tec08-estado="encerrado"] { --tec08-status-heading: #334155; }
-  [data-etapa-estado="reaberta"] > div button span[class*="text-brand-neon"] { color: #0f766e !important; }
+  [data-etapa-estado="revisao"] > div button span[class*="text-brand-neon"] { color: #0f766e !important; }
 }
 @media (prefers-reduced-motion: reduce) {
   :is(.contrato-detalhe-documental, [data-tec08-entidade="modal"]) :is(button, a) { transition-duration: 0ms !important; }
@@ -746,7 +746,7 @@ button[data-tec08-confirmar][data-tec08-acao-aprovar]:not(:disabled):hover {back
 @media (prefers-reduced-motion: reduce) { .tec08-painel-contrato { animation: none; } }
 
 /* TEC08-05-01 / Patch 7 — estados por entidade, sem classe verde global nas decisões.
- * A carteira mantém o filtro "Concluídos" para ENCERRADO e CONCLUIDO,
+ * A carteira mantém o filtro "Finalizados" para ENCERRADO, FINALIZADO e CONCLUIDO,
  * mas identifica separadamente a cor de cada estado persistido. */
 .contrato-card-documental[data-tec08-estado="encerrado"],
 .contrato-card-documental[data-tec08-estado="encerrado"]:has([data-documental-completo="true"]),
@@ -1109,7 +1109,7 @@ section[aria-label^="Rastreabilidade"] {
 /* Cards de etapa — progresso e borda usam o STATUS DA ETAPA, não a comprovação
  * dos filhos e tampouco o status do contrato arquivado. */
 [data-etapa-estado="normal"] { --tec08-item-borda: #5fd34a; --tec08-item-tinta: #5fd34a; }
-[data-etapa-estado="reaberta"] { --tec08-item-borda: #14b8a6; --tec08-item-tinta: #5eead4; }
+[data-etapa-estado="revisao"] { --tec08-item-borda: #14b8a6; --tec08-item-tinta: #5eead4; }
 [data-etapa-estado="concluida"] { --tec08-item-borda: #a78bfa; --tec08-item-tinta: #c4b5fd; }
 [data-etapa-estado="encerrada"] { --tec08-item-borda: #64748b; --tec08-item-tinta: #cbd5e1; }
 [data-etapa-estado="arquivada"] { --tec08-item-borda: #d97706; --tec08-item-tinta: #fcd34d; }
@@ -1131,7 +1131,7 @@ section[aria-label^="Rastreabilidade"] {
 [data-etapa-estado] button[aria-label^="Abrir detalhes da etapa"] > span:first-child > span:first-child {
   color: var(--tec08-item-tinta) !important;
 }
-[data-etapa-estado="reaberta"] [aria-label^="Posição"] > span:last-child {
+[data-etapa-estado="revisao"] [aria-label^="Posição"] > span:last-child {
   background-color: color-mix(in srgb, var(--tec08-item-borda) 13%, transparent) !important;
   border-color: var(--tec08-item-borda) !important;
   color: var(--tec08-item-tinta) !important;
@@ -1210,7 +1210,7 @@ section[aria-label^="Rastreabilidade"] {
   #conteudo-principal :is(button, a, [role="button"]):active { transform: none; }
 }
 @media (prefers-color-scheme: light) {
-  [data-etapa-estado="reaberta"], [data-entregavel-estado="revisao"] { --tec08-item-tinta: #0f766e; }
+  [data-etapa-estado="revisao"], [data-entregavel-estado="revisao"] { --tec08-item-tinta: #0f766e; }
   [data-etapa-estado="concluida"], [data-entregavel-estado="concluido"] { --tec08-item-tinta: #5b21b6; }
   [data-etapa-estado="arquivada"], [data-entregavel-estado="arquivado"] { --tec08-item-tinta: #854d0e; }
 }
@@ -1432,7 +1432,7 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
 :is(.contrato-detalhe-documental, [data-tec08-entidade="modal"],
   [data-tec08-contexto-operacional], [data-tec08-secao-filho],
   [data-tec08-secao-contextual])[data-tec08-estado="revisao"],
-[data-etapa-estado="reaberta"], [data-entregavel-estado="revisao"],
+[data-etapa-estado="revisao"], [data-entregavel-estado="revisao"],
 [data-evidencia-estado="revisao"] {
   --pi-cor-propria: #14b8a6;
   --pi-texto-proprio: #99f6e4;
@@ -1644,7 +1644,7 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
 [data-ocorrencia-estado="EM_ANDAMENTO"] { --pi-texto-proprio: #b8d28a !important; }
 }
 [data-tec08-estado="revisao"],
-[data-etapa-estado="reaberta"],
+[data-etapa-estado="revisao"],
 [data-entregavel-estado="revisao"],
 [data-evidencia-estado="revisao"] {
   --pi-cor-propria: #14b8a6 !important;
@@ -1660,7 +1660,7 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
 }
 @media (prefers-color-scheme: dark) {
 [data-tec08-estado="revisao"],
-[data-etapa-estado="reaberta"],
+[data-etapa-estado="revisao"],
 [data-entregavel-estado="revisao"],
 [data-evidencia-estado="revisao"] { --pi-texto-proprio: #99f6e4 !important; }
 }
@@ -1845,4 +1845,392 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
 [data-pi-etapas-filtros][role="tablist"] > button[role="tab"]:focus-visible {
   outline: 2px solid var(--pi-cor-propria) !important;
   outline-offset: 2px;
+}
+
+.pi-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.85rem center;
+  background-size: 16px 16px;
+}
+.pi-select::-ms-expand { display: none; }
+
+/* HU09/TEC09 Patch 12: pendência de conclusão colore o cartão como uma etapa
+   aguardando validação (violeta). Somente a etiqueta indica amarelo. */
+[data-ocorrencia-estado="PENDENTE_CONCLUSAO"] {
+  --pi-cor-propria: #a78bfa !important;
+  --pi-texto-proprio: #c4b5fd !important;
+  --pi-acao-bg: #6d28d9;
+  --pi-acao-fg: #ffffff;
+  --pi-acao-hover: #7c3aed;
+}
+[data-ocorrencia-estado="PENDENTE_CONCLUSAO"] > button:first-of-type > span:first-child > span:last-child {
+  color: #fde047 !important;
+  border-color: rgb(234 179 8 / .65) !important;
+  background-color: rgb(234 179 8 / .11) !important;
+}
+[data-ocorrencia-estado="PENDENTE_CONCLUSAO"] > button[aria-label^="Editar ocorrência"] {
+  display: none;
+}
+
+/* HU09/TEC09 Patch13: paleta efetiva da entidade, inclusive em modais encadeados.
+   Cancelar/ações destrutivas mantém vermelho e nunca herdam a cor da entidade. */
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="nao-iniciado"] {
+  --tec08-status-bg: #52525b; --tec08-status-fg: #fff;
+  --tec08-status-border: #a1a1aa; --tec08-status-hover: #71717a;
+  --tec08-status-heading: #e4e4e7;
+}
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="andamento"] {
+  --tec08-status-bg: #556b2f; --tec08-status-fg: #fff;
+  --tec08-status-border: #819f54; --tec08-status-hover: #65813b;
+  --tec08-status-heading: #b8d28a;
+}
+[data-tec08-modal] > [data-tec08-entidade="modal"] button[data-pi-acao="contextual"]:not(:disabled) {
+  border-color: var(--tec08-status-border) !important;
+  color: var(--tec08-status-heading) !important;
+  background-color: transparent !important;
+}
+[data-tec08-modal] > [data-tec08-entidade="modal"] button[data-pi-acao="contextual"]:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--tec08-status-bg) 16%, transparent) !important;
+}
+
+/* Botões contextuais dentro de uma seção do entregável, sem interferir nos estados de cada cartão. */
+[data-tec08-contexto-operacional][data-tec08-estado] button[data-pi-acao="contextual"]:not(:disabled) {
+  border-color: var(--tec08-status-border);
+  color: var(--tec08-status-heading);
+}
+[data-tec08-contexto-operacional][data-tec08-estado] button[data-pi-acao="contextual"]:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--tec08-status-bg) 15%, transparent);
+}
+
+/* HU09/TEC09 Patch14: foco de teclado, sem moldura residual após clique de mouse.
+ * A cor pertence à ocorrência e não herda o estado do contrato-pai. */
+.pi-ocorrencia-card:focus:not(:focus-visible) { outline: none !important; box-shadow: none !important; }
+[data-ocorrencia-estado="EM_REVISAO"] > .pi-ocorrencia-card {
+  border-color: color-mix(in srgb, #14b8a6 60%, transparent) !important;
+  background-color: color-mix(in srgb, #0f766e 6%, var(--bg-primary)) !important;
+}
+[data-ocorrencia-estado="PENDENTE_CONCLUSAO"] > .pi-ocorrencia-card {
+  border-color: color-mix(in srgb, #a78bfa 55%, transparent) !important;
+  background-color: color-mix(in srgb, #8b5cf6 6%, var(--bg-primary)) !important;
+}
+[data-ocorrencia-estado="PENDENTE_CONCLUSAO"] > .pi-ocorrencia-card > span:first-child > span:last-child {
+  border-color: #d97706 !important;
+  color: #fbbf24 !important;
+  background-color: color-mix(in srgb, #b45309 16%, var(--bg-primary)) !important;
+}
+[data-ocorrencia-estado] > .pi-ocorrencia-card:focus-visible { outline-color: currentColor !important; }
+/* A lista pesquisável dentro do modal deixa altura para revelar opções e rolar. */
+[data-tec08-corpo-modal]:has([role="combobox"][aria-expanded="true"]) {
+  padding-bottom: min(15rem, 34dvh);
+}
+
+/* Patch16: criação tem paleta própria; o estado do objeto pai não vaza ao formulário. */
+[data-tec08-modal] [data-tec08-criacao="true"] {
+  --pi-cor-propria: #56c943;
+  --pi-texto-proprio: #a6ff82;
+  --tec08-status-border: #56c943;
+  --tec08-status-heading: #a6ff82;
+}
+[data-tec08-modal] [data-tec08-criacao="true"] :is(h2,h3,legend) { color: #a6ff82; }
+[data-tec08-modal] [data-tec08-criacao="true"] :is(input,select,textarea):focus-visible { outline-color: #56c943; }
+/* O cartão arquivado preserva sua cor, inclusive após passar o mouse. */
+[data-tec08-item-clicavel][data-entregavel-estado="arquivado"] > a,
+[data-evidencia-estado="arquivado"],
+[data-etapa-estado="arquivada"] {
+  background-color: color-mix(in srgb, #b45309 10%, var(--bg-primary));
+  border-color: color-mix(in srgb, #f59e0b 55%, transparent);
+}
+[data-tec08-item-clicavel][data-entregavel-estado="arquivado"] > a:hover,
+[data-evidencia-estado="arquivado"]:hover,
+[data-etapa-estado="arquivada"]:hover { background-color: color-mix(in srgb, #b45309 13%, var(--bg-primary)); }
+/* Ativar via teclado mantém foco visível contextual; mouse não cria flash branco. */
+[data-tec08-item-clicavel]:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+[data-tec08-item-clicavel]:focus-visible { outline-color: var(--pi-cor-propria, #56c943); }
+/* Modais de confirmação usam a paleta do item sem afetar Cancelar/vermelho. */
+[role="dialog"][data-tec08-estado="revisao"] { border-color: #0d9488; }
+[role="dialog"][data-tec08-estado="arquivado"] { border-color: #d97706; }
+[role="dialog"][data-tec08-estado="concluido"] { border-color: #8b5cf6; }
+/* A área clicável usa o próprio conteúdo, sem altura artificial para botões removidos. */
+[data-tec08-item-clicavel] > a { min-height: 0; }
+
+/* Entrada do painel contratual: preserva a navegação lateral e evita saltos. */
+@media (prefers-reduced-motion: no-preference) {
+  .pi-modal-contrato-entrada { animation: pi-contrato-entrada 220ms ease-out both; }
+  @keyframes pi-contrato-entrada { from { opacity: .65; transform: translateX(24px); } to { opacity: 1; transform: translateX(0); } }
+}
+
+/* O modal contextual usa a situação contratual, nunca um verde genérico herdado. */
+.pi-contrato-contextual[data-tec08-estado] { border-color: var(--pi-cor-propria, #5fd34a) !important; }
+.pi-contrato-contextual[data-tec08-estado] > header,
+.pi-contrato-contextual[data-tec08-estado] aside { border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 40%, transparent) !important; }
+.pi-contrato-contextual[data-tec08-estado] .pi-contrato-acento { color: var(--pi-texto-proprio, #5fd34a); border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 40%, transparent); }
+.pi-contrato-contextual[data-tec08-estado] aside > section { border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 45%, transparent) !important; }
+.pi-contrato-contextual[data-tec08-estado] aside > section > h3 { color: var(--pi-texto-proprio, #5fd34a) !important; }
+
+/* Decisões administrativas: cor da transição, nunca o verde genérico do cadastro.
+   A cor atinge os campos de justificativa de qualquer entidade que use ModalEtapa. */
+[data-tec08-modal] > [data-tec08-decisao-modal="true"] :is(textarea, input, select) {
+  border-color: var(--tec08-entidade-borda) !important;
+}
+[data-tec08-modal] > [data-tec08-decisao-modal="true"] :is(textarea, input, select):focus-visible {
+  outline-color: var(--tec08-entidade-borda) !important;
+}
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="finalizado"] {
+  --tec08-entidade-bg: #6b21a8;
+  --tec08-entidade-texto: #d8b4fe;
+  --tec08-entidade-borda: #a855f7;
+}
+
+/* PATCH30: cartões internos têm identidade própria, independente do contrato-pai. */
+.contrato-detalhe-documental [data-tec09-painel-execucao] [data-tec08-estado],
+.contrato-detalhe-documental #painel-etapas [data-etapa-estado] {
+  color: var(--foreground);
+}
+.contrato-detalhe-documental [data-tec09-painel-execucao] [data-tec08-estado="nao-iniciado"] {
+  --tec08-status-border: #737373; --tec08-status-heading: #d4d4d4;
+}
+.contrato-detalhe-documental [data-tec09-painel-execucao] [data-tec08-estado="andamento"] {
+  --tec08-status-border: #84cc16; --tec08-status-heading: #bef264;
+}
+.contrato-detalhe-documental [data-tec09-painel-execucao] [data-tec08-estado="concluido"] {
+  --tec08-status-border: #a78bfa; --tec08-status-heading: #c4b5fd;
+}
+.contrato-detalhe-documental [data-tec09-painel-execucao] [data-tec08-estado="finalizado"] {
+  --tec08-status-border: #a855f7; --tec08-status-heading: #d8b4fe;
+}
+.contrato-detalhe-documental [data-tec09-painel-execucao] [data-tec08-secao-contextual],
+.contrato-detalhe-documental [data-tec09-painel-execucao] article[data-tec08-estado] {
+  border-color: var(--tec08-status-border) !important;
+}
+.contrato-detalhe-documental [data-tec09-painel-execucao] article[data-tec08-estado] [data-pi-titulo] {
+  color: var(--tec08-status-heading) !important;
+}
+
+/* Patch 33 — identidade de AÇÕES isolada da identidade de estados do contrato.
+ * Não colore os botões do modal com o status herdado de etapas/entregáveis.
+ * Somente botões com intenção declarada recebem estas regras.
+ */
+[data-pi-intencao] { --pi-acao-cor: #94a3b8; }
+[data-pi-intencao="criar"] { --pi-acao-cor: #4ade80; }
+[data-pi-intencao="editar"], [data-pi-intencao="reabrir"], [data-pi-intencao="reativar"] { --pi-acao-cor: #2dd4bf; }
+[data-pi-intencao="concluir"], [data-pi-intencao="solicitar-conclusao"], [data-pi-intencao="verificar"] { --pi-acao-cor: #a78bfa; }
+[data-pi-intencao="encerrar"], [data-pi-intencao="solicitar-encerramento"] { --pi-acao-cor: #c084fc; }
+[data-pi-intencao="suspender"] { --pi-acao-cor: #fbbf24; }
+[data-pi-intencao="arquivar"] { --pi-acao-cor: #fb923c; }
+[data-pi-intencao="cancelar"], [data-pi-intencao="excluir"] { --pi-acao-cor: #f87171; }
+[data-pi-intencao]:not(:disabled) {
+  color: var(--pi-acao-cor) !important;
+  background-color: transparent !important;
+  border-color: color-mix(in srgb, var(--pi-acao-cor) 42%, transparent) !important;
+}
+[data-pi-intencao]:not(:disabled):hover,
+[data-pi-intencao]:not(:disabled):focus-visible {
+  background-color: color-mix(in srgb, var(--pi-acao-cor) 14%, transparent) !important;
+  border-color: color-mix(in srgb, var(--pi-acao-cor) 72%, transparent) !important;
+}
+[data-pi-intencao]:disabled {
+  color: #94a3b8 !important;
+  background-color: rgb(100 116 139 / .09) !important;
+  border-color: rgb(100 116 139 / .20) !important;
+  opacity: .60;
+}
+@media (prefers-color-scheme: light) {
+  [data-pi-intencao="criar"] { --pi-acao-cor: #15803d; }
+  [data-pi-intencao="editar"], [data-pi-intencao="reabrir"], [data-pi-intencao="reativar"] { --pi-acao-cor: #0f766e; }
+  [data-pi-intencao="concluir"], [data-pi-intencao="solicitar-conclusao"], [data-pi-intencao="verificar"] { --pi-acao-cor: #6d28d9; }
+  [data-pi-intencao="encerrar"], [data-pi-intencao="solicitar-encerramento"] { --pi-acao-cor: #7e22ce; }
+  [data-pi-intencao="suspender"] { --pi-acao-cor: #92400e; }
+  [data-pi-intencao="arquivar"] { --pi-acao-cor: #c2410c; }
+  [data-pi-intencao="cancelar"], [data-pi-intencao="excluir"] { --pi-acao-cor: #b91c1c; }
+}
+
+/* PATCH33: FINALIZADO corresponde a resultado administrativo parcial;
+ * não se mistura com CONCLUIDO, ENCERRADO nem com a cor padrão verde.
+ * Os tokens são usados pelo painel, abas e indicador lateral do contrato.
+ */
+.contrato-detalhe-documental[data-tec08-estado="finalizado"] {
+  --pi-cor-propria: #a855f7;
+  --pi-texto-proprio: #d8b4fe;
+  --contrato-cor-rgb: 168 85 247;
+  --contrato-cor-solida: #7e22ce;
+  --contrato-texto: #d8b4fe;
+  --tec08-status-bg: #7e22ce;
+  --tec08-status-fg: #fff;
+  --tec08-status-border: #a855f7;
+}
+@media (prefers-color-scheme: light) {
+  .contrato-detalhe-documental[data-tec08-estado="finalizado"] {
+    --pi-texto-proprio: #7e22ce;
+    --contrato-texto: #7e22ce;
+  }
+}
+
+/* PATCH34 — Superfícies por identidade própria. Um filho nunca herda o
+   estado visual do contrato quando declara seu próprio data-tec08-estado.
+   A cor da ação é separada e usa data-pi-intencao. */
+[data-tec08-estado="finalizado"],
+[data-etapa-estado="finalizada"], [data-entregavel-estado="finalizado"],
+[data-ocorrencia-estado="ENCERRADA"], [data-ocorrencia-estado="PENDENTE_ENCERRAMENTO"] {
+  --pi-cor-propria: #a855f7 !important;
+  --pi-texto-proprio: #d8b4fe !important;
+  --tec08-status-border: #a855f7 !important;
+  --tec08-status-heading: #d8b4fe !important;
+  --tec08-status-bg: #7e22ce !important;
+  --tec08-status-fg: #fff !important;
+}
+/* O estado pendente de conclusão pertence à identidade de conclusão, não
+   à paleta genérica (amarela) usada na verificação de documentos. */
+[data-tec08-estado="concluido"],
+[data-ocorrencia-estado="PENDENTE_CONCLUSAO"],
+[data-atividade-estado="PENDENTE_CONCLUSAO"] {
+  --pi-cor-propria: #a78bfa !important;
+  --pi-texto-proprio: #c4b5fd !important;
+  --tec08-status-border: #a78bfa !important;
+  --tec08-status-heading: #c4b5fd !important;
+}
+/* A agenda usa exclusivamente a variável do modal/entregável que a contém.
+   Cada botão de ocorrência possui sua própria classe semântica e não afeta
+   este contêiner nem o painel lateral de registros do dia selecionado. */
+[data-pi-calendario-ocorrencias] .pi-agenda-superficie {
+  border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 45%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 4%, var(--bg-primary)) !important;
+}
+[data-pi-calendario-ocorrencias] .pi-agenda-painel-dia {
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 6%, var(--bg-primary)) !important;
+}
+/* Superfícies independentes (incluindo fundo), com escopo explícito no próprio
+   objeto. Se o componente passar data-tec08-estado, seu fundo não é repintado
+   por data-tec08-estado do ancestral. */
+[data-tec08-entidade="modal"][data-tec08-estado] {
+  border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 70%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 4%, var(--bg-primary)) !important;
+}
+[data-tec08-entidade="modal"][data-tec08-estado] > header {
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 9%, var(--bg-primary)) !important;
+}
+[data-tec08-secao-contextual][data-tec08-estado],
+[data-pi-superficie][data-tec08-estado] {
+  border-color: color-mix(in srgb, var(--pi-cor-propria) 52%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria) 7%, var(--bg-primary)) !important;
+}
+[data-pi-controle-fechamento="pendente-conclusao"] {
+  color: #c4b5fd !important;
+  border-color: rgb(167 139 250 / .7) !important;
+  background-color: rgb(139 92 246 / .16) !important;
+}
+[data-pi-controle-fechamento="pendente-conclusao"]:hover,
+[data-pi-controle-fechamento="pendente-conclusao"]:focus-visible {
+  background-color: rgb(139 92 246 / .25) !important;
+}
+
+/* Seleção temporal pertence à agenda do entregável; pontos coloridos nas
+   células representam SOMENTE as ocorrências individuais. */
+[data-pi-calendario-ocorrencias] .pi-agenda-dia-selecionado {
+  border-color: var(--pi-cor-propria, #5fd34a) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 12%, var(--bg-primary)) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 45%, transparent);
+}
+[data-pi-calendario-ocorrencias] .pi-agenda-dia-atual {
+  border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 55%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 7%, var(--bg-primary)) !important;
+}
+
+/* Patch40 — barras de rolagem neutras e legíveis em TODOS os modais,
+   listboxes, sidebars e elementos com overflow, inclusive no Firefox. */
+:root { --pi-scroll-track: #d8e9ce; --pi-scroll-thumb: #73846d; --pi-scroll-hover: #52674c; color-scheme: light; }
+@media (prefers-color-scheme: dark) {
+  :root { --pi-scroll-track: #111a13; --pi-scroll-thumb: #49604c; --pi-scroll-hover: #72876f; color-scheme: dark; }
+}
+html, body, * { scrollbar-width: thin; scrollbar-color: var(--pi-scroll-thumb) var(--pi-scroll-track); }
+*::-webkit-scrollbar { width: 9px; height: 9px; }
+*::-webkit-scrollbar-track { background: var(--pi-scroll-track); border-radius: 10px; }
+*::-webkit-scrollbar-thumb { background: var(--pi-scroll-thumb); border: 2px solid var(--pi-scroll-track); border-radius: 10px; }
+*::-webkit-scrollbar-thumb:hover { background: var(--pi-scroll-hover); }
+*::-webkit-scrollbar-corner { background: var(--pi-scroll-track); }
+/* Select nativo também respeita a paleta do sistema no menu de opções. */
+select, input[type="date"], input[type="datetime-local"] { color-scheme: inherit; }
+/* Botão de confirmação de uma decisão em revisão tem a mesma cor do cabeçalho. */
+[data-tec08-estado="revisao"] button[data-tec08-confirmar]:not(:disabled) {
+  background-color: #0f766e !important;
+  border-color: #14b8a6 !important;
+  color: #fff !important;
+}
+[data-tec08-estado="revisao"] button[data-tec08-confirmar]:not(:disabled):hover { background-color: #0d9488 !important; }
+
+/* Modais de ocorrências com títulos longos jamais escapam da largura do cabeçalho. */
+[data-tec08-modal] [data-pi-titulo], [role="dialog"] h2 { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+
+
+/* PATCH43 — Estados semânticos para superfícies INTERNAS de modais.
+   O token vem do contêiner dono e é redefinido por cada filho com estado
+   próprio. Nunca pintar o filho pela situação do contrato-pai. */
+[data-tec08-entidade="modal"][data-tec08-estado] :is(
+    input:not([type="checkbox"]):not([type="radio"]):not([aria-invalid="true"]),
+    textarea:not([aria-invalid="true"]), select:not([aria-invalid="true"])
+  ) {
+  border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 48%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 3%, var(--bg-primary)) !important;
+}
+[data-tec08-entidade="modal"][data-tec08-estado] :is(input, textarea, select):focus-visible {
+  outline-color: var(--pi-cor-propria, #5fd34a) !important;
+  border-color: var(--pi-cor-propria, #5fd34a) !important;
+  --tw-ring-color: var(--pi-cor-propria, #5fd34a) !important;
+}
+[data-tec08-entidade="modal"][data-tec08-estado] :is(
+    [data-tec08-formulario-contextual],
+    [data-tec08-secao-contextual]:not([data-tec08-estado]),
+    [data-pi-superficie]:not([data-tec08-estado])
+  ) {
+  border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 45%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 5%, var(--bg-primary)) !important;
+}
+[data-tec08-entidade="modal"][data-tec08-estado] [data-tec08-formulario-contextual]
+  :is(section:not([data-tec08-estado]), fieldset:not([data-tec08-estado])) {
+  border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 32%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 2%, var(--bg-primary)) !important;
+}
+/* Controles sem intenção especial herdam o foco, nunca sobrepõem Arquivar,
+   Reabrir, Concluir ou Cancelar, cuja cor depende da própria ação. */
+[data-tec08-entidade="modal"][data-tec08-estado] [data-tec08-formulario-contextual]
+  button:not([data-pi-intencao]):not([data-tec08-confirmar]):not([data-tec08-fechar-modal]):not([class*="red-"]):focus-visible {
+  outline-color: var(--pi-cor-propria, #5fd34a) !important;
+}
+/* A identidade do card de etapa em revisão é TEAL, nunca uma etapa "Reaberta"
+   verde. Cartões internos com outro estado declaram seu próprio token. */
+[data-etapa-estado="revisao"] {
+  --pi-cor-propria: #14b8a6 !important;
+  --pi-texto-proprio: #99f6e4 !important;
+}
+/* Confirmação tem identidade de AÇÃO e prevalece sobre o botão verde genérico
+   dos patches iniciais. Acessibilidade: texto branco nos fundos escuros. */
+button[data-tec08-confirmar][data-pi-intencao-confirmacao="arquivado"]:not(:disabled),
+button[data-tec08-confirmar][data-pi-intencao-confirmacao="arquivado"]:not(:disabled):hover {
+  background-color: #c2410c !important; border-color: #f97316 !important; color: #fff !important;
+}
+button[data-tec08-confirmar][data-pi-intencao-confirmacao="revisao"]:not(:disabled) {
+  background-color: #0f766e !important; border-color: #14b8a6 !important; color: #fff !important;
+}
+button[data-tec08-confirmar][data-pi-intencao-confirmacao="concluido"]:not(:disabled) {
+  background-color: #6d28d9 !important; border-color: #a78bfa !important; color: #fff !important;
+}
+button[data-tec08-confirmar][data-pi-intencao-confirmacao="finalizado"]:not(:disabled) {
+  background-color: #7e22ce !important; border-color: #c084fc !important; color: #fff !important;
+}
+button[data-tec08-confirmar][data-pi-intencao-confirmacao="cancelado"]:not(:disabled) {
+  background-color: #b91c1c !important; border-color: #ef4444 !important; color: #fff !important;
+}
+
+/* PATCH43 — Neutraliza componentes legados de verde fixo dentro do modal.
+   Os tokens são herdados do dono; cards com status próprio reatribuem os tokens. */
+[data-tec08-entidade="modal"][data-tec08-estado] :is(
+  [data-tec08-formulario-contextual], [data-tec08-secao-contextual], [data-pi-superficie]
+) :is([class*="border-brand-green"], [class*="border-green-500"]):not([data-pi-intencao]):not([data-pi-acao]) {
+  border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 50%, transparent) !important;
+}
+[data-tec08-entidade="modal"][data-tec08-estado] :is(
+  [data-tec08-formulario-contextual], [data-tec08-secao-contextual]
+) :is([class*="text-brand-neon"], [class*="text-green-400"]):not([data-pi-intencao]):not([data-pi-acao]) {
+  color: var(--pi-texto-proprio, #86ef73) !important;
 }

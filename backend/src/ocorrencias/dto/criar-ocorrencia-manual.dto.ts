@@ -1,15 +1,29 @@
 import {
   IsNotEmpty,
+  IsIn,
   IsOptional,
+  IsBoolean,
+  IsInt, Min, Max,
   IsString,
   Matches,
   MaxLength,
 } from 'class-validator';
 
 export class CriarOcorrenciaManualDto {
+  @IsOptional() @IsBoolean() exigeAtividade?: boolean;
+  @IsOptional() @IsInt() @Min(0) @Max(99) minimoAtividadesVerificadas?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(99) minimoEvidenciasVerificadas?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(99) minimoFotos?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(99) minimoRelatorios?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(99) minimoEvidenciasLivres?: number;
+
+  @IsOptional() @IsIn(['NENHUMA','FOTO','RELATORIO','AMBOS']) evidenciaExigida?: 'NENHUMA'|'FOTO'|'RELATORIO'|'AMBOS';
+  @IsOptional() @Matches(/^(?:100(?:\.0{1,4})?|\d{1,2}(?:\.\d{1,4})?)$/) pesoPeriodo?: string | null;
+  @IsOptional() @IsBoolean() permiteEncerramentoExcepcional?: boolean;
+
   @IsString()
   @IsNotEmpty()
-  @MaxLength(255)
+  @MaxLength(50)
   titulo!: string;
 
   @IsOptional()
@@ -33,12 +47,23 @@ export class CriarOcorrenciaManualDto {
   })
   dataPrevista?: string | null;
 
+  /** Nova interface declara explicitamente se a execução usa unidades ou somente descrição. */
+  @IsOptional()
+  @IsIn(['QUANTITATIVO', 'DESCRITIVO'])
+  modoRegistro?: 'QUANTITATIVO' | 'DESCRITIVO';
+
   @IsOptional()
   @IsString()
   quantidadeRealizada?: string | null;
 
+  /** Quantidade planejada para esta ocorrência, distinta da realizada. */
   @IsOptional()
   @IsString()
-  @MaxLength(3000)
+  @Matches(/^\d{1,15}(?:\.\d{1,3})?$/)
+  metaQuantidade?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
   observacoes?: string | null;
 }

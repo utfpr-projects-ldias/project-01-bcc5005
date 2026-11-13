@@ -65,6 +65,7 @@ function base() {
     save: jest.fn(async (e: unknown) => e),
   };
   const m = {
+    findBy: jest.fn(async () => []),
     query: jest.fn(async (_sql: string): Promise<unknown[]> => [
       {
         etapas: 1,
@@ -236,6 +237,7 @@ test('arquivar a última evidência pendente (1/2 → 1/1) conclui filho e etapa
   Object.assign(a.entregue, {
     etapaId: 'etapa-qa',
     statusExecucao: 'NAO_INICIADO',
+    tipo: 'UNICO', percentualExecucao: 100,
     reabertoEm: null,
   });
   // A primeira consulta conta 1/1 verificada; a consulta EXISTS diz que
@@ -283,6 +285,7 @@ test('arquivamento autorizado pode causar conclusão DERIVADA, mas não concede 
   Object.assign(a.entregue, {
     etapaId: 'etapa-qa',
     statusExecucao: 'EM_ANDAMENTO',
+    tipo: 'UNICO', percentualExecucao: 100,
     reabertoEm: null,
   });
   a.m.query.mockImplementation(async (sql: string) =>

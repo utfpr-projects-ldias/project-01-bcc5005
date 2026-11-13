@@ -1,5 +1,7 @@
 import { type DadosEtapa, type StatusEtapa } from './etapas';
 
+export const LIMITES_ETAPA = { codigo: 15, nome: 36, descricao: 500, observacoes: 200 } as const;
+
 export const DADOS_ETAPA_INICIAIS: DadosEtapa = {
   codigo: null, nome: '', descricao: null, inicioPrevisto: null,
   terminoPrevisto: null, status: 'PLANEJADA', observacoes: null,
@@ -12,7 +14,7 @@ function dataCivilValida(data: string): boolean {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === data;
 }
 
-export function validarEtapa(valor: DadosEtapa):
+export function validarEtapa(valor: DadosEtapa, inicial?: Partial<DadosEtapa>):
   | { sucesso: true; dados: DadosEtapa }
   | { sucesso: false; erros: ErrosCamposEtapa } {
   const erros: ErrosCamposEtapa = {};
@@ -22,8 +24,10 @@ export function validarEtapa(valor: DadosEtapa):
   const terminoPrevisto = valor.terminoPrevisto || null;
   const statusValidos: StatusEtapa[] = ['PLANEJADA', 'EM_ANDAMENTO', 'CONCLUIDA', 'ENCERRADA'];
   if (!nome) erros.nome = 'Informe o nome da etapa.';
-  else if (nome.length > 255) erros.nome = 'O nome deve ter no máximo 255 caracteres.';
-  if (codigo && codigo.length > 50) erros.codigo = 'O código deve ter no máximo 50 caracteres.';
+  else if (nome.length > LIMITES_ETAPA.nome && nome !== inicial?.nome) erros.nome = `O nome deve ter no máximo ${LIMITES_ETAPA.nome} caracteres.`;
+  if (codigo && codigo.length > LIMITES_ETAPA.codigo && codigo !== inicial?.codigo) erros.codigo = `O código deve ter no máximo ${LIMITES_ETAPA.codigo} caracteres.`;
+  if (valor.descricao && valor.descricao.length > LIMITES_ETAPA.descricao && valor.descricao !== inicial?.descricao) erros.descricao = `Descrição: máximo de ${LIMITES_ETAPA.descricao} caracteres.`;
+  if (valor.observacoes && valor.observacoes.length > LIMITES_ETAPA.observacoes && valor.observacoes !== inicial?.observacoes) erros.observacoes = `Observações: máximo de ${LIMITES_ETAPA.observacoes} caracteres.`;
   if (inicioPrevisto && !dataCivilValida(inicioPrevisto)) erros.inicioPrevisto = 'Informe uma data de início válida.';
   if (terminoPrevisto && !dataCivilValida(terminoPrevisto)) erros.terminoPrevisto = 'Informe uma data de término válida.';
   if (!erros.inicioPrevisto && !erros.terminoPrevisto && inicioPrevisto && terminoPrevisto && terminoPrevisto < inicioPrevisto) {

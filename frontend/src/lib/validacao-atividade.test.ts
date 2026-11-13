@@ -21,3 +21,10 @@ test('justificativa é obrigatória e limitada', () => {
   expect(justificativaAtividadeSchema.safeParse('Conferido').success).toBe(false);
   expect(justificativaAtividadeSchema.safeParse(' Conferido e validado ').success).toBe(true);
 });
+
+test('Patch35: campos de atividades não aceitam texto além do limite de interface', () => {
+  expect(atividadeSchema.safeParse({ ...validos, titulo:'X'.repeat(61) }).success).toBe(false);
+  expect(atividadeSchema.safeParse({ ...validos, descricao:'X'.repeat(751) }).success).toBe(false);
+  expect(atividadeSchema.safeParse({ ...validos, local:'X'.repeat(81) }).success).toBe(false);
+  expect(atividadeSchema.safeParse({ ...validos, observacoes:'X'.repeat(176) }).success).toBe(false);
+});

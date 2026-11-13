@@ -37,14 +37,14 @@ test('HU05-06: contrato real abre detalhe pelo UUID', async () => {
   listar.mockResolvedValue([{ id: '11111111-1111-4111-8111-111111111111', codigoPublico: '00427', numeroContrato: 'REAL-2026', orgaoContratante: 'UTFPR', objeto: 'Serviços', status: 'PLANEJAMENTO', modoCalculo: 'SIMPLES', inicioVigencia: '2026-01-01', terminoVigencia: '2026-12-31' } as Awaited<ReturnType<typeof listarContratos>>[number]]);
   await act(async () => { renderComConsultas(<ContratosListPage />); });
   expect(screen.getByText('REAL-2026')).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: /Abrir contrato/ })).toHaveAttribute('href', '/contratos/11111111-1111-4111-8111-111111111111');
+  expect(screen.getByRole('button', { name: /Abrir detalhes do contrato REAL-2026/ })).toBeInTheDocument();
 });
 
 test('HU05-06: não oferece criar a Colaborador', async () => {
   perfil.mockResolvedValue({ id: 'c', nome: null, email: 'c@example.com', perfil: 'COLABORADOR', ativo: true });
   listar.mockResolvedValue([]);
   await act(async () => { renderComConsultas(<ContratosListPage />); });
-  expect(screen.queryByRole('link', { name: 'Cadastrar contrato' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Cadastrar contrato' })).not.toBeInTheDocument();
 });
 
 
@@ -66,20 +66,20 @@ test('localiza por #00427 e 00427 sem perder busca por órgão, e mostra código
   const campo = screen.getByLabelText('Pesquisar contrato');
   expect(screen.getByText('Código #00427')).toBeInTheDocument();
   fireEvent.change(campo, { target: { value: '#00427' } });
-  expect(screen.getByRole('link', { name: /Abrir contrato/ })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /Abrir detalhes do contrato/ })).toBeInTheDocument();
   fireEvent.change(campo, { target: { value: '00427' } });
-  expect(screen.getByRole('link', { name: /Abrir contrato/ })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /Abrir detalhes do contrato/ })).toBeInTheDocument();
   fireEvent.change(campo, { target: { value: 'institucional' } });
-  expect(screen.getByRole('link', { name: /Abrir contrato/ })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /Abrir detalhes do contrato/ })).toBeInTheDocument();
   const seletor = screen.getByLabelText('Buscar por');
   fireEvent.change(seletor, { target: { value: 'numero' } });
   fireEvent.change(campo, { target: { value: 'institucional' } });
-  expect(screen.queryByRole('link', { name: /Abrir contrato/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /Abrir detalhes do contrato/ })).not.toBeInTheDocument();
   fireEvent.change(seletor, { target: { value: 'orgao' } });
-  expect(screen.getByRole('link', { name: /Abrir contrato/ })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /Abrir detalhes do contrato/ })).toBeInTheDocument();
   fireEvent.change(seletor, { target: { value: 'todos' } });
   fireEvent.change(campo, { target: { value: '#99999' } });
-  expect(screen.queryByRole('link', { name: /Abrir contrato/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /Abrir detalhes do contrato/ })).not.toBeInTheDocument();
 });
 
 test('cartão mostra o planejamento real sem inventar progresso ou evidências entregues', async () => {
@@ -115,7 +115,7 @@ test('Arquivados: ADMIN pode consultar, reativar e excluir com confirmação; at
   fireEvent.click(screen.getByRole('tab', { name: 'Contratos arquivados' }));
   expect(screen.getByText('ARQUIVADO')).toBeInTheDocument();
   expect(screen.queryByText('ATIVO')).not.toBeInTheDocument();
-  expect(screen.getByRole('link', { name: /Abrir contrato/ })).toHaveAttribute('href', '/contratos/22222222-2222-4222-8222-222222222222');
+  expect(screen.getByRole('button', { name: /Abrir detalhes do contrato ARQUIVADO/ })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Reativar contrato ARQUIVADO' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Reativar contrato ARQUIVADO' }));
   expect(screen.getByRole('dialog', { name: 'Reativar contrato?' })).toBeInTheDocument();
@@ -148,7 +148,7 @@ test('card compacto abre contrato inteiro sem botão de detalhe redundante', asy
     inicioVigencia: '2026-01-01', terminoVigencia: '2026-12-31',
   } as Awaited<ReturnType<typeof listarContratos>>[number]]);
   renderComConsultas(<ContratosListPage />);
-  expect(await screen.findByRole('link', { name: 'Abrir contrato QA-CARD' })).toHaveAttribute('href', '/contratos/c-card');
+  expect(await screen.findByRole('button', { name: 'Abrir detalhes do contrato QA-CARD' })).toBeInTheDocument();
   expect(screen.queryByRole('link', { name: 'Detalhes' })).not.toBeInTheDocument();
 });
 
@@ -171,7 +171,8 @@ test('filtros compactos: selects com mesma largura e abas junto ao título Contr
   expect(screen.getByLabelText('Buscar por').parentElement).toHaveClass('order-3', 'min-[500px]:order-3');
   expect(screen.getByLabelText('Filtrar por situação').parentElement).toHaveClass('order-2', 'min-[500px]:order-2');
   expect(screen.getByLabelText('Pesquisar contrato').closest('.order-1')).toHaveClass('lg:order-4');
-  expect(screen.getByRole('link', { name: 'Cadastrar contrato' })).toHaveAttribute('href', '/contratos/novo');
+  expect(screen.getByRole('button', { name: 'Cadastrar contrato' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Ordenar contratos' })).toHaveTextContent('Início mais recente');
 });
 
 
@@ -185,7 +186,7 @@ test('status concluído fica em aba própria, sem confundir com arquivamento', a
   expect(screen.getByText('CONCLUIDO')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('tab', { name: 'Contratos ativos' }));
   expect(screen.queryByText('CONCLUIDO')).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('tab', { name: 'Contratos concluídos' }));
+  fireEvent.click(screen.getByRole('tab', { name: 'Contratos finalizados' }));
   expect(screen.getByText('CONCLUIDO')).toBeInTheDocument();
   expect(screen.queryByText('PLANEJADO')).not.toBeInTheDocument();
 });
@@ -220,10 +221,8 @@ test('ao voltar do detalhe, restaura aba Arquivados, busca e posição da págin
     fireEvent.change(screen.getByLabelText('Pesquisar contrato'), { target: { value: 'QA-' } });
     fireEvent.click(screen.getByRole('tab', { name: 'Contratos arquivados' }));
     expect(await screen.findByText('QA-ARQUIVADO')).toBeInTheDocument();
-    // Evita que o jsdom tente navegar de fato (não implementado). O clique
-    // continua exercitando o onClick que persiste a aba e a rolagem.
-    const link = screen.getByRole('link', { name: 'Abrir contrato QA-ARQUIVADO' });
-    link.addEventListener('click', evento => evento.preventDefault(), { once: true });
+    // A abertura é contextual, pelo modal, e persiste a aba e a rolagem.
+    const link = screen.getByRole('button', { name: 'Abrir detalhes do contrato QA-ARQUIVADO' });
     fireEvent.click(link);
     primeira.unmount();
     expect(window.sessionStorage.getItem('tec08:carteira:estado:v1')).toContain('"arquivados"');
@@ -245,7 +244,7 @@ test('cartão arquivado aproxima indicadores e ações, sem placa preta', async 
     inicioVigencia: '2026-01-01', terminoVigencia: '2026-12-31', arquivadoEm: '2026-11-06T00:00:00Z' } as Awaited<ReturnType<typeof listarContratos>>[number]]);
   renderComConsultas(<ContratosListPage />);
   fireEvent.click(screen.getByRole('tab', { name: 'Contratos arquivados' }));
-  const link = await screen.findByRole('link', { name: 'Abrir contrato QA-ARQUIVADO' });
+  const link = await screen.findByRole('button', { name: 'Abrir detalhes do contrato QA-ARQUIVADO' });
   expect(link).toHaveClass('pt-14', 'sm:pt-4');
   const resumo = within(link).getByTestId('resumo-planejamento-contrato');
   expect(resumo).toHaveClass('grid-cols-3');
@@ -293,6 +292,8 @@ test('carteira inclui filtro pendente de conclusão sem misturar concluídos', a
   fireEvent.click(screen.getByRole('tab', { name: 'Contratos pendentes de conclusão' }));
   expect(screen.getByText('PENDENTE')).toBeInTheDocument();
   expect(screen.getAllByText('Pendente de conclusão').length).toBeGreaterThan(0);
+  const cartao = await screen.findByRole('button', { name: 'Abrir detalhes do contrato PENDENTE' });
+  expect(within(cartao).getByText('Pendente de conclusão')).toHaveClass('border-yellow-400/60');
 });
 
 
@@ -307,11 +308,11 @@ test('contrato reaberto sem alterações fica somente em revisão', async () => 
   pendentes.mockResolvedValue([]);
   await act(async () => { renderComConsultas(<ContratosListPage />); });
   fireEvent.click(screen.getByRole('tab', { name: 'Contratos em revisão' }));
-  const cartao = await screen.findByRole('link', { name: 'Abrir contrato QA-REVISAO' });
+  const cartao = await screen.findByRole('button', { name: 'Abrir detalhes do contrato QA-REVISAO' });
   expect(within(cartao).getByText('Em revisão')).toBeInTheDocument();
   expect(within(cartao).queryByText('Pendente de conclusão')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('tab', { name: 'Contratos pendentes de conclusão' }));
-  expect(screen.queryByRole('link', { name: 'Abrir contrato QA-REVISAO' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Abrir detalhes do contrato QA-REVISAO' })).not.toBeInTheDocument();
 });
 
 
@@ -339,13 +340,13 @@ test('TEC08: o filtro de conclusão fica apenas em Todos e não contradiz Ativos
   ] as Awaited<ReturnType<typeof listarContratos>>);
   await act(async () => { renderComConsultas(<ContratosListPage />); });
   fireEvent.change(screen.getByLabelText('Filtrar por situação'), { target: { value: 'CONCLUIDO' } });
-  expect(screen.getByRole('link', { name: 'Abrir contrato CONCLUIDO' })).toBeInTheDocument();
-  expect(screen.queryByRole('link', { name: 'Abrir contrato CONCLUIDO-ARQUIVADO' })).not.toBeInTheDocument();
-  expect(screen.queryByRole('link', { name: 'Abrir contrato ATIVO' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Abrir detalhes do contrato CONCLUIDO' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Abrir detalhes do contrato CONCLUIDO-ARQUIVADO' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Abrir detalhes do contrato ATIVO' })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('tab', { name: 'Contratos ativos' }));
   expect(screen.queryByLabelText('Filtrar por situação')).not.toBeInTheDocument();
-  expect(screen.getByRole('link', { name: 'Abrir contrato ATIVO' })).toBeInTheDocument();
-  expect(screen.queryByRole('link', { name: 'Abrir contrato CONCLUIDO' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Abrir detalhes do contrato ATIVO' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Abrir detalhes do contrato CONCLUIDO' })).not.toBeInTheDocument();
 });
 
 
@@ -365,9 +366,9 @@ test('TEC08-03: suspensão exibe selo amarelo e não oferece Retomar nos cartõe
     inicioVigencia: '2026-01-01', terminoVigencia: '2027-01-01', arquivadoEm: null,
   } as Awaited<ReturnType<typeof listarContratos>>[number]]);
   renderComConsultas(<ContratosListPage />);
-  await screen.findByRole('link', { name: 'Abrir contrato SUSP-UI' });
+  await screen.findByRole('button', { name: 'Abrir detalhes do contrato SUSP-UI' });
   fireEvent.change(screen.getByLabelText('Filtrar por situação'), { target: { value: 'SUSPENSO' } });
-  const link = screen.getByRole('link', { name: 'Abrir contrato SUSP-UI' });
+  const link = screen.getByRole('button', { name: 'Abrir detalhes do contrato SUSP-UI' });
   expect(link).toHaveAttribute('data-situacao', 'suspensos');
   expect(within(link).getByText('Suspenso')).toHaveClass('text-yellow-200');
   expect(screen.queryByRole('button', { name: /Retomar contrato/ })).not.toBeInTheDocument();
@@ -381,7 +382,7 @@ test('TEC08-03: ações de contrato arquivado permanecem no topo e fora do link 
   renderComConsultas(<ContratosListPage />);
   await screen.findByRole('tab', { name: 'Contratos arquivados' });
   fireEvent.click(screen.getByRole('tab', { name: 'Contratos arquivados' }));
-  const link = screen.getByRole('link', { name: 'Abrir contrato ARQ-UI' });
+  const link = screen.getByRole('button', { name: 'Abrir detalhes do contrato ARQ-UI' });
   const reativar = screen.getByRole('button', { name: 'Reativar contrato ARQ-UI' });
   const excluir = screen.getByRole('button', { name: 'Excluir contrato ARQ-UI' });
   expect(reativar.parentElement).toHaveClass('absolute', 'right-3', 'top-3');
@@ -404,6 +405,6 @@ test.each([
     status, modoCalculo: 'SIMPLES', inicioVigencia: '2026-01-01', terminoVigencia: '2026-12-31',
   } as Awaited<ReturnType<typeof listarContratos>>[number]]);
   await act(async () => { renderComConsultas(<ContratosListPage />); });
-  expect(screen.getByRole('link', { name: /Abrir contrato CONTRATO-ESTADO-2026/ }))
+  expect(screen.getByRole('button', { name: /Abrir detalhes do contrato CONTRATO-ESTADO-2026/ }))
     .toHaveAttribute('data-tec08-estado', estado);
 });

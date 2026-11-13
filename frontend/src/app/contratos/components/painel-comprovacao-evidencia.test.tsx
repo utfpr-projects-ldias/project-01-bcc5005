@@ -266,10 +266,10 @@ test('permissão de envio não implica permissão de editar planejamento nem obr
 });
 
 
-test('orientações têm limite visual de 130 caracteres', async () => {
+test('orientações têm limite visual de 65 caracteres', async () => {
   render(<PainelComprovacaoEvidencia {...props} />);
   fireEvent.click(await screen.findByRole('button', { name: 'Editar orientações' }));
-  expect(screen.getByRole('textbox', { name: 'Orientações da evidência' })).toHaveAttribute('maxLength', '130');
+  expect(screen.getByRole('textbox', { name: 'Orientações da evidência' })).toHaveAttribute('maxLength', '65');
 });
 
 test('quando já existe comprovante o ícone é lápis e a verificação exige confirmação', async () => {

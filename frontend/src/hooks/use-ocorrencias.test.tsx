@@ -2,7 +2,7 @@ import { renderHook, act } from '@testing-library/react';
 import { useOcorrencias } from './use-ocorrencias';
 import { useConsulta } from '@/app/components/provedor-consultas';
 
-jest.mock('@/app/components/provedor-consultas', () => ({ useConsulta: jest.fn() }));
+jest.mock('@/app/components/provedor-consultas', () => ({ useConsulta: jest.fn(), useRepositorioConsultasOpcional: () => null }));
 const consulta = useConsulta as jest.Mock;
 const buscar = jest.fn();
 const atualizar = jest.fn(async () => []);
@@ -53,5 +53,16 @@ test('geração de recorrências não força regeneração, usa endpoint dedicad
   expect(total).toBe(3);
   expect(buscar).toHaveBeenCalledWith(expect.stringContaining('/contratos/contrato-01/entregaveis/entregavel-03/ocorrencias/gerar'),
     expect.objectContaining({ method: 'POST', credentials: 'include', body: JSON.stringify({ forcarRegeneracaoFuturas: false }) }));
+  expect(atualizar).toHaveBeenCalledTimes(1);
+});
+
+test('prévia de replanejamento não atualiza nem envia confirmação; aplicação confirma token', async () => {
+  const plano = { inicioFuturo:'2026-12-01', terminoPrevisto:'2026-12-31', periodicidade:'MENSAL' };
+  buscar.mockResolvedValueOnce({ok:true,json:async()=>({confirmacao:'token',aplicado:false})}).mockResolvedValueOnce({ok:true,json:async()=>({confirmacao:'token',aplicado:true})});
+  const { result } = renderHook(() => useOcorrencias('c'));
+  await act(async()=>{await result.current.replanejar('e',plano);});
+  expect(atualizar).not.toHaveBeenCalled();
+  await act(async()=>{await result.current.replanejar('e',{...plano,confirmacao:'token'});});
+  expect(buscar).toHaveBeenLastCalledWith(expect.stringContaining('/contratos/c/entregaveis/e/ocorrencias/replanejar'),expect.objectContaining({body:JSON.stringify({...plano,confirmacao:'token'})}));
   expect(atualizar).toHaveBeenCalledTimes(1);
 });

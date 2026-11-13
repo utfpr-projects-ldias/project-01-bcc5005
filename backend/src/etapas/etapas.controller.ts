@@ -46,6 +46,30 @@ export class EtapasController {
     return this.etapas.detalhar(contratoId, etapaId);
   }
 
+  @Patch(':etapaId/solicitar-conclusao')
+  @ExigirPoliticaOperacional('etapas:editar', { tipo:'recurso',recurso:'etapa',parametro:'etapaId',parametroContratoPai:'contratoId' })
+  solicitarConclusao(@Param('contratoId') contratoId:string,@Param('etapaId') etapaId:string,@Req() req:RequisicaoAutorizada){
+    return this.etapas.solicitarConclusao(contratoId,etapaId,req.usuarioDominio!);
+  }
+
+  @Patch(':etapaId/solicitar-encerramento')
+  @ExigirPoliticaOperacional('etapas:editar', { tipo:'recurso',recurso:'etapa',parametro:'etapaId',parametroContratoPai:'contratoId' })
+  solicitarEncerramento(@Param('contratoId') contratoId:string,@Param('etapaId') etapaId:string,@Body() dto:EncerrarEtapaDto,@Req() req:RequisicaoAutorizada){
+    return this.etapas.solicitarEncerramento(contratoId,etapaId,req.usuarioDominio!,dto.motivo);
+  }
+
+  @Patch(':etapaId/devolver-conclusao')
+  @ExigirPoliticaOperacional('etapas:concluir', { tipo:'recurso',recurso:'etapa',parametro:'etapaId',parametroContratoPai:'contratoId' })
+  devolverConclusao(@Param('contratoId') c:string,@Param('etapaId') id:string,@Body() dto:JustificativaDecisaoDto,@Req() req:RequisicaoAutorizada){
+    return this.etapas.devolverSolicitacao(c,id,req.usuarioDominio!,'conclusao',dto.motivo);
+  }
+
+  @Patch(':etapaId/devolver-encerramento')
+  @ExigirPoliticaOperacional('etapas:encerrar', { tipo:'recurso',recurso:'etapa',parametro:'etapaId',parametroContratoPai:'contratoId' })
+  devolverEncerramento(@Param('contratoId') c:string,@Param('etapaId') id:string,@Body() dto:JustificativaDecisaoDto,@Req() req:RequisicaoAutorizada){
+    return this.etapas.devolverSolicitacao(c,id,req.usuarioDominio!,'encerramento',dto.motivo);
+  }
+
   @Patch(':etapaId/concluir')
   @ExigirPoliticaOperacional('etapas:concluir', { tipo: 'recurso', recurso: 'etapa', parametro: 'etapaId', parametroContratoPai: 'contratoId' })
   concluir(@Param('contratoId') contratoId: string, @Param('etapaId') etapaId: string, @Req() req: RequisicaoAutorizada) {
@@ -56,6 +80,13 @@ export class EtapasController {
   @ExigirPoliticaOperacional('etapas:visualizar', { tipo: 'recurso', recurso: 'etapa', parametro: 'etapaId', parametroContratoPai: 'contratoId' })
   historico(@Param('contratoId') contratoId: string, @Param('etapaId') etapaId: string, @Req() req: RequisicaoAutorizada) {
     return this.etapas.historico(contratoId, etapaId, req.usuarioDominio!);
+  }
+
+  @Patch(':etapaId/finalizar')
+  @ExigirPoliticaOperacional('etapas:concluir', { tipo: 'recurso', recurso: 'etapa', parametro: 'etapaId', parametroContratoPai: 'contratoId' })
+  finalizar(@Param('contratoId') c: string, @Param('etapaId') id: string,
+    @Body() dto: JustificativaDecisaoDto, @Req() req: RequisicaoAutorizada) {
+    return this.etapas.finalizar(c, id, req.usuarioDominio!, dto.motivo);
   }
 
   @Patch(':etapaId/encerrar')

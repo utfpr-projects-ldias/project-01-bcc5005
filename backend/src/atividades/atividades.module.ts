@@ -6,10 +6,11 @@ import { Entregavel } from '../entregaveis/entregavel.entity.js';
 import { AtividadeEntity } from './atividade.entity.js';
 import { AtividadesController } from './atividades.controller.js';
 import { AtividadesService } from './atividades.service.js';
+import { AtividadeComprovantesService } from './atividade-comprovantes.service.js';
 
 @Module({
   imports: [TypeOrmModule.forFeature([AtividadeEntity, Entregavel]), AutorizacaoModule, AuditoriaModule],
-  providers: [AtividadesService],
+  providers: [AtividadesService, AtividadeComprovantesService],
   controllers: [AtividadesController],
 })
 export class AtividadesModule {}

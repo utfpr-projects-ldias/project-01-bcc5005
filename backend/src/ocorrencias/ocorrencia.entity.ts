@@ -60,7 +60,7 @@ import { StatusOcorrencia } from './status-ocorrencia.enum.js';
   ['entregavelId', 'periodoInicio', 'periodoFim'],
   {
     unique: true,
-    where: `"origem" = 'RECORRENTE'`,
+    where: `"origem" = 'RECORRENTE' AND "substituida_em" IS NULL`,
   },
 )
 @Check('ck_ocorrencias_titulo_nao_vazio', 'length(btrim("titulo")) > 0')
@@ -207,6 +207,51 @@ export class Ocorrencia {
   })
   quantidadeRealizada!: string | null;
 
+  /** Critérios locais configuráveis: execução e comprovação permanecem independentes. */
+  @Column({ name: 'exige_atividade', type: 'boolean', default: true })
+  exigeAtividade!: boolean;
+  /** Quantidades mínimas verificadas exigidas para a solicitação de conclusão (0 = opcional). */
+  @Column({ name: 'minimo_atividades_verificadas', type: 'smallint', default: 0 })
+  minimoAtividadesVerificadas!: number;
+  @Column({ name: 'minimo_evidencias_verificadas', type: 'smallint', default: 0 })
+  minimoEvidenciasVerificadas!: number;
+  /** Requisitos individuais: NULL conserva regras legadas até a primeira edição explícita. */
+  @Column({ name: 'minimo_fotos', type: 'smallint', nullable: true })
+  minimoFotos!: number | null;
+  @Column({ name: 'minimo_relatorios', type: 'smallint', nullable: true })
+  minimoRelatorios!: number | null;
+  @Column({ name: 'minimo_evidencias_livres', type: 'smallint', nullable: true })
+  minimoEvidenciasLivres!: number | null;
+  /** Peso relativo apenas dentro da série recorrente, não o peso do contrato. */
+  @Column({ name: 'peso_periodo', type: 'numeric', precision: 7, scale: 4, nullable: true })
+  pesoPeriodo!: string | null;
+  @Column({ name: 'evidencia_exigida', type: 'varchar', length: 12, default: 'NENHUMA' })
+  evidenciaExigida!: 'NENHUMA' | 'FOTO' | 'RELATORIO' | 'AMBOS';
+  @Column({ name: 'permite_encerramento_excepcional', type: 'boolean', default: true })
+  permiteEncerramentoExcepcional!: boolean;
+
+  /** Encerramento administrativo não representa realização física ou aprovação de quantidade. */
+  @Column({ name: 'motivo_encerramento', type: 'text', nullable: true })
+  motivoEncerramento!: string | null;
+
+  @Column({ name: 'encerrada_em', type: 'timestamptz', nullable: true })
+  encerradaEm!: Date | null;
+
+  @Column({ name: 'encerrada_por', type: 'uuid', nullable: true })
+  encerradaPor!: string | null;
+
+  /** Meta quantitativa fixada no planejamento; execução das atividades não sobrescreve a meta. */
+  @Column({ name: 'meta_quantidade', type: 'numeric', precision: 18, scale: 3, nullable: true })
+  metaQuantidade!: string | null;
+
+  /** Registro mensurável por quantidade ou execução apenas descritiva. */
+  @Column({ name: 'modo_registro', type: 'varchar', length: 16, default: 'DESCRITIVO' })
+  modoRegistro!: 'QUANTITATIVO' | 'DESCRITIVO';
+
+  /** Snapshot da quantidade aprovada; histórico protegido de edições comuns. */
+  @Column({ name: 'quantidade_aprovada', type: 'numeric', precision: 18, scale: 3, nullable: true })
+  quantidadeAprovada!: string | null;
+
   /**
    * Observações operacionais da ocorrência.
    */
@@ -215,6 +260,9 @@ export class Ocorrencia {
     nullable: true,
   })
   observacoes!: string | null;
+
+  @Column({ name: 'substituida_em', type: 'timestamptz', nullable: true })
+  substituidaEm!: Date | null;
 
   /**
    * Identifica a origem da ocorrência.

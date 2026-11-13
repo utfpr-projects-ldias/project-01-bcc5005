@@ -8,6 +8,7 @@ export enum StatusContrato {
   EM_EXECUCAO = 'EM_EXECUCAO',
   EM_ENCERRAMENTO = 'EM_ENCERRAMENTO',
   CONCLUIDO = 'CONCLUIDO',
+  FINALIZADO = 'FINALIZADO',
   /** Encerramento antecipado não equivale a execução completa. */
   ENCERRADO = 'ENCERRADO',
   SUSPENSO = 'SUSPENSO',

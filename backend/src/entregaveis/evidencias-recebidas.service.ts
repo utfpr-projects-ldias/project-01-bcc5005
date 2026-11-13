@@ -1,3 +1,4 @@
+import { aptidaoFisicaParaConclusao } from './conclusao-fisica.js';
 import { normalizarNomeArquivo } from '../armazenamento/nome-arquivo.js';
 import { createHash } from 'node:crypto';
 import {
@@ -10,7 +11,7 @@ import { ARMAZENAMENTO_ARQUIVOS, type ArmazenamentoArquivos } from '../armazenam
 import { ArmazenamentoIndisponivelError } from '../armazenamento/armazenamento-local.js';
 import { ArquivoInvalidoError, LimiteArmazenamentoError } from '../armazenamento/politica-arquivos.js';
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
-import { documentacaoVerificada, filhosEmRevisao, concluirEtapaAposFilhos, atividadesPendentesDeVerificacao } from './conclusao-documental.js';
+import { documentacaoVerificada, concluirEtapaAposFilhos, atividadesPendentesDeVerificacao } from './conclusao-documental.js';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import { EventoAuditoria } from '../auditoria/evento-auditoria.entity.js';
 import { PermissaoContrato } from '../autorizacao/permissao-contrato.entity.js';
@@ -55,7 +56,7 @@ export class EvidenciasRecebidasService {
 
   }
   private validarPlanejamentoAtivo(entregavel: Entregavel, esperada: EvidenciaEsperada): void {
-    if (entregavel.statusExecucao === 'CONCLUIDO') throw new ConflictException('Entregável concluído: reabra antes de alterar evidências');
+    if (['CONCLUIDO','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(entregavel.statusExecucao ?? '')) throw new ConflictException('Entregável concluído: reabra antes de alterar evidências');
     if (entregavel.arquivadoEm || esperada.arquivadoEm)
       throw new ConflictException('Item arquivado: reative-o antes de enviar, editar ou verificar comprovantes');
   }
@@ -74,9 +75,10 @@ export class EvidenciasRecebidasService {
       .setLock('pessimistic_write').where('c.id = :id', { id: contratoId }).getOne();
     if (!contrato) throw new NotFoundException('Contrato não encontrado');
     if (contrato.arquivadoEm) throw new ConflictException('Contrato arquivado: operação não permitida');
-    if ((contrato.status === 'CONCLUIDO' || contrato.status === 'ENCERRADO') ||
-      (contrato.reabertoEm === null && await documentacaoVerificada(m, contratoId) && !await filhosEmRevisao(m, contratoId)))
-      throw new ConflictException('Contrato concluído: reabra antes de alterar evidências');
+    // A documentação estar completa não é decisão formal de conclusão.
+    // Evita bloquear comprovantes de novos entregáveis em contrato ainda aberto.
+    if (['CONCLUIDO','ENCERRADO','FINALIZADO'].includes(contrato.status))
+      throw new ConflictException('Contrato finalizado: reabra-o antes de alterar evidências');
   }
   private async leituraDeArquivoPermitida(ator: UsuarioAutenticado, entregavel: Entregavel): Promise<boolean> {
     if (ator.perfil === PerfilUsuario.ADMINISTRADOR) return true;
@@ -190,8 +192,10 @@ export class EvidenciasRecebidasService {
       if (!e) throw new NotFoundException('Entregável não encontrado neste contrato');
       if (e.arquivadoEm) throw new ConflictException('Entregável arquivado');
       await this.etapaAtiva(m, e);
-      if (e.reabertoEm === null && await documentacaoVerificada(m, contratoId, e.etapaId, entregavelId))
-        throw new ConflictException('Entregável verificado: reabra antes de cadastrar outra evidência');
+      // Evidências previamente verificadas não fecham automaticamente o planejamento.
+      // Apenas o estado explícito CONCLUIDO/FINALIZADO bloqueia uma nova exigência.
+      if (['CONCLUIDO', 'FINALIZADO', 'PENDENTE_CONCLUSAO', 'PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? ''))
+        throw new ConflictException('Entregável fechado ou aguardando aprovação: reabra antes de cadastrar outra evidência');
       if (dto.obrigatoria === false && !await this.alterarObrigatoriedadePermitido(m, contratoId, ator))
         throw new ForbiddenException('Somente Administrador ou usuário delegado pode cadastrar evidência opcional');
       const repo = m.getRepository(EvidenciaEsperada);
@@ -328,7 +332,8 @@ export class EvidenciasRecebidasService {
     if (!entregavel.arquivadoEm &&
         (entregavel.statusExecucao !== StatusExecucaoEntregavel.CONCLUIDO || entregavel.reabertoEm) &&
         await documentacaoVerificada(m, contratoId, entregavel.etapaId, entregavel.id) &&
-        !await atividadesPendentesDeVerificacao(m, contratoId, null, entregavel.id)) {
+        !await atividadesPendentesDeVerificacao(m, contratoId, null, entregavel.id) &&
+        (await aptidaoFisicaParaConclusao(m, entregavel)).apto) {
       const anterior = entregavel.statusExecucao;
       const reabertoAntes = entregavel.reabertoEm ?? null;
       entregavel.statusExecucao = StatusExecucaoEntregavel.CONCLUIDO;
@@ -350,7 +355,7 @@ export class EvidenciasRecebidasService {
         dadosAnteriores: antes,
         dadosPosteriores: { ...depois, motivo: 'COMPROVACAO_COMPLETA' },
       });
-    })) conclusoes.push('etapa');
+    }, ator.id)) conclusoes.push('etapa');
     // Um contrato documentalmente completo aguarda conclusão operacional explícita.
     // A ação PATCH /contratos/:id/concluir verifica a permissão e registra auditoria.
     return conclusoes;
@@ -392,8 +397,10 @@ export class EvidenciasRecebidasService {
       const { entregavel, esperada } = await this.contexto(m, contratoId, entregavelId, esperadaId);
       this.validarPlanejamentoAtivo(entregavel, esperada);
       await this.etapaAtiva(m, entregavel);
-      if (!entregavel.reabertoEm && await documentacaoVerificada(m, contratoId, entregavel.etapaId, entregavelId))
-        throw new ConflictException('Reabra o entregável antes de reabrir suas evidências');
+      // Checklist documental 100% não é, por si só, conclusão física do entregável.
+      // Bloqueie apenas se a decisão de conclusão operacional realmente estiver vigente.
+      if (!entregavel.reabertoEm && entregavel.statusExecucao === StatusExecucaoEntregavel.CONCLUIDO)
+        throw new ConflictException('Reabra o entregável concluído antes de reabrir suas evidências');
       const repo = m.getRepository(ComprovanteEvidencia);
       const ultima = await repo.createQueryBuilder('c').setLock('pessimistic_write')
         .where('c.evidenciaEsperadaId = :esperadaId', { esperadaId })

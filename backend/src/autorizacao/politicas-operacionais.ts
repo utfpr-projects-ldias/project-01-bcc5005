@@ -39,6 +39,10 @@ export const POLITICAS_OPERACIONAIS = {
   'ocorrencias:criar': { recurso: 'ocorrencia', classe: 'planejamento', escopo: 'contrato' },
   'ocorrencias:editar': { recurso: 'ocorrencia', classe: 'planejamento', escopo: 'recurso' },
   'ocorrencias:registrar': { recurso: 'ocorrencia', classe: 'operacional', escopo: 'recurso' },
+  'ocorrencias:vincular-evidencia': { recurso: 'ocorrencia', classe: 'operacional', escopo: 'recurso' },
+  'ocorrencias:concluir': { recurso: 'ocorrencia', classe: 'operacional', escopo: 'recurso' },
+  'ocorrencias:reabrir': { recurso: 'ocorrencia', classe: 'operacional', escopo: 'recurso' },
+  'ocorrencias:replanejar': { recurso: 'entregavel', classe: 'planejamento', escopo: 'recurso' },
   'atividades:listar': { recurso: 'atividade', classe: 'leitura', escopo: 'contrato' },
   'atividades:visualizar': { recurso: 'atividade', classe: 'leitura', escopo: 'recurso' },
   'atividades:registrar': { recurso: 'atividade', classe: 'operacional', escopo: 'contrato' },
@@ -62,6 +66,8 @@ export const POLITICAS_OPERACIONAIS = {
   'documentos:arquivar': { recurso: 'documento', classe: 'planejamento', escopo: 'recurso' },
   'documentos:reativar': { recurso: 'documento', classe: 'planejamento', escopo: 'recurso' },
   'documentos:excluir': { recurso: 'documento', classe: 'planejamento', escopo: 'recurso' },
+  'pesos:atualizar': { recurso: 'entregavel', classe: 'planejamento', escopo: 'contrato' },
+  'execucao:visualizar': { recurso: 'entregavel', classe: 'leitura', escopo: 'contrato' },
   'execucao:atualizar': { recurso: 'entregavel', classe: 'planejamento', escopo: 'recurso' },
 } as const;
 

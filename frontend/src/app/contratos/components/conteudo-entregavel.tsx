@@ -1,6 +1,11 @@
 'use client';
+import { BotaoAcaoModal } from '@/app/components/botoes-modal';
+import { MenuAcoesObjeto } from '@/app/components/menu-acoes-objeto';
 import { AbasRolaveis } from '@/app/components/abas-rolaveis';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
+import { resultadoFinalizacao } from '@/lib/finalizados';
+import { IconeStatus } from '@/app/components/icones-status';
+import dynamic from 'next/dynamic';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { dataPlanejada, ROTULOS_PERIODICIDADE, ROTULOS_TIPO, type Entregavel, type ResumoDocumentalEntregavel } from '@/lib/entregaveis';
 import { PainelComprovacaoEvidencia } from './painel-comprovacao-evidencia';
@@ -11,16 +16,19 @@ import { HistoricoEntregavel } from './historico-entregavel';
 import { AtividadesVinculadas } from './atividades-vinculadas';
 import { IconeEvidencia } from './icone-evidencia';
 import { estadoVisualEvidencia } from '@/lib/estado-visual-evidencia';
+import { estadoDoObjeto } from '@/lib/identidade-operacional';
 import { nomeArquivoLegivel } from '@/lib/nome-arquivo';
 import { rotuloCodigoPublico } from '@/lib/codigos-publicos';
 import { toastSucesso, toastAviso } from '@/app/components/toast-notificacoes';
 
+const PainelOcorrenciasEntregavel = dynamic(() => import('@/app/ocorrencias/components/painel-ocorrencias').then(m => m.PainelOcorrencias), { ssr: false });
+
 type Campo = [nome: string, valor: string | null | undefined];
-function Quadro({ titulo, campos, estado = 'normal' }: { titulo: string; campos: Campo[]; estado?: 'normal' | 'revisao' | 'concluido' | 'arquivado' }) {
-  return <section data-tec08-secao-contextual data-tec08-estado={estado} className={`min-w-0 space-y-2 rounded-xl border p-3 sm:p-4 ${estado === 'arquivado' ? 'border-amber-500/45 bg-amber-500/[0.04]' : estado === 'concluido' ? 'border-violet-400/40 bg-violet-500/[0.04]' : estado === 'revisao' ? 'border-teal-500/40 bg-teal-500/[0.04]' : 'border-brand-green/20 bg-brand-darkgreen/5'}`}>
-    <h2 className={`text-lg font-semibold ${estado === 'arquivado' ? 'text-amber-200' : estado === 'concluido' ? 'text-violet-200' : estado === 'revisao' ? 'text-teal-200' : 'text-brand-neon'}`}>{titulo}</h2>
+function Quadro({ titulo, campos, estado = 'normal' }: { titulo: string; campos: Campo[]; estado?: 'normal' | 'revisao' | 'concluido' | 'finalizado' | 'arquivado' }) {
+  return <section data-tec08-secao-contextual data-tec08-estado={estado} className={`min-w-0 space-y-2 rounded-xl border p-3 sm:p-4 ${estado === 'arquivado' ? 'border-amber-500/45 bg-amber-500/[0.04]' : estado === 'concluido' ? 'border-violet-400/40 bg-violet-500/[0.04]' : estado === 'finalizado' ? 'border-purple-400/40 bg-purple-500/[0.04]' : estado === 'revisao' ? 'border-teal-500/40 bg-teal-500/[0.04]' : 'border-brand-green/20 bg-brand-darkgreen/5'}`}>
+    <h2 className={`text-lg font-semibold ${estado === 'arquivado' ? 'text-amber-200' : estado === 'concluido' ? 'text-violet-200' : estado === 'finalizado' ? 'text-purple-200' : estado === 'revisao' ? 'text-teal-200' : 'text-brand-neon'}`}>{titulo}</h2>
     <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm lg:grid-cols-3">
-      {campos.map(([nome, valor]) => <div key={nome} className={`min-w-0 ${nome === 'Critério operacional' ? 'col-span-full' : ''}`}><dt className="text-xs text-foreground/60">{nome}</dt>
+      {campos.map(([nome, valor]) => <div key={nome} className={`min-w-0 ${['Descrição','Observações','Critério operacional'].includes(nome) ? 'col-span-full border-t border-current/15 pt-3' : ''}`}><dt className="text-xs text-foreground/60">{nome}</dt>
         <dd className="mt-0.5 whitespace-pre-wrap break-words text-sm">{valor?.trim() || 'Não informado'}</dd></div>)}
     </dl>
   </section>;
@@ -50,7 +58,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
   const [ocultasLocais, setOcultasLocais] = useState<string[]>([]);
   const evidenciasAtivas = item.evidenciasEsperadas.filter(e => !ocultasLocais.includes(e.id));
   // Estado persistido do entregável prevalece sobre qualquer permissão de envio.
-  const concluidoSemReabertura = item.statusExecucao === 'CONCLUIDO' && !item.reabertoEm;
+  const concluidoSemReabertura = ['CONCLUIDO', 'FINALIZADO', 'PENDENTE_CONCLUSAO', 'PENDENTE_ENCERRAMENTO'].includes(item.statusExecucao ?? '') && !item.reabertoEm;
   const comprovantesHabilitados = podeEnviarComprovantes && !bloqueadoPorPai && !paiArquivado && !paiConcluido && !item.arquivadoEm && !concluidoSemReabertura;
   const planejamentoHabilitado = !bloqueadoPorPai && !paiArquivado && !paiConcluido && !item.arquivadoEm && !concluidoSemReabertura;
   const [historicoExpandido, setHistoricoExpandido] = useState(false);
@@ -59,7 +67,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
   const statusInicialCarregado = item.evidenciasEsperadas.length === 0 ||
     consultaStatus.chave === chaveEvidencias;
   const estadoEvidencias = statusInicialCarregado ? consultaStatus.status : {}; // sem cartão provisório na aba errada
-  const [focoRetornoEvidencia, setFocoRetornoEvidencia] = useState<HTMLButtonElement | null>(null);
+  const [focoRetornoEvidencia, setFocoRetornoEvidencia] = useState<HTMLElement | null>(null);
   useEffect(() => {
     let ativo = true;
     // Máximo de dez registros por entregável. Uma consulta sem sucesso não vira
@@ -105,15 +113,15 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
       setConfirmarArquivamento(null);
       setOcultasLocais(atuais => [...new Set([...atuais, id])]);
       // A lista local muda imediatamente; o refresh não esconde/recria o modal.
-      if (evidenciaId === id) setEvidenciaId(null);
+      if (evidenciaId === id) voltarAoEntregavel();
       toastAviso('Evidência arquivada.');
       atualizarEstadoEvidencias(); aoAtualizarEsperada?.();
       void listarEvidenciasArquivadas(item.contratoId, item.id).then(setArquivadas).catch(() => {});
     } catch (e) { setErroArquivo(e instanceof Error ? e.message : 'Não foi possível arquivar a evidência.'); }
     finally { setArquivandoItem(false); }
   }
-  const classeAbaAtiva = item.arquivadoEm ? 'bg-amber-500/20 text-amber-200' : item.reabertoEm ? 'bg-teal-700/25 text-teal-200' : item.statusExecucao === 'CONCLUIDO' ? 'bg-violet-500/20 text-violet-200' : 'bg-brand-green text-on-brand-green';
-  const [secaoSelecionada, setSecaoSelecionada] = useState<'evidencias' | 'atividades'>('evidencias');
+  const classeAbaAtiva = item.arquivadoEm ? 'bg-amber-500/20 text-amber-200' : item.reabertoEm ? 'bg-teal-700/25 text-teal-200' : item.statusExecucao === 'FINALIZADO' ? 'bg-purple-500/20 text-purple-200' : item.statusExecucao === 'CONCLUIDO' ? 'bg-violet-500/20 text-violet-200' : 'bg-brand-green text-on-brand-green';
+  const [secaoSelecionada, setSecaoSelecionada] = useState<'ocorrencias' | 'atividades' | 'evidencias'>(contextoModal && item.tipo !== 'UNICO' ? 'ocorrencias' : 'evidencias');
   const [abaChecklist, setAbaChecklist] = useState<'ativas' | 'pendentes' | 'revisao' | 'concluidas' | 'arquivadas'>('ativas');
   const abrirArquivo = abaChecklist === 'arquivadas';
   const [arquivadas, setArquivadas] = useState<Array<{ id: string; codigoPublico?: number; tipoEvidencia: string; obrigatoria: boolean; arquivadoEm: string | null }>>([]);
@@ -136,7 +144,11 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
     registrarVoltaEvidencia?.(null);
     const marcador = historicoCadastro.current;
     historicoCadastro.current = null;
-    if (marcador && window.history.state?.__cadastroEvidencia === marcador) window.history.back();
+    if (marcador && window.history.state?.__cadastroEvidencia === marcador) {
+      const estado = { ...window.history.state };
+      delete estado.__cadastroEvidencia;
+      window.history.replaceState(estado, '', window.location.href);
+    }
   }
   function abrirCadastro() {
     if (criandoEvidencia) { fecharCadastro(); return; }
@@ -204,7 +216,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
       await alterarArquivoEvidencia(item.contratoId, item.id, id, 'reativar', motivoEvidencia.trim());
       // O item volta às ativas, mas permanece nesta aba de arquivadas.
       // Nenhum detalhe é aberto automaticamente após a atualização.
-      setEvidenciaId(null);
+      if (evidenciaId === id) voltarAoEntregavel();
       setConfirmarReativacao(null); setMotivoEvidencia('');
       setArquivadas(anterior => anterior.filter(e => e.id !== id));
       setOcultasLocais(atuais => atuais.filter(valor => valor !== id));
@@ -218,7 +230,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
   // Capturamos a posição ANTES dessa troca e restauramos no commit do React,
   // antes da pintura, sem scrollIntoView e sem alterar a rolagem do contrato.
   const origem = useRef<{ area: HTMLElement | null; topo: number; esquerda: number;
-    paginaY: number; paginaX: number; botao: HTMLButtonElement; evidenciaId: string } | null>(null);
+    paginaY: number; paginaX: number; botao: HTMLElement; evidenciaId: string } | null>(null);
   const restaurarAoVoltar = useRef(false);
   const historicoEvidencia = useRef<string | null>(null);
   const sequenciaEvidencia = useRef(0);
@@ -242,15 +254,15 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
     window.addEventListener('popstate', voltarHistorico);
     return () => window.removeEventListener('popstate', voltarHistorico);
   }, [registrarVoltaEvidencia]);
-  function abrirEvidencia(evento: MouseEvent<HTMLButtonElement>, id: string, editar = false) {
+  function abrirEvidencia(gatilho: HTMLElement, id: string, editar = false) {
     if (evidenciaId) return; // Evita duplo clique duplicar o histórico e gerar duas camadas.
-    const area = evento.currentTarget.closest<HTMLElement>('.overflow-y-auto');
+    const area = gatilho.closest<HTMLElement>('.overflow-y-auto');
     origem.current = { area, topo: area?.scrollTop ?? 0, esquerda: area?.scrollLeft ?? 0,
-      paginaY: window.scrollY, paginaX: window.scrollX, botao: evento.currentTarget, evidenciaId: id };
+      paginaY: window.scrollY, paginaX: window.scrollX, botao: gatilho, evidenciaId: id };
     restaurarAoVoltar.current = false;
     ignorarRetornoEditor.current = false;
-    setFocoRetornoEvidencia(evento.currentTarget);
-    setEditarEvidenciaAberta(editar);
+    setFocoRetornoEvidencia(gatilho);
+    setEditarEvidenciaAberta(editar || Boolean(planejamentoHabilitado && podeEditarEsperada && !paiArquivado && !bloqueadoPorPai));
     const marcador = `evidencia:${item.id}:${id}:${++sequenciaEvidencia.current}`;
     const estado = window.history.state;
     window.history.pushState({ ...(estado && typeof estado === 'object' ? estado : {}), __modalEvidencia: marcador }, '', window.location.href);
@@ -266,7 +278,13 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
     const marcador = historicoEvidencia.current;
     historicoEvidencia.current = null;
     ignorarRetornoEditor.current = false;
-    if (marcador && window.history.state?.__modalEvidencia === marcador) window.history.back();
+    // Mantém a rota: fechar/substituir uma evidência não pode navegar
+    // o iframe nem o modal do contrato para trás no histórico.
+    if (marcador && window.history.state?.__modalEvidencia === marcador) {
+      const estado = { ...window.history.state };
+      delete estado.__modalEvidencia;
+      window.history.replaceState(estado, '', window.location.href);
+    }
   }
   useLayoutEffect(() => {
     if (evidenciaId !== null || !restaurarAoVoltar.current) return;
@@ -301,33 +319,31 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
       ['Periodicidade', item.periodicidade ? ROTULOS_PERIODICIDADE[item.periodicidade] : null],
       ['Configuração de recorrência', item.configuracaoPeriodicidade ? `Versão ${item.configuracaoPeriodicidade.versao}` : null],
     ] as Campo[] : []),
-    ['Peso operacional', item.peso === null ? null : `${item.peso}%`],
-    ['Observações', item.observacoes],
+    ['Peso operacional', item.peso === null ? null : `${Number(item.peso).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`],
+    ['Descrição', item.descricao], ['Observações', item.observacoes],
     ...(item.criterioConclusao?.trim() ? [['Critério operacional', item.criterioConclusao]] as Campo[] : []),
   ];
   const evidenciaNaAba = (id: string): boolean => {
     const status = estadoEvidencias[id];
-    if (abaChecklist === 'concluidas') return status?.status === 'VERIFICADA';
+    if (abaChecklist === 'concluidas') return resultadoFinalizacao('evidencia', status?.status) === 'concluido';
     if (abaChecklist === 'revisao') return Boolean(status?.reabertoEm && status?.status !== 'VERIFICADA');
     if (abaChecklist === 'pendentes') return Boolean(status && status.status !== 'VERIFICADA' && !status.reabertoEm);
-    return true; // Todas: verificadas, pendentes e reabertas; arquivadas são consultadas separadamente.
+    return !status || status.status !== 'VERIFICADA'; // Ativas: pendentes e em revisão; verificadas têm sua própria aba.
   };
-  return <><div data-tec08-contexto-operacional data-tec08-estado={item.arquivadoEm ? 'arquivado' : item.reabertoEm ? 'revisao' : item.statusExecucao === 'CONCLUIDO' ? 'concluido' : 'normal'} className="min-w-0 space-y-3">
-    {item.descricao && <p className="whitespace-pre-wrap break-words text-xs text-foreground/75">{item.descricao}</p>}
-    <Quadro titulo="Identificação e planejamento" campos={campos} estado={item.arquivadoEm ? 'arquivado' : item.reabertoEm ? 'revisao' : concluidoSemReabertura ? 'concluido' : 'normal'} />
+  const estadoProprioEntregavel = estadoDoObjeto({objeto:'entregavel',status:item.statusExecucao,arquivado:Boolean(item.arquivadoEm),reaberto:Boolean(item.reabertoEm)});
+  return <><div data-tec08-contexto-operacional data-tec08-estado={estadoProprioEntregavel} className="min-w-0 space-y-3">
+    <Quadro titulo="Identificação e planejamento" campos={campos} estado={estadoProprioEntregavel === 'finalizado' ? 'finalizado' : estadoProprioEntregavel === 'concluido' ? 'concluido' : estadoProprioEntregavel === 'arquivado' ? 'arquivado' : estadoProprioEntregavel === 'revisao' ? 'revisao' : 'normal'} />
     {podeVerHistorico && <details onToggle={evento => setHistoricoExpandido(evento.currentTarget.open)} className="rounded-xl border border-brand-green/20 px-3 py-2">
       <summary data-tec08-titulo-historico className="cursor-pointer text-sm font-semibold text-brand-neon">Rastreabilidade do entregável</summary>
       {historicoExpandido && <HistoricoEntregavel contratoId={item.contratoId} entregavelId={item.id} versao={versaoEstado} ocultarTitulo />}
     </details>}
     <nav aria-label="Seções do entregável" className="flex min-w-0 items-center justify-start">
       <div role="tablist" aria-label="Conteúdo do entregável" className="inline-flex max-w-full items-center gap-1 rounded-xl border border-current/20 bg-background/55 p-1">
-        <button type="button" role="tab" id={`secao-evidencias-${item.id}`} aria-controls={`conteudo-evidencias-${item.id}`}
-          aria-selected={secaoSelecionada === 'evidencias'} onClick={() => setSecaoSelecionada('evidencias')}
-          className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors duration-200 ${secaoSelecionada === 'evidencias' ? classeAbaAtiva : 'text-foreground/70 hover:bg-foreground/5'}`}>
-          <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="10.5" cy="10.5" r="6.25"/><path d="m15 15 5 5m-12-10 2 2 3-3"/>
-          </svg> Evidências
-        </button>
+        {item.tipo !== 'UNICO' && <button type="button" role="tab" id={`secao-ocorrencias-${item.id}`} aria-controls={`conteudo-ocorrencias-${item.id}`}
+          aria-selected={secaoSelecionada === 'ocorrencias'} onClick={() => setSecaoSelecionada('ocorrencias')}
+          className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors duration-200 ${secaoSelecionada === 'ocorrencias' ? classeAbaAtiva : 'text-foreground/70 hover:bg-foreground/5'}`}>
+          <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="10" cy="10" r="6"/><path d="m14 14 6 6m-8-10-2 2"/></svg> Ocorrências
+        </button>}
         <span aria-hidden="true" className="mx-1 h-6 w-px bg-foreground/20" />
         <button type="button" role="tab" id={`secao-atividades-${item.id}`} aria-controls={`conteudo-atividades-${item.id}`}
           aria-selected={secaoSelecionada === 'atividades'} onClick={() => setSecaoSelecionada('atividades')}
@@ -336,12 +352,32 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
             <path d="M9 6h11M9 12h11M9 18h11M4 6.5l1 1 2-2M4 12.5l1 1 2-2M4 18.5l1 1 2-2"/>
           </svg> Atividades
         </button>
+        <span aria-hidden="true" className="mx-1 h-6 w-px bg-foreground/20" />
+        <button type="button" role="tab" id={`secao-evidencias-${item.id}`} aria-controls={`conteudo-evidencias-${item.id}`}
+          aria-selected={secaoSelecionada === 'evidencias'} onClick={() => setSecaoSelecionada('evidencias')}
+          className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors duration-200 ${secaoSelecionada === 'evidencias' ? classeAbaAtiva : 'text-foreground/70 hover:bg-foreground/5'}`}>
+          <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="10.5" cy="10.5" r="6.25"/><path d="m15 15 5 5m-12-10 2 2 3-3"/>
+          </svg> Evidências
+        </button>
       </div>
     </nav>
+    {item.tipo !== 'UNICO' && secaoSelecionada === 'ocorrencias' && <div id={`conteudo-ocorrencias-${item.id}`} role="tabpanel" aria-labelledby={`secao-ocorrencias-${item.id}`} className="min-w-0">
+      <PainelOcorrenciasEntregavel contratoId={item.contratoId} entregavelIdInicial={item.id}
+        estadoContextual={estadoProprioEntregavel}
+        somenteLeitura={bloqueadoPorPai || paiArquivado || paiConcluido || Boolean(item.arquivadoEm)} embutido />
+    </div>}
     {secaoSelecionada === 'evidencias' && <div id={`conteudo-evidencias-${item.id}`} role="tabpanel" aria-labelledby={`secao-evidencias-${item.id}`} className="min-w-0">
     <section className={`min-h-[min(34dvh,300px)] space-y-3 rounded-xl border p-3 sm:p-4 ${item.arquivadoEm ? 'border-amber-500/45 bg-amber-500/[0.04]' : item.statusExecucao === 'CONCLUIDO' ? 'border-violet-400/40 bg-violet-500/[0.04]' : item.reabertoEm ? 'border-teal-700/40 bg-teal-700/[0.04]' : 'border-brand-green/20 bg-brand-darkgreen/5'}`}>
       <header className="space-y-2">
+        <div className="flex flex-wrap items-start justify-between gap-3">
         <h2 className="text-lg font-semibold" data-tec08-titulo-secao-evidencias>Evidências</h2>
+        {abaChecklist === 'ativas' && planejamentoHabilitado && (podeCriarEvidencia ?? podeEditarEsperada) && <button type="button" aria-expanded={criandoEvidencia} disabled={item.evidenciasEsperadas.length >= 10 && !criandoEvidencia}
+          onClick={abrirCadastro} data-tec08-acao-criar
+          className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-lg bg-brand-green px-3 py-2 text-xs font-semibold text-on-brand-green hover:brightness-110">
+          <span className="mr-1.5 inline-flex align-middle"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 9h8M12 13v5M9.5 15.5h5"/></svg></span>{criandoEvidencia ? 'Cancelar cadastro' : item.evidenciasEsperadas.length >= 10 ? 'Limite de evidências' : 'Nova evidência'}
+        </button>}
+        </div>
       {!abrirArquivo && (() => {
         const obrigatorias = evidenciasAtivas.filter(e => e.obrigatoria);
         const opcionais = evidenciasAtivas.filter(e => !e.obrigatoria);
@@ -349,7 +385,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
         const verificadas = statusInicialCarregado ? obrigatorias.filter(e => estadoEvidencias[e.id]?.status === 'VERIFICADA').length : resumoValido ? resumoInicial!.verificadas : 0;
         const opcionaisVerificadas = statusInicialCarregado ? opcionais.filter(e => estadoEvidencias[e.id]?.status === 'VERIFICADA').length : resumoValido ? (resumoInicial!.verificadasTotal! - resumoInicial!.verificadas) : 0;
         const contagemDisponivel = statusInicialCarregado || resumoValido;
-        return <><p className="min-h-4 text-xs tabular-nums text-foreground/65">{contagemDisponivel ? `${verificadas}/${obrigatorias.length} evidências obrigatórias verificadas` : "Consultando evidências…"}</p>
+        return <><p className="min-h-4 text-xs tabular-nums text-foreground/65">{contagemDisponivel ? `${verificadas}/${obrigatorias.length} evidências obrigatórias` : "Consultando evidências…"}</p>
           {contagemDisponivel && opcionais.length > 0 && <p className="text-xs tabular-nums text-foreground/60">{opcionaisVerificadas}/{opcionais.length} opcionais verificadas · não bloqueiam a conclusão</p>}
           <div className="flex h-1.5 max-w-64 gap-0.5 overflow-hidden rounded-full" role="img"
             aria-label={contagemDisponivel ? `${verificadas} de ${obrigatorias.length} evidências obrigatórias verificadas` : 'Consultando comprovação das evidências obrigatórias'}>
@@ -361,27 +397,22 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 sm:flex-nowrap">
         <AbasRolaveis className="min-w-0 flex-1"><div role="tablist" aria-label="Consultar evidências" className={`inline-flex items-center gap-1 rounded-xl border p-1 ${item.arquivadoEm ? 'border-amber-500/40' : item.statusExecucao === 'CONCLUIDO' ? 'border-violet-400/35' : item.reabertoEm ? 'border-teal-700/35' : 'border-brand-green/20'}`}>
           <button type="button" role="tab" aria-selected={abaChecklist === 'ativas'} onClick={() => setAbaChecklist('ativas')}
-            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-none ${abaChecklist === 'ativas' ? classeAbaAtiva : 'text-foreground/65 hover:text-foreground'}`}>Todas</button>
-          <button type="button" role="tab" aria-selected={abaChecklist === 'pendentes'} onClick={() => setAbaChecklist('pendentes')}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-none ${abaChecklist === 'pendentes' ? classeAbaAtiva : 'text-foreground/65 hover:bg-violet-500/10'}`}>Pendentes de verificação</button>
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-none ${abaChecklist === 'ativas' ? classeAbaAtiva : 'text-foreground/65 hover:text-foreground'}`}> <span className="inline-flex items-center gap-1.5"><IconeStatus tipo="ativas"/>Ativas</span></button>
           <button type="button" role="tab" aria-selected={abaChecklist === 'revisao'} onClick={() => setAbaChecklist('revisao')}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-none ${abaChecklist === 'revisao' ? classeAbaAtiva : 'text-foreground/65 hover:bg-teal-700/10'}`}>Em revisão</button>
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-none ${abaChecklist === 'revisao' ? classeAbaAtiva : 'text-foreground/65 hover:bg-teal-700/10'}`}> <span className="inline-flex items-center gap-1.5"><IconeStatus tipo="revisao"/>Em revisão</span></button>
+          <button type="button" role="tab" aria-selected={abaChecklist === 'pendentes'} onClick={() => setAbaChecklist('pendentes')}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-none ${abaChecklist === 'pendentes' ? classeAbaAtiva : 'text-foreground/65 hover:bg-violet-500/10'}`}> <span className="inline-flex items-center gap-1.5"><IconeStatus tipo="pendentes"/>Pendentes de verificação</span></button>
           <button type="button" role="tab" aria-selected={abaChecklist === 'concluidas'}
-            aria-label="Evidências concluídas" onClick={() => setAbaChecklist('concluidas')}
+            aria-label="Evidências finalizadas" title="Evidências verificadas" onClick={() => setAbaChecklist('concluidas')}
             className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-none ${abaChecklist === 'concluidas' ? classeAbaAtiva : 'text-foreground/65 hover:bg-violet-500/10'}`}>
-            ◉ Concluídas
+            <span className="inline-flex items-center gap-1.5"><IconeStatus tipo="concluidas"/>Finalizadas</span>
           </button>
           {<button type="button" role="tab" aria-selected={abrirArquivo}
             aria-label="Evidências arquivadas" title="Evidências arquivadas" disabled={criandoEvidencia} onClick={() => void alternarArquivo()}
-            className={`inline-flex h-8 w-9 items-center justify-center rounded-lg transition-colors ${abrirArquivo ? 'bg-amber-500/20 text-amber-200' : 'text-amber-300/80 hover:bg-amber-500/10'}`}>
+            className={`inline-flex h-8 w-9 items-center justify-center rounded-lg transition-colors ${abrirArquivo ? 'bg-amber-500/20 text-amber-200' : 'text-foreground/65 hover:bg-foreground/10 hover:text-foreground'}`}>
             <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v12h14V8M9 13h6"/></svg>
           </button>}
         </div></AbasRolaveis>
-        {abaChecklist === 'ativas' && planejamentoHabilitado && (podeCriarEvidencia ?? podeEditarEsperada) && <button type="button" aria-expanded={criandoEvidencia} disabled={item.evidenciasEsperadas.length >= 10 && !criandoEvidencia}
-          onClick={abrirCadastro} data-tec08-acao-criar
-          className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-lg bg-brand-green px-3 py-2 text-xs font-semibold text-on-brand-green hover:brightness-110">
-          {criandoEvidencia ? 'Cancelar cadastro' : item.evidenciasEsperadas.length >= 10 ? 'Limite de evidências' : 'Nova evidência'}
-        </button>}
       </div>
       {!abrirArquivo && <>
       {criandoEvidencia && createPortal(<ModalEtapa titulo="Nova evidência esperada" contexto="Checklist documental" ocupado={salvandoNova}
@@ -399,7 +430,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
           </select>
         </div>
         <label className="block space-y-1">Orientações (opcional)
-          <textarea value={novaDescricao} maxLength={130} onChange={e => setNovaDescricao(e.target.value)}
+          <textarea value={novaDescricao} maxLength={65} onChange={e => setNovaDescricao(e.target.value)}
             className="block min-h-20 w-full rounded-lg border border-brand-green/40 bg-background p-2" /></label>
         {comprovantesHabilitados && <div className="space-y-2">
           <label htmlFor={`arquivo-inicial-${item.id}`} className="block font-medium">Comprovante inicial (opcional)</label>
@@ -431,8 +462,8 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
               {obrigatoria ? `Obrigatórias (${grupo.length})` : `Opcionais (${grupo.length})`}
             </h3>
             <ul aria-label={obrigatoria ? 'Evidências obrigatórias' : 'Evidências opcionais'} className="space-y-2">
-              {grupo.map(e => <li key={e.id} data-evidencia-estado={estadoVisualEvidencia(estadoEvidencias[e.id]?.status, estadoEvidencias[e.id]?.reabertoEm, Boolean(e.arquivadoEm))} data-tec08-card-evidencia data-tec08-item-clicavel className={`group relative min-w-0 rounded-xl border pb-14 transition-opacity duration-150 ${e.arquivadoEm ? 'border-amber-500/60 bg-background text-foreground' : estadoEvidencias[e.id]?.reabertoEm ? 'border-teal-700/60 bg-background text-foreground' : estadoEvidencias[e.id]?.status === 'VERIFICADA' ? 'border-violet-500/60 bg-background hover:border-violet-400 hover:opacity-100 focus-within:border-violet-400 focus-within:opacity-100' : 'border-brand-green/25 bg-background hover:border-brand-green/50 focus-within:border-brand-neon'}`}>
-                <div className="relative flex min-w-0 flex-wrap items-center justify-between gap-3 px-3 py-2.5">
+              {grupo.map(e => <li key={e.id} data-evidencia-estado={estadoVisualEvidencia(estadoEvidencias[e.id]?.status, estadoEvidencias[e.id]?.reabertoEm, Boolean(e.arquivadoEm))} data-tec08-card-evidencia data-tec08-item-clicavel tabIndex={0} aria-label={`Abrir detalhes da evidência ${e.tipoEvidencia}`} onKeyDown={evento => { if (evento.target !== evento.currentTarget) return; if (evento.key === "Enter" || evento.key === " ") { evento.preventDefault(); abrirEvidencia(evento.currentTarget, e.id); } }} onClick={(evento) => { const alvo = evento.target; const elemento = alvo instanceof Element ? alvo : alvo instanceof Node ? alvo.parentElement : null; const acao = elemento?.closest('button,a,input,textarea,select,[role="dialog"]'); if (acao && evento.currentTarget.contains(acao)) return; abrirEvidencia(evento.currentTarget, e.id); }} className={`group relative min-w-0 cursor-pointer rounded-xl border pb-14 transition-opacity duration-150 ${e.arquivadoEm ? 'border-amber-500/60 bg-amber-500/[0.10] text-amber-100' : estadoEvidencias[e.id]?.reabertoEm ? 'border-teal-700/60 bg-teal-900/[0.10] text-teal-100' : estadoEvidencias[e.id]?.status === 'VERIFICADA' ? 'border-violet-500/60 bg-violet-500/[0.06] hover:border-violet-400 focus-within:border-violet-400' : 'border-brand-green/25 bg-background hover:border-brand-green/50 focus-within:border-brand-neon'}`}>
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 px-3 py-2.5">
                   {estadoEvidencias[e.id]?.status === 'VERIFICADA' ? <span aria-label="Evidência com comprovação documental verificada" title="Verificada"
                     className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-violet-400/65 bg-violet-500/20 text-violet-200">
                     <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="h-5 w-5">
@@ -441,9 +472,9 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
                   </span> : <IconeEvidencia nome={estadoEvidencias[e.id]?.arquivo} tipo={e.tipoEvidencia} />}
                   <div className="min-w-0 flex-1 text-left">
                     <button type="button" data-evidencia-esperada-id={e.id}
-                      onClick={evento => abrirEvidencia(evento, e.id)}
+                      onClick={evento => abrirEvidencia(evento.currentTarget, e.id)}
                       aria-label={`Ver detalhes da evidência esperada ${e.tipoEvidencia}`}
-                      data-tec08-titulo-evidencia className={`block w-full appearance-none border-0 bg-transparent p-0 text-left break-words text-sm font-semibold focus-visible:outline-2 ${estadoEvidencias[e.id]?.status === 'VERIFICADA'
+                      data-tec08-titulo-evidencia className={`block w-full appearance-none border-0 bg-transparent p-0 text-left break-words text-sm font-semibold focus-visible:outline-2 before:absolute before:inset-0 before:z-[1] before:rounded-xl before:content-[''] ${estadoEvidencias[e.id]?.status === 'VERIFICADA'
                       ? 'text-violet-800 dark:text-violet-200'
                       : 'text-brand-neon'}`}>
                       {estadoEvidencias[e.id]?.arquivo ? nomeArquivoLegivel(estadoEvidencias[e.id]?.arquivo ?? '') : e.tipoEvidencia}
@@ -462,47 +493,46 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
 
                   </div>
                 </div>
-                {planejamentoHabilitado && (podeArquivarEvidencia || podeReabrirEvidencia || podeEditarEsperada) && <div className="pointer-events-auto absolute bottom-3 right-3 z-[2] flex max-w-[calc(100%-1.5rem)] shrink-0 flex-nowrap items-center justify-end gap-1.5 rounded-lg bg-background/95 p-0.5">
-                  {podeReabrirEvidencia && estadoEvidencias[e.id]?.status === 'VERIFICADA' && <button type="button" title={`Reabrir evidência ${e.tipoEvidencia}`} aria-label={`Reabrir evidência ${e.tipoEvidencia}`} disabled={arquivandoItem || bloqueadoPorPai || paiArquivado || Boolean(item.arquivadoEm)} onClick={() => setConfirmarReabertura(e.id)} className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-teal-500/50 bg-teal-950 px-2 text-xs font-semibold text-teal-100 hover:bg-teal-900 disabled:cursor-not-allowed disabled:border-slate-500/35 disabled:bg-slate-700/10 disabled:text-slate-400"><span aria-hidden="true" className="text-base">⟳</span> Reabrir</button>}
-                  {podeArquivarEvidencia && <button type="button" title={`Arquivar evidência ${e.tipoEvidencia}`} aria-label={`Arquivar evidência ${e.tipoEvidencia}`}
-                    disabled={arquivandoItem || ocupadoArquivo || bloqueadoPorPai || paiArquivado || Boolean(item.arquivadoEm) || estadoEvidencias[e.id]?.status === 'VERIFICADA'} onClick={() => { if (!bloqueadoPorPai && !paiArquivado && !item.arquivadoEm && estadoEvidencias[e.id]?.status !== 'VERIFICADA') setConfirmarArquivamento(e.id); }}
-                    className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border disabled:cursor-not-allowed ${bloqueadoPorPai ? 'border-slate-500/35 bg-slate-500/10 text-slate-500' : 'border-amber-500/40 text-amber-200 hover:bg-amber-500/15'} disabled:opacity-70`}>
-                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v12h14V8M9 13h6"/></svg>
-                  </button>}
-                  {podeEditarEsperada && <button type="button" title={`Editar evidência ${e.tipoEvidencia}`} aria-label={`Editar evidência ${e.tipoEvidencia}`}
-                    disabled={bloqueadoPorPai || paiArquivado || Boolean(item.arquivadoEm) || estadoEvidencias[e.id]?.status === 'VERIFICADA'}
-                    onClick={evento => { if (!bloqueadoPorPai && !paiArquivado && !item.arquivadoEm) abrirEvidencia(evento, e.id, true); }}
-                    data-tec08-acao-evidencia="editar" className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-brand-green/40 text-brand-neon hover:bg-brand-green/15 disabled:cursor-not-allowed disabled:border-slate-500/35 disabled:bg-slate-700/10 disabled:text-slate-400">
-                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><path d="m15 5 4 4M4 20l4.5-1 11-11a2 2 0 0 0-3-3l-11 11L4 20Z"/></svg>
-                  </button>}
-                </div>}
+
               </li>)}</ul>
           </div>;
         })}</div>}</>}
       {erroArquivo && <p role="alert" className="text-sm text-error-text">{erroArquivo}</p>}
       {abrirArquivo && <div role="tabpanel" aria-label="Evidências arquivadas" className="min-h-36 space-y-2">
         {arquivadas.length === 0 ? <p className="text-sm text-foreground/70">Nenhuma evidência arquivada.</p> :
-          <ul className="space-y-2">{arquivadas.map(e => <li key={e.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/50 bg-amber-50 dark:bg-[#261d0d] p-3 text-sm text-foreground">
-            <button type="button" data-evidencia-esperada-id={e.id} onClick={ev => abrirEvidencia(ev, e.id)} className="min-w-0 flex-1 text-left focus-visible:outline-2 focus-visible:outline-amber-300">
+          <ul className="space-y-2">{arquivadas.map(e => <li key={e.id} tabIndex={0} aria-label={`Abrir detalhes da evidência arquivada ${e.tipoEvidencia}`} onKeyDown={evento => { if (evento.target !== evento.currentTarget) return; if (evento.key === 'Enter' || evento.key === ' ') { evento.preventDefault(); abrirEvidencia(evento.currentTarget, e.id); } }} onClick={evento => { const alvo = evento.target; const elemento = alvo instanceof Element ? alvo : alvo instanceof Node ? alvo.parentElement : null; const acao = elemento?.closest('button,a,input,textarea,select'); if (acao && evento.currentTarget.contains(acao)) return; abrirEvidencia(evento.currentTarget, e.id); }} className="relative flex cursor-pointer flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/50 bg-amber-50 dark:bg-[#261d0d] p-3 text-sm text-foreground">
+            <button type="button" data-evidencia-esperada-id={e.id} onClick={ev => abrirEvidencia(ev.currentTarget, e.id)} className="min-w-0 flex-1 text-left focus-visible:outline-2 focus-visible:outline-amber-300 before:absolute before:inset-0 before:z-[1] before:rounded-lg before:content-['']">
               <span className="block font-mono text-xs text-foreground/60">{rotuloCodigoPublico(e.codigoPublico)} · {e.obrigatoria ? 'Obrigatória' : 'Opcional'}</span>
               {e.tipoEvidencia}{!e.arquivadoEm && paiArquivado ? ' · somente leitura por arquivamento do pai' : ''}
             </button>
-            <div className="flex flex-wrap gap-2">
-              {podeReativarEvidencia && Boolean(e.arquivadoEm) && <button type="button" disabled={ocupadoArquivo || bloqueadoPorPai} onClick={() => setConfirmarReativacao(e.id)} className="rounded-lg border border-amber-400/50 px-3 py-1.5 text-amber-900 dark:text-amber-100 hover:bg-amber-500/15 disabled:opacity-50">Reativar</button>}
-              {podeExcluirEvidenciaArquivada && Boolean(e.arquivadoEm) && !bloqueadoPorPai && <button type="button" aria-label={`Excluir evidência arquivada ${e.tipoEvidencia}`} disabled={ocupadoArquivo} onClick={() => setConfirmarExclusao(e.id)} className="inline-flex items-center gap-1.5 rounded-lg border border-red-400/60 bg-red-600/10 px-3 py-1.5 text-red-100 hover:bg-red-600/20 disabled:opacity-50"><svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 10v7M14 10v7" /></svg>Excluir</button>}
-            </div>
+
           </li>)}</ul>}
       </div>}
     </section>
     </div>}
     {secaoSelecionada === 'atividades' && <div id={`conteudo-atividades-${item.id}`} role="tabpanel" aria-labelledby={`secao-atividades-${item.id}`} className="min-w-0">
-      <AtividadesVinculadas contratoId={item.contratoId} entregavelId={item.id} estadoContextual={item.arquivadoEm ? 'arquivado' : item.reabertoEm ? 'revisao' : item.statusExecucao === 'CONCLUIDO' ? 'concluido' : 'normal'} somenteLeitura={bloqueadoPorPai || paiArquivado || paiConcluido || Boolean(item.arquivadoEm)} ocultarAcessoDiario={contextoModal} />
+      <AtividadesVinculadas contratoId={item.contratoId} entregavelId={item.id} estadoContextual={estadoProprioEntregavel} somenteLeitura={bloqueadoPorPai || paiArquivado || paiConcluido || Boolean(item.arquivadoEm)} ocultarAcessoDiario={contextoModal} />
     </div>}
 
   </div>
   {selecionada && createPortal(<ModalEtapa titulo={selecionada.tipoEvidencia} codigoPublico={selecionada.codigoPublico} contexto={`Evidência esperada · ${selecionada.obrigatoria ? 'Obrigatória' : 'Opcional'}`}
     camada="evidencia" arquivado={Boolean(selecionada.arquivadoEm)} concluido={!selecionada.arquivadoEm && !estadoEvidencias[selecionada.id]?.reabertoEm && estadoEvidencias[selecionada.id]?.status === 'VERIFICADA'} revisao={Boolean(estadoEvidencias[selecionada.id]?.reabertoEm)} estadoContextual={estadoEvidencias[selecionada.id]?.status === 'PENDENTE_VERIFICACAO' ? 'pendente' : 'normal'} ocupado={false} focoRetorno={focoRetornoEvidencia}
     textoFechar="Fechar ×" somenteIconeFechar bloqueadoPorSubmodal={edicaoAberta}
+    acoes={<>
+      <MenuAcoesObjeto rotulo={selecionada.arquivadoEm || estadoEvidencias[selecionada.id]?.status === 'VERIFICADA' ? 'Reabrir' : 'Fechar'}
+        acaoDireta={selecionada.arquivadoEm && podeReativarEvidencia && !bloqueadoPorPai ? () => setConfirmarReativacao(selecionada.id)
+          : !selecionada.arquivadoEm && planejamentoHabilitado && podeReabrirEvidencia && estadoEvidencias[selecionada.id]?.status === 'VERIFICADA' && !bloqueadoPorPai && !paiArquivado
+            ? () => setConfirmarReabertura(selecionada.id) : undefined}>
+      {selecionada.arquivadoEm && podeReativarEvidencia && !bloqueadoPorPai &&
+        <BotaoAcaoModal intencao="reativar" disabled={ocupadoArquivo} onClick={() => setConfirmarReativacao(selecionada.id)}>⟳ Reativar</BotaoAcaoModal>}
+      {!selecionada.arquivadoEm && planejamentoHabilitado && podeReabrirEvidencia && estadoEvidencias[selecionada.id]?.status === 'VERIFICADA' && !bloqueadoPorPai && !paiArquivado &&
+        <BotaoAcaoModal intencao="reabrir" disabled={arquivandoItem} onClick={() => setConfirmarReabertura(selecionada.id)}>Reabrir</BotaoAcaoModal>}
+      {!selecionada.arquivadoEm && planejamentoHabilitado && podeArquivarEvidencia && estadoEvidencias[selecionada.id]?.status !== 'VERIFICADA' && !bloqueadoPorPai && !paiArquivado &&
+        <BotaoAcaoModal intencao="arquivar" disabled={ocupadoArquivo} onClick={() => setConfirmarArquivamento(selecionada.id)}>Arquivar</BotaoAcaoModal>}
+      </MenuAcoesObjeto>
+      {selecionada.arquivadoEm && podeExcluirEvidenciaArquivada && !bloqueadoPorPai &&
+        <button type="button" title="Excluir evidência arquivada" aria-label="Excluir evidência arquivada" disabled={ocupadoArquivo} onClick={() => setConfirmarExclusao(selecionada.id)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/35 bg-red-500/10 text-red-300 hover:bg-red-500/20 disabled:opacity-40">×</button>}
+    </>}
     rotuloFechar="Fechar evidência"
     onFechar={() => {
       // O editor pode já estar desmontado após confirmar o comprovante.
@@ -512,10 +542,10 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
     }}>
     <section aria-label="Detalhe da evidência esperada" className="min-w-0 space-y-4">
       <PainelComprovacaoEvidencia contratoId={item.contratoId} entregavelId={item.id}
-        esperadaId={selecionada.id} podeEditar={planejamentoHabilitado && podeEditarEsperada && editarEvidenciaAberta && !selecionada.arquivadoEm}
+        esperadaId={selecionada.id} podeEditar={planejamentoHabilitado && podeEditarEsperada && editarEvidenciaAberta && !selecionada.arquivadoEm && estadoEvidencias[selecionada.id]?.status !== 'VERIFICADA'}
         podeArquivar={planejamentoHabilitado && (podeArquivarEvidencia ?? podeEditarEsperada) && !selecionada.arquivadoEm} ocultarArquivamento
         podeAlterarObrigatoriedade={planejamentoHabilitado && podeAlterarObrigatoriedade && editarEvidenciaAberta}
-        podeEnviar={comprovantesHabilitados && editarEvidenciaAberta && !selecionada.arquivadoEm}
+        podeEnviar={comprovantesHabilitados && editarEvidenciaAberta && !selecionada.arquivadoEm && estadoEvidencias[selecionada.id]?.status !== 'VERIFICADA'}
         somenteLeitura={!editarEvidenciaAberta}
         registrarVoltaEdicao={registrarEditor} cancelamentoNoCabecalho
         onComprovanteAlterado={() => { atualizarEstadoEvidencias(); aoAtualizarEsperada?.(); }}
@@ -533,7 +563,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
         try {
           await excluirEvidenciaArquivada(item.contratoId, item.id, id);
           setArquivadas(lista => lista.filter(e => e.id !== id));
-          if (evidenciaId === id) setEvidenciaId(null);
+          if (evidenciaId === id) voltarAoEntregavel();
           setConfirmarExclusao(null);
           toastSucesso('Evidência excluída com sucesso.');
           atualizarEstadoEvidencias(); aoAtualizarEsperada?.();

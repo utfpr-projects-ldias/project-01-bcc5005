@@ -27,7 +27,10 @@ export default function EditarContratoPage() {
   const [salvando, setSalvando] = useState(false);
   const autorizado = !!perfil?.ativo && !!acessoQuery.dados?.podeEditar && !erroConsulta;
   const contrato = autorizado ? contratoQuery.dados : undefined;
-  const responsaveis = responsaveisQuery.dados?.usuarios ?? [];
+  const responsaveis = [
+    ...(admin && perfil ? [{ ...perfil, criadoEm: '' }] : []),
+    ...(responsaveisQuery.dados?.usuarios ?? []),
+  ].filter((u,indice,todos)=>todos.findIndex(v=>v.id===u.id)===indice);
   async function salvar(dados: DadosContrato) {
     setSalvando(true); setErro('');
     try {

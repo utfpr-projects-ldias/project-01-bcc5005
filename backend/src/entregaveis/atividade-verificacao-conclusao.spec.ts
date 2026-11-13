@@ -20,11 +20,11 @@ function cenario({ outraAtividade = false, documentoPronto = true }: {
   outraAtividade?: boolean; documentoPronto?: boolean } = {}) {
   const contrato = { id: contratoId, status: 'EM_EXECUCAO', arquivadoEm: null };
   const etapa = { id: etapaId, contratoId, status: 'EM_ANDAMENTO', arquivadoEm: null, reabertoEm: new Date() };
-  const entregavel = { id: entregavelId, contratoId, etapaId, statusExecucao: 'EM_ANDAMENTO',
+  const entregavel = { id: entregavelId, contratoId, etapaId, statusExecucao: 'EM_ANDAMENTO', tipo: 'UNICO', percentualExecucao: 100,
     arquivadoEm: null, reabertoEm: new Date() };
   const atividade = Object.assign(new AtividadeEntity(), {
     id: atividadeId, contratoId, titulo: 'Reunião', dataHora: new Date('2026-11-09T15:00:00Z'),
-    tipo: 'Reunião', descricao: 'Trabalho realizado', responsavel: 'QA', status: 'REGISTRADA',
+    tipo: 'Reunião', descricao: 'Trabalho realizado', responsavel: 'QA', status: 'PENDENTE_CONCLUSAO',
     entregaveis: [entregavel], verificadaEm: null, arquivadaEm: null, excluidaEm: null,
   });
   const repoEntregavel = { findOneBy: jest.fn(async () => entregavel), save: jest.fn(async () => entregavel) };
@@ -33,7 +33,7 @@ function cenario({ outraAtividade = false, documentoPronto = true }: {
     if (sql.includes('COUNT(DISTINCT')) return [{ etapas: 1, entregaveis: 1,
       evidencias: 2, verificadas: documentoPronto ? 2 : 1,
       etapas_sem_entregavel: 0, entregaveis_sem_evidencia: 0 }];
-    return [{ pendentes: sql.includes("at.status = 'REGISTRADA'") && outraAtividade }];
+    return [{ pendentes: sql.includes("at.status IN ('REGISTRADA', 'PENDENTE_CONCLUSAO')") && outraAtividade }];
   });
   const manager = {
     findOne: jest.fn(async (entidade: unknown) => entidade === AtividadeEntity ? atividade : entidade === Contrato ? contrato : null),
@@ -41,6 +41,7 @@ function cenario({ outraAtividade = false, documentoPronto = true }: {
     query,
     find: jest.fn(async (entidade: unknown) => entidade === Entregavel ? [entregavel] : entidade === Etapa ? [etapa] : []),
     save: jest.fn(async (_entidade: unknown, registro: unknown) => registro),
+    findBy: jest.fn(async () => []),
   };
   const acoes: AcaoAuditoria[] = [];
   const auditoria = {
@@ -78,6 +79,15 @@ describe('HU08 — verificação da última atividade e fechamento auditável', 
     // Para reabrir a atividade, primeiro é obrigatório reabrir o contexto.
     await expect(c.service.reabrir(contratoId, atividadeId, ator, 'Correção posterior necessária'))
       .rejects.toBeInstanceOf(ConflictException);
+  });
+  it('não fecha entregável após verificar atividade se execução física estiver incompleta', async () => {
+    const c = cenario();
+    c.entregavel.percentualExecucao = 60;
+    await c.service.verificar(contratoId, atividadeId, ator, '');
+    expect(c.atividade.status).toBe('VERIFICADA');
+    expect(c.entregavel.statusExecucao).toBe('EM_ANDAMENTO');
+    expect(c.repoEtapa.save).not.toHaveBeenCalled();
+    expect(c.acoes).toEqual([AcaoAuditoria.ATIVIDADE_VERIFICADA]);
   });
   it('não conclui se outra atividade ainda está REGISTRADA', async () => {
     const c = cenario({ outraAtividade: true });

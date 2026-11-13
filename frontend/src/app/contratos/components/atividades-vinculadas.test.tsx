@@ -4,7 +4,7 @@ import { useAtividades } from '@/hooks/use-atividades';
 import { useEntregaveis } from '@/hooks/use-entregaveis';
 import { useEtapas } from '@/hooks/use-etapas';
 
-jest.mock('@/app/components/provedor-consultas', () => ({ useRepositorioConsultasOpcional: () => ({}) }));
+jest.mock('@/app/components/provedor-consultas', () => ({ useRepositorioConsultasOpcional: () => ({}), useConsulta: () => ({ dados: [], carregando: false, erro: null }) }));
 jest.mock('@/hooks/use-contratos', () => ({ useAcessoContrato: () => ({ dados: { permissoes: { registrarAtividades: true } }, erro: null }) }));
 jest.mock('@/hooks/use-entregaveis', () => ({ useEntregaveis: jest.fn(() => ({ dados: [{ id: 'entrega-1', etapaId: 'etapa-1', nome: 'Entregável 1', arquivadoEm: null }, { id: 'entrega-2', etapaId: 'etapa-2', nome: 'Entregável 2', arquivadoEm: null }] })) }));
 jest.mock('@/hooks/use-etapas', () => ({ useEtapas: jest.fn(() => ({ dados: [{ id: 'etapa-1', nome: 'Etapa 1', arquivadoEm: null }, { id: 'etapa-2', nome: 'Etapa 2', arquivadoEm: null }] })) }));
@@ -14,8 +14,8 @@ jest.mock('@/app/atividades/components/cartao-atividade', () => ({ CartaoAtivida
 test('modal de entregável oferece filtro por situação sem link circular', () => {
   render(<AtividadesVinculadas contratoId="contrato-qa" entregavelId="entregavel-qa" ocultarAcessoDiario />);
   expect(screen.getByRole('region', { name: 'Atividades vinculadas ao entregável' })).toBeInTheDocument();
-  expect(screen.getByRole('tab', { name: 'Registradas' })).toHaveAttribute('aria-selected', 'true');
-  expect(screen.getByRole('tab', { name: 'Verificadas' })).toBeInTheDocument();
+  expect(screen.getByRole('tab', { name: 'Ativas' })).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByRole('tab', { name: 'Finalizadas' })).toBeInTheDocument();
   expect(screen.getByRole('tab', { name: 'Arquivadas' })).toBeInTheDocument();
   expect(screen.queryByRole('link', { name: 'Abrir diário' })).not.toBeInTheDocument();
 });
@@ -26,10 +26,11 @@ test('contrato oferece filtros automáticos por etapa, entregável, datas e stat
   expect(screen.getByLabelText('Data final')).toBeInTheDocument();
   expect(screen.getByLabelText('Etapa')).toBeInTheDocument();
   expect(screen.getByLabelText('Entregável')).toBeInTheDocument();
-  expect(screen.getByLabelText('Situação')).toHaveValue('ATIVAS');
+  expect(screen.getByRole('tab', { name: 'Ativas' })).toHaveAttribute('aria-selected', 'true');
   expect(screen.queryByRole('button', { name: 'Aplicar filtros' })).not.toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText('Situação'), { target: { value: 'VERIFICADA' } });
-  expect(screen.getByLabelText('Situação')).toHaveValue('VERIFICADA');
+  fireEvent.click(screen.getByRole('tab', { name: 'Finalizadas' }));
+  expect(screen.getByRole('tab', { name: 'Finalizadas' })).toHaveAttribute('aria-selected', 'true');
+  expect(useAtividades as jest.Mock).toHaveBeenLastCalledWith('contrato-qa', expect.objectContaining({ status: 'VERIFICADA' }));
 });
 
 test('datas invertidas são identificadas imediatamente, sem clicar em Aplicar', () => {
@@ -51,7 +52,7 @@ test('seleção contextual apresenta Nova atividade e aplica etapa/entregável s
 
 test('entregável vinculado pode ficar somente leitura mesmo com delegação de registro', () => {
   render(<AtividadesVinculadas contratoId="contrato-qa" entregavelId="entrega-1" somenteLeitura />);
-  expect(screen.queryByRole('button', { name: 'Nova atividade neste contexto' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Nova atividade neste contexto' })).toBeInTheDocument();
 });
 
 
@@ -96,7 +97,7 @@ test('entregável reaberto em etapa aberta restabelece CTA e mantém a cor de re
   entregaveis.mockReturnValueOnce({ dados: [registro] });
   etapas.mockReturnValueOnce({ dados: [{ id: 'etapa-1', status: 'PLANEJADA', arquivadoEm: null }] });
   const tela = render(<AtividadesVinculadas contratoId="contrato-qa" estadoContextual="revisao" />);
-  expect(screen.queryByRole('button', { name: 'Nova atividade neste contexto' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Nova atividade neste contexto' })).toBeInTheDocument();
   entregaveis.mockReturnValueOnce({ dados: [{ ...registro, statusExecucao: 'EM_ANDAMENTO', reabertoEm: '2026-11-11' }] });
   etapas.mockReturnValueOnce({ dados: [{ id: 'etapa-1', status: 'PLANEJADA', arquivadoEm: null }] });
   tela.rerender(<AtividadesVinculadas contratoId="contrato-qa" estadoContextual="revisao" />);
@@ -109,6 +110,6 @@ test('reabertura do entregável não contorna etapa ainda concluída', () => {
   (useEntregaveis as jest.Mock).mockReturnValueOnce({ dados: [{ id: 'entrega-1', etapaId: 'etapa-1', statusExecucao: 'EM_ANDAMENTO', arquivadoEm: null }] });
   (useEtapas as jest.Mock).mockReturnValueOnce({ dados: [{ id: 'etapa-1', status: 'CONCLUIDA', arquivadoEm: null }] });
   render(<AtividadesVinculadas contratoId="contrato-qa" estadoContextual="revisao" />);
-  expect(screen.queryByRole('button', { name: 'Nova atividade neste contexto' })).not.toBeInTheDocument();
-  expect(screen.getByText(/Reabra um entregável e sua etapa/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Nova atividade neste contexto' })).toBeInTheDocument();
+  expect(screen.getByText(/Reabra um entregável e a etapa correspondente/)).toBeInTheDocument();
 });

@@ -4,26 +4,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { AbasRolaveis } from "./abas-rolaveis";
-import { IconeAtividades, IconeOcorrencias } from "./icones-operacionais";
-import { useMeuPerfil } from '@/hooks/use-meu-perfil';
 
 type Item = { nome: string; href?: string; aviso?: string; icone: string };
 function useItens(): Item[] {
-  const { dados: perfil } = useMeuPerfil();
   return [
     { nome: 'Dashboard', href: '/dashboard', icone: 'inicio' },
     { nome: 'Contratos', href: '/contratos', icone: 'arquivo' },
-    { nome: 'Atividades', href: '/atividades', icone: 'atividades' },
-    { nome: 'Ocorrências', href: '/ocorrencias', icone: 'ocorrencias' },
-    { nome: 'Evidências', aviso: 'Indisponível', icone: 'evidencia' },
-    { nome: 'Relatórios', aviso: 'Indisponível', icone: 'relatorio' },
-    ...(perfil?.ativo && perfil.perfil === 'ADMINISTRADOR'
-      ? [{ nome: 'Funcionários', href: '/admin/usuarios', icone: 'usuarios' }, { nome: 'Minha conta', href: '/usuario', icone: 'conta' }] : []),
+    { nome: 'Relatórios', href: '/relatorios', icone: 'relatorio' },
+    { nome: 'Administração', href: '/admin', icone: 'usuarios' },
   ];
 }
 function IconeMenu({ tipo }: { tipo: string }) {
-  if (tipo === 'atividades') return <IconeAtividades />;
-  if (tipo === 'ocorrencias') return <IconeOcorrencias />;
   return <svg aria-hidden="true" className="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
     {tipo === 'inicio' ? <><path d="m3 10 9-7 9 7v10H3Z"/><path d="M9 20v-7h6v7"/></> :
       tipo === 'arquivo' ? <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 5V3h8v2M7 10h10M7 14h7"/></> :
@@ -38,7 +29,7 @@ function Itens({ compactos = false, soIcones = false }: { compactos?: boolean; s
   const itens = useItens();
   const path = usePathname();
   const ativo = (href: string) => path === href ||
-    ((href === '/contratos' || href === '/atividades' || href === '/admin/usuarios') && path.startsWith(`${href}/`));
+    ((href === '/contratos' || href === '/admin') && path.startsWith(`${href}/`));
   return <>{itens.map(item => {
     const selecionado = item.href ? ativo(item.href) : false;
     const classes = `${soIcones ? 'h-11 w-11 shrink-0 justify-center p-2' : compactos ? 'gap-2 px-3 py-2' : 'gap-3 px-3 py-3'} flex min-h-10 items-center rounded-xl transition-all duration-200 motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-brand-green ${selecionado

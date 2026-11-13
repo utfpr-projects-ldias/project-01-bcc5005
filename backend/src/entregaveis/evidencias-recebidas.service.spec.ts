@@ -62,6 +62,7 @@ function cenario() {
     id: entregavelId,
     contratoId,
     responsavelId: null,
+    tipo: 'UNICO', percentualExecucao: 100,
   } as Entregavel;
   const queryContrato = {
     setLock: jest.fn().mockReturnThis(),
@@ -153,6 +154,7 @@ function cenario() {
     ]),
   };
   const m = {
+    findBy: jest.fn(async () => []),
     query: jest.fn(async () => [
       {
         etapas: 0,

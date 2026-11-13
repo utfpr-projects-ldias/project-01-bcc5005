@@ -2,22 +2,23 @@
 
 import { useConsulta, useRepositorioConsultasOpcional } from '@/app/components/provedor-consultas';
 
-export type EstadoAtividade = 'REGISTRADA' | 'VERIFICADA' | 'ARQUIVADA';
-export type FiltroEstadoAtividade = EstadoAtividade | 'ATIVAS' | ''; // ATIVAS: registradas e verificadas, sem arquivadas
+export type EstadoAtividade = 'REGISTRADA' | 'PENDENTE_CONCLUSAO' | 'VERIFICADA' | 'ARQUIVADA';
+export type FiltroEstadoAtividade = EstadoAtividade | 'ATIVAS' | ''; // ATIVAS: somente registradas; pendentes e finalizadas possuem abas próprias
 
 export type Atividade = {
   id: string; contratoId: string; titulo: string; dataHora: string; descricao: string;
   tipo: string; responsavel: string | null; participantes: string[] | null;
   local: string | null; duracao: string | null; observacoes: string | null;
+  ocorrenciaId?: string | null; ocorrenciaIds?: string[]; medicoes?: { ocorrenciaId: string; quantidade: string }[]; ocorrencias?: {id: string; entregavelId: string; titulo: string; status: string; inicioPeriodo?: string | null; terminoPeriodo?: string | null}[]; quantidadeExecucao?: string | null;
   entregaveis: { id: string; nome: string; codigoPublico?: number }[];
   status: EstadoAtividade; verificadaEm: string | null; arquivadaEm: string | null; excluidaEm?: string | null;
 };
 export type DadosAtividade = {
   contratoId: string; titulo: string; dataHora: string; descricao: string; tipo: string;
   responsavel?: string; participantes?: string[]; local?: string; duracao?: string;
-  observacoes?: string; entregavelIds: string[];
+  observacoes?: string; ocorrenciaId?: string | null; ocorrenciaIds?: string[]; medicoes?: { ocorrenciaId: string; quantidade: string }[]; entregavelIds: string[];
 };
-export type FiltrosAtividade = { dataInicio?: string; dataFim?: string; etapaId?: string; entregavelId?: string; responsavelId?: string; status?: FiltroEstadoAtividade; page?: number; limit?: number };
+export type FiltrosAtividade = { ocorrenciaId?: string; dataInicio?: string; dataFim?: string; etapaId?: string; entregavelId?: string; responsavelId?: string; status?: FiltroEstadoAtividade; page?: number; limit?: number };
 type ListaAtividades = { data: Atividade[]; meta: { total: number; page: number; lastPage: number } };
 const API = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001').replace(/\/$/, '');
 const base = (contratoId: string) => `${API}/contratos/${encodeURIComponent(contratoId)}/atividades`;
@@ -48,6 +49,25 @@ async function requisitar<T>(url: string, init?: RequestInit): Promise<T> {
   return await resposta.json() as T;
 }
 
+export async function listarAtividadesVinculaveis(contratoId: string, entregavelId: string, signal?: AbortSignal): Promise<ListaAtividades> {
+  const params = new URLSearchParams({ entregavelId, status: 'REGISTRADA', page: '1', limit: '100' });
+  return requisitar<ListaAtividades>(`${base(contratoId)}?${params}`, { signal });
+}
+
+export type ComprovanteAtividade = {
+  id: string; nomeOriginal: string; tipoEvidencia: string; status: 'VERIFICADA'; entregavelId: string; vinculado: boolean;
+};
+export function listarEvidenciasAtividade(contratoId: string, atividadeId: string): Promise<{
+  vinculadas: ComprovanteAtividade[]; disponiveis: ComprovanteAtividade[];
+}> {
+  return requisitar(`${base(contratoId)}/${encodeURIComponent(atividadeId)}/evidencias`);
+}
+export function vincularEvidenciaAtividade(contratoId: string, atividadeId: string, comprovanteId: string) {
+  return requisitar<{ vinculado: boolean }>(`${base(contratoId)}/${encodeURIComponent(atividadeId)}/evidencias`, {
+    method: 'POST', body: JSON.stringify({ comprovanteId }),
+  });
+}
+
 export function consultarAtividade(contratoId: string, id: string, signal?: AbortSignal): Promise<Atividade> {
   return requisitar<Atividade>(`${base(contratoId)}/${encodeURIComponent(id)}`, { signal });
 }
@@ -56,15 +76,16 @@ export function editarAtividadeApi(contratoId: string, id: string, dados: Partia
     { method: 'PATCH', body: JSON.stringify(dados) });
 }
 export function transicionarAtividadeApi(contratoId: string, id: string,
-  acao: 'verificar' | 'reabrir' | 'arquivar' | 'reativar' | 'excluir', justificativa = ''): Promise<Atividade | { excluida: true }> {
+  acao: 'solicitar-conclusao' | 'aprovar-conclusao' | 'cancelar-solicitacao' | 'verificar' | 'reabrir' | 'arquivar' | 'reativar' | 'excluir', justificativa = ''): Promise<Atividade | { excluida: true }> {
   return requisitar<Atividade | { excluida: true }>(`${base(contratoId)}/${encodeURIComponent(id)}/${acao}`,
-    { method: 'POST', body: JSON.stringify(acao === 'verificar' ? {} : { justificativa }) });
+    { method: 'POST', body: JSON.stringify(['verificar', 'solicitar-conclusao', 'aprovar-conclusao'].includes(acao) ? {} : { justificativa }) });
 }
 
 export function useAtividades(contratoId: string, filtros: FiltrosAtividade = {}) {
   const cache = useRepositorioConsultasOpcional();
-  const { dataInicio = '', dataFim = '', etapaId = '', entregavelId = '', responsavelId = '', status = '', page = 1, limit = 20 } = filtros;
+  const { ocorrenciaId = '', dataInicio = '', dataFim = '', etapaId = '', entregavelId = '', responsavelId = '', status = '', page = 1, limit = 20 } = filtros;
   const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (ocorrenciaId) params.set('ocorrenciaId', ocorrenciaId);
   if (dataInicio) params.set('dataInicio', dataInicio);
   if (dataFim) params.set('dataFim', dataFim);
   if (etapaId) params.set('etapaId', etapaId);
@@ -72,7 +93,7 @@ export function useAtividades(contratoId: string, filtros: FiltrosAtividade = {}
   if (responsavelId) params.set('responsavelId', responsavelId);
   if (status) params.set('status', status);
   const consulta = useConsulta(
-    ['atividades', contratoId, dataInicio, dataFim, etapaId, entregavelId, responsavelId, status, String(page), String(limit)],
+    ['atividades', contratoId, ocorrenciaId, dataInicio, dataFim, etapaId, entregavelId, responsavelId, status, String(page), String(limit)],
     (signal) => requisitar<ListaAtividades>(`${base(contratoId)}?${params.toString()}`, { signal }),
     { habilitada: Boolean(contratoId) },
   );
@@ -84,17 +105,18 @@ export function useAtividades(contratoId: string, filtros: FiltrosAtividade = {}
       const resposta = await requisitar<Atividade>(base(contratoId), { method: 'POST', body: JSON.stringify(dados) });
       // A consulta por atividades Registradas do modal de conclusão pode usar
       // outra paginação. Todas as variantes devem ser invalidadas ao criar.
-      cache?.invalidar(['atividades', contratoId]);
+      cache?.invalidar(['atividades', contratoId]); cache?.invalidar(['ocorrencias', contratoId]);
       await consulta.atualizar();
       return resposta;
     },
-    transicionarAtividade: async (id: string, acao: 'verificar' | 'reabrir' | 'arquivar' | 'reativar' | 'excluir', justificativa = '') => {
+    transicionarAtividade: async (id: string, acao: 'solicitar-conclusao' | 'aprovar-conclusao' | 'cancelar-solicitacao' | 'verificar' | 'reabrir' | 'arquivar' | 'reativar' | 'excluir', justificativa = '') => {
       const resposta = await transicionarAtividadeApi(contratoId, id, acao, justificativa);
       await consulta.atualizar();
       return resposta;
     },
     editarAtividade: async (id: string, dados: Partial<Omit<DadosAtividade, 'contratoId'>>) => {
       const resposta = await editarAtividadeApi(contratoId, id, dados);
+      cache?.invalidar(['atividades', contratoId]); cache?.invalidar(['ocorrencias', contratoId]);
       await consulta.atualizar();
       return resposta;
     },

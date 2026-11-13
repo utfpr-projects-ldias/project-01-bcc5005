@@ -21,6 +21,8 @@ import { StatusContrato } from '../status-contrato.enum.js';
  * `termino >= inicio` deve virar 400, não inconsistência silenciosa.
  */
 export class AtualizarContratoDto {
+  @IsOptional() @IsString() @Matches(/^[a-f0-9]{64}$/) confirmacaoVigencia?: string;
+
   /** Legado: flag recusada; fechamento da revisão exige endpoint próprio. */
   @IsOptional()
   @IsBoolean()
@@ -29,34 +31,35 @@ export class AtualizarContratoDto {
   @ValidateIf((_, v) => v !== undefined)
   @IsString()
   @IsNotEmpty()
-  @MaxLength(100)
+  @MaxLength(25)
+  @Matches(/^\d{1,25}$/, { message: "Número do contrato deve conter apenas algarismos (até 25)." })
   numeroContrato?: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(100)
+  @MaxLength(25)
   processoAdministrativo?: string | null;
 
   @ValidateIf((_, v) => v !== undefined)
   @IsString()
   @IsNotEmpty()
-  @MaxLength(255)
+  @MaxLength(30)
   orgaoContratante?: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(255)
+  @MaxLength(30)
   unidadeResponsavel?: string | null;
 
   @ValidateIf((_, v) => v !== undefined)
   @IsString()
   @IsNotEmpty()
-  @MaxLength(500)
+  @MaxLength(50)
   objeto?: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(3000)
+  @MaxLength(400)
   descricao?: string | null;
 
   @IsOptional()
@@ -84,7 +87,7 @@ export class AtualizarContratoDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(255)
+  @MaxLength(25)
   fiscalGestor?: string | null;
 
   @ValidateIf((_, v) => v !== undefined)
@@ -93,6 +96,6 @@ export class AtualizarContratoDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(2000)
+  @MaxLength(200)
   observacoes?: string | null;
 }

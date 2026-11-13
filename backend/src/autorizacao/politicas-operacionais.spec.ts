@@ -25,3 +25,8 @@ describe('catálogo fechado de ações operacionais', () => {
     expect(uuidValido({})).toBe(false);
   });
 });
+
+test('replanejamento exige escopo do entregável associado, sem bypass administrativo', () => {
+  expect(POLITICAS_OPERACIONAIS['ocorrencias:replanejar'].recurso).toBe('entregavel');
+  expect(POLITICAS_OPERACIONAIS['ocorrencias:replanejar'].escopo).toBe('recurso');
+});

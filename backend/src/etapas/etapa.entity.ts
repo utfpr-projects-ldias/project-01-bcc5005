@@ -96,6 +96,18 @@ export class Etapa {
   })
   status!: StatusEtapa;
 
+  /** Solicitações não alteram a fase operacional até uma aprovação autorizada. */
+  @Column({ name: 'conclusao_solicitada_em', type: 'timestamptz', nullable: true })
+  conclusaoSolicitadaEm!: Date | null;
+  @Column({ name: 'conclusao_solicitada_por', type: 'uuid', nullable: true })
+  conclusaoSolicitadaPor!: string | null;
+  @Column({ name: 'encerramento_solicitado_em', type: 'timestamptz', nullable: true })
+  encerramentoSolicitadoEm!: Date | null;
+  @Column({ name: 'encerramento_solicitado_por', type: 'uuid', nullable: true })
+  encerramentoSolicitadoPor!: string | null;
+  @Column({ name: 'encerramento_motivo', type: 'varchar', length: 200, nullable: true })
+  encerramentoMotivo!: string | null;
+
   @Column({ type: 'text', nullable: true })
   observacoes!: string | null;
 }

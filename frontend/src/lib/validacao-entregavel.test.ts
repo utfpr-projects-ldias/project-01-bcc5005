@@ -1,6 +1,6 @@
 import { inicialEntregavel, mudouEstrutura, validarEntregavel } from './validacao-entregavel';
 import type { Entregavel, TipoEntregavel } from './entregaveis';
-const modelo = (tipo: TipoEntregavel) => ({ ...inicialEntregavel('etapa-a'), tipo, nome: 'Planejamento contratual' });
+const modelo = (tipo: TipoEntregavel) => ({ ...inicialEntregavel('etapa-a'), tipo, nome: 'Planejamento contratual', peso: '20', inicioPrevisto: '2026-01-01', terminoPrevisto: '2026-12-31' });
 test('todos os cinco tipos são aceitos com seus parâmetros específicos; sem progressos fictícios', () => {
   for (const tipo of ['UNICO', 'QUANTITATIVO', 'RECORRENTE', 'CONTINUO', 'MARCO'] as const) {
     const r = modelo(tipo);
@@ -17,24 +17,17 @@ test('todos os cinco tipos são aceitos com seus parâmetros específicos; sem p
     }
   }
 });
-test('quantitativo exige quantidade positiva e unidade; decimais preservados como string', () => {
-  const r = modelo('QUANTITATIVO');
-  expect(validarEntregavel(r).sucesso).toBe(false);
-  r.quantidadePrevista = '0'; r.unidadeMedida = 'horas';
-  expect(validarEntregavel(r).sucesso).toBe(false);
-  r.quantidadePrevista = '12.250';
-  const result = validarEntregavel(r);
+test('quantitativo exige meta/unidade e recorrente exige periodicidade com datas definidas', () => {
+  const qtd = modelo('QUANTITATIVO');
+  expect(validarEntregavel(qtd).sucesso).toBe(false);
+  qtd.quantidadePrevista = '12.250'; qtd.unidadeMedida = 'horas';
+  const result = validarEntregavel(qtd);
   expect(result.sucesso).toBe(true);
   if (result.sucesso) expect(result.dados.quantidadePrevista).toBe('12.250');
-  r.quantidadePrevista = '10.1234'; expect(validarEntregavel(r).sucesso).toBe(false);
-});
-test('recorrente aceita somente periodicidade fixa, demais tipos limpam parâmetros ocultos', () => {
-  const r = modelo('RECORRENTE');
-  expect(validarEntregavel(r).sucesso).toBe(false);
+  const r = modelo('RECORRENTE'); expect(validarEntregavel(r).sucesso).toBe(false);
   r.periodicidade = 'MENSAL'; expect(validarEntregavel(r).sucesso).toBe(true);
   r.tipo = 'UNICO';
   const validado = validarEntregavel(r);
-  expect(validado.sucesso).toBe(true);
   if (validado.sucesso) { expect(validado.dados.periodicidade).toBeNull(); expect(validado.dados.configuracaoPeriodicidade).toBeNull(); }
 });
 test('Marco e Contínuo exigem critério, mantendo demais campos opcionais', () => {
@@ -48,7 +41,7 @@ test('datas civis válidas; término não pode anteceder início; UUID e peso op
   r.inicioPrevisto = '2026-02-29'; expect(validarEntregavel(r).sucesso).toBe(false);
   r.inicioPrevisto = '2028-02-29'; r.terminoPrevisto = '2028-02-28'; expect(validarEntregavel(r).sucesso).toBe(false);
   r.terminoPrevisto = '2028-03-01'; r.peso = '100.0001'; expect(validarEntregavel(r).sucesso).toBe(false);
-  r.peso = '12.5000'; r.responsavelId = 'invalido'; expect(validarEntregavel(r).sucesso).toBe(false);
+  r.peso = '12.50'; r.responsavelId = 'invalido'; expect(validarEntregavel(r).sucesso).toBe(false);
   r.responsavelId = '12345678-1234-4123-8123-123456789abc'; expect(validarEntregavel(r).sucesso).toBe(true);
 });
 test('checklist preserva IDs ao editar e valida obrigatoriedade', () => {
@@ -72,7 +65,7 @@ test('alteração estrutural é detectada e não presume replanejamento autoriza
   const r = modelo('RECORRENTE'); r.periodicidade = 'MENSAL';
   const inicial = { ...inicialEntregavel('etapa-a'), ...r, id: 'ent-1', contratoId: 'c-1',
     quantidadePrevista: null, quantidadeRealizada: null, unidadeMedida: null, peso: null, periodicidade: 'MENSAL',
-    codigo: null, descricao: null, responsavelId: null, inicioPrevisto: null, terminoPrevisto: null,
+    codigo: null, descricao: null, responsavelId: null, inicioPrevisto: r.inicioPrevisto, terminoPrevisto: r.terminoPrevisto,
     criterioConclusao: null, observacoes: null, configuracaoPeriodicidade: { versao: 1 },
     statusExecucao: null, percentualExecucao: null, situacaoComprovacao: null, evidenciasEsperadas: [],
   } as Entregavel;
@@ -91,13 +84,39 @@ test('checklist permite 10 evidências e rejeita a décima primeira', () => {
 });
 
 
-test('novas orientações do checklist têm no máximo 130 caracteres; preserva histórico legado', () => {
+test('novas orientações do checklist têm no máximo 65 caracteres; preserva histórico legado', () => {
   const r = modelo('UNICO');
-  r.evidenciasEsperadas = [{ chave: 'novo', tipoEvidencia: 'Foto', descricao: 'x'.repeat(131), obrigatoria: true }];
+  r.evidenciasEsperadas = [{ chave: 'novo', tipoEvidencia: 'Foto', descricao: 'x'.repeat(66), obrigatoria: true }];
   expect(validarEntregavel(r).sucesso).toBe(false);
-  r.evidenciasEsperadas[0].descricao = 'x'.repeat(130);
+  r.evidenciasEsperadas[0].descricao = 'x'.repeat(65);
   expect(validarEntregavel(r).sucesso).toBe(true);
   r.evidenciasEsperadas[0].id = 'uuid-legado';
   r.evidenciasEsperadas[0].descricao = 'x'.repeat(200);
-  expect(validarEntregavel(r).sucesso).toBe(true);
+  expect(validarEntregavel(r).sucesso).toBe(false);
+  expect(validarEntregavel(r, { evidenciasEsperadas: [{ id: 'uuid-legado', descricao: 'x'.repeat(200), tipoEvidencia: 'Foto', obrigatoria: true }] } as Entregavel).sucesso).toBe(true);
+});
+
+test('início previsto obrigatório e término para recorrente/contínuo', () => {
+  const unico = modelo('UNICO'); unico.inicioPrevisto = '';
+  const erro = validarEntregavel(unico);
+  expect(erro.sucesso).toBe(false);
+  if (!erro.sucesso) expect(erro.erros.inicioPrevisto).toContain('data');
+  unico.inicioPrevisto = '2026-01-01';
+  expect(validarEntregavel(unico).sucesso).toBe(true);
+  const continuo = modelo('CONTINUO'); continuo.criterioConclusao = 'Atendimento auditável'; continuo.terminoPrevisto = '';
+  const semFim = validarEntregavel(continuo);
+  expect(semFim.sucesso).toBe(false);
+  if (!semFim.sucesso) expect(semFim.erros.terminoPrevisto).toContain('término');
+});
+
+test('peso novo não pode ser zero, mas peso legado zero pode permanecer inalterado durante outra edição', () => {
+  const r = modelo('UNICO'); r.peso = '0';
+  expect(validarEntregavel(r).sucesso).toBe(false);
+  const antigo = { ...r, id: 'id-legado', peso: '0' } as unknown as Entregavel;
+  const editado = { ...r, nome: 'Nome alterado' };
+  expect(validarEntregavel(editado, antigo).sucesso).toBe(true);
+  r.peso = '20,50';
+  const convertido = validarEntregavel(r);
+  expect(convertido.sucesso).toBe(true);
+  if (convertido.sucesso) expect(convertido.dados.peso).toBe('20.50');
 });

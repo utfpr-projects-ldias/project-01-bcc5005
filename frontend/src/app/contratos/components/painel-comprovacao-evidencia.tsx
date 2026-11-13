@@ -127,13 +127,13 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
     const novoTitulo = campo === 'titulo' ? tipo.trim() : dados.tipoEvidencia;
     const novaDescricao = campo === 'orientacoes' ? (descricaoEsperada.trim() || null) : dados.descricao;
     if (!novoTitulo) { setErro('Informe o título da evidência.'); return; }
-    if (novaDescricao && novaDescricao.length > 130) { setErro('As orientações devem ter no máximo 130 caracteres.'); return; }
-    if (campo === 'titulo' && novoTitulo.length > 60) { setErro('O título deve ter no máximo 60 caracteres.'); return; }
+    if (novaDescricao && novaDescricao.length > 65 && (campo === 'orientacoes' || novaDescricao !== dados.descricao)) { setErro('As orientações devem ter no máximo 65 caracteres.'); return; }
+    if (campo === 'titulo' && novoTitulo.length > 50) { setErro('O título deve ter no máximo 50 caracteres.'); return; }
     setOcupado(true); setErro('');
     try {
       if (novoTitulo !== dados.tipoEvidencia || novaDescricao !== dados.descricao) {
         await editarEvidencia(contratoId, entregavelId, esperadaId,
-          { tipoEvidencia: novoTitulo, descricao: novaDescricao });
+          { ...(novoTitulo !== dados.tipoEvidencia ? { tipoEvidencia: novoTitulo } : {}), ...(novaDescricao !== dados.descricao ? { descricao: novaDescricao } : {}) });
         await recarregar();
         onPlanejamentoAlterado?.();
       }
@@ -214,11 +214,11 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
   const arquivada = Boolean(dados.arquivadoEm || dados.entregavelArquivadoEm);
   const estadoProprio = estadoVisualEvidencia(dados.status, dados.reabertoEm, arquivada);
   const confirmacaoArquivo = confirmandoArquivo && <div role="alertdialog" aria-label="Confirmar arquivamento da evidência"
-    className="space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
+    className="space-y-2 rounded-lg border border-orange-500/40 bg-orange-500/5 p-3 text-sm">
     <p>Arquivar esta evidência? Os comprovantes enviados serão preservados. Você poderá reativá-la em Arquivadas.</p>
     <div className="flex flex-wrap justify-end gap-2">
       <button type="button" disabled={ocupado} onClick={cancelarConfirmacaoArquivo} className="rounded-lg border border-brand-green/30 px-3 py-1.5 text-xs">Cancelar</button>
-      <button type="button" disabled={ocupado} onClick={() => void arquivar()} className="rounded-lg border border-amber-500/60 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-100">Confirmar arquivamento</button>
+      <button type="button" disabled={ocupado} onClick={() => void arquivar()} className="rounded-lg border border-orange-500/60 bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-500">Confirmar arquivamento</button>
     </div>
   </div>;
   const editorArquivo = editando && createPortal(<ModalEtapa titulo={ultima ? 'Substituir comprovante' : 'Anexar comprovante'}
@@ -256,7 +256,7 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
         className="ml-auto rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-600 disabled:opacity-50">Verificar</button>}
       {!ocultarArquivamento && (podeArquivar ?? podeEditar) && !arquivada && dados.status !== 'VERIFICADA' && <button type="button" ref={botaoArquivarRef} disabled={ocupado}
         aria-label="Arquivar evidência" title="Arquivar evidência"
-        onClick={() => setConfirmandoArquivo(true)} className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-lg border border-amber-500/30 text-amber-200 hover:bg-amber-500/10 disabled:opacity-50">
+        onClick={() => setConfirmandoArquivo(true)} className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-lg border border-orange-500/50 text-orange-700 hover:bg-orange-500/15 dark:text-orange-300 disabled:opacity-50">
         <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v12h14V8M9 13h6"/></svg>
       </button>}
     </div>
@@ -294,7 +294,7 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
             <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m15 5 4 4M4 20l4.5-1 11-11a2 2 0 0 0-3-3l-11 11L4 20Z"/></svg>
           </button>)}</div>
         {campoInline === 'orientacoes' ? <><label htmlFor={`orientacoes-inline-${esperadaId}`} className="sr-only">Orientações da evidência</label>
-          <textarea id={`orientacoes-inline-${esperadaId}`} maxLength={130} rows={2} value={descricaoEsperada}
+          <textarea id={`orientacoes-inline-${esperadaId}`} maxLength={65} rows={2} value={descricaoEsperada}
             onChange={e => setDescricaoEsperada(e.target.value)} className="w-full resize-y rounded-lg border border-brand-green/20 bg-transparent px-2 py-1 text-sm outline-none focus:border-brand-neon" /></>
           : <p className="whitespace-pre-wrap break-words text-xs text-foreground/70">{dados.descricao || 'Nenhuma orientação registrada'}</p>}
       </div>}

@@ -1,3 +1,4 @@
+import { aptidaoFisicaParaConclusao } from './conclusao-fisica.js';
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager, Not, IsNull } from 'typeorm';
 import { Contrato } from '../contratos/contrato.entity.js';
@@ -103,7 +104,7 @@ export class ArquivamentoPlanejamentoService {
           const revisoesAbertas = await m.getRepository(EvidenciaEsperada).count({
             where: { entregavelId, arquivadoEm: IsNull(), reabertoEm: Not(IsNull()) },
           });
-          if (!revisoesAbertas) {
+          if (!revisoesAbertas && (await aptidaoFisicaParaConclusao(m, e)).apto) {
             const anterior = { statusExecucao: e.statusExecucao, reabertoEm: e.reabertoEm ?? null };
             e.statusExecucao = StatusExecucaoEntregavel.CONCLUIDO;
             e.reabertoEm = null;
@@ -121,7 +122,7 @@ export class ArquivamentoPlanejamentoService {
                 dadosAnteriores: antes,
                 dadosPosteriores: { ...depois, motivo: 'CONCLUSAO_DOS_ENTREGAVEIS' },
               });
-            })) conclusoes.push('etapa');
+            }, ator.id)) conclusoes.push('etapa');
           }
         }
       }

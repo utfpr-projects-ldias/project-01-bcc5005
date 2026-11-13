@@ -1,6 +1,13 @@
 'use client';
+import { resultadoFinalizacao } from '@/lib/finalizados';
+import { estadoDoObjeto } from '@/lib/identidade-operacional';
 import { AbasRolaveis } from '@/app/components/abas-rolaveis';
 import Link from 'next/link';
+import { createPortal } from 'react-dom';
+import { ModalEtapa } from './modal-etapa';
+import { useRepositorioConsultasOpcional } from '@/app/components/provedor-consultas';
+import { CHAVES_ENTREGAVEIS } from '@/hooks/use-entregaveis';
+import { IconeStatus } from '@/app/components/icones-status';
 import { useCallback, useEffect, useId, useRef, useState, type MouseEvent } from 'react';
 import { ModalDetalheEntregavel } from './modal-detalhe-entregavel';
 import { ConfirmacaoSimples } from '@/app/components/confirmacao-simples';
@@ -8,7 +15,7 @@ import { indicadoresPlanejamento } from '@/lib/indicadores-planejamento';
 import type { ResumoDocumentalEntregavel } from '@/lib/entregaveis';
 import { ajustarRestauracaoHistorico } from '@/lib/historico-modal-scroll';
 import { FormularioEntregavel } from './formulario-entregavel';
-import { criarEntregavel, listarEntregaveisArquivados, concluirEntregavel, reabrirEntregavel, alterarArquivoEntregavel, excluirEntregavelArquivado } from '@/lib/entregaveis';
+import { criarEntregavel, listarEntregaveisArquivados, detalharEntregavel, concluirEntregavel, reabrirEntregavel, alterarArquivoEntregavel, excluirEntregavelArquivado } from '@/lib/entregaveis';
 import type { DadosPlanejamentoEntregavel } from '@/lib/validacao-entregavel';
 import type { PermissoesContrato } from '@/lib/contratos';
 import { toastSucesso, toastAviso } from '@/app/components/toast-notificacoes';
@@ -21,15 +28,17 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, da
   contratoId: string; etapaId: string; dados?: Entregavel[];
   carregando: boolean; erro?: unknown; atualizar: () => Promise<unknown>; podeCriar?: boolean;
   podeEditar?: boolean; podeArquivar?: boolean; permissoes?: PermissoesContrato; documental?: Record<string, ResumoDocumentalEntregavel>;
-  estadoProprioEtapa?: 'normal' | 'revisao' | 'concluido' | 'arquivado' | 'encerrado'; dentroModal?: boolean; podeVerArquivados?: boolean; paiArquivado?: boolean; paiEmRevisao?: boolean; paiConcluido?: boolean; onDetalheMudou?: (aberto: boolean) => void; atualizarDocumental?: () => void; onHierarquiaAlterada?: () => void;
+  estadoProprioEtapa?: 'normal' | 'revisao' | 'concluido' | 'finalizado' | 'arquivado' | 'encerrado'; dentroModal?: boolean; podeVerArquivados?: boolean; paiArquivado?: boolean; paiEmRevisao?: boolean; paiConcluido?: boolean; onDetalheMudou?: (aberto: boolean) => void; atualizarDocumental?: () => void; onHierarquiaAlterada?: () => void;
 }) {
+  const cacheDetalhe = useRepositorioConsultasOpcional();
   const [aberto, setAberto] = useState(false);
   const [iniciado, setIniciado] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [aviso, setAviso] = useState('');
+  const [mostrarLimitePeso, setMostrarLimitePeso] = useState(false);
   // A paleta é da própria etapa, não do contrato que foi arquivado.
   const contextoVisualEtapa = estadoProprioEtapa ?? (paiEmRevisao ? 'revisao' : paiConcluido ? 'concluido' : 'normal');
-  const classeAbaAtiva = contextoVisualEtapa === 'arquivado' ? 'bg-amber-500/20 text-amber-200' : contextoVisualEtapa === 'revisao' ? 'bg-teal-700/25 text-teal-200' : contextoVisualEtapa === 'concluido' ? 'bg-violet-500/20 text-violet-200' : contextoVisualEtapa === 'encerrado' ? 'bg-slate-600/25 text-slate-200' : 'bg-brand-green text-on-brand-green';
+  const classeAbaAtiva = contextoVisualEtapa === 'arquivado' ? 'bg-amber-500/20 text-amber-200' : contextoVisualEtapa === 'revisao' ? 'bg-teal-700/25 text-teal-200' : contextoVisualEtapa === 'concluido' ? 'bg-violet-500/20 text-violet-200' : contextoVisualEtapa === 'finalizado' ? 'bg-purple-500/20 text-purple-200' : contextoVisualEtapa === 'encerrado' ? 'bg-slate-600/25 text-slate-200' : 'bg-brand-green text-on-brand-green';
   const [abaEntregaveis, setAbaEntregaveis] = useState<'ativos' | 'revisao' | 'comprovados' | 'arquivados'>('ativos');
   const mostrarArquivados = abaEntregaveis === 'arquivados';
   const paiBloqueado = paiArquivado || paiConcluido;
@@ -53,6 +62,18 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, da
     setOcupadoArquivo(true); setAviso('');
     try {
       await alterarArquivoEntregavel(contratoId, id, acao, acao === 'reativar' ? motivoEntregavel.trim() : undefined);
+      // Recarregar a versão definitiva antes de reexibir a ficha. Isso evita
+      // renderizar o snapshot arquivado do cache no primeiro quadro do modal.
+      if (acao === 'reativar') {
+        try {
+          const atual = await detalharEntregavel(contratoId, id);
+          cacheDetalhe?.gravar(CHAVES_ENTREGAVEIS.detalhe(contratoId, id), atual);
+        } catch {
+          cacheDetalhe?.invalidar(CHAVES_ENTREGAVEIS.detalhe(contratoId, id));
+        }
+      } else {
+        cacheDetalhe?.invalidar(CHAVES_ENTREGAVEIS.detalhe(contratoId, id));
+      }
       // Primeiro atualizar a visão local em uma única pintura; consultas não
       // devem fazer o cartão reaparecer em um intervalo entre requisições.
       if (acao === 'arquivar') setOcultadosLocais(atuais => [...new Set([...atuais, id])]);
@@ -196,12 +217,20 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, da
     atualizarDocumental?.();
   }
   // Nunca exibir um item cujo contrato/etapa nao corresponda ao contexto visivel.
+  const somaPesosContrato = (dados ?? []).filter(item => item.contratoId === contratoId && !item.arquivadoEm)
+    .reduce((total, item) => total + Number(item.peso ?? 0), 0);
+  const pesoDisponivel = Math.max(0, 100 - somaPesosContrato);
   const visiveis = dados?.filter((e) => e.contratoId === contratoId && e.etapaId === etapaId && !e.arquivadoEm && !ocultadosLocais.includes(e.id)) ?? [];
   const indicadores = indicadoresPlanejamento(visiveis);
-  const concluidos = visiveis.filter(e => e.statusExecucao === 'CONCLUIDO' && !e.reabertoEm);
-  const exibidos = abaEntregaveis === 'comprovados' ? concluidos :
-    abaEntregaveis === 'revisao' ? visiveis.filter(e => Boolean(e.reabertoEm)) :
-    visiveis; // Todas reúne planejamento, revisão/reabertura e concluídos; arquivados ficam em aba própria.
+  // Finalizados reúne conclusão integral (CONCLUIDO) e encerramento parcial (FINALIZADO).
+  // Não soma percentuais e não promove encerrados a 100%.
+  const ordenados = [...visiveis].sort((a, b) =>
+    (a.inicioPrevisto ?? '9999-12-31').localeCompare(b.inicioPrevisto ?? '9999-12-31') ||
+    (a.codigoPublico ?? 0) - (b.codigoPublico ?? 0) || a.nome.localeCompare(b.nome, 'pt-BR'));
+  const finalizados = ordenados.filter(e => resultadoFinalizacao('entregavel', e.statusExecucao) !== null && !e.reabertoEm);
+  const exibidos = abaEntregaveis === 'comprovados' ? finalizados :
+    abaEntregaveis === 'revisao' ? ordenados.filter(e => Boolean(e.reabertoEm)) :
+    ordenados.filter(e => resultadoFinalizacao('entregavel', e.statusExecucao) === null || Boolean(e.reabertoEm));
   const protegido = erro && typeof erro === 'object' && 'status' in erro &&
     [401, 403, 404].includes((erro as { status?: number }).status ?? -1);
   return <section data-tec08-contexto-operacional data-tec08-estado={contextoVisualEtapa} aria-label="Entregáveis da etapa" className={`mt-4 min-h-[min(42dvh,400px)] min-w-0 rounded-xl border p-3 sm:p-4 ${contextoVisualEtapa === 'arquivado' ? 'border-amber-500/45 bg-amber-500/[0.04]' : contextoVisualEtapa === 'revisao' ? 'border-teal-700/40 bg-teal-900/[0.05]' : contextoVisualEtapa === 'concluido' ? 'border-violet-500/40 bg-violet-500/[0.04]' : contextoVisualEtapa === 'encerrado' ? 'border-slate-500/40 bg-slate-500/[0.04]' : 'border-brand-green/20 bg-brand-darkgreen/10'}`}>
@@ -209,14 +238,14 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, da
       <AbasRolaveis className="min-w-0 flex-1"><div role="tablist" aria-label="Entregáveis da etapa" className={`inline-flex items-center gap-1 rounded-xl border bg-background/70 p-1 ${contextoVisualEtapa === 'arquivado' ? 'border-amber-500/40' : contextoVisualEtapa === 'revisao' ? 'border-teal-700/45' : contextoVisualEtapa === 'concluido' ? 'border-violet-500/40' : contextoVisualEtapa === 'encerrado' ? 'border-slate-500/40' : 'border-brand-green/25'}`}>
         <button type="button" role="tab" aria-selected={abaEntregaveis === 'ativos'} onClick={() => setAbaEntregaveis('ativos')}
           className={`rounded-lg px-4 py-2 text-sm font-semibold transition-none ${abaEntregaveis === 'ativos' ? classeAbaAtiva : 'text-foreground/70 hover:bg-brand-green/10 hover:text-foreground'}`}>
-          Todas
+          <span className="inline-flex items-center gap-1.5"><IconeStatus tipo="ativas"/>Ativas</span>
         </button>
         <button type="button" role="tab" aria-selected={abaEntregaveis === 'revisao'} onClick={() => setAbaEntregaveis('revisao')}
-          className={`rounded-lg px-3 py-2 text-xs font-semibold transition-none ${abaEntregaveis === 'revisao' ? classeAbaAtiva : 'text-foreground/65 hover:bg-teal-700/10'}`}>Em revisão</button>
+          className={`rounded-lg px-3 py-2 text-xs font-semibold transition-none ${abaEntregaveis === 'revisao' ? classeAbaAtiva : 'text-foreground/65 hover:bg-teal-700/10'}`}> <span className="inline-flex items-center gap-1.5"><IconeStatus tipo="revisao"/>Em revisão</span></button>
         <button type="button" role="tab" aria-selected={abaEntregaveis === 'comprovados'}
-          aria-label="Entregáveis concluídos" onClick={() => setAbaEntregaveis('comprovados')}
+          aria-label="Entregáveis finalizados" onClick={() => setAbaEntregaveis('comprovados')}
           className={`rounded-lg px-3 py-2 text-xs font-semibold transition-none ${abaEntregaveis === 'comprovados' ? classeAbaAtiva : 'text-foreground/65 hover:bg-violet-500/10'}`}>
-          ◉ Concluídos
+          <span className="inline-flex items-center gap-1.5"><IconeStatus tipo="concluidas"/>Finalizados</span>
         </button>
         {podeVerArquivados && <button type="button" role="tab" aria-selected={mostrarArquivados}
           aria-label="Entregáveis arquivados" title="Entregáveis arquivados" onClick={() => void alternarArquivados()}
@@ -226,7 +255,10 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, da
       </div></AbasRolaveis>
       {abaEntregaveis === 'ativos' && podeCriar && !paiBloqueado && !erro && <button type="button" disabled={salvando} aria-expanded={aberto}
         aria-controls={`cadastro-entregavel-${etapaId}`} data-tec08-acao-criar
-        onClick={() => { setIniciado(true); setAberto(anterior => !anterior); setAviso(''); }}
+        onClick={() => {
+          if (!aberto && dados && somaPesosContrato >= 100 - 0.00001) { setMostrarLimitePeso(true); return; }
+          setIniciado(true); setAberto(anterior => !anterior); setAviso('');
+        }}
         className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg bg-brand-green px-3 py-2 text-xs font-semibold text-on-brand-green transition-colors hover:brightness-110 focus-visible:outline-2 focus-visible:outline-brand-neon disabled:opacity-50">
         {aberto ? 'Cadastrando entregável' : 'Novo entregável'}
         <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8"
@@ -238,35 +270,32 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, da
       className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-foreground/65">
       <span>{visiveis.length} {visiveis.length === 1 ? 'entregável' : 'entregáveis'} · {indicadores.esperadas} {indicadores.esperadas === 1 ? 'evidência esperada' : 'evidências esperadas'}</span>
     </div>}
+    {mostrarLimitePeso && <ConfirmacaoSimples titulo="Limite do peso operacional"
+      descricao={`Os entregáveis deste contrato já representam 100% do peso operacional. Disponível: ${pesoDisponivel.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%. Redistribua os pesos antes de cadastrar outro entregável.`}
+      confirmar="Entendi" onCancelar={() => setMostrarLimitePeso(false)} onConfirmar={() => setMostrarLimitePeso(false)} />}
     {aviso && <p role="alert" className="mt-2 text-sm text-error-text">{aviso}</p>}
-    {abaEntregaveis === 'ativos' && podeCriar && !paiBloqueado && !erro && iniciado && <div id={`cadastro-entregavel-${etapaId}`} hidden={!aberto} data-tec08-criacao="true" className="mt-3">
-      <FormularioEntregavel contratoId={contratoId} etapaId={etapaId} onSalvar={cadastrar} onCancelar={() => setAberto(false)}
-        podeAlterarObrigatoriedade={permissoes?.alterarObrigatoriedade ?? false}
-        podeCriarEvidencias={permissoes?.criarEvidencias ?? podeCriar}
-        onSalvandoMudou={setSalvando} />
-    </div>}
+    {abaEntregaveis === 'ativos' && podeCriar && !paiBloqueado && !erro && iniciado && aberto && typeof document !== 'undefined' && createPortal(
+      <ModalEtapa titulo="Novo entregável" contexto="Cadastro do entregável" camada="edicao" formularioLongo ocupado={salvando}
+        estadoContextual="normal" onFechar={() => { if (!salvando) setAberto(false); }}>
+        <div id={`cadastro-entregavel-${etapaId}`} data-tec08-criacao="true">
+          <FormularioEntregavel contratoId={contratoId} etapaId={etapaId} onSalvar={cadastrar} onCancelar={() => setAberto(false)}
+            onSalvandoMudou={setSalvando} />
+        </div>
+      </ModalEtapa>, document.body)}
     {!mostrarArquivados && carregando && !dados && !erro && <p role="status" className="mt-3 text-sm">Carregando entregáveis...</p>}
     {!mostrarArquivados && Boolean(erro) && <p role="alert" className="mt-3 break-words text-sm text-error-text">
       {erro instanceof Error ? erro.message : 'Falha ao consultar entregáveis.'}
     </p>}
-    {!mostrarArquivados && !carregando && !erro && !exibidos.length && <p className="mt-3 text-sm text-foreground/70">{abaEntregaveis === 'comprovados' ? 'Nenhum entregável concluído.' : 'Nenhum entregável pendente de comprovação.'}</p>}
+    {!mostrarArquivados && !carregando && !erro && !exibidos.length && <p className="mt-3 text-sm text-foreground/70">{abaEntregaveis === 'comprovados' ? 'Nenhum entregável finalizado.' : 'Nenhum entregável pendente de comprovação.'}</p>}
     {podeVerArquivados && mostrarArquivados && <section role="tabpanel" className="mt-3 space-y-2" aria-label="Entregáveis arquivados">
       <h6 className="sr-only">Entregáveis arquivados</h6>
       {arquivados.length === 0 ? <p className="text-sm text-foreground/70">Nenhum entregável arquivado nesta etapa.</p> :
-        <ul className="space-y-2">{arquivados.map(item => <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/50 bg-background p-3 text-foreground">
+        <ul className="space-y-2">{[...arquivados].sort((a,b) => (a.inicioPrevisto ?? '9999-12-31').localeCompare(b.inicioPrevisto ?? '9999-12-31')).map(item => <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/60 bg-amber-500/[0.10] p-3 text-amber-100">
           <button type="button" onClick={evento => abrirDetalhe(item.id, evento)} aria-haspopup="dialog" className="min-w-0 flex-1 text-left hover:text-foreground focus-visible:outline-2 focus-visible:outline-amber-300">
             <span className="block text-xs font-mono text-foreground/65">{rotuloCodigoPublico(item.codigoPublico)} · Arquivado</span>
             <span className="break-words text-sm font-medium">{item.nome}</span>
           </button>
-          <div className="flex flex-wrap gap-2">
-            {permissoes?.reativarEntregaveis && <button type="button" disabled={ocupadoArquivo || paiBloqueado} title={paiArquivado ? 'Reative a etapa antes de alterar os entregáveis' : 'Reativar entregável'} onClick={() => setConfirmarReativacao(item.id)}
-              className="rounded-lg border border-amber-400/50 px-3 py-2 text-xs font-semibold text-amber-900 dark:text-amber-100 hover:bg-amber-500/15 disabled:cursor-not-allowed disabled:border-slate-600 disabled:bg-slate-700/10 disabled:text-slate-400">Reativar</button>}
-            {permissoes?.excluirEntregaveisArquivados && <button type="button" title="Excluir entregável definitivamente" aria-label={`Excluir entregável arquivado ${item.nome}`}
-              disabled={ocupadoArquivo || paiBloqueado} onClick={() => setConfirmarExclusao(item.id)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/55 bg-red-600/10 px-3 py-2 text-xs text-red-100 hover:bg-red-500/20">
-              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 10v7M14 10v7"/></svg>Excluir
-            </button>}
-          </div>
+
         </li>)}</ul>}
     </section>}
     {!mostrarArquivados && !protegido && !erro && exibidos.length > 0 && <ul aria-label="Entregáveis planejados da etapa" className="mt-3 space-y-2">
@@ -274,8 +303,9 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, da
         const resumoItem = documental?.[e.id];
         const completo = entregavelDocumentalmenteConcluido(e, resumoItem);
         const concluidoVisual = e.statusExecucao === 'CONCLUIDO' && !e.reabertoEm;
+        const finalizadoVisual = e.statusExecucao === 'FINALIZADO' && !e.reabertoEm;
         const comprovacaoSemConclusao = completo && !concluidoVisual && !e.reabertoEm;
-        return <li key={e.id} data-tec08-item-clicavel data-entregavel-estado={e.arquivadoEm ? 'arquivado' : concluidoVisual ? 'concluido' : e.reabertoEm ? 'revisao' : 'normal'} className="relative min-w-0">
+        return <li key={e.id} data-tec08-item-clicavel data-entregavel-estado={estadoDoObjeto({objeto:'entregavel',status:e.statusExecucao,arquivado:Boolean(e.arquivadoEm),reaberto:Boolean(e.reabertoEm)})} className="relative min-w-0">
         <Link href={`/contratos/${encodeURIComponent(contratoId)}/entregaveis/${encodeURIComponent(e.id)}`}
           onClick={(evento) => {
             // Clique comum abre o detalhe no modal; modificadores permitem nova aba.
@@ -284,19 +314,19 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, da
           }}
           aria-haspopup="dialog" aria-label={e.nome}
           title={`Abrir detalhes de ${e.nome}`}
-          className={`group block min-w-0 cursor-pointer rounded-xl border p-3.5 pb-14 text-left transition-none focus-visible:outline-2 focus-visible:outline-offset-2 ${e.arquivadoEm ? 'border-amber-500/60 bg-background text-foreground focus-visible:outline-amber-300' : e.reabertoEm ? 'border-teal-700/60 bg-background focus-visible:outline-teal-600' : concluidoVisual
+          className={`group block min-w-0 cursor-pointer rounded-xl border p-3.5 text-left transition-none focus-visible:outline-2 focus-visible:outline-offset-2 ${e.arquivadoEm ? 'border-amber-500/60 bg-amber-500/[0.10] text-amber-100 focus-visible:outline-amber-300' : e.reabertoEm ? 'border-teal-700/60 bg-teal-900/[0.14] focus-visible:outline-teal-600' : finalizadoVisual ? 'border-purple-500/65 bg-purple-500/[0.12] focus-visible:outline-purple-400' : concluidoVisual
             ? 'border-violet-500/65 bg-background hover:border-violet-400 focus-visible:outline-violet-400'
             : comprovacaoSemConclusao ? 'border-brand-green/40 bg-background hover:border-brand-green/55 focus-visible:outline-brand-neon' : 'border-brand-green/20 bg-background hover:border-brand-green/55 focus-visible:outline-brand-neon'}`}>
           <div className="grid min-w-0 grid-cols-[2rem_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2">
             <span aria-label={completo ? 'Entregável com comprovação documental completa' : 'Entregável com comprovação pendente'} title={completo ? 'Comprovação completa' : 'Comprovação pendente'}
-              className={`mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${e.arquivadoEm ? 'border-amber-400/65 bg-amber-500/20 text-amber-200' : e.reabertoEm ? 'border-teal-600/60 bg-teal-900/20 text-teal-200' : concluidoVisual ? 'border-violet-400/65 bg-violet-500/20 text-violet-200' : comprovacaoSemConclusao ? 'border-brand-green/50 bg-brand-green/10 text-brand-neon' : 'border-brand-green/30 bg-brand-green/10 text-brand-neon/75'}`}>
+              className={`mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${e.arquivadoEm ? 'border-amber-400/65 bg-amber-500/20 text-amber-200' : e.reabertoEm ? 'border-teal-600/60 bg-teal-900/20 text-teal-200' : 'border-violet-500/60 bg-violet-500/10 text-violet-600 dark:text-violet-300'}`}>
               {completo ? <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="h-5 w-5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="m5 12 4 4L19 6" />
               </svg> : <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-4 w-4"><circle cx="12" cy="12" r="8" /></svg>}
             </span>
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                <p className={`min-w-0 break-words text-base font-semibold ${e.arquivadoEm ? 'text-amber-300' : e.reabertoEm ? 'text-teal-300' : concluidoVisual ? 'text-violet-300' : 'text-brand-neon'}`}>{e.nome}</p>
+                <p className={`min-w-0 break-words text-base font-semibold ${e.arquivadoEm ? 'text-amber-300' : e.reabertoEm ? 'text-teal-300' : finalizadoVisual ? 'text-purple-300' : concluidoVisual ? 'text-violet-300' : 'text-brand-neon'}`}>{e.nome}</p>
                 <span className="shrink-0 font-mono text-xs text-foreground/60">{rotuloCodigoPublico(e.codigoPublico)}</span>
               </div>
               {intervaloPrevisto(e.inicioPrevisto, e.terminoPrevisto) &&
@@ -304,8 +334,8 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, da
               <p className="mt-0.5 break-words text-xs text-foreground/70">{e.codigo ? `${e.codigo} · ` : ''}{ROTULOS_TIPO[e.tipo]}</p>
             </div>
             <div className="col-start-3 row-start-1 flex shrink-0 items-center justify-self-end gap-1.5 self-start pl-1">
-              <span className={`rounded-full border px-2.5 py-1 text-xs ${e.reabertoEm ? 'border-teal-600/55 bg-teal-900/20 text-teal-200' : concluidoVisual ? 'border-violet-400/55 bg-violet-500/15 text-violet-100' : comprovacaoSemConclusao ? 'border-brand-green/45 bg-brand-green/10 text-foreground' : 'border-brand-green/30'}`}>{e.reabertoEm ? 'Em revisão' : concluidoVisual ? 'Concluído' : e.statusExecucao === 'CONCLUIDO' ? 'Execução concluída' :
-                e.statusExecucao === 'EM_ANDAMENTO' ? 'Em andamento' : 'Planejamento'}</span>
+              <span className={`rounded-full border px-2.5 py-1 text-xs ${e.reabertoEm ? 'border-teal-600/55 bg-teal-900/20 text-teal-200' : finalizadoVisual ? 'border-purple-500/60 bg-purple-500/20 text-purple-300' : concluidoVisual ? 'border-violet-400/55 bg-violet-500/15 text-violet-100' : comprovacaoSemConclusao ? 'border-brand-green/45 bg-brand-green/10 text-foreground' : 'border-brand-green/30'}`}>{e.reabertoEm ? 'Em revisão' : finalizadoVisual ? 'Encerrado' : concluidoVisual ? 'Concluído' : e.statusExecucao === 'CONCLUIDO' ? 'Execução concluída' :
+                e.statusExecucao === 'PENDENTE_ENCERRAMENTO' ? 'Pendente de encerramento' : e.statusExecucao === 'PENDENTE_CONCLUSAO' ? 'Pendente de conclusão' : e.statusExecucao === 'EM_ANDAMENTO' ? 'Em andamento' : 'Planejamento'}</span>
               <span aria-hidden="true" className="text-sm text-foreground/65">›</span>
             </div>
           </div>
@@ -325,23 +355,16 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, da
             </div>;
           })()}
         </Link>
-        {(podeArquivar || podeEditar || permissoes?.reabrirEntregaveis) && <div className="absolute bottom-2 right-3 z-[2] flex min-h-9 items-center justify-end gap-1.5 rounded-lg bg-background/95 p-0.5">
-          {permissoes?.reabrirEntregaveis && concluidoVisual && !paiBloqueado && <button type="button" aria-label={`Reabrir entregável ${e.nome}`} title="Reabrir entregável verificado" disabled={ocupadoArquivo} onClick={() => setConfirmarReabertura(e.id)} className="inline-flex h-8 items-center gap-1 rounded-lg border border-teal-500/50 bg-teal-950 px-2 text-teal-100 hover:bg-teal-900">⟳ <span className="text-xs font-semibold">Reabrir</span></button>}
-          {podeArquivar && <button type="button" disabled={ocupadoArquivo || paiBloqueado || (completo && !e.reabertoEm) || (e.statusExecucao === 'CONCLUIDO' && !e.reabertoEm)} aria-label={`Arquivar entregável ${e.nome}`} title={paiArquivado ? 'Etapa arquivada: reative a etapa antes de arquivar o entregável' : 'Arquivar entregável'}
-            onClick={() => setConfirmarArquivamento(e.id)} className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border disabled:cursor-not-allowed ${paiArquivado ? 'border-slate-500/35 bg-slate-500/10 text-slate-500' : 'border-amber-500/40 text-amber-200 hover:bg-amber-500/15'} disabled:opacity-70 disabled:!bg-slate-600/10 disabled:!text-slate-400`}>
-            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v12h14V8M9 13h6"/></svg>
-          </button>}
-          {podeEditar && <button type="button" aria-label={`Editar entregável ${e.nome}`} title={paiArquivado ? 'Contrato ou etapa arquivados: edição bloqueada' : 'Editar entregável'} disabled={paiBloqueado || (completo && !e.reabertoEm) || (e.statusExecucao === 'CONCLUIDO' && !e.reabertoEm)} onClick={evento => abrirDetalhe(e.id, evento, true)}
-            data-tec08-editar-entidade className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-brand-green/40 text-brand-neon hover:bg-brand-green/15 disabled:cursor-not-allowed disabled:border-slate-600 disabled:bg-slate-600/10 disabled:text-slate-400 disabled:opacity-65">
-            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><path d="m15 5 4 4M4 20l4.5-1 11-11a2 2 0 0 0-3-3l-11 11L4 20Z"/></svg>
-          </button>}
-        </div>}
+
       </li>;
       })}
     </ul>}
     {detalheId && !protegido && (!erro || mostrarArquivados) && <ModalDetalheEntregavel contratoId={contratoId} etapaId={etapaId}
     entregavelId={detalheId} itemInicial={[...(dados ?? []), ...arquivados].find(item => item.id === detalheId)}
-    dentroModal={dentroModal} resumoInicial={documental?.[detalheId]} paiConcluido={paiConcluido} paiEmRevisao={paiEmRevisao} verificado={Boolean([...(dados ?? []), ...arquivados].find(e => e.id === detalheId)?.statusExecucao === 'CONCLUIDO' && ![...(dados ?? []), ...arquivados].find(e => e.id === detalheId)?.reabertoEm)} iniciarEditando={editarAoAbrir && !paiBloqueado} paiArquivado={paiArquivado} podeEditar={!paiBloqueado && (podeEditar ?? podeCriar)} permissoes={permissoes}
+    dentroModal={dentroModal} resumoInicial={documental?.[detalheId]} paiConcluido={paiConcluido} paiEmRevisao={paiEmRevisao} verificado={Boolean([...(dados ?? []), ...arquivados].find(e => e.id === detalheId)?.statusExecucao === 'CONCLUIDO' && ![...(dados ?? []), ...arquivados].find(e => e.id === detalheId)?.reabertoEm)} iniciarEditando={editarAoAbrir && !paiBloqueado} paiArquivado={paiArquivado} podeEditar={Boolean(permissoes?.editarEntregaveis) && (podeEditar ?? podeCriar)} permissoes={permissoes}
+    podeArquivar={Boolean(podeArquivar) && !paiBloqueado} onArquivar={() => setConfirmarArquivamento(detalheId)}
+    onReabrir={() => setConfirmarReabertura(detalheId)} onReativar={() => setConfirmarReativacao(detalheId)}
+    onExcluir={() => setConfirmarExclusao(detalheId)}
     focoRetorno={gatilhoDetalhe} onFechar={() => fecharDetalhe()} atualizar={async () => {
       atualizarDocumental?.();
       await atualizar();

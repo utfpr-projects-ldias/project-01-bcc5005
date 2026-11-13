@@ -1,7 +1,7 @@
 import { criarEntregavel, editarEntregavel, ErroEntregavel } from './entregaveis';
 import { inicialEntregavel, validarEntregavel } from './validacao-entregavel';
 const resposta = { id: 'e', contratoId: 'c', etapaId: 'etapa', tipo: 'UNICO' };
-const dados = validarEntregavel({ ...inicialEntregavel('etapa'), nome: 'Reunião' });
+const dados = validarEntregavel({ ...inicialEntregavel('etapa'), nome: 'Reunião', peso: '20' });
 if (!dados.sucesso) throw Error('Dados de teste inválidos');
 const payload = dados.dados;
 const fetchSimulado = jest.fn();

@@ -27,3 +27,19 @@ describe('HU06-03 — validação civil das Etapas', () => {
     expect(validarEtapa({ ...DADOS_ETAPA_INICIAIS, nome: 'A', status: 'INVALIDA' as typeof DADOS_ETAPA_INICIAIS.status }).sucesso).toBe(false);
   });
 });
+
+test('Patch35: nome, código, descrição e observações respeitam limites menores', () => {
+  const base = { ...DADOS_ETAPA_INICIAIS, nome:'A' };
+  expect(validarEtapa({ ...base, nome:'A'.repeat(50) }).sucesso).toBe(true);
+  expect(validarEtapa({ ...base, nome:'A'.repeat(51) }).sucesso).toBe(false);
+  expect(validarEtapa({ ...base, codigo:'X'.repeat(16) }).sucesso).toBe(false);
+  expect(validarEtapa({ ...base, descricao:'X'.repeat(501) }).sucesso).toBe(false);
+  expect(validarEtapa({ ...base, observacoes:'X'.repeat(501) }).sucesso).toBe(false);
+});
+
+
+test('Patch37: preserva descrição legada da etapa e rejeita novo texto acima do limite', () => {
+  const antigo = { ...DADOS_ETAPA_INICIAIS, nome: 'Etapa', descricao: 'A'.repeat(800) };
+  expect(validarEtapa({ ...antigo, nome: 'Etapa revisada' }, antigo).sucesso).toBe(true);
+  expect(validarEtapa({ ...antigo, descricao: 'B'.repeat(800) }, antigo).sucesso).toBe(false);
+});

@@ -1,7 +1,7 @@
 /** Contrato HTTP HU06-02 — Etapas reais, sem entidades financeiras ou dados de demonstração. */
-export type StatusEtapa = 'PLANEJADA' | 'EM_ANDAMENTO' | 'CONCLUIDA' | 'ENCERRADA';
+export type StatusEtapa = 'PLANEJADA' | 'EM_ANDAMENTO' | 'CONCLUIDA' | 'ENCERRADA' | 'FINALIZADA';
 export const STATUS_ETAPA: Record<StatusEtapa, string> = {
-  PLANEJADA: 'Planejada', EM_ANDAMENTO: 'Em andamento', CONCLUIDA: 'Concluída', ENCERRADA: 'Encerrada',
+  PLANEJADA: 'Planejada', EM_ANDAMENTO: 'Em andamento', CONCLUIDA: 'Concluída', ENCERRADA: 'Encerrada', FINALIZADA: 'Encerrada',
 };
 
 export type Etapa = {
@@ -18,6 +18,11 @@ export type Etapa = {
   terminoPrevisto: string | null;
   status: StatusEtapa;
   observacoes: string | null;
+  conclusaoSolicitadaEm?: string | null;
+  conclusaoSolicitadaPor?: string | null;
+  encerramentoSolicitadoEm?: string | null;
+  encerramentoSolicitadoPor?: string | null;
+  encerramentoMotivo?: string | null;
   vigenciaContrato: { inicioVigencia: string; terminoVigencia: string };
   avisoVigencia: boolean;
 };
@@ -46,13 +51,19 @@ async function requisitar<T>(caminho: string, init?: RequestInit): Promise<T> {
   }
   if (!resposta.ok) {
     const mensagens: Record<number, string> = {
-      400: 'Confira os campos informados e tente novamente.',
+      400: 'Dados inválidos: confira a justificativa (15 a 200 caracteres) e os campos enviados.',
       401: 'Sua sessão expirou. Entre novamente.',
       403: 'Você não tem permissão para esta operação.',
       404: 'Contrato ou etapa indisponível. Atualize a página.',
       409: 'As etapas foram alteradas por outra pessoa. Atualize a lista antes de tentar novamente.',
     };
-    throw new ErroEtapa(resposta.status, mensagens[resposta.status] ?? 'Não foi possível concluir a operação. Tente novamente.');
+    let detalhe: unknown;
+    try { detalhe = await resposta.json(); } catch { /* resposta sem JSON */ }
+    const mensagemServidor = detalhe && typeof detalhe === 'object'
+      ? ('message' in detalhe ? (detalhe as { message?: unknown }).message : 'error' in detalhe ? (detalhe as { error?: unknown }).error : null) : null;
+    const mensagem = typeof mensagemServidor === 'string' ? mensagemServidor
+      : Array.isArray(mensagemServidor) ? mensagemServidor.filter((v): v is string => typeof v === 'string').join(' ') : '';
+    throw new ErroEtapa(resposta.status, mensagem || mensagens[resposta.status] || 'Não foi possível concluir a operação. Tente novamente.');
   }
   return (await resposta.json()) as T;
 }
@@ -63,9 +74,14 @@ export const listarEtapas = (contratoId: string) => requisitar<Etapa[]>(caminho(
 export const criarEtapa = (contratoId: string, dados: DadosEtapa) => requisitar<Etapa>(caminho(contratoId), {
   method: 'POST', body: JSON.stringify(dados),
 });
-export const editarEtapa = (contratoId: string, etapaId: string, dados: DadosEtapa) => requisitar<Etapa>(
+export const editarEtapa = (contratoId: string, etapaId: string, dados: Partial<DadosEtapa>) => requisitar<Etapa>(
   `${caminho(contratoId)}/${encodeURIComponent(etapaId)}`, { method: 'PATCH', body: JSON.stringify(dados) },
 );
+export const solicitarConclusaoEtapa = (c:string,e:string) => requisitar<Etapa>(`${caminho(c)}/${encodeURIComponent(e)}/solicitar-conclusao`,{method:'PATCH'});
+export const solicitarEncerramentoEtapa = (c:string,e:string,motivo:string) => requisitar<Etapa>(`${caminho(c)}/${encodeURIComponent(e)}/solicitar-encerramento`,{method:'PATCH',body:JSON.stringify({motivo})});
+export const devolverSolicitacaoEtapa = (c:string,e:string,tipo:'conclusao'|'encerramento',motivo:string) => requisitar<Etapa>(`${caminho(c)}/${encodeURIComponent(e)}/devolver-${tipo}`,{method:'PATCH',body:JSON.stringify({motivo})});
+export const finalizarEtapa = (c: string, e: string, motivo: string) => requisitar<Etapa>(
+  `${caminho(c)}/${encodeURIComponent(e)}/finalizar`, { method: 'PATCH', body: JSON.stringify({ motivo }) });
 export const concluirEtapa = (c: string, e: string) => requisitar<Etapa>(`${caminho(c)}/${encodeURIComponent(e)}/concluir`, { method: 'PATCH' });
 export const consultarHistoricoEtapa = (c: string, e: string, signal?: AbortSignal) => requisitar<Array<{id: string; acao: string; descricao: string; ocorridoEm: string; entidadeTipo: string; entidadeId: string; evidenciaId?: string | null; contexto?: string; nomeArquivo?: string | null; justificativa?: string | null; ator?: {nome: string; email: string} | null}>>(`${caminho(c)}/${encodeURIComponent(e)}/historico`, { signal });
 export const reabrirEtapaEncerrada = (c: string, e: string, motivo: string) => requisitar<Etapa>(`${caminho(c)}/${encodeURIComponent(e)}/reabrir-encerrada`, { method: 'PATCH', body: JSON.stringify({ motivo }) });

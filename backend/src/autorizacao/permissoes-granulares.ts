@@ -8,6 +8,7 @@ export const CHAVES_PERMISSOES = [
   'criarEntregaveis', 'editarEntregaveis', 'arquivarEntregaveis', 'reativarEntregaveis', 'reabrirEntregaveis', 'excluirEntregaveisArquivados',
   'criarEvidencias', 'editarEvidencias', 'arquivarEvidencias', 'reativarEvidencias', 'reabrirEvidencias', 'excluirEvidenciasArquivadas',
   'alterarObrigatoriedade', 'enviarComprovantes', 'verificarComprovantes',
+  'criarOcorrencias', 'editarOcorrencias', 'editarExigenciasOcorrencia', 'editarPesoOcorrencia', 'registrarExecucaoOcorrencia', 'corrigirExecucaoOcorrencia', 'concluirOcorrencias', 'reabrirOcorrencias', 'configurarAgendaOcorrencias', 'editarExecucaoFisica', 'configurarPesos',
   'registrarAtividades', 'editarAtividades', 'verificarAtividades', 'reabrirAtividades', 'arquivarAtividades', 'reativarAtividades', 'excluirAtividadesArquivadas',
   'editarContrato', 'concluirContrato', 'encerrarContrato', 'reabrirContrato', 'cancelarContrato', 'reverterCancelamentoContrato', 'suspenderContrato', 'retomarContrato', 'verificarDocumentos', 'reabrirDocumentos', 'concluirEtapas', 'concluirEntregaveis', 'anexarDocumentos', 'editarDocumentos', 'arquivarDocumentos', 'reativarDocumentos', 'excluirDocumentosArquivados', 'verificarDocumentoPrincipal', 'reabrirDocumentoPrincipal', 'arquivarDocumentoPrincipal', 'reativarDocumentoPrincipal', 'excluirDocumentoPrincipal', 'administrarDocumentoPrincipal',
 ] as const;
@@ -15,6 +16,12 @@ export type ChavePermissao = typeof CHAVES_PERMISSOES[number];
 export type PermissoesGranulares = Partial<Record<ChavePermissao, boolean>>;
 
 export const ACAO_PERMISSAO: Readonly<Record<string, ChavePermissao>> = {
+  'ocorrencias:gerar': 'configurarAgendaOcorrencias', 'ocorrencias:replanejar': 'configurarAgendaOcorrencias',
+  'ocorrencias:criar': 'criarOcorrencias', 'ocorrencias:editar': 'editarOcorrencias',
+  'ocorrencias:registrar': 'editarExecucaoFisica', 'ocorrencias:vincular-evidencia': 'enviarComprovantes', 'ocorrencias:concluir': 'concluirOcorrencias',
+  'ocorrencias:reabrir': 'reabrirOcorrencias',
+  'pesos:atualizar': 'configurarPesos',
+  'execucao:atualizar': 'editarExecucaoFisica',
   'etapas:criar': 'criarEtapas', 'etapas:editar': 'editarEtapas',
   'etapas:reordenar': 'reordenarEtapas',
   'etapas:bloquear-ordem': 'bloquearOrdemEtapas',
@@ -66,7 +73,7 @@ export function permissoesEfetivas(perfil: PerfilUsuario | string, podeEditar: b
   const gestorEditor = perfil === 'GESTOR' && podeEditar;
   const base = {} as Record<ChavePermissao, boolean>;
   for (const chave of CHAVES_PERMISSOES) {
-    const padrao = (chave === 'verificarAtividades' || chave === 'arquivarAtividades' || chave === 'verificarDocumentos' || chave === 'reabrirDocumentos' || chave === 'alterarObrigatoriedade' || chave === 'encerrarContrato' || chave === 'encerrarEtapas' || chave === 'cancelarContrato' || chave === 'reverterCancelamentoContrato' || chave === 'suspenderContrato' || chave === 'retomarContrato' || chave === 'administrarDocumentoPrincipal' || chave.endsWith('DocumentoPrincipal') || chave === 'bloquearOrdemEtapas' || chave.startsWith('excluir') || chave.startsWith('reativar') || chave.startsWith('reabrir') || chave === 'arquivarEtapas' || chave.startsWith('concluir')) ? false
+    const padrao = (chave === 'concluirOcorrencias' || chave === 'reabrirOcorrencias' || chave === 'verificarAtividades' || chave === 'arquivarAtividades' || chave === 'verificarDocumentos' || chave === 'reabrirDocumentos' || chave === 'alterarObrigatoriedade' || chave === 'editarExigenciasOcorrencia' || chave === 'editarPesoOcorrencia' || chave === 'corrigirExecucaoOcorrencia' || chave === 'encerrarContrato' || chave === 'encerrarEtapas' || chave === 'cancelarContrato' || chave === 'reverterCancelamentoContrato' || chave === 'suspenderContrato' || chave === 'retomarContrato' || chave === 'administrarDocumentoPrincipal' || chave.endsWith('DocumentoPrincipal') || chave === 'bloquearOrdemEtapas' || chave.startsWith('excluir') || chave.startsWith('reativar') || chave.startsWith('reabrir') || chave === 'arquivarEtapas' || chave.startsWith('concluir')) ? false
       : chave === 'registrarAtividades' || chave === 'editarAtividades' ? podeEditar
       : chave === 'enviarComprovantes' ? true
       : chave === 'verificarComprovantes' ? true // serviço exige verificador distinto e autorizado

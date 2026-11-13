@@ -37,14 +37,12 @@ import { TipoEntregavel } from './tipo-entregavel.enum.js';
 @Check('ck_entregaveis_quantidades', '("quantidade_prevista" IS NULL OR "quantidade_prevista" >= 0) AND ("quantidade_realizada" IS NULL OR "quantidade_realizada" >= 0)')
 @Check('ck_entregaveis_peso', '"peso" IS NULL OR ("peso" >= 0 AND "peso" <= 100)')
 @Check('ck_entregaveis_percentual', '"percentual_execucao" IS NULL OR ("percentual_execucao" >= 0 AND "percentual_execucao" <= 100)')
-@Check('ck_entregaveis_quantitativo', `"tipo" <> 'QUANTITATIVO' OR ("quantidade_prevista" IS NOT NULL AND "quantidade_prevista" > 0 AND "unidade_medida" IS NOT NULL AND length(btrim("unidade_medida")) > 0)`)
+@Check('ck_entregaveis_quantitativo', `"tipo" <> 'QUANTITATIVO' OR (("quantidade_prevista" IS NULL AND "unidade_medida" IS NULL) OR ("quantidade_prevista" > 0 AND "unidade_medida" IS NOT NULL AND length(btrim("unidade_medida")) > 0))`)
 @Check('ck_entregaveis_unidade_nao_vazia', '"unidade_medida" IS NULL OR length(btrim("unidade_medida")) > 0')
 @Check('ck_entregaveis_recorrencia', `
   (
-    "tipo" = 'RECORRENTE' AND "periodicidade" IS NOT NULL
-    AND "configuracao_periodicidade" IS NOT NULL
-    AND jsonb_typeof("configuracao_periodicidade") = 'object'
-    AND "configuracao_periodicidade" = '{"versao":1}'::jsonb
+    "tipo" = 'RECORRENTE' AND (("periodicidade" IS NULL AND "configuracao_periodicidade" IS NULL) OR
+    ("periodicidade" IS NOT NULL AND "configuracao_periodicidade" = '{"versao":1}'::jsonb))
   ) OR (
     "tipo" <> 'RECORRENTE' AND "periodicidade" IS NULL
     AND "configuracao_periodicidade" IS NULL
@@ -129,11 +127,24 @@ export class Entregavel {
   @Column({ name: 'status_execucao', type: 'enum', enum: StatusExecucaoEntregavel, enumName: 'entregaveis_status_execucao_enum', nullable: true })
   statusExecucao!: StatusExecucaoEntregavel | null;
 
-  @Column({ name: 'percentual_execucao', type: 'numeric', precision: 5, scale: 2, nullable: true })
+  /** Justificativa da finalização administrativa com progresso parcial. */
+  @Column({ name: 'motivo_finalizacao', type: 'text', nullable: true })
+  motivoFinalizacao!: string | null;
+
+  @Column({ name: 'finalizado_em', type: 'timestamptz', nullable: true })
+  finalizadoEm!: Date | null;
+
+  @Column({ name: 'percentual_execucao' , type: 'numeric', precision: 5, scale: 2, nullable: true })
   percentualExecucao!: string | null;
 
   @Column({ name: 'situacao_comprovacao', type: 'enum', enum: SituacaoComprovacaoEntregavel, enumName: 'entregaveis_situacao_comprovacao_enum', nullable: true })
   situacaoComprovacao!: SituacaoComprovacaoEntregavel | null;
+
+  @Column({ name: 'data_efetiva_marco', type: 'date', nullable: true })
+  dataEfetivaMarco!: string | null;
+
+  @Column({ name: 'agenda_inicio_futuro', type: 'date', nullable: true })
+  agendaInicioFuturo!: string | null;
 
   /** Reabertura documental explícita, independente do status operacional. */
   @Column({ name: 'reaberto_em', type: 'timestamptz', nullable: true })

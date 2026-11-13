@@ -17,7 +17,7 @@ export function useMutacoesEtapas(contratoId: string) {
       cache.invalidar(['contratos', 'pendentes']);
       return etapa;
     },
-    editar: async (etapaId: string, dados: DadosEtapa) => {
+    editar: async (etapaId: string, dados: Partial<DadosEtapa>) => {
       const etapa = await editarEtapa(contratoId, etapaId, dados);
       cache.invalidar(chave);
       cache.invalidar(['contratos', 'pendentes']);

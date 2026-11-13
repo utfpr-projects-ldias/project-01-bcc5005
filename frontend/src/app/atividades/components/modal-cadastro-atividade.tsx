@@ -3,6 +3,8 @@
 import type { EstadoContextual } from '@/lib/estado-visivel-contrato';
 import { useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
+import { SeletorOcorrencia } from './seletor-ocorrencia';
+import { useOcorrencias } from '@/hooks/use-ocorrencias';
 import { ModalEtapa } from '@/app/contratos/components/modal-etapa';
 import { useEntregaveis } from '@/hooks/use-entregaveis';
 import { useEtapas } from '@/hooks/use-etapas';
@@ -11,10 +13,10 @@ import { atividadeSchema, TIPOS_ATIVIDADE, type FormularioAtividade } from '@/li
 
 const vazio = (entregavelId: string): FormularioAtividade => ({
   titulo: '', dataHora: '', descricao: '', tipo: 'Reunião', responsavel: '',
-  participantes: '', local: '', duracao: '', observacoes: '',
+  participantes: '', local: '', duracao: '', observacoes: '', quantidadeExecucao: null, ocorrenciaIds: [], medicoes: [],
   entregavelIds: entregavelId ? [entregavelId] : [],
 });
-const CAMPO = 'mt-1 w-full min-w-0 rounded-lg border border-brand-green/30 bg-background px-3 py-2.5 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-brand-neon';
+const CAMPO = 'mt-1 w-full min-w-0 rounded-xl border border-brand-green/25 bg-background/80 px-3 py-2.5 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-brand-neon';
 
 type Props = { contratoId: string; entregavelId?: string; origem?: HTMLElement | null; estadoContextual?: EstadoContextual;
   onFechar: () => void; onSalvo?: () => void | Promise<unknown> };
@@ -27,6 +29,9 @@ export function ModalCadastroAtividade({ contratoId, entregavelId = '', origem, 
   const [erro, setErro] = useState('');
   const [erros, setErros] = useState<Record<string, string>>({});
   const entregaveisConsulta = useEntregaveis(contratoId);
+  const agenda = useOcorrencias(contratoId);
+  const selecionada = agenda.ocorrencias.find(o => o.id === form.ocorrenciaId);
+  const unidade = entregaveisConsulta.dados?.find(e => e.id === selecionada?.entregavelId)?.unidadeMedida || "unidades";
   const etapasConsulta = useEtapas(contratoId);
   const diario = useAtividades(contratoId, { page: 1, limit: 20 });
   const etapasAbertas = new Set((etapasConsulta.dados ?? []).filter(e =>
@@ -59,43 +64,45 @@ export function ModalCadastroAtividade({ contratoId, entregavelId = '', origem, 
   const campo = <K extends keyof FormularioAtividade>(nome: K, valor: FormularioAtividade[K]) =>
     setForm(prev => ({ ...prev, [nome]: valor }));
 
-  return createPortal(<ModalEtapa estadoContextual={estadoContextual} titulo="Nova atividade" contexto="Diário de execução" formularioLongo
-    ocupado={salvando} camada={entregavelId ? 'edicao' : 'principal'} focoRetorno={origem} onFechar={onFechar} rotuloFechar="Fechar cadastro de atividade">
-    <form data-pi-formulario aria-label="Formulário de atividade" onSubmit={salvar} noValidate className="space-y-4">
+  return createPortal(<ModalEtapa estadoContextual={estadoContextual} titulo="Nova atividade" contexto="Diário de execução"
+    ocupado={salvando} formularioHorizontal cabecalhoUmaLinha camada={entregavelId ? 'edicao' : 'principal'} focoRetorno={origem} onFechar={onFechar} rotuloFechar="Fechar cadastro de atividade">
+    <form data-pi-formulario aria-label="Formulário de atividade" onSubmit={salvar} noValidate className="mx-auto max-w-3xl space-y-4">
       <p className="text-xs text-foreground/70">Campos com * são obrigatórios. A atividade pode vincular vários entregáveis abertos do mesmo contrato.</p>
       {erro && <p role="alert" className="rounded-lg border border-error-text/40 p-3 text-sm text-error-text">{erro}</p>}
       <label className="block text-sm font-medium">Título *
-        <input required maxLength={255} className={CAMPO} value={form.titulo} onChange={e => campo('titulo', e.target.value)} aria-invalid={Boolean(erros.titulo)} />
+        <input required maxLength={50} className={CAMPO} value={form.titulo} onChange={e => campo('titulo', e.target.value)} aria-invalid={Boolean(erros.titulo)} />
+        <span className="block text-right text-[11px] text-foreground/50">{form.titulo.length}/50</span>
       </label>{erros.titulo && <p className="text-xs text-error-text">{erros.titulo}</p>}
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-sm font-medium">Data e hora *
-          <input required type="datetime-local" lang="pt-BR" className={`${CAMPO} tec08-data-hora`} value={form.dataHora} onChange={e => campo('dataHora', e.target.value)} aria-invalid={Boolean(erros.dataHora)} />
+          <input required type="datetime-local" lang="pt-BR" className={`${CAMPO} tec08-data-hora max-w-full [color-scheme:light] dark:[color-scheme:dark]`} value={form.dataHora} onChange={e => campo('dataHora', e.target.value)} aria-invalid={Boolean(erros.dataHora)} />
         </label>
         <label className="block text-sm font-medium">Tipo *
-          <select className={CAMPO} value={form.tipo} onChange={e => campo('tipo', e.target.value as FormularioAtividade['tipo'])}>
+          <select className={`${CAMPO} pi-select pr-10`} value={form.tipo} onChange={e => campo('tipo', e.target.value as FormularioAtividade['tipo'])}>
             {TIPOS_ATIVIDADE.map(tipo => <option key={tipo}>{tipo}</option>)}
           </select>
         </label>
       </div>{erros.dataHora && <p className="text-xs text-error-text">{erros.dataHora}</p>}
       <label className="block text-sm font-medium">Descrição *
-        <textarea required rows={4} maxLength={5000} className={CAMPO} value={form.descricao} onChange={e => campo('descricao', e.target.value)} />
+        <textarea required rows={2} maxLength={500} className={CAMPO} value={form.descricao} onChange={e => campo('descricao', e.target.value)} />
+        <span className="block text-right text-[11px] text-foreground/50">{form.descricao.length}/500</span>
       </label>{erros.descricao && <p className="text-xs text-error-text">{erros.descricao}</p>}
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-sm font-medium">Responsável
-          <input maxLength={255} placeholder="Padrão: usuário conectado" className={CAMPO} value={form.responsavel} onChange={e => campo('responsavel', e.target.value)} />
+          <input maxLength={25} placeholder="Padrão: usuário conectado" className={CAMPO} value={form.responsavel} onChange={e => campo('responsavel', e.target.value)} />
         </label>
         <label className="block text-sm font-medium">Duração
-          <input maxLength={80} placeholder="Ex.: 2 horas" className={CAMPO} value={form.duracao} onChange={e => campo('duracao', e.target.value)} />
+          <input maxLength={25} placeholder="Ex.: 2 horas" className={CAMPO} value={form.duracao} onChange={e => campo('duracao', e.target.value)} />
         </label>
         <label className="block text-sm font-medium">Participantes
-          <input maxLength={2000} placeholder="Separe por vírgulas" className={CAMPO} value={form.participantes} onChange={e => campo('participantes', e.target.value)} />
+          <input maxLength={500} placeholder="Separe por vírgulas" className={CAMPO} value={form.participantes} onChange={e => campo('participantes', e.target.value)} />
         </label>
         <label className="block text-sm font-medium">Local
-          <input maxLength={255} className={CAMPO} value={form.local} onChange={e => campo('local', e.target.value)} />
+          <input maxLength={50} className={CAMPO} value={form.local} onChange={e => campo('local', e.target.value)} />
         </label>
       </div>
       <label className="block text-sm font-medium">Observações
-        <textarea rows={2} maxLength={5000} className={CAMPO} value={form.observacoes} onChange={e => campo('observacoes', e.target.value)} />
+        <textarea rows={2} maxLength={200} className={CAMPO} value={form.observacoes} onChange={e => campo('observacoes', e.target.value)} /><span className="block text-right text-[11px] text-foreground/55">{form.observacoes.length}/200</span>
       </label>
       <fieldset className="rounded-xl border border-brand-green/25 p-3 space-y-2">
         <legend className="px-1 text-sm font-semibold">Vincular ao(s) entregável(is) *</legend>
@@ -107,8 +114,20 @@ export function ModalCadastroAtividade({ contratoId, entregavelId = '', origem, 
             <span className="min-w-0 break-words">{ent.nome}</span></label>)}</div>}
         {erros.entregavelIds && <p className="text-xs text-error-text">{erros.entregavelIds}</p>}
       </fieldset>
+      {selecionada && (selecionada.modoRegistro === 'DESCRITIVO' || (selecionada.modoRegistro !== 'QUANTITATIVO' && selecionada.metaQuantidade == null)) && <p role="status" className="rounded-lg border border-current/20 bg-background/35 p-3 text-xs text-foreground/70">Esta ocorrência é descritiva: registre o que foi realizado no campo Descrição, sem informar uma quantidade.</p>}
+      <SeletorOcorrencia contratoId={contratoId} entregavelIds={form.entregavelIds}
+        valor={form.ocorrenciaId} valores={form.ocorrenciaIds ?? []} medicoes={form.medicoes ?? []}
+        unidades={Object.fromEntries((entregaveisConsulta.dados ?? []).map(ent => [ent.id, ent.unidadeMedida?.trim() || 'unidades']))}
+        onMedicoesChange={medicoes => setForm(anterior => ({...anterior, medicoes}))}
+        onChangeMultiplas={ids => setForm(anterior => ({...anterior,
+          ocorrenciaIds: ids,
+          medicoes: (anterior.medicoes ?? []).filter(m => ids.includes(m.ocorrenciaId)),
+          ocorrenciaId: ids.includes(anterior.ocorrenciaId ?? '') ? anterior.ocorrenciaId : null,
+          quantidadeExecucao: ids.includes(anterior.ocorrenciaId ?? '') ? anterior.quantidadeExecucao : null,
+        }))}
+        onChange={v => { campo('ocorrenciaId', v); campo('quantidadeExecucao', null); }} />
       <div className="flex justify-end gap-2 border-t border-brand-green/20 pt-4">
-        <button data-pi-acao="secundaria" type="button" onClick={onFechar} disabled={salvando} className="rounded-lg border border-brand-green/30 px-4 py-2 text-sm">Cancelar</button>
+        <button data-pi-acao="secundaria" type="button" onClick={onFechar} disabled={salvando} className="rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-500/20 dark:text-red-300">Cancelar</button>
         <button data-pi-acao="primaria" type="submit" aria-busy={salvando} disabled={salvando || !elegiveis.length || origemNaoElegivel}
           className="min-h-10 min-w-36 rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-on-brand-green">
           Registrar atividade</button>

@@ -2,9 +2,9 @@ import {
   BadRequestException, ConflictException, Injectable, NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, QueryFailedError, type EntityManager, type Repository } from 'typeorm';
+import { DataSource, IsNull, QueryFailedError, type EntityManager, type Repository } from 'typeorm';
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
-import { documentacaoVerificada, filhosEmRevisao, filhosPendentesDeConclusao } from '../entregaveis/conclusao-documental.js';
+import { documentacaoVerificada, filhosPendentesDeConclusao } from '../entregaveis/conclusao-documental.js';
 import { ordemAposArquivamento } from './ordem-apos-arquivamento.js';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
@@ -50,11 +50,12 @@ function calendarioValido(data: string): boolean {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === data;
 }
 
-function verificarDados(etapa: Pick<Etapa, 'nome' | 'codigo' | 'inicioPrevisto' | 'terminoPrevisto'>): void {
-  if (!etapa.nome.trim() || etapa.nome.length > 255) {
-    throw new BadRequestException('Nome da etapa é obrigatório e deve ter até 255 caracteres');
+function verificarDados(etapa: Pick<Etapa, 'nome' | 'codigo' | 'inicioPrevisto' | 'terminoPrevisto'>, nomeAnterior?: string): void {
+  // Nomes históricos maiores que o novo limite não são alterados ou truncados.
+  if (!etapa.nome.trim() || (etapa.nome.length > 36 && etapa.nome !== nomeAnterior)) {
+    throw new BadRequestException('Nome da etapa é obrigatório e deve ter até 36 caracteres');
   }
-  if (etapa.codigo !== null && (!etapa.codigo.trim() || etapa.codigo.length > 50)) {
+  if (etapa.codigo !== null && (!etapa.codigo.trim() || etapa.codigo.length > 30)) {
     throw new BadRequestException('Código da etapa inválido');
   }
   for (const data of [etapa.inicioPrevisto, etapa.terminoPrevisto]) {
@@ -73,6 +74,7 @@ function snapshot(etapa: Etapa): Record<string, unknown> {
     descricao: etapa.descricao, sequencia: etapa.sequencia,
     inicioPrevisto: etapa.inicioPrevisto, terminoPrevisto: etapa.terminoPrevisto,
     status: etapa.status, observacoes: etapa.observacoes,
+    conclusaoSolicitadaEm: etapa.conclusaoSolicitadaEm, encerramentoSolicitadoEm: etapa.encerramentoSolicitadoEm,
   };
 }
 
@@ -120,9 +122,10 @@ export class EtapasService {
       .where('c.id = :id', { id })
       .getOne();
     if (!contrato) throw new NotFoundException('Contrato não encontrado');
-    if (contrato.arquivadoEm || (contrato.status === 'CONCLUIDO' || contrato.status === 'ENCERRADO') ||
-      (!somenteConclusao && contrato.reabertoEm === null && await documentacaoVerificada(manager, id) && !await filhosEmRevisao(manager, id)))
-      throw new ConflictException('Reative ou reabra o contrato antes de modificar etapas');
+    // Documentação comprovada não equivale a uma decisão formal de conclusão.
+    // O planejamento só é bloqueado pelo arquivamento/status final expresso.
+    if (contrato.arquivadoEm || ['CONCLUIDO','ENCERRADO','FINALIZADO'].includes(contrato.status))
+      throw new ConflictException('Contrato arquivado ou finalizado: reative ou reabra o contrato antes de modificar etapas');
     return contrato;
   }
 
@@ -145,7 +148,7 @@ export class EtapasService {
     try {
       return await this.dataSource.transaction(async (manager) => {
         const contrato = await this.bloquearContrato(manager, contratoId);
-        if (dto.status === StatusEtapa.CONCLUIDA || dto.status === StatusEtapa.ENCERRADA) throw new ForbiddenException('Cadastre a etapa em planejamento ou andamento; a finalização é uma operação separada');
+        if (dto.status === StatusEtapa.CONCLUIDA || dto.status === StatusEtapa.ENCERRADA || dto.status === StatusEtapa.FINALIZADA) throw new ForbiddenException('Cadastre a etapa em planejamento ou andamento; a finalização é uma operação separada');
         const repo = manager.getRepository(Etapa);
         const ultima = await repo.findOne({ where: { contratoId }, order: { sequencia: 'DESC' } });
         const etapa = repo.create({
@@ -176,9 +179,12 @@ export class EtapasService {
         const etapa = await repo.findOneBy({ contratoId, id: etapaId });
         if (!etapa) throw new NotFoundException('Etapa não encontrada');
         if (etapa.arquivadoEm) throw new ConflictException('Reative a etapa antes de editar');
-        if (etapa.status === StatusEtapa.CONCLUIDA || etapa.status === StatusEtapa.ENCERRADA ||
-          (etapa.reabertoEm === null && await documentacaoVerificada(manager, contratoId, etapaId)))
-          throw new ConflictException('Etapa concluída: reabra antes de editar');
+        if (etapa.conclusaoSolicitadaEm || etapa.encerramentoSolicitadoEm) throw new ConflictException('Existe solicitação pendente; devolva a decisão antes de editar a etapa');
+        // Decisão de produto: finalização formal bloqueia TODA edição, inclusive textos.
+        // Um novo ciclo exige reabertura explícita e auditável.
+        if (!etapa.reabertoEm && [StatusEtapa.CONCLUIDA, StatusEtapa.ENCERRADA, StatusEtapa.FINALIZADA].includes(etapa.status))
+          throw new ConflictException('Etapa finalizada. Reabra para revisão antes de editar.');
+        const nomeAnterior = etapa.nome;
         const anterior = snapshot(etapa);
         const datasAnteriores = { inicioPrevisto: etapa.inicioPrevisto, terminoPrevisto: etapa.terminoPrevisto };
         const statusAnterior = etapa.status;
@@ -188,11 +194,11 @@ export class EtapasService {
         if (dto.inicioPrevisto !== undefined) etapa.inicioPrevisto = dto.inicioPrevisto;
         if (dto.terminoPrevisto !== undefined) etapa.terminoPrevisto = dto.terminoPrevisto;
         if (dto.status !== undefined) {
-          if (dto.status === StatusEtapa.CONCLUIDA || dto.status === StatusEtapa.ENCERRADA) throw new ForbiddenException('Use uma operação de finalização autorizada');
+          if (dto.status === StatusEtapa.CONCLUIDA || dto.status === StatusEtapa.ENCERRADA || dto.status === StatusEtapa.FINALIZADA) throw new ForbiddenException('Use uma operação de finalização autorizada');
           etapa.status = dto.status;
         }
         if (dto.observacoes !== undefined) etapa.observacoes = dto.observacoes;
-        verificarDados(etapa);
+        verificarDados(etapa, nomeAnterior);
         const salva = await repo.save(etapa);
         if (salva.status !== statusAnterior) {
           await this.auditoria.registrarNaTransacao(manager, ator, {
@@ -216,11 +222,89 @@ export class EtapasService {
     } catch (error: unknown) { return traduzirErro(error); }
   }
 
+  /** Uma solicitação não conclui nem encerra a etapa. A decisão final pertence a outro ator autorizado. */
+  async solicitarConclusao(contratoId: string, etapaId: string, ator: UsuarioAutenticado): Promise<RespostaEtapa> {
+    return this.dataSource.transaction(async manager => {
+      const contrato = await this.bloquearContrato(manager, contratoId, true);
+      if (contrato.arquivadoEm || ['CONCLUIDO','ENCERRADO','SUSPENSO','CANCELADO'].includes(contrato.status))
+        throw new ConflictException('Contrato fechado ou suspenso; reabra ou retome antes.');
+      if (ator.perfil !== PerfilUsuario.ADMINISTRADOR) {
+        const vinculo = await manager.getRepository(PermissaoContrato).findOneBy({ usuarioId: ator.id, contratoId });
+        if (!vinculo || !permissoesEfetivas(ator.perfil, vinculo.podeEditar, vinculo.permissoesDetalhadas).editarEtapas)
+          throw new ForbiddenException('Sem permissão para solicitar conclusão de etapa');
+      }
+      const repo = manager.getRepository(Etapa);
+      const etapa = await repo.findOneBy({ contratoId, id: etapaId });
+      if (!etapa) throw new NotFoundException('Etapa não encontrada');
+      if (etapa.arquivadoEm || (!etapa.reabertoEm && ['CONCLUIDA','ENCERRADA','FINALIZADA'].includes(etapa.status)))
+        throw new ConflictException('Etapa indisponível para solicitar conclusão');
+      if (etapa.conclusaoSolicitadaEm || etapa.encerramentoSolicitadoEm)
+        throw new ConflictException('Já existe uma solicitação pendente para a etapa');
+      if (!await documentacaoVerificada(manager, contratoId, etapaId) || await filhosPendentesDeConclusao(manager, contratoId, etapaId))
+        throw new ConflictException('Conclua ou verifique primeiro os entregáveis e evidências exigidos');
+      etapa.conclusaoSolicitadaEm = new Date(); etapa.conclusaoSolicitadaPor = ator.id;
+      const salvo = await repo.save(etapa);
+      await this.auditoria.registrarNaTransacao(manager, ator, {
+        acao: AcaoAuditoria.ETAPA_STATUS_ALTERADO, entidadeTipo:'ETAPA', entidadeId:etapaId,
+        dadosAnteriores:{solicitacao:null}, dadosPosteriores:{solicitacao:'CONCLUSAO', solicitadaEm:salvo.conclusaoSolicitadaEm, solicitante:ator.id},
+      });
+      return resposta(salvo,contrato);
+    });
+  }
+
+  async solicitarEncerramento(contratoId:string,etapaId:string,ator:UsuarioAutenticado,motivo:string):Promise<RespostaEtapa>{
+    const justificativa=motivo?.trim()??'';
+    if(justificativa.length<15||justificativa.length>200)throw new BadRequestException('Informe justificativa de 15 a 200 caracteres');
+    return this.dataSource.transaction(async manager=>{
+      const contrato=await this.bloquearContrato(manager,contratoId,true);
+      if(contrato.arquivadoEm || ['CONCLUIDO','ENCERRADO','SUSPENSO','CANCELADO'].includes(contrato.status))throw new ConflictException('Contrato indisponível');
+      if(ator.perfil!==PerfilUsuario.ADMINISTRADOR){
+        const vinculo=await manager.getRepository(PermissaoContrato).findOneBy({usuarioId:ator.id,contratoId});
+        if(!vinculo||!permissoesEfetivas(ator.perfil,vinculo.podeEditar,vinculo.permissoesDetalhadas).editarEtapas)throw new ForbiddenException('Sem permissão para solicitar encerramento de etapa');
+      }
+      const repo=manager.getRepository(Etapa);const etapa=await repo.findOneBy({contratoId,id:etapaId});
+      if(!etapa)throw new NotFoundException('Etapa não encontrada');
+      if(etapa.arquivadoEm || (!etapa.reabertoEm && ['CONCLUIDA','ENCERRADA','FINALIZADA'].includes(etapa.status)))throw new ConflictException('Etapa indisponível');
+      if(etapa.encerramentoSolicitadoEm||etapa.conclusaoSolicitadaEm)throw new ConflictException('Já existe solicitação pendente');
+      if(await documentacaoVerificada(manager,contratoId,etapaId)&&!await filhosPendentesDeConclusao(manager,contratoId,etapaId))
+        throw new ConflictException('Etapa integralmente elegível: solicite conclusão em vez de encerramento');
+      etapa.encerramentoSolicitadoEm=new Date();etapa.encerramentoSolicitadoPor=ator.id;etapa.encerramentoMotivo=justificativa;
+      const salvo=await repo.save(etapa);
+      await this.auditoria.registrarNaTransacao(manager,ator,{
+        acao:AcaoAuditoria.ETAPA_STATUS_ALTERADO,entidadeTipo:'ETAPA',entidadeId:etapaId,
+        dadosAnteriores:{solicitacao:null},dadosPosteriores:{solicitacao:'ENCERRAMENTO',justificativa,solicitante:ator.id},
+      });
+      return resposta(salvo,contrato);
+    });
+  }
+
+  async devolverSolicitacao(contratoId:string,etapaId:string,ator:UsuarioAutenticado,tipo:'conclusao'|'encerramento',motivo:string):Promise<RespostaEtapa>{
+    const justificativa=motivo?.trim()??'';
+    if(justificativa.length<15||justificativa.length>200)throw new BadRequestException('Informe justificativa de 15 a 200 caracteres');
+    return this.dataSource.transaction(async manager=>{
+      const contrato=await this.bloquearContrato(manager,contratoId,true);
+      if(ator.perfil!==PerfilUsuario.ADMINISTRADOR){
+        const vinculo=await manager.getRepository(PermissaoContrato).findOneBy({usuarioId:ator.id,contratoId});
+        const p=vinculo?permissoesEfetivas(ator.perfil,vinculo.podeEditar,vinculo.permissoesDetalhadas):null;
+        if(!p||!(tipo==='conclusao'?p.concluirEtapas:p.encerrarEtapas))throw new ForbiddenException('Sem permissão para devolver solicitação');
+      }
+      const repo=manager.getRepository(Etapa);const etapa=await repo.findOneBy({contratoId,id:etapaId});
+      if(!etapa)throw new NotFoundException('Etapa não encontrada');
+      if(!(tipo==='conclusao'?etapa.conclusaoSolicitadaEm:etapa.encerramentoSolicitadoEm))throw new ConflictException('Não existe solicitação pendente deste tipo');
+      if(tipo==='conclusao'){etapa.conclusaoSolicitadaEm=null;etapa.conclusaoSolicitadaPor=null;}
+      else {etapa.encerramentoSolicitadoEm=null;etapa.encerramentoSolicitadoPor=null;etapa.encerramentoMotivo=null;}
+      const salvo=await repo.save(etapa);
+      await this.auditoria.registrarNaTransacao(manager,ator,{acao:AcaoAuditoria.ETAPA_STATUS_ALTERADO,entidadeTipo:'ETAPA',entidadeId:etapaId,
+        dadosAnteriores:{solicitacao:tipo.toUpperCase()},dadosPosteriores:{solicitacao:null,devolvidaPor:ator.id,justificativa}});
+      return resposta(salvo,contrato);
+    });
+  }
+
   /** Confirmação explícita da etapa pela MESMA permissão no primeiro fechamento e no retorno da revisão. */
   async concluir(contratoId: string, etapaId: string, ator: UsuarioAutenticado): Promise<RespostaEtapa> {
     return this.dataSource.transaction(async manager => {
       const contrato = await this.bloquearContrato(manager, contratoId, true);
-      if (contrato.arquivadoEm || (contrato.status === 'CONCLUIDO' || contrato.status === 'ENCERRADO'))
+      if (contrato.arquivadoEm || ['CONCLUIDO','ENCERRADO','SUSPENSO','CANCELADO'].includes(contrato.status))
         throw new ConflictException('Reative ou reabra o contrato antes de concluir etapas');
       if (ator.perfil !== PerfilUsuario.ADMINISTRADOR) {
         const vinculo = await manager.getRepository(PermissaoContrato).findOneBy({ usuarioId: ator.id, contratoId });
@@ -231,7 +315,8 @@ export class EtapasService {
       const etapa = await repo.findOneBy({ contratoId, id: etapaId });
       if (!etapa) throw new NotFoundException('Etapa não encontrada');
       if (etapa.arquivadoEm) throw new ConflictException('Reative a etapa arquivada primeiro');
-      if ((etapa.status === StatusEtapa.CONCLUIDA || etapa.status === StatusEtapa.ENCERRADA) && !etapa.reabertoEm)
+      if (!etapa.conclusaoSolicitadaEm) throw new ConflictException('Solicite conclusão antes da aprovação');
+      if ((etapa.status === StatusEtapa.CONCLUIDA || (etapa.status === StatusEtapa.ENCERRADA || etapa.status === StatusEtapa.FINALIZADA)) && !etapa.reabertoEm)
         throw new ConflictException('Etapa já concluída');
       if (!await documentacaoVerificada(manager, contratoId, etapaId))
         throw new ConflictException('Ainda existem comprovações pendentes nesta etapa');
@@ -240,6 +325,7 @@ export class EtapasService {
       const anterior = { status: etapa.status, reabertoEm: etapa.reabertoEm ?? null };
       etapa.status = StatusEtapa.CONCLUIDA;
       etapa.reabertoEm = null;
+      etapa.conclusaoSolicitadaEm = null; etapa.conclusaoSolicitadaPor = null;
       const salva = await repo.save(etapa);
       await this.auditoria.registrarNaTransacao(manager, ator, {
         acao: AcaoAuditoria.ETAPA_STATUS_ALTERADO, entidadeTipo: 'ETAPA', entidadeId: etapaId,
@@ -256,7 +342,7 @@ export class EtapasService {
     if (justificativa.length < 15 || justificativa.length > 200)
       throw new BadRequestException('Informe justificativa de 15 a 200 caracteres para encerrar a etapa');
     return this.dataSource.transaction(async manager => {
-      const contrato = await this.bloquearContrato(manager, contratoId);
+      const contrato = await this.bloquearContrato(manager, contratoId, true);
       if (contrato.status === 'SUSPENSO' || contrato.status === 'CANCELADO')
         throw new ConflictException('Retome o contrato antes de encerrar uma etapa');
       if (ator.perfil !== PerfilUsuario.ADMINISTRADOR) {
@@ -267,16 +353,51 @@ export class EtapasService {
       const repo = manager.getRepository(Etapa);
       const etapa = await repo.findOneBy({ id: etapaId, contratoId });
       if (!etapa) throw new NotFoundException('Etapa não encontrada');
+      if (!etapa.encerramentoSolicitadoEm) throw new ConflictException('Solicite encerramento antes da aprovação');
       if (etapa.arquivadoEm) throw new ConflictException('Reative a etapa antes de encerrar');
-      if (etapa.status === StatusEtapa.CONCLUIDA || etapa.status === StatusEtapa.ENCERRADA)
+      if (['CONCLUIDA','ENCERRADA','FINALIZADA'].includes(etapa.status) && !etapa.reabertoEm)
         throw new ConflictException('Etapa já finalizada; uma nova decisão exige reabertura');
       const anterior = { status: etapa.status, reabertoEm: etapa.reabertoEm };
       etapa.status = StatusEtapa.ENCERRADA;
       etapa.reabertoEm = null;
+      etapa.encerramentoSolicitadoEm = null; etapa.encerramentoSolicitadoPor = null; etapa.encerramentoMotivo = null;
       const salvo = await repo.save(etapa);
       await this.auditoria.registrarNaTransacao(manager, ator, {
         acao: AcaoAuditoria.ETAPA_STATUS_ALTERADO, entidadeTipo: 'ETAPA', entidadeId: etapaId,
         dadosAnteriores: anterior, dadosPosteriores: { status: salvo.status, nome: salvo.nome, justificativa },
+      });
+      return resposta(salvo, contrato);
+    });
+  }
+
+  /** Finalização parcial autorizada: filhos resolvidos, sem falsificar CONCLUIDA. */
+  async finalizar(contratoId: string, etapaId: string, ator: UsuarioAutenticado, motivo: string): Promise<RespostaEtapa> {
+    if (!motivo || motivo.trim().length < 15 || motivo.trim().length > 200)
+      throw new BadRequestException('Justifique a finalização parcial (15 a 200 caracteres)');
+    return this.dataSource.transaction(async m => {
+      const contrato = await this.bloquearContrato(m, contratoId, true);
+      if (contrato.arquivadoEm || !['PLANEJAMENTO','EM_EXECUCAO','EM_ENCERRAMENTO'].includes(contrato.status))
+        throw new ConflictException('Contrato indisponível para finalizar etapa');
+      if (ator.perfil !== PerfilUsuario.ADMINISTRADOR) {
+        const v = await m.findOneBy(PermissaoContrato, { contratoId, usuarioId: ator.id });
+        if (!v || !permissoesEfetivas(ator.perfil, v.podeEditar, v.permissoesDetalhadas).concluirEtapas)
+          throw new ForbiddenException('Sem permissão para finalizar etapas');
+      }
+      const e = await m.findOne(Etapa, { where: { contratoId, id: etapaId }, lock: { mode: 'pessimistic_write' } });
+      if (!e || e.arquivadoEm) throw new NotFoundException('Etapa indisponível');
+      if (['CONCLUIDA','ENCERRADA','FINALIZADA'].includes(e.status)) throw new ConflictException('Etapa já possui decisão final');
+      const filhos = await m.findBy(Entregavel, { contratoId, etapaId, arquivadoEm: IsNull() });
+      if (!filhos.length || filhos.some(f => !['CONCLUIDO','FINALIZADO'].includes(f.statusExecucao ?? '')))
+        throw new ConflictException('Conclua ou finalize todos os entregáveis ativos da etapa');
+      if (!filhos.some(f => f.statusExecucao === 'FINALIZADO'))
+        throw new ConflictException('Todos os entregáveis foram concluídos: utilize Concluir etapa');
+      const anterior = { status: e.status };
+      e.status = StatusEtapa.FINALIZADA;
+      e.reabertoEm = null;
+      const salvo = await m.save(Etapa, e);
+      await this.auditoria.registrarNaTransacao(m, ator, {
+        acao: AcaoAuditoria.ETAPA_STATUS_ALTERADO, entidadeTipo: 'ETAPA', entidadeId: etapaId,
+        dadosAnteriores: anterior, dadosPosteriores: { status: salvo.status, justificativa: motivo.trim(), aprovadoPor: ator.id },
       });
       return resposta(salvo, contrato);
     });
@@ -361,15 +482,15 @@ export class EtapasService {
       const etapa = await repo.findOneBy({ id: etapaId, contratoId });
       if (!etapa) throw new NotFoundException('Etapa não encontrada');
       if (etapa.arquivadoEm) throw new ConflictException('Reative a etapa arquivada primeiro');
-      if (etapa.reabertoEm) throw new ConflictException('Etapa já foi reaberta');
-      if (somenteEncerrada !== (etapa.status === StatusEtapa.ENCERRADA))
+      if (etapa.reabertoEm) throw new ConflictException('Esta etapa já está Em revisão. Use Editar para corrigir os dados permitidos.');
+      if (somenteEncerrada !== (etapa.status === StatusEtapa.ENCERRADA || etapa.status === StatusEtapa.FINALIZADA))
         throw new ConflictException('Use a reabertura correspondente ao estado da etapa');
       if (somenteEncerrada && ator.perfil !== PerfilUsuario.ADMINISTRADOR) {
         const vinculo = await manager.getRepository(PermissaoContrato).findOneBy({ usuarioId: ator.id, contratoId });
         if (!vinculo || !permissoesEfetivas(ator.perfil, vinculo.podeEditar, vinculo.permissoesDetalhadas).reabrirEtapasEncerradas)
           throw new ForbiddenException('Sem permissão especial para reabrir etapa encerrada');
       }
-      const operacional = etapa.status === StatusEtapa.CONCLUIDA || etapa.status === StatusEtapa.ENCERRADA;
+      const operacional = [StatusEtapa.CONCLUIDA, StatusEtapa.ENCERRADA, StatusEtapa.FINALIZADA].includes(etapa.status);
       if (!operacional && !await documentacaoVerificada(manager, contratoId, etapaId))
         throw new ConflictException('Etapa ainda não tem comprovação concluída');
       const anterior = etapa.status;
