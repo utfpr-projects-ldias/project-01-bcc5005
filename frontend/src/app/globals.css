@@ -2007,3 +2007,60 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
 .contrato-detalhe-documental [data-tec09-painel-execucao] article[data-tec08-estado] [data-pi-titulo] {
   color: var(--tec08-status-heading) !important;
 }
+
+/* Patch 33 — identidade de AÇÕES isolada da identidade de estados do contrato.
+ * Não colore os botões do modal com o status herdado de etapas/entregáveis.
+ * Somente botões com intenção declarada recebem estas regras.
+ */
+[data-pi-intencao] { --pi-acao-cor: #94a3b8; }
+[data-pi-intencao="criar"] { --pi-acao-cor: #4ade80; }
+[data-pi-intencao="editar"], [data-pi-intencao="reabrir"], [data-pi-intencao="reativar"] { --pi-acao-cor: #2dd4bf; }
+[data-pi-intencao="concluir"], [data-pi-intencao="solicitar-conclusao"], [data-pi-intencao="verificar"] { --pi-acao-cor: #a78bfa; }
+[data-pi-intencao="encerrar"], [data-pi-intencao="solicitar-encerramento"] { --pi-acao-cor: #c084fc; }
+[data-pi-intencao="suspender"], [data-pi-intencao="arquivar"] { --pi-acao-cor: #fbbf24; }
+[data-pi-intencao="cancelar"], [data-pi-intencao="excluir"] { --pi-acao-cor: #f87171; }
+[data-pi-intencao]:not(:disabled) {
+  color: var(--pi-acao-cor) !important;
+  background-color: transparent !important;
+  border-color: color-mix(in srgb, var(--pi-acao-cor) 42%, transparent) !important;
+}
+[data-pi-intencao]:not(:disabled):hover,
+[data-pi-intencao]:not(:disabled):focus-visible {
+  background-color: color-mix(in srgb, var(--pi-acao-cor) 14%, transparent) !important;
+  border-color: color-mix(in srgb, var(--pi-acao-cor) 72%, transparent) !important;
+}
+[data-pi-intencao]:disabled {
+  color: #94a3b8 !important;
+  background-color: rgb(100 116 139 / .09) !important;
+  border-color: rgb(100 116 139 / .20) !important;
+  opacity: .60;
+}
+@media (prefers-color-scheme: light) {
+  [data-pi-intencao="criar"] { --pi-acao-cor: #15803d; }
+  [data-pi-intencao="editar"], [data-pi-intencao="reabrir"], [data-pi-intencao="reativar"] { --pi-acao-cor: #0f766e; }
+  [data-pi-intencao="concluir"], [data-pi-intencao="solicitar-conclusao"], [data-pi-intencao="verificar"] { --pi-acao-cor: #6d28d9; }
+  [data-pi-intencao="encerrar"], [data-pi-intencao="solicitar-encerramento"] { --pi-acao-cor: #7e22ce; }
+  [data-pi-intencao="suspender"], [data-pi-intencao="arquivar"] { --pi-acao-cor: #92400e; }
+  [data-pi-intencao="cancelar"], [data-pi-intencao="excluir"] { --pi-acao-cor: #b91c1c; }
+}
+
+/* PATCH33: FINALIZADO corresponde a resultado administrativo parcial;
+ * não se mistura com CONCLUIDO, ENCERRADO nem com a cor padrão verde.
+ * Os tokens são usados pelo painel, abas e indicador lateral do contrato.
+ */
+.contrato-detalhe-documental[data-tec08-estado="finalizado"] {
+  --pi-cor-propria: #a855f7;
+  --pi-texto-proprio: #d8b4fe;
+  --contrato-cor-rgb: 168 85 247;
+  --contrato-cor-solida: #7e22ce;
+  --contrato-texto: #d8b4fe;
+  --tec08-status-bg: #7e22ce;
+  --tec08-status-fg: #fff;
+  --tec08-status-border: #a855f7;
+}
+@media (prefers-color-scheme: light) {
+  .contrato-detalhe-documental[data-tec08-estado="finalizado"] {
+    --pi-texto-proprio: #7e22ce;
+    --contrato-texto: #7e22ce;
+  }
+}

@@ -1,4 +1,5 @@
 'use client';
+import { BotaoAcaoModal } from '@/app/components/botoes-modal';
 import { AbasRolaveis } from '@/app/components/abas-rolaveis';
 import { resultadoFinalizacao } from '@/lib/finalizados';
 import { IconeStatus } from '@/app/components/icones-status';
@@ -14,6 +15,7 @@ import { HistoricoEntregavel } from './historico-entregavel';
 import { AtividadesVinculadas } from './atividades-vinculadas';
 import { IconeEvidencia } from './icone-evidencia';
 import { estadoVisualEvidencia } from '@/lib/estado-visual-evidencia';
+import { estadoDoObjeto } from '@/lib/identidade-operacional';
 import { nomeArquivoLegivel } from '@/lib/nome-arquivo';
 import { rotuloCodigoPublico } from '@/lib/codigos-publicos';
 import { toastSucesso, toastAviso } from '@/app/components/toast-notificacoes';
@@ -21,9 +23,9 @@ import { toastSucesso, toastAviso } from '@/app/components/toast-notificacoes';
 const PainelOcorrenciasEntregavel = dynamic(() => import('@/app/ocorrencias/components/painel-ocorrencias').then(m => m.PainelOcorrencias), { ssr: false });
 
 type Campo = [nome: string, valor: string | null | undefined];
-function Quadro({ titulo, campos, estado = 'normal' }: { titulo: string; campos: Campo[]; estado?: 'normal' | 'revisao' | 'concluido' | 'arquivado' }) {
-  return <section data-tec08-secao-contextual data-tec08-estado={estado} className={`min-w-0 space-y-2 rounded-xl border p-3 sm:p-4 ${estado === 'arquivado' ? 'border-amber-500/45 bg-amber-500/[0.04]' : estado === 'concluido' ? 'border-violet-400/40 bg-violet-500/[0.04]' : estado === 'revisao' ? 'border-teal-500/40 bg-teal-500/[0.04]' : 'border-brand-green/20 bg-brand-darkgreen/5'}`}>
-    <h2 className={`text-lg font-semibold ${estado === 'arquivado' ? 'text-amber-200' : estado === 'concluido' ? 'text-violet-200' : estado === 'revisao' ? 'text-teal-200' : 'text-brand-neon'}`}>{titulo}</h2>
+function Quadro({ titulo, campos, estado = 'normal' }: { titulo: string; campos: Campo[]; estado?: 'normal' | 'revisao' | 'concluido' | 'finalizado' | 'arquivado' }) {
+  return <section data-tec08-secao-contextual data-tec08-estado={estado} className={`min-w-0 space-y-2 rounded-xl border p-3 sm:p-4 ${estado === 'arquivado' ? 'border-amber-500/45 bg-amber-500/[0.04]' : estado === 'concluido' ? 'border-violet-400/40 bg-violet-500/[0.04]' : estado === 'finalizado' ? 'border-purple-400/40 bg-purple-500/[0.04]' : estado === 'revisao' ? 'border-teal-500/40 bg-teal-500/[0.04]' : 'border-brand-green/20 bg-brand-darkgreen/5'}`}>
+    <h2 className={`text-lg font-semibold ${estado === 'arquivado' ? 'text-amber-200' : estado === 'concluido' ? 'text-violet-200' : estado === 'finalizado' ? 'text-purple-200' : estado === 'revisao' ? 'text-teal-200' : 'text-brand-neon'}`}>{titulo}</h2>
     <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm lg:grid-cols-3">
       {campos.map(([nome, valor]) => <div key={nome} className={`min-w-0 ${nome === 'Critério operacional' ? 'col-span-full' : ''}`}><dt className="text-xs text-foreground/60">{nome}</dt>
         <dd className="mt-0.5 whitespace-pre-wrap break-words text-sm">{valor?.trim() || 'Não informado'}</dd></div>)}
@@ -327,9 +329,10 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
     if (abaChecklist === 'pendentes') return Boolean(status && status.status !== 'VERIFICADA' && !status.reabertoEm);
     return !status || status.status !== 'VERIFICADA'; // Ativas: pendentes e em revisão; verificadas têm sua própria aba.
   };
-  return <><div data-tec08-contexto-operacional data-tec08-estado={item.arquivadoEm ? 'arquivado' : item.reabertoEm ? 'revisao' : item.statusExecucao === 'CONCLUIDO' ? 'concluido' : 'normal'} className="min-w-0 space-y-3">
+  const estadoProprioEntregavel = estadoDoObjeto({objeto:'entregavel',status:item.statusExecucao,arquivado:Boolean(item.arquivadoEm),reaberto:Boolean(item.reabertoEm)});
+  return <><div data-tec08-contexto-operacional data-tec08-estado={estadoProprioEntregavel} className="min-w-0 space-y-3">
     {item.descricao && <p className="whitespace-pre-wrap break-words text-xs text-foreground/75">{item.descricao}</p>}
-    <Quadro titulo="Identificação e planejamento" campos={campos} estado={item.arquivadoEm ? 'arquivado' : item.reabertoEm ? 'revisao' : concluidoSemReabertura ? 'concluido' : 'normal'} />
+    <Quadro titulo="Identificação e planejamento" campos={campos} estado={estadoProprioEntregavel === 'finalizado' ? 'finalizado' : estadoProprioEntregavel === 'concluido' ? 'concluido' : estadoProprioEntregavel === 'arquivado' ? 'arquivado' : estadoProprioEntregavel === 'revisao' ? 'revisao' : 'normal'} />
     {podeVerHistorico && <details onToggle={evento => setHistoricoExpandido(evento.currentTarget.open)} className="rounded-xl border border-brand-green/20 px-3 py-2">
       <summary data-tec08-titulo-historico className="cursor-pointer text-sm font-semibold text-brand-neon">Rastreabilidade do entregável</summary>
       {historicoExpandido && <HistoricoEntregavel contratoId={item.contratoId} entregavelId={item.id} versao={versaoEstado} ocultarTitulo />}
@@ -361,7 +364,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
     </nav>
     {item.tipo !== 'UNICO' && secaoSelecionada === 'ocorrencias' && <div id={`conteudo-ocorrencias-${item.id}`} role="tabpanel" aria-labelledby={`secao-ocorrencias-${item.id}`} className="min-w-0">
       <PainelOcorrenciasEntregavel contratoId={item.contratoId} entregavelIdInicial={item.id}
-        estadoContextual={item.arquivadoEm ? 'arquivado' : item.reabertoEm ? 'revisao' : item.statusExecucao === 'CONCLUIDO' ? 'concluido' : 'normal'}
+        estadoContextual={estadoProprioEntregavel}
         somenteLeitura={bloqueadoPorPai || paiArquivado || paiConcluido || Boolean(item.arquivadoEm)} embutido />
     </div>}
     {secaoSelecionada === 'evidencias' && <div id={`conteudo-evidencias-${item.id}`} role="tabpanel" aria-labelledby={`secao-evidencias-${item.id}`} className="min-w-0">
@@ -508,7 +511,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
     </section>
     </div>}
     {secaoSelecionada === 'atividades' && <div id={`conteudo-atividades-${item.id}`} role="tabpanel" aria-labelledby={`secao-atividades-${item.id}`} className="min-w-0">
-      <AtividadesVinculadas contratoId={item.contratoId} entregavelId={item.id} estadoContextual={item.arquivadoEm ? 'arquivado' : item.reabertoEm ? 'revisao' : item.statusExecucao === 'CONCLUIDO' ? 'concluido' : 'normal'} somenteLeitura={bloqueadoPorPai || paiArquivado || paiConcluido || Boolean(item.arquivadoEm)} ocultarAcessoDiario={contextoModal} />
+      <AtividadesVinculadas contratoId={item.contratoId} entregavelId={item.id} estadoContextual={estadoProprioEntregavel} somenteLeitura={bloqueadoPorPai || paiArquivado || paiConcluido || Boolean(item.arquivadoEm)} ocultarAcessoDiario={contextoModal} />
     </div>}
 
   </div>
@@ -517,13 +520,13 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
     textoFechar="Fechar ×" somenteIconeFechar bloqueadoPorSubmodal={edicaoAberta}
     acoesComoMenu rotuloMenuAcoes={selecionada.arquivadoEm && podeReativarEvidencia ? 'Reabrir' : 'Fechar'} acoes={<>
       {selecionada.arquivadoEm && podeReativarEvidencia && !bloqueadoPorPai &&
-        <button type="button" className="rounded-lg border border-amber-500/45 bg-amber-500/15 px-3 py-2 text-xs font-semibold" disabled={ocupadoArquivo} onClick={() => setConfirmarReativacao(selecionada.id)}>⟳ Reativar</button>}
+        <BotaoAcaoModal intencao="reativar" disabled={ocupadoArquivo} onClick={() => setConfirmarReativacao(selecionada.id)}>⟳ Reativar</BotaoAcaoModal>}
       {selecionada.arquivadoEm && podeExcluirEvidenciaArquivada && !bloqueadoPorPai &&
-        <button type="button" className="rounded-lg border border-red-500/45 bg-red-500/15 px-3 py-2 text-xs font-semibold text-red-300" disabled={ocupadoArquivo} onClick={() => setConfirmarExclusao(selecionada.id)}>Excluir</button>}
+        <BotaoAcaoModal intencao="excluir" disabled={ocupadoArquivo} onClick={() => setConfirmarExclusao(selecionada.id)}>Excluir</BotaoAcaoModal>}
       {!selecionada.arquivadoEm && planejamentoHabilitado && podeReabrirEvidencia && estadoEvidencias[selecionada.id]?.status === 'VERIFICADA' && !bloqueadoPorPai && !paiArquivado &&
-        <button type="button" className="rounded-lg border border-emerald-500/60 bg-emerald-600 px-3 py-2 text-xs font-semibold text-white" disabled={arquivandoItem} onClick={() => setConfirmarReabertura(selecionada.id)}>⟳ Reabrir</button>}
+        <BotaoAcaoModal intencao="reabrir" disabled={arquivandoItem} onClick={() => setConfirmarReabertura(selecionada.id)}>⟳ Reabrir</BotaoAcaoModal>}
       {!selecionada.arquivadoEm && planejamentoHabilitado && podeArquivarEvidencia && estadoEvidencias[selecionada.id]?.status !== 'VERIFICADA' && !bloqueadoPorPai && !paiArquivado &&
-        <button type="button" className="rounded-lg border border-amber-500/45 bg-amber-500/15 px-3 py-2 text-xs font-semibold text-amber-200" disabled={ocupadoArquivo} onClick={() => setConfirmarArquivamento(selecionada.id)}>▣ Arquivar</button>}
+        <BotaoAcaoModal intencao="arquivar" disabled={ocupadoArquivo} onClick={() => setConfirmarArquivamento(selecionada.id)}>▣ Arquivar</BotaoAcaoModal>}
     </>}
     rotuloFechar="Fechar evidência"
     onFechar={() => {

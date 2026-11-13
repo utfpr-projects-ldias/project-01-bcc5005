@@ -1,5 +1,6 @@
 'use client';
 import { resultadoFinalizacao } from '@/lib/finalizados';
+import { estadoDoObjeto } from '@/lib/identidade-operacional';
 import { AbasRolaveis } from '@/app/components/abas-rolaveis';
 import Link from 'next/link';
 import { createPortal } from 'react-dom';
@@ -289,7 +290,7 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, da
         const concluidoVisual = e.statusExecucao === 'CONCLUIDO' && !e.reabertoEm;
         const finalizadoVisual = e.statusExecucao === 'FINALIZADO' && !e.reabertoEm;
         const comprovacaoSemConclusao = completo && !concluidoVisual && !e.reabertoEm;
-        return <li key={e.id} data-tec08-item-clicavel data-entregavel-estado={e.arquivadoEm ? 'arquivado' : finalizadoVisual ? 'finalizado' : concluidoVisual ? 'concluido' : e.reabertoEm ? 'revisao' : 'normal'} className="relative min-w-0">
+        return <li key={e.id} data-tec08-item-clicavel data-entregavel-estado={estadoDoObjeto({objeto:'entregavel',status:e.statusExecucao,arquivado:Boolean(e.arquivadoEm),reaberto:Boolean(e.reabertoEm)})} className="relative min-w-0">
         <Link href={`/contratos/${encodeURIComponent(contratoId)}/entregaveis/${encodeURIComponent(e.id)}`}
           onClick={(evento) => {
             // Clique comum abre o detalhe no modal; modificadores permitem nova aba.

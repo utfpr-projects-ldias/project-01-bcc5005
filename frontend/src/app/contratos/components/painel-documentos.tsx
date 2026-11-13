@@ -7,7 +7,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSy
 import { createPortal } from 'react-dom';
 import { ModalEtapa } from './modal-etapa';
 import { IconeStatus } from '@/app/components/icones-status';
-import { IconeEngrenagem } from '@/app/components/icone-engrenagem';
+import { BotaoEditarModal, BotaoAcaoModal } from '@/app/components/botoes-modal';
 import { ajustarRestauracaoHistorico } from '@/lib/historico-modal-scroll';
 import {
   CATEGORIAS_DOCUMENTO, EXTENSOES_PROVISORIAS, ErroDocumento,
@@ -444,14 +444,14 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
       onCancelar={() => { setDocumentoArquivar(null); setErroMetadados(''); }} onConfirmar={() => void confirmarArquivamento()} /></div>, document.body)}
 
     {documentoDetalhe && createPortal(<ModalEtapa titulo={documentoDetalhe.nomeOriginal} contexto="Documento contratual" acoes={<>
-      {podeEditarRegistro && !somenteLeitura && !documentoDetalhe.arquivadoEm && documentoDetalhe.categoria !== 'CONTRATO_PRINCIPAL' && <button type="button" aria-label="Editar metadados do documento" title="Editar metadados do documento" onClick={() => { setDocumentoEdicao(documentoDetalhe); setCategoriaEdicao(documentoDetalhe.categoria); setDescricaoEdicao(documentoDetalhe.descricao ?? ''); setErroMetadados(''); }} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border-0 bg-transparent text-current transition hover:bg-current/10 focus-visible:outline-2 focus-visible:outline-current"><IconeEngrenagem /></button>}
+      {podeEditarRegistro && !somenteLeitura && !documentoDetalhe.arquivadoEm && documentoDetalhe.categoria !== 'CONTRATO_PRINCIPAL' && <BotaoEditarModal rotulo="Editar metadados do documento" onClick={() => { setDocumentoEdicao(documentoDetalhe); setCategoriaEdicao(documentoDetalhe.categoria); setDescricaoEdicao(documentoDetalhe.descricao ?? ''); setErroMetadados(''); }} />}
       <MenuAcoesObjeto rotulo={documentoDetalhe.arquivadoEm || !!documentoDetalhe.verificadoEm ? 'Reabrir' : 'Fechar'} disabled={somenteLeitura || salvandoMetadados}>
         {!documentoDetalhe.arquivadoEm && !!documentoDetalhe.verificadoEm && permiteReabrir(documentoDetalhe) &&
-          <button type="button" disabled={somenteLeitura || salvandoMetadados} onClick={() => setDocumentoReabrir(documentoDetalhe)} className="rounded-lg border border-violet-500/45 bg-violet-500/15 px-3 py-2 text-left text-xs font-semibold text-violet-700 dark:text-violet-200">⟳ Reabrir</button>}
+          <BotaoAcaoModal intencao="reabrir" disabled={somenteLeitura || salvandoMetadados} onClick={() => setDocumentoReabrir(documentoDetalhe)}>⟳ Reabrir</BotaoAcaoModal>}
         {!documentoDetalhe.arquivadoEm && !documentoDetalhe.verificadoEm && permiteArquivar(documentoDetalhe) &&
-          <button type="button" disabled={somenteLeitura || salvandoMetadados} onClick={() => { setDocumentoArquivar(documentoDetalhe); setErroMetadados(''); }} className="rounded-lg border border-amber-500/45 bg-amber-500/15 px-3 py-2 text-left text-xs font-semibold text-amber-700 dark:text-amber-200">▣ Arquivar</button>}
+          <BotaoAcaoModal intencao="arquivar" disabled={somenteLeitura || salvandoMetadados} onClick={() => { setDocumentoArquivar(documentoDetalhe); setErroMetadados(''); }}>▣ Arquivar</BotaoAcaoModal>}
         {!!documentoDetalhe.arquivadoEm && permiteReativar(documentoDetalhe) &&
-          <button type="button" disabled={somenteLeitura || salvandoMetadados} onClick={() => setDocumentoReativar(documentoDetalhe)} className="rounded-lg border border-amber-500/45 bg-amber-500/15 px-3 py-2 text-left text-xs font-semibold text-amber-700 dark:text-amber-200">⟳ Reativar</button>}
+          <BotaoAcaoModal intencao="reativar" disabled={somenteLeitura || salvandoMetadados} onClick={() => setDocumentoReativar(documentoDetalhe)}>⟳ Reativar</BotaoAcaoModal>}
       </MenuAcoesObjeto>
     </>} estadoContextual={documentoDetalhe.arquivadoEm ? 'arquivado' : documentoDetalhe.reabertoEm ? 'revisao' : documentoDetalhe.verificadoEm ? 'concluido' : 'pendente'} compacto ocupado={!!baixandoId} onFechar={() => setDocumentoDetalhe(null)}>
       <div className="space-y-3" aria-label="Detalhes do documento contratual">

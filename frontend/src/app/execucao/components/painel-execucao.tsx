@@ -6,7 +6,7 @@ import { useMeuPerfil } from '@/hooks/use-meu-perfil';
 import { useRepositorioConsultasOpcional } from '@/app/components/provedor-consultas';
 import type { EstadoContextual } from '@/lib/estado-visivel-contrato';
 import { ModalEtapa } from '@/app/contratos/components/modal-etapa';
-import { IconeEngrenagem } from '@/app/components/icone-engrenagem';
+import { BotaoEditarModal } from '@/app/components/botoes-modal';
 import { PainelOcorrencias } from '@/app/ocorrencias/components/painel-ocorrencias';
 import { CampoBuscaSugestoes } from '@/app/components/campo-busca-sugestoes';
 import { useProgresso, type ProgressoContrato, type ProgressoEntregavel, type AtualizacaoExecucao } from '@/hooks/use-progresso';
@@ -183,7 +183,7 @@ export function PainelExecucao({ contratoId, entregavelId, estadoContextual = 'n
 
     {detalhe && <ModalEtapa alturaEstavel titulo={detalhe.nome} contexto="Execução física do entregável" estadoContextual={estadoFisico(detalhe)} ocupado={salvando} focoRetorno={gatilho} onFechar={fechar} rotuloFechar="Fechar detalhes da execução"
       acoes={podeEditar && detalhe.editavel && detalhe.tipo !== 'RECORRENTE' && !['OCORRENCIAS', 'CONFLITO_QUANTIDADE'].includes(detalhe.fonte) && !editandoExecucao ?
-        <button type="button" aria-label="Editar execução" title="Editar execução" className="inline-flex h-9 w-9 items-center justify-center rounded-lg border-0 bg-transparent text-current transition hover:bg-current/10 focus-visible:outline-2 focus-visible:outline-current" onClick={() => setEditandoExecucao(true)}><IconeEngrenagem /></button> : undefined}>
+        <BotaoEditarModal rotulo="Editar execução" onClick={() => setEditandoExecucao(true)} /> : undefined}>
       <div className="space-y-4" data-tec08-estado={estadoFisico(detalhe)} data-tec08-secao-contextual>
         <div className="flex gap-1 rounded-xl border border-current/20 p-1" role="tablist" aria-label="Detalhes de execução do entregável">
           <button type="button" role="tab" aria-selected={abaDetalhe === 'AVANCO'} className={`rounded-lg px-3 py-2 text-sm font-semibold ${abaDetalhe === 'AVANCO' ? 'bg-current/20 underline underline-offset-4' : 'hover:bg-current/10'}`} onClick={() => setAbaDetalhe('AVANCO')}>Avanço físico</button>

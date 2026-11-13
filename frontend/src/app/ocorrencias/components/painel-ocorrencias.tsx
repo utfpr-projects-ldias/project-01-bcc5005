@@ -21,6 +21,8 @@ import { useProgresso } from '@/hooks/use-progresso';
 import { SeletorEntregavel } from './seletor-entregavel';
 import { CalendarioOcorrencias } from './calendario-ocorrencias';
 import { MenuAcoesObjeto } from '@/app/components/menu-acoes-objeto';
+import { BotaoEditarModal, BotaoAcaoModal } from '@/app/components/botoes-modal';
+import { estadoDoObjeto } from '@/lib/identidade-operacional';
 import { IconeEngrenagem } from '@/app/components/icone-engrenagem';
 
 const CAMPO = 'mt-1.5 w-full min-w-0 rounded-lg border border-brand-green/25 bg-background px-3 py-2.5 text-sm text-foreground outline-none transition-colors focus-visible:border-brand-green focus-visible:ring-2 focus-visible:ring-brand-green/25 disabled:opacity-50';
@@ -584,19 +586,17 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, embutido
           <button data-pi-acao="primaria" type="submit" className={PRINCIPAL} disabled={!podeCriar || ocupado || (form.modoRegistro === 'QUANTITATIVO' && quantidadeDireta !== null) || !form.titulo.trim() || !form.entregavelId || (form.modoRegistro === 'QUANTITATIVO' && Number(form.metaQuantidade) <= 0)}>{ocupado ? 'Salvando...' : 'Registrar ocorrência'}</button></div>
       </form>
     </ModalEtapa>}
-    {detalhe && <ModalEtapa titulo={tituloApresentacao(detalhe, periodos[detalhe.entregavelId])} compacto etiqueta={detalhe.substituidaEm ? 'Arquivada' : (ESTADOS[estadoTemporal(detalhe.status, detalhe.periodoInicio || detalhe.dataPrevista)] ?? ESTADOS.NAO_INICIADO).titulo} contexto="Detalhes da ocorrência" rotuloFechar="Fechar detalhes da ocorrência" ocupado={ocupado} focoRetorno={focoRetorno} onFechar={() => { setDetalhe(null); setEditando(false); setMostrarReabertura(false); setErro(''); }} estadoContextual={detalhe.substituidaEm ? 'arquivado' : (ESTADOS[estadoTemporal(detalhe.status, detalhe.periodoInicio || detalhe.dataPrevista)] ?? ESTADOS.NAO_INICIADO).modal}
+    {detalhe && <ModalEtapa titulo={tituloApresentacao(detalhe, periodos[detalhe.entregavelId])} compacto etiqueta={detalhe.substituidaEm ? 'Arquivada' : (ESTADOS[estadoTemporal(detalhe.status, detalhe.periodoInicio || detalhe.dataPrevista)] ?? ESTADOS.NAO_INICIADO).titulo} contexto="Detalhes da ocorrência" rotuloFechar="Fechar detalhes da ocorrência" ocupado={ocupado} focoRetorno={focoRetorno} onFechar={() => { setDetalhe(null); setEditando(false); setMostrarReabertura(false); setErro(''); }} estadoContextual={estadoDoObjeto({objeto:'ocorrencia', status:estadoTemporal(detalhe.status, detalhe.periodoInicio || detalhe.dataPrevista), arquivado:Boolean(detalhe.substituidaEm)})}
       retornoEsquerda mostrarXComVoltar somenteIconeFechar
       acoes={<>
-      {!editando && podeEditarDetalhe && <button type="button" aria-label="Editar ocorrência"  title="Editar ocorrência" disabled={ocupado} onClick={() => setEditando(true)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border-0 bg-transparent text-current transition hover:bg-current/10 focus-visible:outline-2 focus-visible:outline-current"><IconeEngrenagem /></button>}
+      {!editando && podeEditarDetalhe && <BotaoEditarModal rotulo="Editar ocorrência" disabled={ocupado} onClick={() => setEditando(true)} />}
       {podeEditar && ['NAO_INICIADO','EM_ANDAMENTO','EM_REVISAO'].includes(detalhe.status) && <MenuAcoesObjeto rotulo="Fechar" disabled={ocupado}>
-          <button type="button" disabled={ocupado || !podeSolicitarConclusao}
+          <BotaoAcaoModal intencao="solicitar-conclusao" disabled={ocupado || !podeSolicitarConclusao}
             title={semAtividadeVerificada ? 'É necessária ao menos uma atividade verificada, sem outras pendentes.' : undefined}
-            className="rounded-lg border border-violet-500/45 bg-violet-700 px-3 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:border-slate-400/30 disabled:bg-slate-500/15 disabled:text-foreground/45"
-            onClick={() => void transicionar('solicitar-conclusao')}>✓ Solicitar conclusão</button>
-          <button type="button" disabled={ocupado || podeSolicitarConclusao || haAtividadesPendentes}
+            onClick={() => void transicionar('solicitar-conclusao')}>✓ Solicitar conclusão</BotaoAcaoModal>
+          <BotaoAcaoModal intencao="solicitar-encerramento" disabled={ocupado || podeSolicitarConclusao || haAtividadesPendentes}
             title={podeSolicitarConclusao ? 'A conclusão está disponível; o encerramento está desabilitado.' : haAtividadesPendentes ? 'Verifique ou arquive as atividades pendentes antes de solicitar encerramento.' : undefined}
-            className="rounded-lg border border-purple-500/50 bg-purple-700 px-3 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:border-slate-400/30 disabled:bg-slate-500/15 disabled:text-foreground/45"
-            onClick={() => { setMotivoEncerramento(''); setMostrarEncerramento(true); }}>⚑ Solicitar encerramento</button>
+            onClick={() => { setMotivoEncerramento(''); setMostrarEncerramento(true); }}>⚑ Solicitar encerramento</BotaoAcaoModal>
         </MenuAcoesObjeto>}
       {!editando && ['PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(detalhe.status) && <>
         {podeReabrir && <button type="button" className="rounded-lg border border-red-500/50 bg-red-600/15 px-3 py-2 text-sm font-semibold text-red-200 transition hover:bg-red-600/25 disabled:opacity-40" disabled={ocupado} onClick={e => { setFocoReabertura(e.currentTarget); setMotivoReabertura(''); setMostrarReabertura(true); }} title="Cancelar a solicitação e devolver à revisão">✕ Cancelar</button>}

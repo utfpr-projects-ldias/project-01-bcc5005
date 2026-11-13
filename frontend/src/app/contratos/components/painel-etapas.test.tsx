@@ -95,9 +95,12 @@ describe('TEC08-03 — etapa reaberta após conclusão', () => {
     const modal = screen.getByRole('dialog', { name: /Planejamento/ });
     const cabecalho = modal.querySelector('header');
     expect(cabecalho).not.toBeNull();
-    expect(within(cabecalho as HTMLElement).getByRole('button', { name: 'Fechar novamente' })).toBeEnabled();
-    expect(within(modal).getAllByRole('button', { name: 'Fechar novamente' })).toHaveLength(1);
-    fireEvent.click(within(cabecalho as HTMLElement).getByRole('button', { name: 'Fechar novamente' }));
+    const acao = within(cabecalho as HTMLElement).getByRole('button', { name: 'Fechar: escolher ação' });
+    expect(acao).toBeEnabled();
+    fireEvent.click(acao);
+    const menu = screen.getByRole('menu', { name: 'Fechar' });
+    expect(within(menu).getByRole('button', { name: 'Concluir etapa' })).toBeEnabled();
+    fireEvent.click(within(menu).getByRole('button', { name: 'Concluir etapa' }));
     expect(screen.getByRole('dialog', { name: 'Fechar novamente?' })).toBeInTheDocument();
   });
   test('oculta Fechar novamente quando um novo entregável incompleto passa a integrar a etapa', () => {
@@ -106,7 +109,11 @@ describe('TEC08-03 — etapa reaberta após conclusão', () => {
     documentalHook.mockReturnValue({ dados: { [comprovado.id]: { obrigatorias: 1, verificadas: 1, total: 1, verificadasTotal: 1 } }, carregando: false, erro: undefined, atualizar: jest.fn() });
     render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
     fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes da etapa 1: Planejamento' }));
-    expect(within(screen.getByRole('dialog', { name: /Planejamento/ })).queryByRole('button', { name: 'Fechar novamente' })).not.toBeInTheDocument();
+    const menuBotao = screen.queryByRole('button', { name: 'Fechar: escolher ação' });
+    if (menuBotao) {
+      fireEvent.click(menuBotao);
+      expect(within(screen.getByRole('menu', { name: 'Fechar' })).queryByRole('button', { name: 'Concluir etapa' })).not.toBeInTheDocument();
+    }
   });
   test('arquivar uma evidência opcional preserva o fechamento se a comprovação ativa permanece completa', () => {
     consultar.mockReturnValue(estado([{ ...base, status: 'PLANEJADA', reabertoEm: '2026-11-08T08:00:00.000Z' }]));
@@ -119,7 +126,8 @@ describe('TEC08-03 — etapa reaberta após conclusão', () => {
     render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
     fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes da etapa 1: Planejamento' }));
     const modal = screen.getByRole('dialog', { name: /Planejamento/ });
-    expect(within(modal.querySelector('header') as HTMLElement).getByRole('button', { name: 'Fechar novamente' })).toBeEnabled();
+    fireEvent.click(within(modal.querySelector('header') as HTMLElement).getByRole('button', { name: 'Fechar: escolher ação' }));
+    expect(within(screen.getByRole('menu', { name: 'Fechar' })).getByRole('button', { name: 'Concluir etapa' })).toBeEnabled();
   });
   test('nova evidência obrigatória sem verificação remove Fechar novamente', () => {
     consultar.mockReturnValue(estado([{ ...base, status: 'PLANEJADA', reabertoEm: '2026-11-08T08:00:00.000Z' }]));
@@ -131,7 +139,11 @@ describe('TEC08-03 — etapa reaberta após conclusão', () => {
     documentalHook.mockReturnValue({ dados: { [comprovado.id]: { obrigatorias: 2, verificadas: 1, total: 2, verificadasTotal: 1 } }, carregando: false, erro: undefined, atualizar: jest.fn() });
     render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
     fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes da etapa 1: Planejamento' }));
-    expect(within(screen.getByRole('dialog', { name: /Planejamento/ })).queryByRole('button', { name: 'Fechar novamente' })).not.toBeInTheDocument();
+    const menuBotao = screen.queryByRole('button', { name: 'Fechar: escolher ação' });
+    if (menuBotao) {
+      fireEvent.click(menuBotao);
+      expect(within(screen.getByRole('menu', { name: 'Fechar' })).queryByRole('button', { name: 'Concluir etapa' })).not.toBeInTheDocument();
+    }
   });
   test('nova evidência opcional sem verificação não impede Fechar novamente', () => {
     consultar.mockReturnValue(estado([{ ...base, status: 'PLANEJADA', reabertoEm: '2026-11-08T08:00:00.000Z' }]));
@@ -143,7 +155,8 @@ describe('TEC08-03 — etapa reaberta após conclusão', () => {
     documentalHook.mockReturnValue({ dados: { [comprovado.id]: { obrigatorias: 1, verificadas: 1, total: 2, verificadasTotal: 1 } }, carregando: false, erro: undefined, atualizar: jest.fn() });
     render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
     fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes da etapa 1: Planejamento' }));
-    expect(within(screen.getByRole('dialog', { name: /Planejamento/ })).getByRole('button', { name: 'Fechar novamente' })).toBeEnabled();
+    fireEvent.click(within(screen.getByRole('dialog', { name: /Planejamento/ })).getByRole('button', { name: 'Fechar: escolher ação' }));
+    expect(within(screen.getByRole('menu', { name: 'Fechar' })).getByRole('button', { name: 'Concluir etapa' })).toBeEnabled();
   });
   test('não oferece conclusão manual quando falta permissão de concluirEtapas', () => {
     consultar.mockReturnValue(estado([{ ...base, status: 'PLANEJADA', reabertoEm: '2026-11-08T08:00:00.000Z' }]));
@@ -151,7 +164,11 @@ describe('TEC08-03 — etapa reaberta após conclusão', () => {
     documentalHook.mockReturnValue({ dados: { [comprovado.id]: { obrigatorias: 1, verificadas: 1, total: 1, verificadasTotal: 1 } }, carregando: false, erro: undefined, atualizar: jest.fn() });
     render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar={false} />);
     fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes da etapa 1: Planejamento' }));
-    expect(within(screen.getByRole('dialog', { name: /Planejamento/ })).queryByRole('button', { name: 'Fechar novamente' })).not.toBeInTheDocument();
+    const menuBotao = screen.queryByRole('button', { name: 'Fechar: escolher ação' });
+    if (menuBotao) {
+      fireEvent.click(menuBotao);
+      expect(within(screen.getByRole('menu', { name: 'Fechar' })).queryByRole('button', { name: 'Concluir etapa' })).not.toBeInTheDocument();
+    }
   });
 });
 
@@ -494,13 +511,18 @@ test('card de etapa mostra numeração ordinal e abre detalhe; voltar não fecha
   expect(acao).toHaveFocus();
 });
 
-test('card possui botão de editar; detalhe da etapa não duplica ações no cabeçalho', () => {
+test('detalhe da etapa monta menu Fechar e engrenagem independente sem erro de componente indefinido', () => {
   render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
   fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes da etapa 1: Planejamento' }));
-  expect(screen.getByRole('dialog', { name: /1 · Planejamento/ })).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'Editar etapa' })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Voltar às etapas' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Editar etapa Planejamento' }));
+  const modal = screen.getByRole('dialog', { name: /1 · Planejamento/ });
+  expect(modal).toBeInTheDocument();
+  expect(within(modal).getByRole('button', { name: 'Editar etapa' })).toHaveAttribute('data-pi-controle-modal', 'editar');
+  const menu = within(modal).getByRole('button', { name: 'Fechar: escolher ação' });
+  fireEvent.click(menu);
+  expect(screen.getByRole('menu', { name: 'Fechar' })).toBeInTheDocument();
+  expect(within(screen.getByRole('menu', { name: 'Fechar' })).queryByRole('button', { name: /Editar/ })).not.toBeInTheDocument();
+  fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+  fireEvent.click(within(modal).getByRole('button', { name: 'Editar etapa' }));
   expect(screen.getByRole('dialog', { name: /Editar etapa · Planejamento/ })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Fechar edição da etapa' }));
 });

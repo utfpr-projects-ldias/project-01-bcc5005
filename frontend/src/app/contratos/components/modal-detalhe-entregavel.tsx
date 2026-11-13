@@ -14,7 +14,8 @@ import { ConfirmacaoSimples } from '@/app/components/confirmacao-simples';
 import { useAtividades } from '@/hooks/use-atividades';
 import { useProgresso } from '@/hooks/use-progresso';
 import { MenuAcoesObjeto } from '@/app/components/menu-acoes-objeto';
-import { IconeEngrenagem } from '@/app/components/icone-engrenagem';
+import { BotaoEditarModal, BotaoAcaoModal } from '@/app/components/botoes-modal';
+import { estadoDoObjeto } from '@/lib/identidade-operacional';
 
 /** Consulta o detalhe real no backend, sem confiar só na listagem em cache. */
 export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, podeEditar, focoRetorno, onFechar, atualizar, permissoes, dentroModal = false, iniciarEditando = false, paiArquivado = false, paiConcluido = false, paiEmRevisao = false, verificado = false, resumoInicial, podeArquivar = false, onArquivar, onReabrir, onReativar, onExcluir }: {
@@ -156,31 +157,29 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, pode
   return createPortal(<ModalEtapa camada={dentroModal ? "aninhada" : "principal"} contexto={editando ? 'Editando entregável' : 'Entregável do contrato'} titulo={item?.nome ?? 'Detalhes do entregável'} codigoPublico={item?.codigoPublico}
     retornoEsquerda={true} formularioLongo={editando}
     etiqueta={item?.arquivadoEm ? 'Arquivado' : item?.reabertoEm ? 'Em revisão' : item?.statusExecucao === 'FINALIZADO' ? 'Encerrado' : item?.statusExecucao === 'PENDENTE_ENCERRAMENTO' ? 'Pendente de encerramento' : item?.statusExecucao === 'PENDENTE_CONCLUSAO' ? 'Pendente de conclusão' : ['CONCLUIDO','FINALIZADO'].includes(item?.statusExecucao ?? '') ? 'Concluído' : item?.statusExecucao === 'EM_ANDAMENTO' ? 'Em andamento' : item ? 'Planejamento' : undefined}
-    arquivado={Boolean(item?.arquivadoEm)} revisao={Boolean(item?.reabertoEm && !item?.arquivadoEm)} concluido={!item?.arquivadoEm && !item?.reabertoEm && !editando && ['CONCLUIDO','FINALIZADO'].includes(item?.statusExecucao ?? '')} estadoContextual={item?.arquivadoEm ? 'arquivado' : item?.reabertoEm ? 'revisao' : item?.statusExecucao === 'FINALIZADO' ? 'finalizado' : ['CONCLUIDO','FINALIZADO'].includes(item?.statusExecucao ?? '') ? 'concluido' : 'normal'}
+    arquivado={Boolean(item?.arquivadoEm)} revisao={Boolean(item?.reabertoEm && !item?.arquivadoEm)} concluido={!item?.arquivadoEm && !item?.reabertoEm && !editando && item?.statusExecucao === 'CONCLUIDO'} estadoContextual={estadoDoObjeto({objeto:'entregavel',status:item?.statusExecucao,arquivado:Boolean(item?.arquivadoEm),reaberto:Boolean(item?.reabertoEm)})}
 
     ocultarFechar={false}
     rotuloFechar={nivel !== 'entregavel' || editando ? 'Voltar ao nível anterior' : 'Voltar à etapa'}
     textoFechar='← Etapa'
     bloqueadoPorSubmodal={nivel !== 'entregavel'}
     acoes={!editando && item ? <>
-      {podeEditarCadastro && !bloqueioEdicao && !verificado && !['CONCLUIDO','FINALIZADO'].includes(item.statusExecucao ?? '') && <button type="button" className="inline-flex h-9 w-9 items-center justify-center rounded-lg border-0 bg-transparent text-current transition hover:bg-current/10 focus-visible:outline-2 focus-visible:outline-current" onClick={() => setEditando(true)} aria-label="Editar entregável" title="Editar entregável"><IconeEngrenagem /></button>}
+      {podeEditarCadastro && !bloqueioEdicao && !verificado && !['CONCLUIDO','FINALIZADO'].includes(item.statusExecucao ?? '') && <BotaoEditarModal rotulo="Editar entregável" onClick={() => setEditando(true)} />}
       <MenuAcoesObjeto rotulo={item.arquivadoEm || ['CONCLUIDO','FINALIZADO'].includes(item.statusExecucao ?? '') ? 'Reabrir' : 'Fechar'} disabled={salvando}>
             {abertaParaDecisao && permissoes?.editarEntregaveis && <>
-              <button type="button" disabled={salvando || !podeSolicitarConclusao}
+              <BotaoAcaoModal intencao="solicitar-conclusao" disabled={salvando || !podeSolicitarConclusao}
                 title={!podeSolicitarConclusao ? 'A conclusão requer execução integral, atividades verificadas e documentação válida.' : undefined}
-                className="rounded-lg border border-violet-500/50 bg-violet-700 px-3 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:border-slate-400/30 disabled:bg-slate-500/15 disabled:text-foreground/45"
-                onClick={() => void transicionar('solicitar-conclusao')}>✓ Solicitar conclusão</button>
-              <button type="button" disabled={salvando || podeSolicitarConclusao}
+                onClick={() => void transicionar('solicitar-conclusao')}>✓ Solicitar conclusão</BotaoAcaoModal>
+              <BotaoAcaoModal intencao="solicitar-encerramento" disabled={salvando || podeSolicitarConclusao}
                 title={podeSolicitarConclusao ? 'A conclusão está disponível; o encerramento administrativo está desabilitado.' : undefined}
-                className="rounded-lg border border-purple-500/55 bg-purple-700 px-3 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:border-slate-400/30 disabled:bg-slate-500/15 disabled:text-foreground/45"
-                onClick={() => setConfirmarEncerramento(true)}>⚑ Solicitar encerramento</button>
+                onClick={() => setConfirmarEncerramento(true)}>⚑ Solicitar encerramento</BotaoAcaoModal>
             </>}
-            {item.statusExecucao === 'PENDENTE_ENCERRAMENTO' && permissoes?.concluirEntregaveis && <button type="button" disabled={salvando} className="rounded-lg bg-purple-700 px-3 py-2 text-white" onClick={() => void transicionar('aprovar-encerramento')}>✓ Aprovar encerramento</button>}
-            {item.statusExecucao === 'PENDENTE_CONCLUSAO' && permissoes?.concluirEntregaveis && <button type="button" disabled={salvando || !podeConcluir} className="rounded-lg bg-violet-700 px-3 py-2 text-white disabled:opacity-40" onClick={() => setConfirmarConclusao(true)}>✓ Aprovar conclusão</button>}
-            {item.statusExecucao === 'CONCLUIDO' && !item.reabertoEm && permissoes?.reabrirEntregaveis && !bloqueioEdicao && <button type="button" className="rounded-lg bg-emerald-600 px-3 py-2 text-white" onClick={onReabrir}>⟳ Reabrir</button>}
-            {!item.arquivadoEm && podeArquivar && !['CONCLUIDO','FINALIZADO'].includes(item.statusExecucao ?? '') && <button type="button" className="rounded-lg border border-amber-500/45 bg-amber-500/15 px-3 py-2 text-amber-200" onClick={onArquivar}>▣ Arquivar</button>}
-            {item.arquivadoEm && permissoes?.reativarEntregaveis && <button type="button" className="rounded-lg bg-emerald-600 px-3 py-2 text-white" onClick={onReativar}>⟳ Reativar</button>}
-            {item.arquivadoEm && permissoes?.excluirEntregaveisArquivados && <button type="button" className="rounded-lg border border-red-500/45 bg-red-500/10 px-3 py-2 text-red-300" onClick={onExcluir}>▣ Excluir</button>}
+            {item.statusExecucao === 'PENDENTE_ENCERRAMENTO' && permissoes?.concluirEntregaveis && <BotaoAcaoModal intencao="encerrar" disabled={salvando} onClick={() => void transicionar('aprovar-encerramento')}>✓ Aprovar encerramento</BotaoAcaoModal>}
+            {item.statusExecucao === 'PENDENTE_CONCLUSAO' && permissoes?.concluirEntregaveis && <BotaoAcaoModal intencao="concluir" disabled={salvando || !podeConcluir} onClick={() => setConfirmarConclusao(true)}>✓ Aprovar conclusão</BotaoAcaoModal>}
+            {item.statusExecucao === 'CONCLUIDO' && !item.reabertoEm && permissoes?.reabrirEntregaveis && !bloqueioEdicao && <BotaoAcaoModal intencao="reabrir" onClick={onReabrir}>⟳ Reabrir</BotaoAcaoModal>}
+            {!item.arquivadoEm && podeArquivar && !['CONCLUIDO','FINALIZADO'].includes(item.statusExecucao ?? '') && <BotaoAcaoModal intencao="arquivar" onClick={onArquivar}>▣ Arquivar</BotaoAcaoModal>}
+            {item.arquivadoEm && permissoes?.reativarEntregaveis && <BotaoAcaoModal intencao="reativar" onClick={onReativar}>⟳ Reativar</BotaoAcaoModal>}
+            {item.arquivadoEm && permissoes?.excluirEntregaveisArquivados && <BotaoAcaoModal intencao="excluir" onClick={onExcluir}>▣ Excluir</BotaoAcaoModal>}
           </MenuAcoesObjeto>
     </> : undefined}
     ocupado={salvando} focoRetorno={focoRetorno} onFechar={fecharNivel}>

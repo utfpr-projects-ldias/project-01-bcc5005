@@ -1,10 +1,12 @@
 'use client';
 
+import { BotaoAcaoModal } from '@/app/components/botoes-modal';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useRepositorioConsultasOpcional, useConsulta } from '@/app/components/provedor-consultas';
 import { ModalEtapa } from '@/app/contratos/components/modal-etapa';
 import { MenuAcoesObjeto } from '@/app/components/menu-acoes-objeto';
+import { BotaoEditarModal } from '@/app/components/botoes-modal';
 import { IconeEngrenagem } from '@/app/components/icone-engrenagem';
 import { useMeuPerfil } from '@/hooks/use-meu-perfil';
 import { estadoContextualContrato } from '@/lib/estado-visivel-contrato';
@@ -148,17 +150,17 @@ export function PreviaContrato({ contratoId, fechar, foco }: { contratoId: strin
             <button type="button" className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-teal-500/65 bg-teal-500/10 px-3 text-xs font-semibold text-teal-200 hover:bg-teal-500/20 focus-visible:outline-2 focus-visible:outline-teal-400"
               onClick={() => enviarAcao(acaoReabrir)}>⟳ Reabrir</button>
             : !acaoReabrir && <MenuAcoesObjeto rotulo="Fechar" disabled={!contrato}>
-            <button type="button" disabled={!encerramentoElegivel || !permitido('suspenderContrato')} className="!bg-amber-600/20 !text-amber-200 disabled:!bg-slate-600/15 disabled:!text-foreground/40" onClick={() => enviarAcao('suspender')}>⏸ Suspender contrato</button>
-            <button type="button" disabled={!encerramentoElegivel || !permitido('cancelarContrato')} className="!bg-red-600/20 !text-red-200 disabled:!bg-slate-600/15 disabled:!text-foreground/40" onClick={() => enviarAcao('cancelar')}>✕ Cancelar contrato</button>
-            <button type="button" disabled={!encerramentoElegivel || !permitido('encerrarContrato')} className="!bg-violet-600/20 !text-violet-200 disabled:!bg-slate-600/15 disabled:!text-foreground/40" onClick={() => enviarAcao('encerrar')}>⚑ Encerrar antecipadamente</button>
-            <button type="button" disabled={!encerramentoElegivel || !!contrato?.conclusaoSolicitadaEm || !elegibilidade.dados?.apto || !(admin || acessoContrato.dados?.permissoes?.editarContrato)}
+            <BotaoAcaoModal intencao="suspender" disabled={!encerramentoElegivel || !permitido('suspenderContrato')} onClick={() => enviarAcao('suspender')}>⏸ Suspender contrato</BotaoAcaoModal>
+            <BotaoAcaoModal intencao="cancelar" disabled={!encerramentoElegivel || !permitido('cancelarContrato')} onClick={() => enviarAcao('cancelar')}>✕ Cancelar contrato</BotaoAcaoModal>
+            <BotaoAcaoModal intencao="encerrar" disabled={!encerramentoElegivel || !permitido('encerrarContrato')} onClick={() => enviarAcao('encerrar')}>⚑ Encerrar antecipadamente</BotaoAcaoModal>
+            <BotaoAcaoModal intencao="solicitar-conclusao" disabled={!encerramentoElegivel || !!contrato?.conclusaoSolicitadaEm || !elegibilidade.dados?.apto || !(admin || acessoContrato.dados?.permissoes?.editarContrato)}
               title={elegibilidade.dados?.pendencias?.[0] ?? 'Solicitar avaliação de conclusão integral'}
-              className="!bg-transparent !text-violet-300 hover:!bg-violet-500/10 disabled:!text-foreground/35" onClick={() => enviarAcao('solicitar-conclusao')}>
+              onClick={() => enviarAcao('solicitar-conclusao')}>
               <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="inline-block h-4 w-4 align-middle"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="m7 11 2 2 3-4M14 10h4M7 17h11"/></svg> Solicitar conclusão
-            </button>
+            </BotaoAcaoModal>
             {Boolean(contrato?.conclusaoSolicitadaEm) && permitido('concluirContrato') && <>
-              <button type="button" className="!bg-transparent !text-red-300 hover:!bg-red-500/10" onClick={() => enviarAcao('devolver-conclusao')}>✕ Devolver solicitação</button>
-              <button type="button" className="!bg-transparent !text-violet-300 hover:!bg-violet-500/10" onClick={() => enviarAcao('aprovar-conclusao')}>✓ Aprovar conclusão</button>
+              <BotaoAcaoModal intencao="cancelar" onClick={() => enviarAcao('devolver-conclusao')}>✕ Devolver solicitação</BotaoAcaoModal>
+              <BotaoAcaoModal intencao="concluir" onClick={() => enviarAcao('aprovar-conclusao')}>✓ Aprovar conclusão</BotaoAcaoModal>
             </>}
           </MenuAcoesObjeto>}
           <button ref={fecharRef} type="button" aria-label="Fechar detalhes do contrato" onClick={fechar} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-xl pi-contrato-acento hover:bg-current/10">×</button>
@@ -311,16 +313,15 @@ export function CartaoAtividade({ atividade, contratoId, permissoes, compacto = 
             {acaoDisponivel('aprovar-conclusao') && <button type="button" className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-500"
               onClick={e => solicitar('aprovar-conclusao', e.currentTarget)}>Aprovar</button>}
           </div>}
-        {estado === 'REGISTRADA' && permissoes?.editarAtividades && <button type="button" aria-label="Editar atividade" title="Editar atividade"
-          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border-0 bg-transparent text-current hover:bg-current/10" onClick={e => {
+        {estado === 'REGISTRADA' && permissoes?.editarAtividades && <BotaoEditarModal rotulo="Editar atividade" onClick={e => {
             setDetalheAberto(false);
             if (onEditar) onEditar(atividade, e.currentTarget);
             else { setGatilhoEdicao(e.currentTarget); setEdicaoAberta(true); }
-          }}><IconeEngrenagem/></button>}
+          }} />}
         {(['solicitar-conclusao','reabrir','arquivar','reativar','excluir'] as const).some(acaoDisponivel) && <MenuAcoesObjeto rotulo={estado === 'VERIFICADA' || estado === 'ARQUIVADA' ? 'Reabrir' : 'Fechar'}>
           {(['solicitar-conclusao','reabrir','arquivar','reativar','excluir'] as const).filter(acaoDisponivel).map(acao =>
-            <button key={acao} type="button" aria-label={`${ROTULO[acao]} atividade`} className="w-full rounded-lg border border-current/20 px-3 py-2 text-left text-xs font-semibold hover:bg-current/10"
-              onClick={e => solicitar(acao, e.currentTarget)}><Icone nome={acao}/>{' '}{ROTULO[acao]}</button>)}
+            <BotaoAcaoModal key={acao} intencao={acao} aria-label={`${ROTULO[acao]} atividade`}
+              onClick={e => solicitar(acao, e.currentTarget)}><Icone nome={acao}/>{ROTULO[acao]}</BotaoAcaoModal>)}
         </MenuAcoesObjeto>}
       </>}>
       <div className="space-y-4 text-sm" data-testid="detalhe-atividade-modal">

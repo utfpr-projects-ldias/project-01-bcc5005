@@ -52,3 +52,10 @@ test('decisão de reabertura exige justificativa de 15 a 200 caracteres e manté
   expect(confirmar).toHaveBeenCalledTimes(1);
   expect(screen.getByRole('button', { name: 'Cancelar' })).not.toHaveClass('bg-red-600');
 });
+
+
+test('reabertura pode preservar a cor de origem de um contrato encerrado', () => {
+  render(<ConfirmacaoSimples titulo="Reabrir contrato encerrado?" descricao="Retornar à revisão" confirmar="Reabrir contrato"
+    estadoContextual="encerrado" preservarCorOrigem onCancelar={jest.fn()} onConfirmar={jest.fn()} />);
+  expect(screen.getByRole('dialog')).toHaveAttribute('data-tec08-estado', 'encerrado');
+});

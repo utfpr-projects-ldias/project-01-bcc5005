@@ -1,4 +1,5 @@
 'use client';
+import { BotaoAcaoModal } from '@/app/components/botoes-modal';
 import { PainelExecucaoContextual } from '@/app/execucao/components/painel-execucao';
 import { AbasRolaveis } from '@/app/components/abas-rolaveis';
 import { toastSucesso, toastAviso } from '@/app/components/toast-notificacoes';
@@ -690,14 +691,14 @@ export default function DetalheContratoPage() {
           {Boolean(contrato.observacoes?.trim()) && <p className="min-w-0 flex-1 truncate text-xs text-foreground/65" title={contrato.observacoes ?? ''}>{contrato.observacoes}</p>}
         <div className="flex min-w-0 items-center justify-end gap-2">
           {!painelInterno && <MenuAcoesObjeto rotulo="Fechar contrato" disabled={alterandoArquivo}>
-           {podeSuspender && <button type="button" disabled={alterandoArquivo} onClick={() => setConfirmarSuspensao(true)}>⏸ Suspender contrato</button>}
-           {podeCancelarContrato && <button type="button" disabled={alterandoArquivo} onClick={() => setCancelamentoAberto(true)}>✕ Cancelar contrato</button>}
-           {podeEncerrar && <button type="button" disabled={alterandoArquivo} onClick={() => setAbrirEncerramento(true)}>⚑ Encerrar antecipadamente</button>}
+           {podeSuspender && <BotaoAcaoModal intencao="suspender" disabled={alterandoArquivo} onClick={() => setConfirmarSuspensao(true)}>⏸ Suspender contrato</BotaoAcaoModal>}
+           {podeCancelarContrato && <BotaoAcaoModal intencao="cancelar" disabled={alterandoArquivo} onClick={() => setCancelamentoAberto(true)}>✕ Cancelar contrato</BotaoAcaoModal>}
+           {podeEncerrar && <BotaoAcaoModal intencao="encerrar" disabled={alterandoArquivo} onClick={() => setAbrirEncerramento(true)}>⚑ Encerrar antecipadamente</BotaoAcaoModal>}
           {!finalizado && !concluido && !encerrado && !cancelado && !suspenso && !contrato.arquivadoEm && !pendenteConclusao && (administrador || acessoQuery.dados?.permissoes?.editarContrato) &&
-            <button type="button" disabled={!podeSolicitarConclusao || alterandoArquivo} title={!podeSolicitarConclusao ? motivoIndisponibilidadeConclusao : 'Solicitar aprovação da conclusão integral'}
-              className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-violet-300 hover:bg-violet-500/10 disabled:cursor-not-allowed disabled:text-foreground/35" onClick={() => setConfirmarSolicitacao(true)}>
+            <BotaoAcaoModal intencao="solicitar-conclusao" disabled={!podeSolicitarConclusao || alterandoArquivo} title={!podeSolicitarConclusao ? motivoIndisponibilidadeConclusao : 'Solicitar aprovação da conclusão integral'}
+              onClick={() => setConfirmarSolicitacao(true)}>
               <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="m7 11 2 2 3-4M14 10h4M7 17h11"/></svg>Solicitar conclusão
-            </button>}
+            </BotaoAcaoModal>}
           {pendenteConclusao && podeDeliberar ? <>
             <button type="button" data-tec08-decisao="rejeitar" onClick={() => setConfirmarDevolucao(true)} disabled={alterandoArquivo}
               aria-label="Não aprovar conclusão" title="Não aprovar e devolver o contrato para revisão"
@@ -845,7 +846,7 @@ export default function DetalheContratoPage() {
     {confirmarReabertura && contrato && <ConfirmacaoSimples
       titulo={encerrado ? 'Reabrir contrato encerrado?' : 'Reabrir contrato concluído?'}
       descricao={`O contrato deixará de ficar ${encerrado ? 'Encerrado' : 'Concluído'} e passará para Em revisão. Etapas, entregáveis e evidências continuarão no estado atual e poderão ser reabertos separadamente. O histórico será preservado.`}
-      confirmar="Reabrir contrato" estadoContextual={encerrado ? 'encerrado' : 'concluido'} ocupado={alterandoArquivo} justificativa={motivoDecisao} onJustificativaChange={setMotivoDecisao} onCancelar={() => setConfirmarReabertura(false)}
+      confirmar="Reabrir contrato" estadoContextual={encerrado ? 'encerrado' : 'concluido'} preservarCorOrigem ocupado={alterandoArquivo} justificativa={motivoDecisao} onJustificativaChange={setMotivoDecisao} onCancelar={() => setConfirmarReabertura(false)}
       onConfirmar={() => void executarReabertura()} />}
     {confirmarArquivo && contrato && <ConfirmacaoSimples
       titulo='Arquivar contrato?'

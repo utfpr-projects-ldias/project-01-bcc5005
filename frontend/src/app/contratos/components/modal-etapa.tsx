@@ -89,7 +89,11 @@ export function ModalEtapa({ titulo, ocupado, onFechar, focoRetorno, contexto = 
   const larguraPainel = larguraAmpla ? 'max-w-4xl' : (formularioLongo || formularioHorizontal) ? 'max-w-5xl' : estreito ? 'max-w-md' : camada === 'edicao' ? 'max-w-lg' : camada === 'evidencia' ? 'max-w-xl' : camada === 'aninhada' ? 'max-w-5xl'
     : compacto ? 'max-w-3xl' : 'max-w-5xl';
   // Cada janela tem uma única identidade: estado próprio prevalece sobre o pai.
-  const estadoModal = contextoDaDecisao(titulo, arquivado ? 'arquivado' : concluido ? 'concluido' : revisao ? 'revisao' : estadoContextual);
+  // Um modal de DETALHE usa a situação explícita do próprio objeto; somente
+  // um diálogo de decisão sem estado informado infere a cor pelo título.
+  // Isso impede que um entregável filho herde a cor da ação ou do contrato-pai.
+  const estadoInformado: EstadoContextual = arquivado ? 'arquivado' : concluido ? 'concluido' : revisao ? 'revisao' : estadoContextual;
+  const estadoModal = estadoInformado !== 'normal' ? estadoInformado : contextoDaDecisao(titulo, estadoInformado);
   const coresDaAcao = coresDecisao(estadoModal);
   const modalDeDecisao = /reabr|reativ|retom|revert|cancelar solicit|cancelar contrato|suspend|arquiv|encerr|finaliz|solicitar conclus|aprovar conclus/i.test(titulo.normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
   const corConclusao = estadoModal === 'finalizado' ? 'border-purple-500/60' : estadoModal === 'arquivado' ? 'border-amber-500/50' : estadoModal === 'concluido' ? 'border-violet-500/45' : estadoModal === 'nao-iniciado' ? 'border-neutral-400/50' : estadoModal === 'andamento' ? 'border-[#65813b]/70' : estadoModal === 'revisao' ? 'border-teal-600/50' : estadoModal === 'pendente' ? 'border-yellow-400/50' : estadoModal === 'suspenso' ? 'border-yellow-500/50' : estadoModal === 'encerrado' ? 'border-slate-500/45' : estadoModal === 'cancelado' ? 'border-red-500/45' : coresDaAcao.borda;

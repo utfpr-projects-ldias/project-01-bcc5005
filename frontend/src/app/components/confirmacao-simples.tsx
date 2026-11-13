@@ -15,6 +15,7 @@ type Props = {
   confirmacaoRoxa?: boolean;
   aprovarVerde?: boolean;
   estadoContextual?: EstadoContextual;
+  preservarCorOrigem?: boolean;
   onCancelar: () => void;
   onConfirmar: () => void;
   justificativa?: string;
@@ -23,9 +24,9 @@ type Props = {
 };
 
 /** Confirmação da própria interface, sem window.confirm ou dependência externa. */
-export function ConfirmacaoSimples({ titulo, descricao, confirmar, ocupado = false, perigoso = false, cancelarVermelho = false, confirmacaoRoxa = false, aprovarVerde = false, estadoContextual = 'normal', onCancelar, onConfirmar, justificativa, onJustificativaChange, justificativaMinima = 15 }: Props) {
+export function ConfirmacaoSimples({ titulo, descricao, confirmar, ocupado = false, perigoso = false, cancelarVermelho = false, confirmacaoRoxa = false, aprovarVerde = false, estadoContextual = 'normal', preservarCorOrigem = false, onCancelar, onConfirmar, justificativa, onJustificativaChange, justificativaMinima = 15 }: Props) {
   const modalId = useId();
-  const estadoDaAcao = contextoDaDecisao(`${titulo} ${confirmar}`, estadoContextual);
+  const estadoDaAcao = preservarCorOrigem ? estadoContextual : contextoDaDecisao(`${titulo} ${confirmar}`, estadoContextual);
   // Logout: confirmação de sessão, com identidade verde do sistema.
   const saidaVerde = /sair da conta|encerrar sessão/i.test(`${titulo} ${confirmar}`);
   const cores = saidaVerde ? {
