@@ -15,6 +15,7 @@ import { DocumentosModule } from './documentos/documentos.module.js';
 import { AtividadesModule } from './atividades/atividades.module.js';
 import { ExecucaoModule } from './execucao/execucao.module.js';
 import { OcorrenciasModule } from './ocorrencias/ocorrencias.module.js';
+import { MetasMarcoModule } from './metas-marco/metas-marco.module.js';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { OcorrenciasModule } from './ocorrencias/ocorrencias.module.js';
     EtapasModule,
     EntregaveisModule,
     OcorrenciasModule,
+    MetasMarcoModule,
     ExecucaoModule,
     DocumentosModule,
     AtividadesModule,

@@ -1,3 +1,4 @@
+import { mensagemErroDominioHttp } from './erro-dominio-http';
 import type { DadosPlanejamentoEntregavel } from './validacao-entregavel';
 
 /** HU07-03/HU07-04 — leitura e escrita do planejamento real da API HU07-02. */
@@ -143,12 +144,19 @@ export const editarEntregavel = (contratoId: string, id: string, dados: Partial<
 /** Solicitação e aprovação de encerramento administrativo não alteram o avanço físico. */
 export async function transicaoAdministrativaEntregavel(c: string, id: string,
   acao: 'solicitar-conclusao' | 'solicitar-encerramento' | 'aprovar-encerramento' | 'devolver-solicitacao', motivo?: string): Promise<Entregavel> {
-  const resposta = await fetch(`${API}${base(c)}/${encodeURIComponent(id)}/${acao}`, {
-    method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(motivo ? { motivo } : {}),
-  });
-  if (!resposta.ok) { const texto = await resposta.json().catch(() => null);
-    throw new ErroEntregavel(resposta.status, typeof texto?.message === 'string' ? texto.message : 'A operação não foi autorizada ou os requisitos ainda não foram cumpridos.'); }
+  let resposta: Response;
+  try {
+    resposta = await fetch(`${API}${base(c)}/${encodeURIComponent(id)}/${acao}`, {
+      method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(motivo ? { motivo } : {}),
+    });
+  } catch {
+    throw new ErroEntregavel(0, 'Falha de conexão ao alterar a situação do entregável. Tente novamente.');
+  }
+  if (!resposta.ok) {
+    throw new ErroEntregavel(resposta.status, await mensagemErroDominioHttp(resposta,
+      'A operação não foi autorizada ou os requisitos ainda não foram cumpridos.'));
+  }
   return await resposta.json() as Entregavel;
 }
 
@@ -168,16 +176,22 @@ export async function concluirEntregavel(contratoId: string, id: string): Promis
       404: 'Contrato ou entregável não encontrado ou não autorizado.',
       409: 'O entregável ainda possui pendências ou foi alterado. Atualize os dados antes de concluir.',
     };
-    throw new ErroEntregavel(resposta.status, mensagens[resposta.status] ?? 'Não foi possível concluir o entregável.');
+    throw new ErroEntregavel(resposta.status, await mensagemErroDominioHttp(resposta,
+      mensagens[resposta.status] ?? 'Não foi possível concluir o entregável.'));
   }
   return await resposta.json() as Entregavel;
 }
 
 /** Reabertura de conclusão física, sujeita à permissão especial no backend. */
 export async function reabrirEntregavel(contratoId: string, id: string, motivo: string) {
-  const r = await fetch(`${API}${base(contratoId)}/${encodeURIComponent(id)}/reabrir`, {
-    method: 'PATCH', credentials: 'include', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ motivo }),
-  });
+  let r: Response;
+  try {
+    r = await fetch(`${API}${base(contratoId)}/${encodeURIComponent(id)}/reabrir`, {
+      method: 'PATCH', credentials: 'include', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ motivo }),
+    });
+  } catch {
+    throw new ErroEntregavel(0, 'Falha de conexão ao reabrir o entregável. Tente novamente.');
+  }
   if (!r.ok) {
     const body: unknown = await r.json().catch(() => null);
     const mensagem = body && typeof body === 'object' && 'message' in body ? (body as {message?:unknown}).message : null;
@@ -192,8 +206,14 @@ export async function reabrirEntregavel(contratoId: string, id: string, motivo: 
 
 /** Ações reversíveis e auditadas; jamais removem o entregável ou seus comprovantes. */
 export async function alterarArquivoEntregavel(contratoId: string, id: string, acao: 'arquivar' | 'reativar', motivo?: string) {
-  const r = await fetch(`${API}${base(contratoId)}/${encodeURIComponent(id)}/${acao}`, { method: 'PATCH', credentials: 'include', cache: 'no-store', ...(acao === 'reativar' ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ motivo }) } : {}) });
-  if (!r.ok) throw new ErroEntregavel(r.status, r.status === 403 ? 'Sem permissão para arquivar ou reativar.' : 'Não foi possível alterar o arquivamento do entregável.');
+  let r: Response;
+  try {
+    r = await fetch(`${API}${base(contratoId)}/${encodeURIComponent(id)}/${acao}`, { method: 'PATCH', credentials: 'include', cache: 'no-store', ...(acao === 'reativar' ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ motivo }) } : {}) });
+  } catch {
+    throw new ErroEntregavel(0, 'Falha de conexão ao alterar o arquivamento do entregável. Tente novamente.');
+  }
+  if (!r.ok) throw new ErroEntregavel(r.status, await mensagemErroDominioHttp(r,
+    r.status === 403 ? 'Sem permissão para arquivar ou reativar.' : 'Não foi possível alterar o arquivamento do entregável.'));
   return await r.json() as { id: string; arquivadoEm: string | null };
 }
 export const listarEntregaveisArquivados = (contratoId: string, etapaId: string) =>

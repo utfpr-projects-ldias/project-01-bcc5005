@@ -88,3 +88,33 @@ describe('Patch38 — medição e critérios para ocorrências', () => {
   });
 
 });
+
+
+describe('lançamentos excluídos logicamente', () => {
+  it('filtra registros excluídos na soma do progresso físico', async () => {
+    const m = gerente(7,0,0,0,0);
+    const o = ocorrencia({ metaQuantidade: '20', exigeAtividade: false });
+    await resumoMedicao(m,o);
+    expect((m.query as jest.Mock).mock.calls[0][0]).toContain('excluido_em IS NULL');
+  });
+});
+
+
+describe('execução acima da meta preserva a quantidade sem ultrapassar 100%', () => {
+  it('registra excedente manual e limita somente a porcentagem', async () => {
+    const o = ocorrencia({ metaQuantidade:'20', exigeAtividade:false });
+    const r = await resumoMedicao(gerente(25,0,0,0,0),o);
+    expect(r.quantidadeExecutada).toBe(25);
+    expect(r.quantidadeRegistrada).toBe(25);
+    expect(r.quantidadeRestante).toBe(0);
+    expect(r.progressoPercentual).toBe(100);
+    expect(proximoStatusAutomatico(o,r)).toBe('PENDENTE_CONCLUSAO');
+  });
+  it('refaz a proporção ao mudar só a meta, não a medição já registrada', async () => {
+    const maior = await resumoMedicao(gerente(13,0,0,0,0),ocorrencia({metaQuantidade:'25',exigeAtividade:false}));
+    const menor = await resumoMedicao(gerente(13,0,0,0,0),ocorrencia({metaQuantidade:'10',exigeAtividade:false}));
+    expect(maior.progressoPercentual).toBe(52);
+    expect(menor.progressoPercentual).toBe(100);
+    expect(menor.quantidadeExecutada).toBe(13);
+  });
+});

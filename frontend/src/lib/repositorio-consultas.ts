@@ -45,6 +45,9 @@ export class RepositorioConsultas {
     this.notificar(entrada, { ...entrada.estado, carregando: entrada.estado.dados === undefined, atualizando: entrada.estado.dados !== undefined, erro: undefined });
     const pedido = Promise.resolve().then(() => consulta(controlador.signal));
     entrada.pendente = pedido;
+    // A consulta anterior pode ser invalidada sem que seu consumidor ainda
+    // esteja aguardando a promessa. Evita unhandledrejection em abort.
+    void pedido.catch(() => {});
     try {
       const dados = await pedido;
       if (entrada.geracao === geracao && this.sessao === sessao && !controlador.signal.aborted) {
@@ -66,7 +69,7 @@ export class RepositorioConsultas {
   gravar<T>(chave: string, dados: T) {
     const entrada = this.entrada(chave);
     entrada.geracao++;
-    entrada.controlador?.abort(); entrada.pendente = undefined; entrada.controlador = undefined;
+    try { entrada.controlador?.abort(); } catch { /* cancelamento de leitura obsoleta */ } entrada.pendente = undefined; entrada.controlador = undefined;
     entrada.ultimaLeitura = Date.now();
     this.notificar(entrada, { dados, carregando: false, atualizando: false });
   }
@@ -79,7 +82,7 @@ export class RepositorioConsultas {
       // Uma leitura em voo iniciada antes da mutacao nao pode sobrescrever a nova.
       if (entrada.pendente) {
         entrada.geracao++;
-        entrada.controlador?.abort();
+        try { entrada.controlador?.abort(); } catch { /* cancelamento de leitura obsoleta */ }
         entrada.controlador = undefined; entrada.pendente = undefined;
       }
       if (entrada.ouvintes.size && entrada.consultar && opcoes.recarregar !== false) {
@@ -93,7 +96,7 @@ export class RepositorioConsultas {
     this.sessao++;
     for (const entrada of this.entradas.values()) {
       entrada.geracao++;
-      entrada.controlador?.abort();
+      try { entrada.controlador?.abort(); } catch { /* cancelamento de leitura obsoleta */ }
       entrada.controlador = undefined; entrada.pendente = undefined;
       entrada.ultimaLeitura = 0;
       this.notificar(entrada, VAZIO);

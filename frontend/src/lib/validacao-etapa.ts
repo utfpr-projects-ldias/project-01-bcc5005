@@ -1,6 +1,6 @@
 import { type DadosEtapa, type StatusEtapa } from './etapas';
 
-export const LIMITES_ETAPA = { codigo: 15, nome: 36, descricao: 500, observacoes: 200 } as const;
+export const LIMITES_ETAPA = { codigo: 15, nome: 36, descricao: 400, observacoes: 150 } as const;
 
 export const DADOS_ETAPA_INICIAIS: DadosEtapa = {
   codigo: null, nome: '', descricao: null, inicioPrevisto: null,

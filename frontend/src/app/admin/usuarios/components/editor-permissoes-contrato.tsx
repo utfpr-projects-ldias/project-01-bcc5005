@@ -28,14 +28,15 @@ const ESCOPOS_PERMISSOES: readonly GrupoPermissoes[] = [
     { icone: '▣', nome: 'Arquivamento e exclusão', chaves: ['arquivarEtapas', 'reativarEtapas', 'excluirEtapasArquivadas'] },
   ] },
   { titulo: 'Entregáveis', secoes: [
+    { icone: '◆', nome: 'Metas de Marcos', chaves: ['criarMetasMarco', 'editarMetasMarco', 'vincularMetasMarco', 'aprovarVinculosMetasMarco'] },
     { icone: '✎', nome: 'Cadastro', chaves: ['criarEntregaveis', 'editarEntregaveis'] },
     { icone: '✓', nome: 'Conclusão e revisão', chaves: ['concluirEntregaveis', 'reabrirEntregaveis'] },
     { icone: '▣', nome: 'Arquivamento e exclusão', chaves: ['arquivarEntregaveis', 'reativarEntregaveis', 'excluirEntregaveisArquivados'] },
   ] },
   { titulo: 'Ocorrências', secoes: [
-    { icone: '✎', nome: 'Cadastro e edição', chaves: ['criarOcorrencias', 'editarOcorrencias'] },
+    { icone: '✎', nome: 'Cadastro e edição', chaves: ['criarOcorrencias', 'editarOcorrencias', 'editarMetaOcorrencia', 'vincularAtividadesOcorrencia', 'vincularEvidenciasOcorrencia', 'editarExigenciasOcorrencia', 'editarPesoOcorrencia'] },
     { icone: '✓', nome: 'Conclusão e reabertura', chaves: ['concluirOcorrencias', 'reabrirOcorrencias'] },
-    { icone: '▣', nome: 'Agenda recorrente', chaves: ['configurarAgendaOcorrencias'] },
+    { icone: '▣', nome: 'Agenda e medições', chaves: ['configurarAgendaOcorrencias', 'registrarExecucaoOcorrencia', 'corrigirExecucaoOcorrencia', 'bloquearExecucaoOcorrencia', 'excluirExecucaoOcorrencia'] },
   ] },
   { titulo: 'Execução', secoes: [
     { icone: '✎', nome: 'Valores físicos', chaves: ['editarExecucaoFisica'] },

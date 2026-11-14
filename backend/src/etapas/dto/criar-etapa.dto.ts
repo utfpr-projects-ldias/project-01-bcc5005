@@ -12,7 +12,7 @@ export class CriarEtapaDto {
   @IsOptional() @IsString() @MaxLength(15)
   codigo?: string | null;
 
-  @IsOptional() @IsString() @MaxLength(500)
+  @IsOptional() @IsString() @MaxLength(400)
   descricao?: string | null;
 
   @IsOptional() @IsDateString({ strict: true })
@@ -27,6 +27,6 @@ export class CriarEtapaDto {
   @IsEnum(StatusEtapa)
   status?: StatusEtapa;
 
-  @IsOptional() @IsString() @MaxLength(200)
+  @IsOptional() @IsString() @MaxLength(150)
   observacoes?: string | null;
 }

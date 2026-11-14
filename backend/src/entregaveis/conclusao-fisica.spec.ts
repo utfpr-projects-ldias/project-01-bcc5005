@@ -41,3 +41,19 @@ describe('Regularização: conclusão física é independente do checklist e exi
     expect(resultado.apto).toBe(false);
   });
 });
+
+
+describe('RF-14 e RB-03: quantitativo pode ser executado sem ocorrências', () => {
+  it('considera 115 executados de 100 previstos, sem criar ocorrências fictícias', async () => {
+    const e = entrada(TipoEntregavel.QUANTITATIVO);
+    e.quantidadePrevista = '100'; e.quantidadeRealizada = '115';
+    const resultado = await aptidaoFisicaParaConclusao(manager() as never,e);
+    expect(resultado.apto).toBe(true);
+    expect(resultado.percentual).toBe(100);
+  });
+  it('não conclui entregável quantitativo se não houver quantidade informada', async () => {
+    const e=entrada(TipoEntregavel.QUANTITATIVO);
+    e.quantidadePrevista = '100';
+    expect((await aptidaoFisicaParaConclusao(manager() as never,e)).apto).toBe(false);
+  });
+});

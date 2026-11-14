@@ -13,7 +13,7 @@ const grupos = [
   {chave:'PENDENTE',titulo:'Pendente',cor:'bg-amber-400'},
   {chave:'CONCLUIDA',titulo:'Concluída',cor:'bg-violet-500'},
   {chave:'ENCERRADA',titulo:'Encerrada',cor:'bg-purple-500'},
-  {chave:'NAO_INICIADA',titulo:'Não iniciada',cor:'bg-neutral-400'},
+  {chave:'NAO_INICIADA',titulo:'Não iniciada',cor:'bg-green-500'},
 ] as const;
 function grupo(o: Ocorrencia, hoje:string) {
   if (o.status==='CONCLUIDO') return 'CONCLUIDA';
@@ -30,6 +30,7 @@ export function AgendaContrato({ contratoId, abrirOcorrencia }:{ contratoId:stri
   const entregaveis=useEntregaveis(contratoId);
   const [selecionado,setSelecionado]=useState('');
   const [mesEscolhido,setMesEscolhido]=useState('');
+  const [filtroResumo,setFiltroResumo]=useState<(typeof grupos)[number]['chave']>('ATIVA');
   const hoje=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   const registros=useMemo(()=>agenda.ocorrencias.filter(o=>!o.substituidaEm),[agenda.ocorrencias]);
   const meses=Array.from(new Set([...registros.map(o=>dataAlvo(o).slice(0,7)).filter(Boolean),hoje.slice(0,7)])).sort();
@@ -46,7 +47,8 @@ export function AgendaContrato({ contratoId, abrirOcorrencia }:{ contratoId:stri
   const dataSelecionada=selecionado.startsWith(mes)?selecionado:(hoje.startsWith(mes)?hoje:`${mes}-01`);
   const listagem=porDia.get(dataSelecionada)??[];
   const titulos=new Map((entregaveis.dados??[]).map(e=>[e.id,e.nome]));
-  const emAndamento=registros.filter(o=>grupo(o,hoje)==='ATIVA');
+  const itensResumo=registros.filter(o=>grupo(o,hoje)===filtroResumo).sort((a,b)=>dataAlvo(a).localeCompare(dataAlvo(b)));
+  const filtroAtual=grupos.find(g=>g.chave===filtroResumo) ?? grupos[0];
   return <section className="space-y-4" aria-label="Agenda consolidada do contrato">
     <header className="flex flex-wrap items-start justify-between gap-3">
       <div><h3 className="text-base font-semibold text-current">Acompanhamento das ocorrências</h3>
@@ -54,8 +56,8 @@ export function AgendaContrato({ contratoId, abrirOcorrencia }:{ contratoId:stri
       <span className="text-xs text-foreground/65">{registros.length} ocorrência(s)</span>
     </header>
     {agenda.erro ? <p role="alert" className="text-error-text">{agenda.erro}</p> : agenda.loading ? <p role="status">Carregando agenda...</p> : <>
-      <div className="flex flex-wrap gap-2">{grupos.map(g=>{const n=registros.filter(o=>grupo(o,hoje)===g.chave).length;
-        return <span key={g.chave} className="inline-flex items-center gap-1.5 rounded-full border border-current/15 px-2.5 py-1 text-xs"><span className={`h-2 w-2 rounded-full ${g.cor}`}/>{g.titulo}: {n}</span>;})}</div>
+      <div role="group" aria-label="Filtrar ocorrências por situação" className="flex flex-wrap gap-2">{grupos.map(g=>{const n=registros.filter(o=>grupo(o,hoje)===g.chave).length;
+        return <button key={g.chave} type="button" aria-pressed={filtroResumo===g.chave} onClick={()=>setFiltroResumo(g.chave)} className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-current ${filtroResumo===g.chave?'border-current/60 bg-current/15 text-foreground':'border-current/15 text-foreground/70 hover:bg-current/10'}`}><span className={`h-2 w-2 rounded-full ${g.cor}`}/>{g.titulo}: {n}</button>;})}</div>
       <div className="grid min-w-0 overflow-hidden rounded-xl border border-current/20 lg:grid-cols-[minmax(0,1.75fr)_minmax(16rem,1fr)]">
         <div className="min-w-0 space-y-3 border-b border-current/15 p-3 lg:border-b-0 lg:border-r">
           <div className="flex items-center justify-between gap-2"><h4 className="text-sm font-bold capitalize">{inicio.toLocaleDateString('pt-BR',{month:'long',year:'numeric',timeZone:'UTC'})}</h4>
@@ -83,10 +85,10 @@ export function AgendaContrato({ contratoId, abrirOcorrencia }:{ contratoId:stri
             </button>;})}</div>
         </aside>
       </div>
-      <div className="space-y-2"><h4 className="text-sm font-semibold">Em andamento ({emAndamento.length})</h4>
-        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">{emAndamento.length===0?<p className="text-sm text-foreground/65">Nenhuma ocorrência em andamento.</p>:emAndamento.map(o=><button key={o.id} type="button" onClick={()=>abrirOcorrencia(o.id)} className="min-w-0 rounded-xl border border-lime-500/35 bg-lime-500/[0.05] p-3 text-left hover:bg-lime-500/10">
-          <strong className="block truncate text-sm" title={o.titulo}>{o.titulo}</strong>
-          <span className="mt-1 block text-xs opacity-70">{diaBR(o.periodoInicio||o.dataPrevista||'')}{o.periodoFim&&o.periodoInicio!==o.periodoFim?` até ${diaBR(o.periodoFim)}`:''}</span>
+      <div className="space-y-2"><h4 className="text-sm font-semibold">{filtroAtual.titulo} ({itensResumo.length})</h4>
+        <div className="flex flex-col gap-2">{itensResumo.length===0?<p className="text-sm text-foreground/65">Nenhuma ocorrência nesta situação.</p>:itensResumo.map(o=><button key={o.id} type="button" onClick={()=>abrirOcorrencia(o.id)} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-current/20 bg-current/[0.025] p-3 text-left transition-colors hover:bg-current/[0.07] focus-visible:outline-2 focus-visible:outline-current">
+          <span className="min-w-0 flex-1"><strong className="block truncate text-sm" title={o.titulo}>{o.titulo}</strong><span className="mt-1 block text-xs text-foreground/65">{diaBR(o.periodoInicio||o.dataPrevista||'')}{o.periodoFim&&o.periodoInicio!==o.periodoFim?` até ${diaBR(o.periodoFim)}`:''}</span></span>
+          <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border border-current/25 bg-current/[0.04] px-2 py-1 text-[11px] font-semibold`}><span className={`h-2 w-2 rounded-full ${filtroAtual.cor}`} aria-hidden="true" />{filtroAtual.titulo}</span>
         </button>)}</div>
       </div>
     </>}

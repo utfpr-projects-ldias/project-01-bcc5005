@@ -137,21 +137,21 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
         className="rounded-lg bg-brand-green px-4 py-2 font-semibold text-on-brand-green disabled:opacity-40">Continuar</button>
     </div>
   </form>;
-  return <form data-tec08-formulario-contextual data-tec08-edicao={inicial ? "true" : undefined} data-tec08-criacao={inicial ? undefined : "true"} noValidate onSubmit={e => void enviar(e)} className="space-y-4" aria-label={inicial ? 'Editar dados do contrato' : 'Cadastrar contrato'}>
-    <div className="rounded-2xl border border-brand-green/25 bg-brand-darkgreen/10 p-4 md:p-6 space-y-5">
+  return <form data-tec08-formulario-contextual data-tec08-edicao={inicial ? "true" : undefined} data-tec08-criacao={inicial ? undefined : "true"} noValidate onSubmit={e => void enviar(e)} className="space-y-3" aria-label={inicial ? 'Editar dados do contrato' : 'Cadastrar contrato'}>
+    <div className="rounded-2xl border border-brand-green/25 bg-brand-darkgreen/10 p-3 sm:p-4 space-y-3">
       <div><h2 className="text-lg font-semibold text-brand-neon">Identificação do contrato</h2>
         <p className="mt-1 text-sm text-foreground/65">Dados administrativos. Campos com * são obrigatórios.</p></div>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Campo titulo="Número do contrato" id="numero" obrigatorio erro={erroDo('numeroContrato')} ajuda="Identificador administrativo conforme o instrumento contratual." contador={{ valor: form.numeroContrato.length, max: LIMITES_CONTRATO.numeroContrato }}>
           <input id="numero" className={input} inputMode="numeric" pattern="[0-9]*" maxLength={LIMITES_CONTRATO.numeroContrato} value={form.numeroContrato} onChange={e => atualizar('numeroContrato', e.target.value.replace(/\D/g, ''))} {...acessibilidade('numero', 'numeroContrato', true)} /></Campo>
         <Campo titulo="Órgão contratante" id="orgao" obrigatorio erro={erroDo('orgaoContratante')} contador={{ valor: form.orgaoContratante.length, max: LIMITES_CONTRATO.orgaoContratante }}>
           <input id="orgao" className={input} maxLength={LIMITES_CONTRATO.orgaoContratante} value={form.orgaoContratante} onChange={e => atualizar('orgaoContratante', e.target.value)} {...acessibilidade('orgao', 'orgaoContratante')} /></Campo>
+        <Campo titulo="Objeto" id="objeto" obrigatorio erro={erroDo('objeto')} contador={{ valor: form.objeto.length, max: LIMITES_CONTRATO.objeto }}>
+          <input id="objeto" className={input} maxLength={LIMITES_CONTRATO.objeto} value={form.objeto} onChange={e => atualizar('objeto', e.target.value)} {...acessibilidade('objeto', 'objeto')} /></Campo>
       </div>
-      <Campo titulo="Objeto" id="objeto" obrigatorio ajuda="Resumo do serviço ou obrigação principal contratada." erro={erroDo('objeto')} contador={{ valor: form.objeto.length, max: LIMITES_CONTRATO.objeto }}>
-        <textarea id="objeto" rows={3} className={input} maxLength={LIMITES_CONTRATO.objeto} value={form.objeto} onChange={e => atualizar('objeto', e.target.value)} {...acessibilidade('objeto', 'objeto', true)} /></Campo>
     </div>
 
-    <fieldset className="space-y-4 rounded-2xl border border-brand-green/25 bg-brand-darkgreen/10 p-4 md:p-6">
+    <fieldset className="space-y-3 rounded-2xl border border-brand-green/25 bg-brand-darkgreen/10 p-3 sm:p-4">
       <legend className="px-2 text-lg font-semibold text-brand-neon">Vigência</legend>
       <p className="text-sm text-foreground/65">Informe início e término. Como alternativa, calcule a data de término pela duração em meses.</p>
       <div className="flex flex-wrap gap-2" role="group" aria-label="Modo da vigência">
@@ -179,7 +179,7 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
         </label>}</Campo>}
     </fieldset>
 
-    <div className="rounded-2xl border border-brand-green/25 bg-brand-darkgreen/10 p-4 md:p-6 space-y-4">
+    <div className="rounded-2xl border border-brand-green/25 bg-brand-darkgreen/10 p-3 sm:p-4 space-y-3">
       <h2 className="text-lg font-semibold text-brand-neon">Situação e acompanhamento físico</h2>
       <div className="grid gap-4 md:grid-cols-2">
         <Campo titulo="Status operacional" id="status" obrigatorio ajuda={emRevisao ? 'Fase operacional durante a revisão.' : inicial ? 'Situações especiais exigem autorização. Concluído depende de aprovação separada.' : 'O novo contrato começa em Planejamento ou Em execução.'} erro={erroDo('status')}>
@@ -191,10 +191,10 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
       </p>
     </div>
 
-    <details className="group rounded-2xl border border-brand-green/25 bg-brand-darkgreen/10 p-4 md:p-6">
+    <details open className="group rounded-2xl border border-brand-green/25 bg-brand-darkgreen/10 p-3 sm:p-4">
       <summary className="cursor-pointer text-lg font-semibold text-brand-neon focus-visible:outline-2 focus-visible:outline-brand-green">Informações complementares <span className="text-xs font-normal text-foreground/60">(opcionais)</span></summary>
-      <div className="mt-5 space-y-4">
-        <div className="grid gap-4 md:grid-cols-2">
+      <div className="mt-3 space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <Campo titulo="Processo administrativo" id="processo" erro={erroDo('processoAdministrativo')} contador={{ valor: (form.processoAdministrativo ?? '').length, max: LIMITES_CONTRATO.processoAdministrativo }}>
             <input id="processo" className={input} maxLength={LIMITES_CONTRATO.processoAdministrativo} value={form.processoAdministrativo ?? ''} onChange={e => atualizar('processoAdministrativo', e.target.value || null)} {...acessibilidade('processo', 'processoAdministrativo')} /></Campo>
           <Campo titulo="Unidade responsável" id="unidade" erro={erroDo('unidadeResponsavel')} ajuda="Setor ou unidade interna responsável pela gestão do contrato." contador={{ valor: (form.unidadeResponsavel ?? '').length, max: LIMITES_CONTRATO.unidadeResponsavel }}>
@@ -208,10 +208,10 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
               <option value="">Não atribuído</option>
               {responsaveis.map(u => <option key={u.id} value={u.id}>{u.email}</option>)}</select></Campo>
         </div>
-        <Campo titulo="Descrição" id="descricao" erro={erroDo('descricao')} ajuda="Detalhamento adicional do objeto e do contexto do contrato." contador={{ valor: (form.descricao ?? '').length, max: LIMITES_CONTRATO.descricao }}>
-          <textarea id="descricao" rows={3} className={input} maxLength={LIMITES_CONTRATO.descricao} value={form.descricao ?? ''} onChange={e => atualizar('descricao', e.target.value || null)} {...acessibilidade('descricao', 'descricao', true)} /></Campo>
+        <div className="grid gap-3 md:grid-cols-2"><Campo titulo="Descrição" id="descricao" erro={erroDo('descricao')} ajuda="Detalhamento adicional do objeto e do contexto do contrato." contador={{ valor: (form.descricao ?? '').length, max: LIMITES_CONTRATO.descricao }}>
+          <textarea id="descricao" rows={2} className={input} maxLength={LIMITES_CONTRATO.descricao} value={form.descricao ?? ''} onChange={e => atualizar('descricao', e.target.value || null)} {...acessibilidade('descricao', 'descricao', true)} /></Campo>
         <Campo titulo="Observações" id="observacoes" erro={erroDo('observacoes')} ajuda="Anotações administrativas complementares, sem dados financeiros estruturados." contador={{ valor: (form.observacoes ?? '').length, max: LIMITES_CONTRATO.observacoes }}>
-          <textarea id="observacoes" rows={3} className={input} maxLength={LIMITES_CONTRATO.observacoes} value={form.observacoes ?? ''} onChange={e => atualizar('observacoes', e.target.value || null)} {...acessibilidade('observacoes', 'observacoes', true)} /></Campo>
+          <textarea id="observacoes" rows={2} className={input} maxLength={LIMITES_CONTRATO.observacoes} value={form.observacoes ?? ''} onChange={e => atualizar('observacoes', e.target.value || null)} {...acessibilidade('observacoes', 'observacoes', true)} /></Campo></div>
       </div>
     </details>
     <p role="note" className="rounded-xl border border-brand-green/20 p-3 text-sm text-foreground/70">O contrato será salvo primeiro. Em seguida, você poderá anexar o PDF principal e outros documentos classificados, sem exigir arquivo no cadastro.</p>

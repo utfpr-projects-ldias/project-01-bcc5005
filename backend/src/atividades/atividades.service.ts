@@ -1,5 +1,5 @@
 import {
-  BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleInit,
+  BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, type EntityManager, type Repository } from 'typeorm';
@@ -13,6 +13,9 @@ import { concluirEntregavelAposAtividade, concluirEtapaAposFilhos } from '../ent
 import { Contrato } from '../contratos/contrato.entity.js';
 import { Etapa } from '../etapas/etapa.entity.js';
 import { Ocorrencia } from '../ocorrencias/ocorrencia.entity.js';
+import { PermissaoContrato } from '../autorizacao/permissao-contrato.entity.js';
+import { permissoesEfetivas } from '../autorizacao/permissoes-granulares.js';
+import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
 import { OrigemOcorrencia } from '../ocorrencias/origem-ocorrencia.enum.js';
 import { StatusOcorrencia } from '../ocorrencias/status-ocorrencia.enum.js';
 import { resumoMedicao, proximoStatusAutomatico } from '../ocorrencias/medicao-ocorrencia.js';
@@ -67,6 +70,16 @@ export class AtividadesService implements OnModuleInit {
       const registro = await manager.findOne(AtividadeEntity, { where: { id }, select: { contratoId: true } });
       return registro?.contratoId ?? null;
     });
+  }
+
+  private async exigirPermissaoDeVinculo(manager: EntityManager, contratoId: string, ator: UsuarioAutenticado,
+    chave: 'vincularAtividadesOcorrencia' | 'registrarExecucaoOcorrencia') {
+    if (ator.perfil === PerfilUsuario.ADMINISTRADOR) return;
+    const vinculo = await manager.findOneBy(PermissaoContrato, { contratoId, usuarioId: ator.id });
+    if (!vinculo || !permissoesEfetivas(ator.perfil, Boolean(vinculo.podeEditar), vinculo.permissoesDetalhadas)[chave])
+      throw new ForbiddenException(chave === 'vincularAtividadesOcorrencia'
+        ? 'Sem permissão específica para vincular atividades a ocorrências'
+        : 'Sem permissão específica para registrar quantidades nas ocorrências');
   }
 
   private async verificarEntregaveis(manager: EntityManager, contratoId: string, ids: string[]): Promise<Entregavel[]> {
@@ -158,8 +171,6 @@ export class AtividadesService implements OnModuleInit {
     if ([StatusOcorrencia.PENDENTE_CONCLUSAO,StatusOcorrencia.CONCLUIDO,StatusOcorrencia.PENDENTE_ENCERRAMENTO,
       StatusOcorrencia.ENCERRADA].includes(o.status)) throw new ConflictException('Ocorrência bloqueada até reabertura');
     const r = await resumoMedicao(manager,o);
-    if (o.metaQuantidade != null && r.quantidadeRegistrada > Number(o.metaQuantidade))
-      throw new ConflictException(`Quantidade registrada (${r.quantidadeRegistrada}) excede a meta desta ocorrência (${o.metaQuantidade})`);
     const novo = proximoStatusAutomatico(o,r) as StatusOcorrencia;
     if (o.status === novo) return;
     const anterior=o.status;o.status=novo;
@@ -172,13 +183,17 @@ export class AtividadesService implements OnModuleInit {
     });
   }
 
-  async create(contratoId: string, dto: CreateAtividadeDto, ator: UsuarioAutenticado) {
+  /** Mesma validação e vínculo local para criação simples ou criação atômica multicontrato. */
+  async criarNaTransacao(manager: EntityManager, contratoId: string, dto: CreateAtividadeDto,
+    ator: UsuarioAutenticado, grupoId: string | null = null) {
     if (dto.contratoId !== contratoId) throw new BadRequestException('Contrato da atividade divergente da URL');
     const dataHora = instante(dto.dataHora);
-    return this.auditoria.executarComAuditoria(ator, async manager => {
-      const entregaveis = await this.verificarEntregaveis(manager, contratoId, dto.entregavelIds);
+    const entregaveis = await this.verificarEntregaveis(manager, contratoId, dto.entregavelIds);
       await this.validarOcorrencia(manager, contratoId, dto.ocorrenciaId, entregaveis, dto.quantidadeExecucao);
       const idsOcorrencias = dto.ocorrenciaIds ?? (dto.ocorrenciaId ? [dto.ocorrenciaId] : []);
+      if (idsOcorrencias.length) await this.exigirPermissaoDeVinculo(manager, contratoId, ator, 'vincularAtividadesOcorrencia');
+      if (dto.medicoes?.length || dto.quantidadeExecucao != null)
+        await this.exigirPermissaoDeVinculo(manager, contratoId, ator, 'registrarExecucaoOcorrencia');
       const ocorrencias = await this.verificarOcorrencias(manager, contratoId, idsOcorrencias,
         entregaveis, dto.ocorrenciaId, dto.quantidadeExecucao);
       if (dto.medicoes) for (const item of dto.medicoes)
@@ -186,7 +201,7 @@ export class AtividadesService implements OnModuleInit {
       if (dto.medicoes && dto.quantidadeExecucao != null)
         throw new BadRequestException('Não misture a medição única legada com quantidades por ocorrência');
       const registro = manager.create(AtividadeEntity, {
-        contratoId, titulo: dto.titulo.trim(), dataHora, descricao: dto.descricao.trim(), tipo: dto.tipo.trim(),
+        contratoId, atividadeCompartilhadaId: grupoId, titulo: dto.titulo.trim(), dataHora, descricao: dto.descricao.trim(), tipo: dto.tipo.trim(),
         responsavelId: ator.id, responsavel: dto.responsavel?.trim() || ator.nome || ator.email,
         participantes: dto.participantes ?? [], local: dto.local?.trim() || null,
         duracao: dto.duracao?.trim() || null, observacoes: dto.observacoes?.trim() || null, entregaveis, ocorrencias, ocorrenciaId: dto.ocorrenciaId ?? null,
@@ -199,7 +214,11 @@ export class AtividadesService implements OnModuleInit {
         acao: AcaoAuditoria.ATIVIDADE_CRIADA, entidadeTipo: 'ATIVIDADE' as const, entidadeId: salvo.id,
         dadosPosteriores: resumo(salvo),
       } };
-    });
+  }
+
+  async create(contratoId: string, dto: CreateAtividadeDto, ator: UsuarioAutenticado) {
+    return this.auditoria.executarComAuditoria(ator,
+      manager => this.criarNaTransacao(manager, contratoId, dto, ator));
   }
 
   async findAllPaginated(contratoId: string, filtros: Record<string, string>) {
@@ -300,6 +319,10 @@ export class AtividadesService implements OnModuleInit {
       const antes = resumo(registro);
       const anteriores = registro.entregaveis.map(e => e.id).sort();
       const ocorrenciasAnteriores = (registro.ocorrencias ?? []).map(o => o.id);
+      if (dto.ocorrenciaIds !== undefined || dto.ocorrenciaId !== undefined)
+        await this.exigirPermissaoDeVinculo(manager, contratoId, ator, 'vincularAtividadesOcorrencia');
+      if (dto.medicoes !== undefined || dto.quantidadeExecucao !== undefined)
+        await this.exigirPermissaoDeVinculo(manager, contratoId, ator, 'registrarExecucaoOcorrencia');
       const idsSolicitados = dto.ocorrenciaIds ?? (dto.ocorrenciaId !== undefined
         ? dto.ocorrenciaId ? [dto.ocorrenciaId] : [] : ocorrenciasAnteriores);
 
@@ -346,13 +369,12 @@ export class AtividadesService implements OnModuleInit {
   }
 
   /** Operação atômica: transição + snapshot de auditoria no MESMO EntityManager. */
-  private async transicionar(contratoId: string, id: string, ator: UsuarioAutenticado,
+  private async transicionarNaTransacao(manager: EntityManager, contratoId: string, id: string, ator: UsuarioAutenticado,
     origem: 'REGISTRADA' | 'PENDENTE_CONCLUSAO' | 'VERIFICADA' | 'ARQUIVADA',
     destino: 'REGISTRADA' | 'PENDENTE_CONCLUSAO' | 'VERIFICADA' | 'ARQUIVADA',
     acao: AcaoAuditoria, justificativa: string) {
     const motivo = justificativa.trim();
     if ((![AcaoAuditoria.ATIVIDADE_VERIFICADA, AcaoAuditoria.ATIVIDADE_CONCLUSAO_SOLICITADA].includes(acao) && motivo.length < 15) || motivo.length > 200 || (motivo && motivo.length < 15)) throw new BadRequestException('Justificativa deve ter entre 15 e 200 caracteres; verificação dispensa motivo');
-    return this.auditoria.executarComAuditoria(ator, async manager => {
       // PostgreSQL não permite FOR UPDATE sobre o lado opcional de LEFT JOIN.
       // Bloqueamos APENAS a atividade e lemos os vínculos na mesma transação.
       const bloqueada = await manager.findOne(AtividadeEntity, {
@@ -417,8 +439,33 @@ export class AtividadesService implements OnModuleInit {
         },
       } : {}),
       };
-    });
   }
+  private async transicionar(contratoId: string, id: string, ator: UsuarioAutenticado,
+    origem: 'REGISTRADA' | 'PENDENTE_CONCLUSAO' | 'VERIFICADA' | 'ARQUIVADA',
+    destino: 'REGISTRADA' | 'PENDENTE_CONCLUSAO' | 'VERIFICADA' | 'ARQUIVADA',
+    acao: AcaoAuditoria, justificativa: string) {
+    return this.auditoria.executarComAuditoria(ator, manager =>
+      this.transicionarNaTransacao(manager, contratoId, id, ator, origem, destino, acao, justificativa));
+  }
+
+  /** Solicitação compartilhada, preservando decisão separada por contrato. */
+  async solicitarNaTransacao(manager: EntityManager, contratoId: string, id: string, ator: UsuarioAutenticado) {
+    const acao = await this.transicionarNaTransacao(manager, contratoId, id, ator,
+      'REGISTRADA', 'PENDENTE_CONCLUSAO', AcaoAuditoria.ATIVIDADE_CONCLUSAO_SOLICITADA, '');
+    await this.auditoria.registrarNaTransacao(manager, ator, acao.evento);
+    if (acao.aposEvento) await acao.aposEvento(manager);
+    return acao.resultado;
+  }
+
+  /** Aprovação compartilhada, na transação única do grupo; reaproveita regras e auditoria HU08. */
+  async verificarNaTransacao(manager: EntityManager, contratoId: string, id: string, ator: UsuarioAutenticado) {
+    const acao = await this.transicionarNaTransacao(manager, contratoId, id, ator,
+      'PENDENTE_CONCLUSAO', 'VERIFICADA', AcaoAuditoria.ATIVIDADE_VERIFICADA, '');
+    await this.auditoria.registrarNaTransacao(manager, ator, acao.evento);
+    if (acao.aposEvento) await acao.aposEvento(manager);
+    return acao.resultado;
+  }
+
   solicitarConclusao(contratoId: string, id: string, ator: UsuarioAutenticado) {
     return this.transicionar(contratoId, id, ator, 'REGISTRADA', 'PENDENTE_CONCLUSAO',
       AcaoAuditoria.ATIVIDADE_CONCLUSAO_SOLICITADA, '');

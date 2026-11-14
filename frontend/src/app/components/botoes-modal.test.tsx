@@ -7,6 +7,9 @@ it('usa uma engrenagem sem borda decorativa e não executa edição desabilitada
   const botao = screen.getByRole('button', { name: 'Editar etapa' });
   expect(botao).toBeDisabled();
   expect(botao).toHaveAttribute('data-pi-controle-modal', 'editar');
+  expect(botao.querySelector('svg')).not.toBeNull();
+  expect(botao.className).toContain('bg-transparent');
+  expect(botao.className).not.toContain('hover:bg-current/10');
   fireEvent.click(botao);
   expect(editar).not.toHaveBeenCalled();
   tela.rerender(<BotaoEditarModal rotulo="Editar etapa" onClick={editar}/>);

@@ -159,3 +159,51 @@ describe('Patch24 — competências independentes de planejamento, peso e recorr
     expect(ACAO_PERMISSAO['pesos:atualizar']).toBe('configurarPesos');
   });
 });
+
+
+describe('lançamentos manuais — bloqueio e exclusão com permissões independentes', () => {
+  it('nega as novas operações por padrão até para gestor com edição', () => {
+    const permissoes = permissoesEfetivas('GESTOR', true, null);
+    expect(permissoes.corrigirExecucaoOcorrencia).toBe(false);
+    expect(permissoes.bloquearExecucaoOcorrencia).toBe(false);
+    expect(permissoes.excluirExecucaoOcorrencia).toBe(false);
+  });
+  it('permite delegação individual e mantém negações de outras ações', () => {
+    const delegado = permissoesEfetivas('COLABORADOR', false, {
+      bloquearExecucaoOcorrencia: true, excluirExecucaoOcorrencia: false,
+    });
+    expect(delegado.bloquearExecucaoOcorrencia).toBe(true);
+    expect(delegado.excluirExecucaoOcorrencia).toBe(false);
+    expect(delegado.corrigirExecucaoOcorrencia).toBe(false);
+    expect(permissoesEfetivas('ADMINISTRADOR', false, {}).excluirExecucaoOcorrencia).toBe(true);
+    expect(validarPermissoes({ bloquearExecucaoOcorrencia: false, excluirExecucaoOcorrencia: true }))
+      .toEqual({ bloquearExecucaoOcorrencia: false, excluirExecucaoOcorrencia: true });
+  });
+});
+
+
+describe('Bugfix Sprint 04 — Parte 08: meta e vínculos têm autorizações distintas', () => {
+  it('não herda poderes especiais da edição geral, inclusive no vínculo legado', () => {
+    const gestor = permissoesEfetivas('GESTOR', true, null);
+    expect(gestor.editarOcorrencias).toBe(true);
+    expect(gestor.editarMetaOcorrencia).toBe(false);
+    expect(gestor.vincularAtividadesOcorrencia).toBe(false);
+    expect(gestor.vincularEvidenciasOcorrencia).toBe(false);
+  });
+  it('delegar a meta não concede peso, edição geral nem vínculos', () => {
+    const p = permissoesEfetivas('COLABORADOR', false, { editarMetaOcorrencia: true });
+    expect(p.editarMetaOcorrencia).toBe(true);
+    expect(p.editarOcorrencias).toBe(false);
+    expect(p.editarPesoOcorrencia).toBe(false);
+    expect(p.editarExigenciasOcorrencia).toBe(false);
+    expect(p.vincularAtividadesOcorrencia).toBe(false);
+    expect(p.vincularEvidenciasOcorrencia).toBe(false);
+  });
+  it('alinha registrar execução manual entre guard e serviço', () => {
+    expect(ACAO_PERMISSAO['ocorrencias:registrar']).toBe('registrarExecucaoOcorrencia');
+    expect(ACAO_PERMISSAO['ocorrencias:editar-meta']).toBe('editarMetaOcorrencia');
+    expect(ACAO_PERMISSAO['ocorrencias:vincular-evidencia']).toBe('vincularEvidenciasOcorrencia');
+    expect(validarPermissoes({ editarMetaOcorrencia: true, vincularAtividadesOcorrencia: false }))
+      .toEqual({ editarMetaOcorrencia: true, vincularAtividadesOcorrencia: false });
+  });
+});

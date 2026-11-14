@@ -6,8 +6,8 @@ import { estadoTemporal } from '@/lib/estado-temporal';
 
 const dias = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
 const cores: Record<string, string> = {
-  NAO_INICIADO: 'border-neutral-400/50 bg-neutral-500/10 text-foreground',
-  EM_ANDAMENTO: 'border-lime-500/60 bg-lime-500/15 text-lime-700 dark:text-lime-200',
+  NAO_INICIADO: 'border-brand-green/40 bg-brand-green/10 text-brand-neon',
+  EM_ANDAMENTO: 'border-brand-green/55 bg-brand-green/10 text-brand-neon',
   EM_REVISAO: 'border-teal-500/60 bg-teal-500/15 text-teal-800 dark:text-teal-200',
   PENDENTE_CONCLUSAO: 'border-amber-500/65 bg-amber-500/15 text-amber-700 dark:text-amber-200',
   PENDENTE_ENCERRAMENTO: 'border-purple-500/60 bg-purple-500/15 text-purple-700 dark:text-purple-200',
@@ -20,8 +20,8 @@ const nomes: Record<string,string> = {
   CONCLUIDO:'Concluída',ENCERRADA:'Encerrada',
 };
 const dots: Record<string, string> = {
-  NAO_INICIADO: 'bg-neutral-400',
-  EM_ANDAMENTO: 'bg-lime-400',
+  NAO_INICIADO: 'bg-green-500',
+  EM_ANDAMENTO: 'bg-green-500',
   EM_REVISAO: 'bg-teal-400',
   PENDENTE_CONCLUSAO: 'bg-amber-400',
   PENDENTE_ENCERRAMENTO: 'bg-purple-400',
@@ -61,39 +61,34 @@ export function CalendarioOcorrencias({registros,aoAbrir,periodicidade='DIARIA'}
   const hojeIso=hoje();
   const [mesSelecionado, setMesSelecionado] = useState('');
   const [diaSelecionado, setDiaSelecionado] = useState('');
-  const [ocorrenciaSelecionada, setOcorrenciaSelecionada] = useState<string | null>(null);
   const ativos=registros.filter(o=>!o.substituidaEm);
   const todosConcluidos=ativos.length>0&&ativos.every(o=>o.status==='CONCLUIDO');
   const existeEncerrada=ativos.some(o=>o.status==='ENCERRADA');
   // A superfície do calendário pertence ao ENTREGÁVEL. Nenhuma ocorrência
   // pode mudar borda/fundo do calendário inteiro; apenas seus próprios cards.
   const corTotal='pi-agenda-superficie';
-  const grupos=new Map<string,Ocorrencia[]>();
-  const semData:Ocorrencia[]=[];
-  const chaveGrupo=(data:string)=>{
-    const ano=data.slice(0,4),n=Number(data.slice(5,7));
-    if(periodicidade==='ANUAL')return `${ano}-01`;
-    if(periodicidade==='SEMESTRAL')return `${ano}-${n<=6?'01':'07'}`;
-    if(periodicidade==='TRIMESTRAL')return `${ano}-${String(Math.floor((n-1)/3)*3+1).padStart(2,'0')}`;
-    return data.slice(0,7);
-  };
-  registros.forEach(o=>{
-    if(!iso(chave(o))){semData.push(o);return;}
-    const k=chaveGrupo(chave(o)),grupo=grupos.get(k)??[];
-    grupo.push(o);grupos.set(k,grupo);
-  });
-  const oAtual=(o:Ocorrencia)=>{const p=periodo(o);return p.inicio<=hojeIso&&p.fim>=hojeIso;};
+  const {grupos,semData}=useMemo(()=>{
+    const grupos=new Map<string,Ocorrencia[]>();
+    const semData:Ocorrencia[]=[];
+    registros.forEach(o=>{
+      if(!iso(chave(o))){semData.push(o);return;}
+      const k=chave(o).slice(0,7),grupo=grupos.get(k)??[];
+      grupo.push(o);grupos.set(k,grupo);
+    });
+    return {grupos,semData};
+  },[registros]);
   const tituloGrupo=(k:string)=>{
-    if(periodicidade==='ANUAL')return k.slice(0,4);
-    if(periodicidade==='SEMESTRAL')return `${k.slice(5)==='01'?'1º':'2º'} semestre de ${k.slice(0,4)}`;
-    if(periodicidade==='TRIMESTRAL')return `${Math.floor((Number(k.slice(5))-1)/3)+1}º trimestre de ${k.slice(0,4)}`;
     return mes(`${k}-01`);
   };
   const chaves = Array.from(grupos.keys()).sort();
-  const indiceAtual = chaves.findIndex(k=>hojeIso.slice(0,7)===k);
-  const chaveAtiva = chaves.includes(mesSelecionado) ? mesSelecionado : chaves[Math.max(0,indiceAtual)] ?? '';
-  const indiceAtivo = Math.max(0, chaves.indexOf(chaveAtiva));
-  const itensAtivos = (grupos.get(chaveAtiva) ?? []).slice().sort((a,b)=>chave(a).localeCompare(chave(b)) || a.titulo.localeCompare(b.titulo));
+  const chaveAtiva = mesSelecionado || (chaves.includes(hojeIso.slice(0,7)) ? hojeIso.slice(0,7) : chaves[0] ?? hojeIso.slice(0,7));
+  const moverMes = (deslocamento:number) => {
+    const [ano,numero]=chaveAtiva.split('-').map(Number);
+    const data=new Date(Date.UTC(ano,numero-1+deslocamento,1));
+    setMesSelecionado(`${data.getUTCFullYear()}-${String(data.getUTCMonth()+1).padStart(2,'0')}`);
+    setDiaSelecionado('');
+  };
+  const itensAtivos = useMemo(() => (grupos.get(chaveAtiva) ?? []).slice().sort((a,b)=>chave(a).localeCompare(chave(b)) || a.titulo.localeCompare(b.titulo)), [grupos, chaveAtiva]);
 
   const itensPorDia = useMemo(() => {
     const mapa = new Map<string, Ocorrencia[]>();
@@ -111,23 +106,16 @@ export function CalendarioOcorrencias({registros,aoAbrir,periodicidade='DIARIA'}
 
   useEffect(() => {
     if (!chaveAtiva) { if (diaSelecionado) setDiaSelecionado(''); return; }
-    if (periodicidade !== 'DIARIA') return;
+    // Grade mensal utilizada para todos os recorrentes, independentemente da periodicidade.
     const opcoes = Array.from(itensPorDia.keys()).filter(v => v.startsWith(`${chaveAtiva}-`)).sort();
     const alvoHoje = hojeIso.startsWith(chaveAtiva) ? hojeIso : '';
     if (diaSelecionado.startsWith(`${chaveAtiva}-`) && (itensPorDia.has(diaSelecionado) || !opcoes.length)) return;
     setDiaSelecionado(alvoHoje && (itensPorDia.has(alvoHoje) || !opcoes.length) ? alvoHoje : (opcoes[0] ?? `${chaveAtiva}-01`));
   }, [chaveAtiva, diaSelecionado, itensPorDia, hojeIso, periodicidade]);
 
-  useEffect(() => {
-    if (periodicidade === 'DIARIA') return;
-    if (!itensAtivos.length) { if (ocorrenciaSelecionada) setOcorrenciaSelecionada(null); return; }
-    if (ocorrenciaSelecionada && itensAtivos.some(o => o.id === ocorrenciaSelecionada)) return;
-    setOcorrenciaSelecionada(itensAtivos.find(oAtual)?.id ?? itensAtivos[0]?.id ?? null);
-  }, [itensAtivos, oAtual, ocorrenciaSelecionada, periodicidade]);
 
-  const calendarioVazio = periodicidade === 'DIARIA' && chaveAtiva && !Array.from(itensPorDia.keys()).some(v => v.startsWith(`${chaveAtiva}-`));
-  const ocorrenciasDoDia = periodicidade === 'DIARIA' ? (itensPorDia.get(diaSelecionado) ?? []) : [];
-  const selecionada = periodicidade === 'DIARIA' ? null : (itensAtivos.find(o => o.id === ocorrenciaSelecionada) ?? null);
+  const calendarioVazio = Boolean(chaveAtiva) && !Array.from(itensPorDia.keys()).some(v => v.startsWith(`${chaveAtiva}-`));
+  const ocorrenciasDoDia = itensPorDia.get(diaSelecionado) ?? [];
 
   const cardResumo = (o: Ocorrencia, compacto = false) => {
     const p = periodo(o);
@@ -155,16 +143,16 @@ export function CalendarioOcorrencias({registros,aoAbrir,periodicidade='DIARIA'}
     <div className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2.5 ${corTotal}`}>
       <div>
         <h4 className="font-semibold capitalize">{chaveAtiva ? tituloGrupo(chaveAtiva) : `Calendário ${periodicidade.toLocaleLowerCase('pt-BR')}`}</h4>
-        <p className="text-xs text-foreground/60">{periodicidade === 'DIARIA' ? 'Selecione um dia para ver as ocorrências do período.' : 'Selecione um período para ver os detalhes.'}</p>
+
       </div>
       <div className="flex items-center gap-1">
         <span className="mr-1 hidden text-xs text-foreground/65 sm:inline">{todosConcluidos?'Concluído':existeEncerrada?'Encerramento registrado':'Por período'}</span>
-        <button type="button" aria-label="Período anterior" disabled={indiceAtivo===0} onClick={()=>setMesSelecionado(chaves[indiceAtivo-1])} className="rounded-lg border border-current/20 px-2 py-1 text-sm transition hover:bg-current/10 disabled:opacity-30">‹</button>
-        <button type="button" aria-label="Próximo período" disabled={indiceAtivo>=chaves.length-1} onClick={()=>setMesSelecionado(chaves[indiceAtivo+1])} className="rounded-lg border border-current/20 px-2 py-1 text-sm transition hover:bg-current/10 disabled:opacity-30">›</button>
+        <button type="button" aria-label="Período anterior" onClick={()=>moverMes(-1)} className="rounded-lg border border-current/20 px-2 py-1 text-sm transition hover:bg-current/10 disabled:opacity-30">‹</button>
+        <button type="button" aria-label="Próximo período" onClick={()=>moverMes(1)} className="rounded-lg border border-current/20 px-2 py-1 text-sm transition hover:bg-current/10 disabled:opacity-30">›</button>
       </div>
     </div>
 
-    {periodicidade === 'DIARIA' && chaveAtiva && (() => {
+    {chaveAtiva && (() => {
       const ano=Number(chaveAtiva.slice(0,4)),mesNumero=Number(chaveAtiva.slice(5,7));
       const inicio=new Date(Date.UTC(ano,mesNumero-1,1));
       const qtdDias=new Date(Date.UTC(ano,mesNumero,0)).getUTCDate();
@@ -193,7 +181,7 @@ export function CalendarioOcorrencias({registros,aoAbrir,periodicidade='DIARIA'}
                       className={`min-h-[84px] rounded-xl border p-2 text-left transition focus-visible:outline-2 focus-visible:outline-current ${selecionado ? 'pi-agenda-dia-selecionado' : atual ? 'pi-agenda-dia-atual' : 'border-current/15 bg-current/[0.03]'} ${passado?'opacity-80':''}`}>
                       <div className="flex items-start justify-between gap-2">
                         <time dateTime={data} className="text-sm font-semibold tabular-nums">{i+1}</time>
-                        {atual && <span className="rounded-full border border-brand-green/35 bg-brand-green/10 px-1.5 py-0.5 text-[10px] font-semibold text-brand-neon">Hoje</span>}
+
                       </div>
                       {itensDoDia.length > 0 ? <>
                         <div className="mt-2 flex flex-wrap gap-1" aria-label={`${itensDoDia.length} ocorrências neste dia`}>{resumo.map(item => <span key={item.status} title={`${item.qtd} ${nomeStatus(item.status).toLowerCase()}`} className={`inline-flex min-h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white ${corPonto(item.status)}`}>{item.qtd}</span>)}</div>
@@ -222,44 +210,6 @@ export function CalendarioOcorrencias({registros,aoAbrir,periodicidade='DIARIA'}
       </section>;
     })()}
 
-    {periodicidade !== 'DIARIA' && chaveAtiva && <section className={`min-w-0 overflow-hidden rounded-xl border ${corTotal}`}>
-      <div className="grid min-h-[28rem] min-w-0 gap-0 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.2fr)]">
-        <div className="border-b border-current/10 p-3 lg:border-b-0 lg:border-r">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <h5 className="text-sm font-semibold">Ocorrências do período</h5>
-            <span className="text-xs text-foreground/60">{itensAtivos.length} item(ns)</span>
-          </div>
-          <div className="max-h-[26rem] space-y-2 overflow-y-auto pr-1">
-            {itensAtivos.map(o => {
-              const p = periodo(o);
-              const atual = oAtual(o);
-              const visual = statusVisual(o, hojeIso);
-              return <button key={o.id} type="button" onClick={() => setOcorrenciaSelecionada(o.id)} aria-pressed={ocorrenciaSelecionada === o.id}
-                className={`block w-full rounded-xl border p-3 text-left transition focus-visible:outline-2 focus-visible:outline-current ${classeStatus(visual)} ${ocorrenciaSelecionada === o.id ? 'ring-1 ring-current/35' : ''}`}>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold">{o.titulo}</p>
-                    <p className="mt-1 text-[11px] opacity-80">{formatar(p.inicio)}{p.fim!==p.inicio?` – ${formatar(p.fim)}`:''}</p>
-                  </div>
-                  {atual && <span className="rounded-full border border-current/25 px-2 py-0.5 text-[10px] font-semibold">Atual</span>}
-                </div>
-              </button>;
-            })}
-            {!itensAtivos.length && <div className="rounded-xl border border-dashed border-current/20 bg-background/45 p-4 text-sm text-foreground/60">Ainda não há ocorrências neste período.</div>}
-          </div>
-        </div>
-        <aside className="pi-agenda-painel-dia min-w-0 p-3">
-          {selecionada ? <div className="space-y-3">
-            <div className="border-b border-current/10 pb-2">
-              <p className="text-sm font-semibold">{selecionada.titulo}</p>
-              <p className="text-xs text-foreground/60">{formatar(periodo(selecionada).inicio)}{periodo(selecionada).fim!==periodo(selecionada).inicio?` – ${formatar(periodo(selecionada).fim)}`:''}</p>
-            </div>
-            {cardResumo(selecionada, true)}
-            {selecionada.observacoes && <div className="rounded-xl border border-current/15 bg-background/60 p-3 text-sm text-foreground/75"><strong className="block text-xs text-foreground/60">Observações</strong><p className="mt-1 whitespace-pre-wrap">{selecionada.observacoes}</p></div>}
-          </div> : <div className="flex h-full min-h-[20rem] items-center justify-center rounded-xl border border-dashed border-current/20 bg-background/45 p-4 text-center text-sm text-foreground/60">Selecione uma ocorrência para ver os detalhes.</div>}
-        </aside>
-      </div>
-    </section>}
 
     {semData.length>0&&<section className="space-y-2 rounded-xl border border-current/20 p-3"><h5 className="font-semibold">Sem data</h5>{semData.map(item => cardResumo(item, true))}</section>}
   </div>;

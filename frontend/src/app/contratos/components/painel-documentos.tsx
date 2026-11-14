@@ -269,6 +269,9 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
       await reativarDocumento(contratoId, documento.id, motivoDocumento.trim());
       setOcultos(anteriores => { const novo = new Set(anteriores); novo.delete(`ativos:${documento.id}`); novo.add(`arquivados:${documento.id}`); return novo; });
       setDocumentoDetalhe(null); setDocumentoReativar(null); setMotivoDocumento('');
+      // A nova condição precisa aparecer imediatamente na aba Ativos,
+      // inclusive quando a sessão anterior estava filtrada por Arquivados.
+      atualizarFiltros({ ...filtrosAtivos, situacao: 'ATIVOS', arquivados: false, pagina: 1, busca: '' });
       onDocumentoAlterado?.();
       toastSucesso('Documento reativado.');
       await Promise.allSettled([consulta.atualizar(), principais.atualizar(), totalAtivos.atualizar(), totalArquivados.atualizar()]);
@@ -486,7 +489,7 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
     </ModalEtapa>, document.body)}
     {documentoVerificar && createPortal(<div className="relative z-[160]"><ConfirmacaoSimples
       titulo="Verificar documento?" descricao={`Confirme a conferência de “${documentoVerificar.nomeOriginal}”. Esta decisão será auditada.`}
-      confirmar="Verificar documento" ocupado={salvandoMetadados}
+      estadoContextual="concluido" preservarCorOrigem confirmacaoRoxa confirmar="Verificar documento" ocupado={salvandoMetadados}
       onCancelar={() => setDocumentoVerificar(null)} onConfirmar={() => void confirmarVerificacao()}/></div>, document.body)}
     {documentoReabrir && createPortal(<div className="relative z-[160]"><ConfirmacaoSimples
       titulo="Reabrir verificação?" descricao={`“${documentoReabrir.nomeOriginal}” voltará à revisão e precisará de nova verificação.`}

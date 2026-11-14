@@ -5,6 +5,7 @@ import { useDetalheEntregavel } from '@/hooks/use-entregaveis';
 import { concluirEntregavel, transicaoAdministrativaEntregavel, editarEntregavel, consultarHistoricoEntregavel, type Entregavel, type ResumoDocumentalEntregavel } from '@/lib/entregaveis';
 import { FormularioEntregavel } from './formulario-entregavel';
 import { ConteudoEntregavel } from './conteudo-entregavel';
+import { PainelMetasMarco } from './painel-metas-marco';
 import { ModalEtapa } from './modal-etapa';
 import type { DadosPlanejamentoEntregavel } from '@/lib/validacao-entregavel';
 import type { PermissoesContrato } from '@/lib/contratos';
@@ -18,11 +19,11 @@ import { BotaoEditarModal, BotaoAcaoModal } from '@/app/components/botoes-modal'
 import { estadoDoObjeto } from '@/lib/identidade-operacional';
 
 /** Consulta o detalhe real no backend, sem confiar só na listagem em cache. */
-export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, podeEditar, focoRetorno, onFechar, atualizar, permissoes, dentroModal = false, iniciarEditando = false, paiArquivado = false, paiConcluido = false, paiEmRevisao = false, verificado = false, resumoInicial, podeArquivar = false, onArquivar, onReabrir, onReativar, onExcluir }: {
+export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, podeEditar, focoRetorno, onFechar, atualizar, permissoes, dentroModal = false, iniciarEditando = false, secaoInicial = 'informacoes', paiArquivado = false, paiConcluido = false, paiEmRevisao = false, verificado = false, resumoInicial, podeArquivar = false, onArquivar, onReabrir, onReativar, onExcluir }: {
   contratoId: string; etapaId: string; entregavelId: string; itemInicial?: Entregavel; podeEditar: boolean;
   focoRetorno: HTMLElement | null; onFechar: () => void;
   atualizar: () => Promise<unknown>;
-  permissoes?: PermissoesContrato; dentroModal?: boolean; iniciarEditando?: boolean; paiArquivado?: boolean; paiConcluido?: boolean; paiEmRevisao?: boolean; verificado?: boolean; resumoInicial?: ResumoDocumentalEntregavel;
+  permissoes?: PermissoesContrato; dentroModal?: boolean; iniciarEditando?: boolean; secaoInicial?: 'informacoes' | 'planejamento'; paiArquivado?: boolean; paiConcluido?: boolean; paiEmRevisao?: boolean; verificado?: boolean; resumoInicial?: ResumoDocumentalEntregavel;
   podeArquivar?: boolean; onArquivar?: () => void; onReabrir?: () => void; onReativar?: () => void; onExcluir?: () => void;
 }) {
   const consulta = useDetalheEntregavel(contratoId, entregavelId);
@@ -30,7 +31,9 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, pode
   // Verificação documental isolada não basta: o backend também exige que as
   // atividades vinculadas estejam verificadas. Consultar sem paginação total.
   const pendenciasAtividades = useAtividades(contratoId, { entregavelId, status: 'REGISTRADA', page: 1, limit: 1 });
+  const [abaMarco, setAbaMarco] = useState<'detalhes'|'metas'>('detalhes');
   const [editando, setEditando] = useState(Boolean(iniciarEditando && !paiArquivado && podeEditar && permissoes?.editarEntregaveis));
+  const [secaoEdicao, setSecaoEdicao] = useState<'informacoes' | 'planejamento' | 'completo'>('completo');
   const marcadorEdicaoEntregavel = useRef<string | null>(null);
   function voltarDaEdicaoEntregavel() {
     // O lápis do CARD já abriu este modal editando. Cancelar precisa retornar
@@ -136,7 +139,11 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, pode
         : (campo === 'peso' || campo === 'quantidadePrevista') && novo != null && atual != null
           ? Number(novo) === Number(atual)
           : (novo ?? null) === (atual ?? null);
-      if (!igual) (alteracoes as Record<string, unknown>)[campo] = novo;
+      const camposPermitidos = secaoEdicao === 'completo' ? [...campos]
+        : secaoEdicao === 'informacoes'
+        ? ['codigo', 'nome', 'responsavelId', 'descricao', 'observacoes']
+        : ['tipo', 'quantidadePrevista', 'unidadeMedida', 'inicioPrevisto', 'terminoPrevisto', 'peso', 'criterioConclusao', 'periodicidade', 'configuracaoPeriodicidade'];
+      if (!igual && camposPermitidos.includes(campo)) (alteracoes as Record<string, unknown>)[campo] = novo;
     }
     if (Object.keys(alteracoes).length) await editarEntregavel(contratoId, entregavelId, alteracoes);
     voltarDaEdicaoEntregavel();
@@ -186,8 +193,9 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, pode
   const bloqueioFinalizacao = Boolean(item && (['PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(item.statusExecucao ?? '') || (!item.reabertoEm && ['CONCLUIDO','FINALIZADO'].includes(item.statusExecucao ?? ''))));
   const abertaParaDecisao = Boolean(item && !item.arquivadoEm && !bloqueioEdicao &&
     !['CONCLUIDO','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(item.statusExecucao ?? ''));
-  return createPortal(<ModalEtapa camada={dentroModal ? "aninhada" : "principal"} contexto={editando ? 'Editando entregável' : 'Entregável do contrato'} titulo={item?.nome ?? 'Detalhes do entregável'} codigoPublico={item?.codigoPublico}
+  return createPortal(<ModalEtapa camada={dentroModal ? "aninhada" : "principal"} contexto={editando ? 'Editar entregável' : 'Entregável do contrato'} titulo={item?.nome ?? 'Detalhes do entregável'} codigoPublico={item?.codigoPublico}
     retornoEsquerda={true} formularioLongo={editando}
+    etiquetaNoContexto
     etiqueta={item?.arquivadoEm ? 'Arquivado' : item?.statusExecucao === 'PENDENTE_ENCERRAMENTO' ? 'Pendente de encerramento' : item?.statusExecucao === 'PENDENTE_CONCLUSAO' ? 'Pendente de conclusão' : item?.reabertoEm ? 'Em revisão' : item?.statusExecucao === 'FINALIZADO' ? 'Encerrado' : ['CONCLUIDO','FINALIZADO'].includes(item?.statusExecucao ?? '') ? 'Concluído' : item?.statusExecucao === 'EM_ANDAMENTO' ? 'Em andamento' : item ? 'Planejamento' : undefined}
     arquivado={Boolean(item?.arquivadoEm)} revisao={Boolean(item?.reabertoEm && !item?.arquivadoEm && !pendenteDecisao)} concluido={!item?.arquivadoEm && !item?.reabertoEm && !editando && item?.statusExecucao === 'CONCLUIDO'} estadoContextual={estadoDoObjeto({objeto:'entregavel',status:item?.statusExecucao,arquivado:Boolean(item?.arquivadoEm),reaberto:Boolean(item?.reabertoEm)})}
 
@@ -196,7 +204,9 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, pode
     textoFechar='← Etapa'
     bloqueadoPorSubmodal={nivel !== 'entregavel'}
     acoes={!editando && item ? <>
-      {podeEditarCadastro && !bloqueioArquivo && !bloqueioFinalizacao && <BotaoEditarModal rotulo="Editar entregável" onClick={() => setEditando(true)} />}
+      {podeEditarCadastro && !bloqueioArquivo && !bloqueioFinalizacao && !verificado &&
+        <BotaoEditarModal rotulo="Editar entregável" disabled={salvando}
+          onClick={() => { setSecaoEdicao('completo'); setEditando(true); }} />}
       {pendenteDecisao ? <div className="flex items-center gap-2" aria-label="Decisão pendente do entregável">
         <button type="button" disabled={salvando || !permissoes?.concluirEntregaveis} onClick={() => {setMotivoDevolucao('');setDevolucaoPendente(true);}}
           className="rounded-lg border border-red-500/60 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-500/20 dark:text-red-300 disabled:opacity-35">Cancelar</button>
@@ -230,6 +240,7 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, pode
       {!consulta.carregando && !erro && !item && <p role="alert">Entregável não encontrado ou sem acesso neste contrato.</p>}
       {erroConclusao && <p role="alert" className="text-error-text">{erroConclusao}</p>}
       {item && <>
+        {item.tipo === 'MARCO' && !editando && <div role="tablist" aria-label="Seções do Marco" className="flex gap-1 rounded-lg border border-violet-500/20 p-1">{([['detalhes','Detalhes'],['metas','Metas']] as const).map(([aba,rotulo])=><button key={aba} type="button" role="tab" aria-selected={abaMarco===aba} onClick={()=>setAbaMarco(aba)} className={`rounded-lg px-3 py-2 text-xs font-semibold ${abaMarco===aba?'bg-violet-500/20 text-violet-300':'hover:bg-current/10'}`}>{rotulo}</button>)}</div>}
         {editando && podeEditarCadastro && !bloqueioArquivo && !bloqueioFinalizacao && apenasMetadados ? <FormularioMetadadosEntregavel item={item} ocupado={salvando}
           onCancelar={voltarDaEdicaoEntregavel} onSalvar={async alteracoes => {
             setSalvando(true);try {await editarEntregavel(contratoId, entregavelId, alteracoes);
@@ -238,11 +249,12 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, pode
             } finally {setSalvando(false);}
           }}/>
           : editando && podeEditarCadastro && !bloqueioEdicao && !bloqueioFinalizacao && !verificado ? <FormularioEntregavel key={item.id} contratoId={contratoId} etapaId={etapaId} inicial={item}
-          onSalvar={salvar} onCancelar={voltarDaEdicaoEntregavel}
+          onSalvar={salvar} onCancelar={voltarDaEdicaoEntregavel} secaoEdicao={secaoEdicao}
           onSalvandoMudou={setSalvando}
           podeAlterarObrigatoriedade={permissoes?.alterarObrigatoriedade ?? false}
           podeConfigurarPesos={Boolean(permissoes?.configurarPesos)}
           podeReplanejarOcorrencias={Boolean(permissoes?.configurarAgendaOcorrencias)} />
+          : item.tipo === 'MARCO' && abaMarco === 'metas' ? <PainelMetasMarco contratoId={contratoId} entregavelId={item.id} permissoes={permissoes} readOnly={bloqueioEdicao || Boolean(item.arquivadoEm) || bloqueioFinalizacao} onAtualizar={()=>{void consulta.atualizar().catch(()=>{});void atualizar().catch(()=>{});}} />
           : <ConteudoEntregavel item={item} resumoInicial={resumoInicial} contextoModal podeEditarEsperada={!bloqueioEdicao && !verificado && !['CONCLUIDO','FINALIZADO'].includes(item.statusExecucao ?? '') && (permissoes?.editarEvidencias ?? podeEditar)}
               podeCriarEvidencia={!bloqueioEdicao && !verificado && !['CONCLUIDO','FINALIZADO'].includes(item.statusExecucao ?? '') && (permissoes?.criarEvidencias ?? podeEditar)}
               podeArquivarEvidencia={(permissoes?.arquivarEvidencias ?? podeEditar) && !bloqueioEdicao}
@@ -285,14 +297,12 @@ function FormularioMetadadosEntregavel({item,ocupado,onSalvar,onCancelar}:{item:
   const [codigo,setCodigo]=useState(item.codigo??'');
   const [descricao,setDescricao]=useState(item.descricao??'');
   const [observacoes,setObservacoes]=useState(item.observacoes??'');
-  const [criterio,setCriterio]=useState(item.criterioConclusao??'');
   const [erro,setErro]=useState('');
   const entradas=[
     {id:'nome',rotulo:'Nome',valor:nome,alterar:setNome,original:item.nome,limite:42,obrigatorio:true},
     {id:'codigo',rotulo:'Código',valor:codigo,alterar:setCodigo,original:item.codigo??'',limite:15},
-    {id:'descricao',rotulo:'Descrição',valor:descricao,alterar:setDescricao,original:item.descricao??'',limite:220,textarea:true},
-    {id:'criterioConclusao',rotulo:'Critério de conclusão',valor:criterio,alterar:setCriterio,original:item.criterioConclusao??'',limite:350,textarea:true},
-    {id:'observacoes',rotulo:'Observações',valor:observacoes,alterar:setObservacoes,original:item.observacoes??'',limite:120,textarea:true},
+    {id:'descricao',rotulo:'Descrição',valor:descricao,alterar:setDescricao,original:item.descricao??'',limite:200,textarea:true},
+    {id:'observacoes',rotulo:'Observações',valor:observacoes,alterar:setObservacoes,original:item.observacoes??'',limite:100,textarea:true},
   ];
   async function enviar(evento:FormEvent){
     evento.preventDefault();if(ocupado)return;

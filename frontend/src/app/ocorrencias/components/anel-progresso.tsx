@@ -14,7 +14,8 @@ export function AnelProgresso({atual,total,rotulo,cor='violeta',tamanho=96}: {
       {porcentagem!=null&&<circle cx="50" cy="50" r={raio} stroke={corAnel} strokeWidth="9" fill="none"
         strokeLinecap="round" strokeDasharray={`${circunferencia*porcentagem/100} ${circunferencia}`}
         transform="rotate(-90 50 50)"/>}
-      <text x="50" y="54" textAnchor="middle" fill="currentColor" fontSize="16" fontWeight="600">{porcentagem==null?'—':`${Math.round(porcentagem)}%`}</text>
+      {rotulo === 'Avanço físico' && <text x="50" y="40" textAnchor="middle" fill="currentColor" fontSize="10">Avanço</text>}
+      <text x="50" y={rotulo === 'Avanço físico' ? '60' : '54'} textAnchor="middle" fill="currentColor" fontSize="16" fontWeight="600">{['Atividades','Evidências','Fotografias','Relatórios'].includes(rotulo) ? `${Math.min(atual,total)}/${total}` : porcentagem==null?'—':`${Math.round(porcentagem)}%`}</text>
     </svg>
   </div>;
 }
