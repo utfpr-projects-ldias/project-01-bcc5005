@@ -1,4 +1,5 @@
 'use client';
+import { chaveTexto } from '@/lib/repositorio-consultas';
 import { resultadoFinalizacao } from '@/lib/finalizados';
 import { estadoDoObjeto } from '@/lib/identidade-operacional';
 import { AbasRolaveis } from '@/app/components/abas-rolaveis';
@@ -67,7 +68,7 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, da
       if (acao === 'reativar') {
         try {
           const atual = await detalharEntregavel(contratoId, id);
-          cacheDetalhe?.gravar(CHAVES_ENTREGAVEIS.detalhe(contratoId, id), atual);
+          cacheDetalhe?.gravar(chaveTexto(CHAVES_ENTREGAVEIS.detalhe(contratoId, id)), atual);
         } catch {
           cacheDetalhe?.invalidar(CHAVES_ENTREGAVEIS.detalhe(contratoId, id));
         }
@@ -319,7 +320,7 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, da
             : comprovacaoSemConclusao ? 'border-brand-green/40 bg-background hover:border-brand-green/55 focus-visible:outline-brand-neon' : 'border-brand-green/20 bg-background hover:border-brand-green/55 focus-visible:outline-brand-neon'}`}>
           <div className="grid min-w-0 grid-cols-[2rem_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2">
             <span aria-label={completo ? 'Entregável com comprovação documental completa' : 'Entregável com comprovação pendente'} title={completo ? 'Comprovação completa' : 'Comprovação pendente'}
-              className={`mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${e.arquivadoEm ? 'border-amber-400/65 bg-amber-500/20 text-amber-200' : e.reabertoEm ? 'border-teal-600/60 bg-teal-900/20 text-teal-200' : 'border-violet-500/60 bg-violet-500/10 text-violet-600 dark:text-violet-300'}`}>
+              className={`mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${e.arquivadoEm ? 'border-amber-400/65 bg-amber-500/20 text-amber-200' : e.reabertoEm ? 'border-teal-600/60 bg-teal-900/20 text-teal-200' : 'border-brand-green/45 bg-brand-green/10 text-brand-neon'}`}>
               {completo ? <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="h-5 w-5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="m5 12 4 4L19 6" />
               </svg> : <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-4 w-4"><circle cx="12" cy="12" r="8" /></svg>}

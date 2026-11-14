@@ -16,7 +16,7 @@ const vazio = (entregavelId: string): FormularioAtividade => ({
   participantes: '', local: '', duracao: '', observacoes: '', quantidadeExecucao: null, ocorrenciaIds: [], medicoes: [],
   entregavelIds: entregavelId ? [entregavelId] : [],
 });
-const CAMPO = 'mt-1 w-full min-w-0 rounded-xl border border-brand-green/25 bg-background/80 px-3 py-2.5 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-brand-neon';
+const CAMPO = 'mt-1 w-full min-w-0 rounded-xl border border-brand-green/25 bg-background/80 px-3 py-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-brand-neon';
 
 type Props = { contratoId: string; entregavelId?: string; origem?: HTMLElement | null; estadoContextual?: EstadoContextual;
   onFechar: () => void; onSalvo?: () => void | Promise<unknown> };
@@ -66,14 +66,14 @@ export function ModalCadastroAtividade({ contratoId, entregavelId = '', origem, 
 
   return createPortal(<ModalEtapa estadoContextual={estadoContextual} titulo="Nova atividade" contexto="Diário de execução"
     ocupado={salvando} formularioHorizontal cabecalhoUmaLinha camada={entregavelId ? 'edicao' : 'principal'} focoRetorno={origem} onFechar={onFechar} rotuloFechar="Fechar cadastro de atividade">
-    <form data-pi-formulario aria-label="Formulário de atividade" onSubmit={salvar} noValidate className="mx-auto max-w-3xl space-y-4">
+    <form data-pi-formulario aria-label="Formulário de atividade" onSubmit={salvar} noValidate className="mx-auto max-w-2xl space-y-3">
       <p className="text-xs text-foreground/70">Campos com * são obrigatórios. A atividade pode vincular vários entregáveis abertos do mesmo contrato.</p>
       {erro && <p role="alert" className="rounded-lg border border-error-text/40 p-3 text-sm text-error-text">{erro}</p>}
-      <label className="block text-sm font-medium">Título *
+      <label className="block max-w-sm min-w-0 text-sm font-medium">Título *
         <input required maxLength={50} className={CAMPO} value={form.titulo} onChange={e => campo('titulo', e.target.value)} aria-invalid={Boolean(erros.titulo)} />
         <span className="block text-right text-[11px] text-foreground/50">{form.titulo.length}/50</span>
       </label>{erros.titulo && <p className="text-xs text-error-text">{erros.titulo}</p>}
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid min-w-0 gap-3 sm:grid-cols-2">
         <label className="block text-sm font-medium">Data e hora *
           <input required type="datetime-local" lang="pt-BR" className={`${CAMPO} tec08-data-hora max-w-full [color-scheme:light] dark:[color-scheme:dark]`} value={form.dataHora} onChange={e => campo('dataHora', e.target.value)} aria-invalid={Boolean(erros.dataHora)} />
         </label>
@@ -83,11 +83,11 @@ export function ModalCadastroAtividade({ contratoId, entregavelId = '', origem, 
           </select>
         </label>
       </div>{erros.dataHora && <p className="text-xs text-error-text">{erros.dataHora}</p>}
-      <label className="block text-sm font-medium">Descrição *
+      <label className="block min-w-0 text-sm font-medium">Descrição *
         <textarea required rows={2} maxLength={500} className={CAMPO} value={form.descricao} onChange={e => campo('descricao', e.target.value)} />
         <span className="block text-right text-[11px] text-foreground/50">{form.descricao.length}/500</span>
       </label>{erros.descricao && <p className="text-xs text-error-text">{erros.descricao}</p>}
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid min-w-0 gap-3 sm:grid-cols-2">
         <label className="block text-sm font-medium">Responsável
           <input maxLength={25} placeholder="Padrão: usuário conectado" className={CAMPO} value={form.responsavel} onChange={e => campo('responsavel', e.target.value)} />
         </label>

@@ -12,7 +12,7 @@ export class CriarEntregavelDto {
   @IsString() @IsNotEmpty() @MaxLength(42) nome!: string;
   @IsEnum(TipoEntregavel) tipo!: TipoEntregavel;
   @IsOptional() @IsString() @MaxLength(15) codigo?: string | null;
-  @IsOptional() @IsString() @MaxLength(220) descricao?: string | null;
+  @IsOptional() @IsString() @MaxLength(200) descricao?: string | null;
   @IsOptional() @IsUUID('4') responsavelId?: string | null;
   @IsOptional() @IsString() @Matches(/^\d{4}-\d{2}-\d{2}$/) inicioPrevisto?: string | null;
   @IsOptional() @IsString() @Matches(/^\d{4}-\d{2}-\d{2}$/) terminoPrevisto?: string | null;
@@ -22,8 +22,8 @@ export class CriarEntregavelDto {
   /** Validação estrutural estrita no serviço; não transformar objeto arbitrário. */
   @Allow() configuracaoPeriodicidade?: unknown;
   @IsOptional() @IsString() peso?: string | null;
-  @IsOptional() @IsString() @MaxLength(350) criterioConclusao?: string | null;
-  @IsOptional() @IsString() @MaxLength(120) observacoes?: string | null;
+  @IsOptional() @IsString() @MaxLength(200) criterioConclusao?: string | null;
+  @IsOptional() @IsString() @MaxLength(100) observacoes?: string | null;
   @IsOptional() @IsArray() @ArrayMaxSize(10) @ValidateNested({ each: true })
   @Type(() => ItemEvidenciaEsperadaDto) evidenciasEsperadas?: ItemEvidenciaEsperadaDto[];
 }
@@ -34,7 +34,7 @@ export class EditarEntregavelDto {
   @ValidateIf((_, v: unknown) => v !== undefined) @IsString() @IsNotEmpty() @MaxLength(42) nome?: string;
   @ValidateIf((_, v: unknown) => v !== undefined) @IsEnum(TipoEntregavel) tipo?: TipoEntregavel;
   @IsOptional() @IsString() @MaxLength(15) codigo?: string | null;
-  @IsOptional() @IsString() @MaxLength(220) descricao?: string | null;
+  @IsOptional() @IsString() @MaxLength(200) descricao?: string | null;
   @IsOptional() @IsUUID('4') responsavelId?: string | null;
   @IsOptional() @IsString() @Matches(/^\d{4}-\d{2}-\d{2}$/) inicioPrevisto?: string | null;
   @IsOptional() @IsString() @Matches(/^\d{4}-\d{2}-\d{2}$/) terminoPrevisto?: string | null;
@@ -43,8 +43,8 @@ export class EditarEntregavelDto {
   @IsOptional() @IsEnum(PeriodicidadeEntregavel) periodicidade?: PeriodicidadeEntregavel | null;
   @Allow() configuracaoPeriodicidade?: unknown;
   @IsOptional() @IsString() peso?: string | null;
-  @IsOptional() @IsString() @MaxLength(350) criterioConclusao?: string | null;
-  @IsOptional() @IsString() @MaxLength(120) observacoes?: string | null;
+  @IsOptional() @IsString() @MaxLength(200) criterioConclusao?: string | null;
+  @IsOptional() @IsString() @MaxLength(100) observacoes?: string | null;
   @IsOptional() @IsArray() @ArrayMaxSize(10) @ValidateNested({ each: true })
   @Type(() => ItemEvidenciaEsperadaDto) evidenciasEsperadas?: ItemEvidenciaEsperadaDto[];
 }

@@ -28,9 +28,9 @@ export type ConfiguracaoOcorrencias = {
   quantidadePrevista: string | null; unidadeMedida: string | null;
   periodicidade: string | null; inicioPrevisto: string | null; terminoPrevisto: string | null; modoVisualizacao: 'LISTA' | 'CALENDARIO';
 };
-export type EdicaoOcorrencia = Partial<Pick<Ocorrencia, 'titulo' | 'dataPrevista' | 'dataRealizada' | 'status' | 'quantidadeRealizada' | 'metaQuantidade' | 'observacoes' | 'exigeAtividade' | 'minimoAtividadesVerificadas' | 'minimoEvidenciasVerificadas' | 'minimoFotos' | 'minimoRelatorios' | 'minimoEvidenciasLivres' | 'pesoPeriodo' | 'evidenciaExigida' | 'permiteEncerramentoExcepcional'>>;
+export type EdicaoOcorrencia = Partial<Pick<Ocorrencia, 'titulo' | 'dataPrevista' | 'dataRealizada' | 'status' | 'quantidadeRealizada' | 'observacoes' | 'exigeAtividade' | 'minimoAtividadesVerificadas' | 'minimoEvidenciasVerificadas' | 'minimoFotos' | 'minimoRelatorios' | 'minimoEvidenciasLivres' | 'pesoPeriodo' | 'evidenciaExigida' | 'permiteEncerramentoExcepcional'>>;
 
-export type LancamentoOcorrencia = {id:string;quantidade:string;justificativa:string|null;criadoEm:string;criadoPor:string;alteradoEm:string|null;alteradoPor:string|null};
+export type LancamentoOcorrencia = {id:string;quantidade:string;justificativa:string|null;criadoEm:string;criadoPor:string;alteradoEm:string|null;alteradoPor:string|null;bloqueadoEm:string|null;bloqueadoPor:string|null};
 export type ComprovanteOcorrencia = {id:string;nomeOriginal:string;tipoEvidencia:string;status:string;vinculado:boolean};
 export type EventoHistoricoOcorrencia = {id:string;acao:string;registradoEm:string;ator:string;autorNome?:string|null;dadosAnteriores:Record<string,unknown>|null;dadosPosteriores:Record<string,unknown>|null};
 const rotaOcorrencia=(contratoId:string,ocorrenciaId:string)=>`${API}/contratos/${encodeURIComponent(contratoId)}/ocorrencias/${encodeURIComponent(ocorrenciaId)}`;
@@ -42,6 +42,8 @@ async function chamadaJson<T>(url:string,init?:RequestInit):Promise<T>{
 }
 export const editarExigenciasOcorrencia=(c:string,o:string,dados:EdicaoOcorrencia)=>
   chamadaJson<Ocorrencia>(`${rotaOcorrencia(c,o)}/exigencias`,{method:'PATCH',body:JSON.stringify(dados)});
+export const editarMetaOcorrencia=(c:string,o:string,metaQuantidade:string,justificativa?:string)=>
+  chamadaJson<Ocorrencia>(`${rotaOcorrencia(c,o)}/meta`,{method:'PATCH',body:JSON.stringify({metaQuantidade,...(justificativa?.trim()?{justificativa:justificativa.trim()}: {})})});
 export const editarPesoOcorrencia=(c:string,o:string,pesoPeriodo:string|null)=>
   chamadaJson<Ocorrencia>(`${rotaOcorrencia(c,o)}/peso`,{method:'PATCH',body:JSON.stringify({pesoPeriodo})});
 export const listarLancamentosOcorrencia=(c:string,o:string)=>chamadaJson<LancamentoOcorrencia[]>(`${rotaOcorrencia(c,o)}/lancamentos`);
@@ -49,11 +51,15 @@ export const criarLancamentoOcorrencia=(c:string,o:string,id:string,quantidade:s
   chamadaJson<{id:string;quantidadeExecutada:number}>(`${rotaOcorrencia(c,o)}/lancamentos`,{method:'POST',body:JSON.stringify({id,quantidade,justificativa})});
 export const corrigirLancamentoOcorrencia=(c:string,o:string,id:string,quantidade:string,justificativa:string)=>
   chamadaJson<{id:string;quantidade:string}>(`${rotaOcorrencia(c,o)}/lancamentos/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({quantidade,justificativa})});
+export const bloquearLancamentoOcorrencia=(c:string,o:string,id:string,bloqueado:boolean)=>
+  chamadaJson<{id:string;bloqueado:boolean}>(`${rotaOcorrencia(c,o)}/lancamentos/${encodeURIComponent(id)}/bloqueio`,{method:'PATCH',body:JSON.stringify({bloqueado})});
+export const excluirLancamentoOcorrencia=(c:string,o:string,id:string,justificativa:string)=>
+  chamadaJson<{id:string;excluido:boolean}>(`${rotaOcorrencia(c,o)}/lancamentos/${encodeURIComponent(id)}`,{method:'DELETE',body:JSON.stringify({justificativa})});
 export const listarComprovantesOcorrencia=(c:string,o:string)=>chamadaJson<{vinculadas:ComprovanteOcorrencia[];disponiveis:ComprovanteOcorrencia[]}>(`${rotaOcorrencia(c,o)}/evidencias`);
 export const vincularComprovanteOcorrencia=(c:string,o:string,comprovanteId:string)=>chamadaJson<{vinculado:boolean}>(`${rotaOcorrencia(c,o)}/evidencias`,{method:'POST',body:JSON.stringify({comprovanteId})});
 export const desvincularComprovanteOcorrencia=(c:string,o:string,comprovanteId:string)=>chamadaJson<{desvinculado:boolean}>(`${rotaOcorrencia(c,o)}/evidencias/${encodeURIComponent(comprovanteId)}`,{method:'DELETE'});
 export const listarHistoricoOcorrencia=(c:string,o:string)=>chamadaJson<EventoHistoricoOcorrencia[]>(`${rotaOcorrencia(c,o)}/historico`);
-export type Replanejamento = { inicioFuturo: string; terminoPrevisto: string; periodicidade: string; confirmacao?: string };
+export type Replanejamento = { inicioFuturo: string; terminoPrevisto: string; periodicidade: string; modoRegistro?: 'DESCRITIVO'|'QUANTITATIVO'; metaQuantidade?: string; unidadeMedida?: string; confirmacao?: string };
 export type ImpactoAgenda = { confirmacao: string; substituir: {id: string; inicio: string; fim: string}[]; novas: {inicio: string; fim: string}[]; reativar: number; preservadas: number; total: number; aplicado: boolean };
 const API = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001').replace(/\/$/, '');
 

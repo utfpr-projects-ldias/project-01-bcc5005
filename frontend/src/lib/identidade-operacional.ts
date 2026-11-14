@@ -31,7 +31,8 @@ export function estadoDoObjeto({ objeto, status, arquivado, reaberto, pendenteCo
   if (status === 'EM_REVISAO') return 'revisao';
   if (status === 'PENDENTE_VERIFICACAO' || status === 'AGUARDANDO_ENVIO' || status === 'SEM_ENVIO') return 'pendente';
   if (status === 'EM_ANDAMENTO' || status === 'EM_EXECUCAO' || status === 'REGISTRADA') return 'andamento';
-  if (status === 'NAO_INICIADO' || status === 'PLANEJADA' || status === 'PLANEJAMENTO') return 'nao-iniciado';
+  if (objeto === 'etapa' && status === 'PLANEJADA') return 'andamento';
+  if (status === 'NAO_INICIADO' || status === 'PLANEJADA' || status === 'PLANEJAMENTO') return 'andamento';
   // EM_ENCERRAMENTO no contrato é uma fase administrativa, não execução integral.
   if (objeto === 'contrato' && status === 'EM_ENCERRAMENTO') return 'pendente';
   return 'normal';

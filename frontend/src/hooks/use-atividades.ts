@@ -6,7 +6,7 @@ export type EstadoAtividade = 'REGISTRADA' | 'PENDENTE_CONCLUSAO' | 'VERIFICADA'
 export type FiltroEstadoAtividade = EstadoAtividade | 'ATIVAS' | ''; // ATIVAS: somente registradas; pendentes e finalizadas possuem abas próprias
 
 export type Atividade = {
-  id: string; contratoId: string; titulo: string; dataHora: string; descricao: string;
+  id: string; contratoId: string; atividadeCompartilhadaId?: string | null; titulo: string; dataHora: string; descricao: string;
   tipo: string; responsavel: string | null; participantes: string[] | null;
   local: string | null; duracao: string | null; observacoes: string | null;
   ocorrenciaId?: string | null; ocorrenciaIds?: string[]; medicoes?: { ocorrenciaId: string; quantidade: string }[]; ocorrencias?: {id: string; entregavelId: string; titulo: string; status: string; inicioPeriodo?: string | null; terminoPeriodo?: string | null}[]; quantidadeExecucao?: string | null;

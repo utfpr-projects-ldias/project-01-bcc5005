@@ -30,6 +30,7 @@ import { PainelDocumentos } from '../components/painel-documentos';
 import { ResumoPlanejamentoContrato } from '../components/resumo-planejamento-contrato';
 import { HistoricoContrato } from '../components/historico-contrato';
 import { AgendaContrato } from '../components/agenda-contrato';
+import { PainelEpicosMarco } from '@/app/execucao/components/painel-epicos-marco';
 import { AtividadesVinculadas } from '../components/atividades-vinculadas';
 import { PainelOcorrencias } from '@/app/ocorrencias/components/painel-ocorrencias';
 import { IconeAtividades, IconeOcorrencias } from '@/app/components/icones-operacionais';
@@ -49,7 +50,7 @@ export default function DetalheContratoPage() {
   const painelInterno = useSyncExternalStore(() => () => {},
     () => new URLSearchParams(window.location.search).get('painel') === '1', () => false);
   const cache = useRepositorioConsultas();
-  const [abaExecucao, setAbaExecucao] = useState<'geral' | 'ocorrencias'>('geral');
+  const [abaExecucao, setAbaExecucao] = useState<'geral' | 'epicos'>('geral');
   const [abaContrato, setAbaContrato] = useState<'visao' | 'execucao' | 'etapas' | 'atividades' | 'documentos'>('visao');
   const [identificacaoExpandida, setIdentificacaoExpandida] = useState(false);
   const [abrirOcorrenciaGeral, setAbrirOcorrenciaGeral] = useState<string | null>(null);
@@ -696,7 +697,8 @@ export default function DetalheContratoPage() {
                   </dl>}
                   </div>
                 </div>
-                <AgendaContrato contratoId={contrato.id} abrirOcorrencia={ocorrenciaId=>{setAbrirOcorrenciaGeral(ocorrenciaId);setAbaExecucao('ocorrencias');setAbaContrato('execucao');}} />
+                <AgendaContrato contratoId={contrato.id} abrirOcorrencia={ocorrenciaId=>setAbrirOcorrenciaGeral(ocorrenciaId)} />
+                {abrirOcorrenciaGeral&&<div className="hidden"><PainelOcorrencias contratoId={contrato.id} abrirOcorrenciaId={abrirOcorrenciaGeral} aoFecharOcorrenciaSelecionada={()=>setAbrirOcorrenciaGeral(null)} somenteLeitura={bloqueioOperacional} embutido/></div>}
               </div>
               <div id="secao-geral-vigencia" role="tabpanel" hidden={abaGeral!=='vigencia'} className={abaGeral==='vigencia'?'space-y-3':'hidden'}>
                 <h3 className="text-sm font-semibold text-current">Vigência e responsáveis</h3>
@@ -714,10 +716,10 @@ export default function DetalheContratoPage() {
           <section data-tec08-aba-contrato role="tabpanel" id="painel-execucao" aria-labelledby="tab-execucao" hidden={abaContrato !== 'execucao'} className={abaContrato !== 'execucao' ? 'hidden' : 'space-y-4'}>
             <nav role="tablist" aria-label="Seções da execução" className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-xl border border-current/25 bg-background/60 p-1">
               <button role="tab" type="button" id="execucao-tab-geral" aria-controls="execucao-conteudo-geral" aria-selected={abaExecucao === 'geral'} onClick={() => setAbaExecucao('geral')} className={`rounded-lg px-4 py-2 text-sm font-semibold ${abaExecucao === 'geral' ? 'bg-current/10 underline underline-offset-4' : 'text-foreground/75 hover:bg-foreground/5'}`}>Geral</button>
-              <button role="tab" type="button" id="execucao-tab-ocorrencias" aria-controls="execucao-conteudo-ocorrencias" aria-selected={abaExecucao === 'ocorrencias'} onClick={() => setAbaExecucao('ocorrencias')} className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold ${abaExecucao === 'ocorrencias' ? 'bg-current/10 underline underline-offset-4' : 'text-foreground/75 hover:bg-foreground/5'}`}><IconeOcorrencias tamanho={16} /> Ocorrências</button>
+              <button role="tab" type="button" id="execucao-tab-epicos" aria-controls="execucao-conteudo-epicos" aria-selected={abaExecucao === 'epicos'} onClick={() => setAbaExecucao('epicos')} className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold ${abaExecucao === 'epicos' ? 'bg-current/10 underline underline-offset-4' : 'text-foreground/75 hover:bg-foreground/5'}`}><IconeOcorrencias tamanho={16} /> Épicos (Marcos)</button>
             </nav>
             <div role="tabpanel" id="execucao-conteudo-geral" aria-labelledby="execucao-tab-geral" hidden={abaExecucao !== 'geral'} className={abaExecucao !== 'geral' ? 'hidden' : undefined}><PainelExecucaoContextual contratoId={contrato.id} estadoContextual={contrato.arquivadoEm ? 'arquivado' : cancelado ? 'cancelado' : suspenso ? 'suspenso' : finalizado ? 'finalizado' : encerrado ? 'encerrado' : emRevisao ? 'revisao' : (concluido || pendenteConclusao) ? 'concluido' : 'normal'} /></div>
-            <div role="tabpanel" id="execucao-conteudo-ocorrencias" aria-labelledby="execucao-tab-ocorrencias" hidden={abaExecucao !== 'ocorrencias'} className={abaExecucao !== 'ocorrencias' ? 'hidden' : undefined}><PainelOcorrencias contratoId={contrato.id} abrirOcorrenciaId={abrirOcorrenciaGeral} aoFecharOcorrenciaSelecionada={()=>setAbrirOcorrenciaGeral(null)} estadoContextual={contrato.arquivadoEm ? 'arquivado' : cancelado ? 'cancelado' : suspenso ? 'suspenso' : finalizado ? 'finalizado' : encerrado ? 'encerrado' : emRevisao ? 'revisao' : (concluido || pendenteConclusao) ? 'concluido' : 'normal'} somenteLeitura={Boolean(contrato.arquivadoEm || cancelado || encerrado || suspenso || concluido || contrato.status === 'EM_ENCERRAMENTO')} embutido /></div>
+            <div role="tabpanel" id="execucao-conteudo-epicos" aria-labelledby="execucao-tab-epicos" hidden={abaExecucao !== 'epicos'} className={abaExecucao !== 'epicos' ? 'hidden' : undefined}><PainelEpicosMarco contratoId={contrato.id} somenteLeitura={bloqueioOperacional} /></div>
           </section>
           <section data-tec08-aba-contrato role="tabpanel" id="painel-atividades" aria-labelledby="tab-atividades" hidden={abaContrato !== 'atividades'} className={abaContrato !== 'atividades' ? 'hidden' : 'space-y-4'}>
             <AtividadesVinculadas contratoId={contrato.id} estadoContextual={contrato.arquivadoEm ? 'arquivado' : cancelado ? 'cancelado' : suspenso ? 'suspenso' : finalizado ? 'finalizado' : encerrado ? 'encerrado' : emRevisao ? 'revisao' : (concluido || pendenteConclusao) ? 'concluido' : 'normal'} visivel={abaContrato === 'atividades'} somenteLeitura={Boolean(contrato.arquivadoEm || cancelado || encerrado || suspenso || concluido || contrato.status === 'EM_ENCERRAMENTO')} ocultarAcessoDiario />

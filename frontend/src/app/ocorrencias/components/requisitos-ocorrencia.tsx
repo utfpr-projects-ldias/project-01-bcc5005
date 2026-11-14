@@ -48,7 +48,7 @@ export function FormularioRequisitosOcorrencia({ valor, onChange, compacto = fal
   };
   return <fieldset className="min-w-0 space-y-3 rounded-xl border border-current/20 bg-current/[0.025] p-3 sm:p-4">
     <legend className="px-1 text-sm font-semibold">Requisitos para solicitar conclusão</legend>
-    {!compacto && <p className="text-xs text-foreground/65">Defina quantos registros verificados são necessários. Cada comprovante conta uma vez e a execução física continua independente da comprovação.</p>}
+
     <p className="text-xs text-foreground/65">Total de evidências exigidas: {valor.minimoFotos+valor.minimoRelatorios+valor.minimoEvidenciasLivres} / 99</p>
     <div className="grid min-w-0 gap-3 sm:grid-cols-2">
       <Contador rotulo="Atividades verificadas" descricao="Quantidade mínima de atividades aprovadas." quantidade={valor.minimoAtividadesVerificadas} onChange={n => onChange({...valor,minimoAtividadesVerificadas:n})}/>
@@ -64,10 +64,10 @@ export function FormularioRequisitosOcorrencia({ valor, onChange, compacto = fal
   </fieldset>;
 }
 
-export function ResumoRequisitosOcorrencia({ minimoAtividades, minimoEvidencias, formato, verificadas = 0, fotos = 0, relatorios = 0, minimoFotos, minimoRelatorios, minimoEvidenciasLivres }:{
+export function ResumoRequisitosOcorrencia({ minimoAtividades, minimoEvidencias, formato, verificadas = 0, fotos = 0, relatorios = 0, minimoFotos, minimoRelatorios, minimoEvidenciasLivres, integrado = false }:{
   minimoAtividades: number; minimoEvidencias: number; formato: FormatoComprovacao;
   verificadas?: number; fotos?: number; relatorios?: number;
-  minimoFotos?:number|null; minimoRelatorios?:number|null; minimoEvidenciasLivres?:number|null;
+  minimoFotos?:number|null; minimoRelatorios?:number|null; minimoEvidenciasLivres?:number|null; integrado?:boolean;
 }) {
   const individuais=[minimoFotos,minimoRelatorios,minimoEvidenciasLivres].some(n=>n!=null);
   const exigidas={fotos:minimoFotos??0,relatorios:minimoRelatorios??0,livres:minimoEvidenciasLivres??0};
@@ -78,23 +78,19 @@ export function ResumoRequisitosOcorrencia({ minimoAtividades, minimoEvidencias,
     : formato==='FOTO'?fotos:formato==='RELATORIO'?relatorios:fotos+relatorios;
   const atividadesAtendidas=Math.min(verificadas,minimoAtividades);
   const comprovacaoAtendida=Math.min(evidenciasAtendidas,totalEvidencias);
-  return <section aria-label="Requisitos da ocorrência" className="max-w-2xl rounded-xl border border-current/20 bg-current/[0.025] p-3 sm:p-4">
+  if (minimoAtividades === 0 && totalEvidencias === 0) return null;
+  return <section aria-label="Requisitos para conclusão" className={integrado ? "min-w-0" : "min-w-0 rounded-xl border border-current/20 bg-current/[0.025] p-3"}>
     <h4 className="mb-3 text-sm font-semibold">Requisitos para conclusão</h4>
-    <div className="grid gap-4 sm:grid-cols-2">
-      <div className="flex min-w-0 items-center gap-3">
-        <AnelProgresso atual={atividadesAtendidas} total={minimoAtividades} rotulo="Atividades verificadas" tamanho={80}/>
-        <div className="min-w-0"><p className="text-xs text-foreground/60">Atividades</p><p className="font-semibold tabular-nums">{verificadas} / {minimoAtividades}</p>
-          <p className="text-xs text-foreground/60">{minimoAtividades===0?'Não exigidas':'Verificadas / exigidas'}</p></div>
-      </div>
-      <div className="flex min-w-0 items-center gap-3">
-        <AnelProgresso atual={comprovacaoAtendida} total={totalEvidencias} rotulo="Evidências verificadas" tamanho={80}/>
-        <div className="min-w-0"><p className="text-xs text-foreground/60">Evidências</p><p className="font-semibold tabular-nums">{comprovacaoAtendida} / {totalEvidencias}</p>
-          <p className="text-xs text-foreground/60">{totalEvidencias===0?'Não exigidas':'Verificadas / exigidas'}</p></div>
-      </div>
+    <div className="grid gap-3 sm:grid-cols-2">
+      {minimoAtividades > 0 && <div className="flex min-w-0 items-center gap-3">
+        <AnelProgresso atual={atividadesAtendidas} total={minimoAtividades} rotulo="Atividades" tamanho={68}/>
+        <span className="text-xs font-semibold">Atividades</span>
+      </div>}
+      {totalEvidencias > 0 && <div className="flex min-w-0 items-center gap-3">
+        <AnelProgresso atual={comprovacaoAtendida} total={totalEvidencias} rotulo="Evidências" tamanho={68}/>
+        <span className="text-xs font-semibold">Evidências</span>
+      </div>}
     </div>
-    {individuais && totalEvidencias>0 && <details className="mt-3 border-t border-current/15 pt-2 text-xs text-foreground/70">
-      <summary className="cursor-pointer font-medium">Detalhar formatos exigidos</summary>
-      <p className="mt-2">Fotografias: {fotos} / {exigidas.fotos} · Relatórios: {relatorios} / {exigidas.relatorios} · Adicionais: {livresAtendidos} / {exigidas.livres}</p>
-    </details>}
+
   </section>;
 }

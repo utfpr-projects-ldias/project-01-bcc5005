@@ -25,7 +25,7 @@ test('requisitos de foto e relatório são contabilizados individualmente', () =
 
 test('painel de requisitos não inventa uma obrigação de 0/0', () => {
   render(<ResumoRequisitosOcorrencia minimoAtividades={1} minimoEvidencias={0} formato="NENHUMA" verificadas={0} fotos={0} relatorios={0}/>);
-  expect(screen.getByText('0 / 1')).toBeInTheDocument();
-  expect(screen.getByText('0 / 0')).toBeInTheDocument();
-  expect(screen.getByText('Não exigidas')).toBeInTheDocument();
+  expect(screen.getByText('0/1')).toBeInTheDocument();
+  expect(screen.queryByText('0/0')).not.toBeInTheDocument();
+  expect(screen.queryByText('Não exigidas')).not.toBeInTheDocument();
 });

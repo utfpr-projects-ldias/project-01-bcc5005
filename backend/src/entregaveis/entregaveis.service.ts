@@ -477,6 +477,10 @@ export class EntregaveisService implements OnModuleInit {
         throw new ConflictException('Conclua novamente as evidências em revisão');
       const antes = { statusExecucao: e.statusExecucao, reabertoEm: e.reabertoEm ?? null };
       e.statusExecucao = 'CONCLUIDO' as Entregavel['statusExecucao'];
+      if (e.tipo === TipoEntregavel.MARCO && !e.dataEfetivaMarco) {
+        // Atingimento efetivo é uma decisão autorizada, nunca um efeito de mero vínculo.
+        e.dataEfetivaMarco = new Date().toISOString().slice(0, 10);
+      }
       e.reabertoEm = null;
       await repo.save(e);
       await this.auditoria.registrarNaTransacao(m, ator, {

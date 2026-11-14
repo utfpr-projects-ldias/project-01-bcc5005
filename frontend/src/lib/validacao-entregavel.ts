@@ -24,7 +24,7 @@ export const TIPOS: TipoEntregavel[] = ['UNICO', 'QUANTITATIVO', 'RECORRENTE', '
 export const PERIODICIDADES: PeriodicidadeEntregavel[] = ['DIARIA', 'SEMANAL', 'MENSAL', 'TRIMESTRAL', 'SEMESTRAL', 'ANUAL'];
 export const DESCRICOES_TIPO: Record<TipoEntregavel, string> = {
   UNICO: 'Uma obrigação pontual. O andamento será registrado pelo módulo de execução.',
-  QUANTITATIVO: 'Obrigação mensurável. Informe meta e unidade; o progresso depende de ocorrências aprovadas.',
+  QUANTITATIVO: 'Obrigação mensurável. Informe meta e unidade; registre a execução diretamente ou por ocorrências, sem duplicar quantidades.',
   RECORRENTE: 'Serviço periódico. Defina frequência e período para gerar a agenda de ocorrências.',
   CONTINUO: 'Atividade mantida ao longo do período. O tempo decorrido não representa progresso automático.',
   MARCO: 'Marco contratual atingido em uma condição verificável. A data efetiva será tratada na execução.',
@@ -60,7 +60,7 @@ export function validarEntregavel(r: RascunhoEntregavel, inicial?: Entregavel): 
   const erros: ErrosEntregavel = {};
   const nome = r.nome.trim();
   if (!nome || (nome.length > 42 && nome !== inicial?.nome)) erros.nome = 'Informe o nome (até 42 caracteres).';
-  for (const [campo, maximo] of [['codigo', 15], ['descricao', 220], ['unidadeMedida', 40], ['criterioConclusao', 350], ['observacoes', 120]] as const) {
+  for (const [campo, maximo] of [['codigo', 15], ['descricao', 200], ['unidadeMedida', 40], ['criterioConclusao', 200], ['observacoes', 100]] as const) {
     const t = r[campo];
     if (t && (!t.trim() || (t.length > maximo && t !== (inicial?.[campo] ?? '')))) erros[campo] = `Revise o campo (até ${maximo} caracteres e sem valor somente com espaços).`;
   }
@@ -99,7 +99,7 @@ export function validarEntregavel(r: RascunhoEntregavel, inicial?: Entregavel): 
     responsavelId: opcional(r.responsavelId), inicioPrevisto: opcional(r.inicioPrevisto),
     terminoPrevisto: opcional(r.terminoPrevisto),
     quantidadePrevista: r.tipo === 'QUANTITATIVO' ? opcional(r.quantidadePrevista) : null,
-    unidadeMedida: r.tipo === 'QUANTITATIVO' ? opcional(r.unidadeMedida) : null,
+    unidadeMedida: ['QUANTITATIVO', 'RECORRENTE'].includes(r.tipo) ? opcional(r.unidadeMedida) : null,
     periodicidade: r.tipo === 'RECORRENTE' && r.periodicidade ? r.periodicidade as PeriodicidadeEntregavel : null,
     configuracaoPeriodicidade: r.tipo === 'RECORRENTE' && r.periodicidade ? { versao: 1 } : null,
     peso: opcional(r.peso.replace(',', '.')), criterioConclusao: opcional(r.criterioConclusao), observacoes: opcional(r.observacoes),

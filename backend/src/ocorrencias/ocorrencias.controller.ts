@@ -21,9 +21,10 @@ import { OcorrenciasService } from './ocorrencias.service.js';
 import { GerarOcorrenciasDto } from './dto/gerar-ocorrencias.dto.js';
 import { CriarOcorrenciaManualDto } from './dto/criar-ocorrencia-manual.dto.js';
 import { AtualizarOcorrenciaDto } from './dto/atualizar-ocorrencia.dto.js';
+import { EditarMetaOcorrenciaDto } from './dto/editar-meta-ocorrencia.dto.js';
 import { JustificativaDecisaoDto } from '../contratos/dto/justificativa-decisao.dto.js';
 import { ReabrirOcorrenciaDto } from './dto/reabrir-ocorrencia.dto.js';
-import { CriarLancamentoOcorrenciaDto, CorrigirLancamentoOcorrenciaDto, VincularComprovanteOcorrenciaDto } from './dto/lancamento-ocorrencia.dto.js';
+import { CriarLancamentoOcorrenciaDto, CorrigirLancamentoOcorrenciaDto, BloquearLancamentoOcorrenciaDto, ExcluirLancamentoOcorrenciaDto, VincularComprovanteOcorrenciaDto } from './dto/lancamento-ocorrencia.dto.js';
 
 @Controller('contratos/:contratoId')
 @UsePipes(
@@ -133,6 +134,18 @@ export class OcorrenciasController {
     @Param('lancamentoId') lancamentoId:string,@Body() dto:CorrigirLancamentoOcorrenciaDto,@Req() req:RequisicaoAutorizada) {
     return this.ocorrenciasService.corrigirLancamento(contratoId,id,lancamentoId,dto.quantidade,dto.justificativa,req.usuarioDominio!);
   }
+  @Patch('ocorrencias/:ocorrenciaId/lancamentos/:lancamentoId/bloqueio')
+  @ExigirPoliticaOperacional('ocorrencias:visualizar',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})
+  bloquearLancamento(@Param('contratoId') contratoId:string,@Param('ocorrenciaId') id:string,
+    @Param('lancamentoId') lancamentoId:string,@Body() dto:BloquearLancamentoOcorrenciaDto,@Req() req:RequisicaoAutorizada) {
+    return this.ocorrenciasService.alterarBloqueioLancamento(contratoId,id,lancamentoId,dto.bloqueado,req.usuarioDominio!);
+  }
+  @Delete('ocorrencias/:ocorrenciaId/lancamentos/:lancamentoId')
+  @ExigirPoliticaOperacional('ocorrencias:visualizar',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})
+  excluirLancamento(@Param('contratoId') contratoId:string,@Param('ocorrenciaId') id:string,
+    @Param('lancamentoId') lancamentoId:string,@Body() dto:ExcluirLancamentoOcorrenciaDto,@Req() req:RequisicaoAutorizada) {
+    return this.ocorrenciasService.excluirLancamento(contratoId,id,lancamentoId,dto.justificativa,req.usuarioDominio!);
+  }
   @Get('ocorrencias/:ocorrenciaId/evidencias')
   @ExigirPoliticaOperacional('ocorrencias:visualizar',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})
   listarComprovantes(@Param('contratoId') contratoId:string,@Param('ocorrenciaId') id:string) {
@@ -160,6 +173,16 @@ export class OcorrenciasController {
   atualizarExigencias(@Param('contratoId') contratoId: string, @Param('ocorrenciaId') id: string,
     @Body() dto: AtualizarOcorrenciaDto, @Req() req: RequisicaoAutorizada) {
     return this.ocorrenciasService.atualizar(contratoId,id,dto,req.usuarioDominio!,'EXIGENCIAS');
+  }
+
+  @Patch('ocorrencias/:ocorrenciaId/meta')
+  @ExigirPoliticaOperacional('ocorrencias:editar-meta', {
+    tipo: 'recurso', recurso: 'ocorrencia', parametro: 'ocorrenciaId', parametroContratoPai: 'contratoId',
+  })
+  editarMeta(@Param('contratoId') contratoId: string, @Param('ocorrenciaId') id: string,
+    @Body() dto: EditarMetaOcorrenciaDto, @Req() req: RequisicaoAutorizada) {
+    return this.ocorrenciasService.atualizar(contratoId, id,
+      { metaQuantidade: dto.metaQuantidade }, req.usuarioDominio!, 'META', dto.justificativa);
   }
 
   @Patch('ocorrencias/:ocorrenciaId/peso')

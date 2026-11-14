@@ -1611,11 +1611,11 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
 }
 [data-tec08-estado="nao-iniciado"],
 [data-ocorrencia-estado="NAO_INICIADO"] {
-  --pi-cor-propria: #a3a3a3 !important;
-  --pi-texto-proprio: #404040 !important;
-  --pi-acao-bg: #e5e5e5;
-  --pi-acao-fg: #171717;
-  --pi-acao-hover: #f5f5f5;
+  --pi-cor-propria: #5fd34a !important;
+  --pi-texto-proprio: #166534 !important;
+  --pi-acao-bg: #166534;
+  --pi-acao-fg: #ffffff;
+  --pi-acao-hover: #15803d;
   --tec08-status-heading: var(--pi-texto-proprio) !important;
   --tec08-status-border: var(--pi-cor-propria) !important;
   --tec08-status-bg: var(--pi-acao-bg) !important;
@@ -1624,15 +1624,15 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
 }
 @media (prefers-color-scheme: dark) {
 [data-tec08-estado="nao-iniciado"],
-[data-ocorrencia-estado="NAO_INICIADO"] { --pi-texto-proprio: #f5f5f5 !important; }
+[data-ocorrencia-estado="NAO_INICIADO"] { --pi-texto-proprio: #86ef73 !important; }
 }
 [data-tec08-estado="andamento"],
 [data-ocorrencia-estado="EM_ANDAMENTO"] {
-  --pi-cor-propria: #789446 !important;
-  --pi-texto-proprio: #486129 !important;
-  --pi-acao-bg: #486129;
+  --pi-cor-propria: #5fd34a !important;
+  --pi-texto-proprio: #166534 !important;
+  --pi-acao-bg: #166534;
   --pi-acao-fg: #ffffff;
-  --pi-acao-hover: #587337;
+  --pi-acao-hover: #15803d;
   --tec08-status-heading: var(--pi-texto-proprio) !important;
   --tec08-status-border: var(--pi-cor-propria) !important;
   --tec08-status-bg: var(--pi-acao-bg) !important;
@@ -1641,7 +1641,7 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
 }
 @media (prefers-color-scheme: dark) {
 [data-tec08-estado="andamento"],
-[data-ocorrencia-estado="EM_ANDAMENTO"] { --pi-texto-proprio: #b8d28a !important; }
+[data-ocorrencia-estado="EM_ANDAMENTO"] { --pi-texto-proprio: #86ef73 !important; }
 }
 [data-tec08-estado="revisao"],
 [data-etapa-estado="revisao"],
@@ -1877,14 +1877,14 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
 /* HU09/TEC09 Patch13: paleta efetiva da entidade, inclusive em modais encadeados.
    Cancelar/ações destrutivas mantém vermelho e nunca herdam a cor da entidade. */
 [data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="nao-iniciado"] {
-  --tec08-status-bg: #52525b; --tec08-status-fg: #fff;
-  --tec08-status-border: #a1a1aa; --tec08-status-hover: #71717a;
-  --tec08-status-heading: #e4e4e7;
+  --tec08-status-bg: #166534; --tec08-status-fg: #fff;
+  --tec08-status-border: #5fd34a; --tec08-status-hover: #15803d;
+  --tec08-status-heading: #86ef73;
 }
 [data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="andamento"] {
-  --tec08-status-bg: #556b2f; --tec08-status-fg: #fff;
-  --tec08-status-border: #819f54; --tec08-status-hover: #65813b;
-  --tec08-status-heading: #b8d28a;
+  --tec08-status-bg: #166534; --tec08-status-fg: #fff;
+  --tec08-status-border: #5fd34a; --tec08-status-hover: #15803d;
+  --tec08-status-heading: #86ef73;
 }
 [data-tec08-modal] > [data-tec08-entidade="modal"] button[data-pi-acao="contextual"]:not(:disabled) {
   border-color: var(--tec08-status-border) !important;
@@ -2233,4 +2233,66 @@ button[data-tec08-confirmar][data-pi-intencao-confirmacao="cancelado"]:not(:disa
   [data-tec08-formulario-contextual], [data-tec08-secao-contextual]
 ) :is([class*="text-brand-neon"], [class*="text-green-400"]):not([data-pi-intencao]):not([data-pi-acao]) {
   color: var(--pi-texto-proprio, #86ef73) !important;
+}
+
+/* Bugfix Sprint 04 / Parte 06 — a INTENÇÃO da confirmação prevalece sobre
+   regras históricas de status aplicadas ao mesmo botão. Não afeta os filhos. */
+button[data-tec08-confirmar][data-tec08-acao-aprovar]:not(:disabled):not([data-pi-intencao-confirmacao="arquivado"]) {
+  background-color: #166534 !important; border-color: #16a34a !important; color: #fff !important;
+}
+button[data-tec08-confirmar][data-tec08-acao-aprovar]:not(:disabled):not([data-pi-intencao-confirmacao="arquivado"]):hover {
+  background-color: #15803d !important; border-color: #22c55e !important;
+}
+button[data-tec08-confirmar][data-tec08-acao-roxa]:not(:disabled):not([data-tec08-acao-aprovar]):not([data-pi-intencao-confirmacao="arquivado"]) {
+  background-color: #6d28d9 !important; border-color: #a78bfa !important; color: #fff !important;
+}
+button[data-tec08-confirmar][data-tec08-acao-roxa]:not(:disabled):not([data-tec08-acao-aprovar]):not([data-pi-intencao-confirmacao="arquivado"]):hover {
+  background-color: #7c3aed !important; border-color: #c4b5fd !important;
+}
+/* Fechar/Voltar são controles neutros; não recebem a cor de uma decisão. */
+[data-tec08-modal] > [data-tec08-entidade="modal"] > header button[data-tec08-fechar-modal]:not(:disabled) {
+  color: var(--text-primary) !important;
+  border-color: rgb(148 163 184 / .48) !important;
+  background-color: transparent !important;
+}
+[data-tec08-modal] > [data-tec08-entidade="modal"] > header button[data-tec08-fechar-modal]:not(:disabled):hover {
+  background-color: rgb(100 116 139 / .13) !important;
+  border-color: rgb(148 163 184 / .75) !important;
+}
+/* Textos antigos e palavras sem separadores nunca ultrapassam as superfícies.
+   Não corta nem modifica os dados persistidos. */
+[data-tec08-corpo-modal] :where(p, li, dt, dd, blockquote, h3, h4, h5, h6),
+[data-tec08-entidade="modal"] > header :where(h2, p) {
+  min-width: 0; overflow-wrap: anywhere;
+}
+[data-tec08-corpo-modal] :where(pre, code) {
+  max-width: 100%; overflow-wrap: anywhere; white-space: pre-wrap;
+}
+[data-tec08-corpo-modal] :where(input, select, textarea) {
+  min-width: 0; max-width: 100%;
+}
+
+/* Exclusão/cancelamento perigoso sempre vermelho, ainda que o objeto esteja
+   concluído e o CSS legado tente impor o roxo ao confirmar. Arquivar é laranja. */
+button[data-tec08-confirmar][data-tec08-acao-perigosa]:not(:disabled):not([data-pi-intencao-confirmacao="arquivado"]) {
+  background-color: #b91c1c !important; border-color: #ef4444 !important; color: #fff !important;
+}
+button[data-tec08-confirmar][data-tec08-acao-perigosa]:not(:disabled):hover:not([data-pi-intencao-confirmacao="arquivado"]) {
+  background-color: #991b1b !important;
+}
+/* Quebra de palavras extensas também nos cartões fora de modais. */
+:is(.contrato-card-documental, .pi-ocorrencia-card, [data-pi-superficie], [data-pi-painel-contextual]) {
+  min-width: 0; overflow-wrap: anywhere;
+}
+
+/* Sprint 04: o diálogo de confirmação expressa a ação de negócio, não a
+ * identidade genérica de botão verde do legado. O estado específico vence. */
+button[data-tec08-confirmar][data-pi-intencao-confirmacao="cadastro"]:not(:disabled) {
+  background-color: #5fd34a !important; border-color: #5fd34a !important; color: #050607 !important;
+}
+button[data-tec08-confirmar][data-pi-intencao-confirmacao="cadastro"]:not(:disabled):hover {
+  background-color: #83e66f !important; border-color: #83e66f !important;
+}
+button[data-tec08-confirmar][data-pi-intencao-confirmacao="concluido"]:not(:disabled):hover {
+  background-color: #7c3aed !important; border-color: #c4b5fd !important; color: #fff !important;
 }

@@ -29,3 +29,15 @@ describe('HU09 — impacto de replanejamento histórico',()=>{
    expect(p.novas).toHaveLength(6);
  });
 });
+
+// As alterações de unidade e da meta para NOVOS períodos não participam do
+// algoritmo de datas: o impacto deve preservar períodos históricos concluídos.
+describe('parâmetros dos períodos novos não reescrevem o calendário histórico', () => {
+  it('preserva o mesmo conjunto de datas ao incluir meta e unidade', () => {
+    const antigo = [o('historico', '2026-11-01', '2026-11-07', Status.CONCLUIDO)];
+    const base = planoDeRevisao(antigo, new Set(), dto, '2026-11-07');
+    const comMeta = planoDeRevisao(antigo, new Set(), { ...dto, modoRegistro: 'QUANTITATIVO', metaQuantidade: '25.000', unidadeMedida: 'computadores' }, '2026-11-07');
+    expect(comMeta.novas).toEqual(base.novas);
+    expect(comMeta.preservadas).toBe(1);
+  });
+});

@@ -17,16 +17,16 @@ test('confirmação simples abre com foco em cancelar, fecha por Escape e confir
 
 test('confirmação não perigosa usa texto contrastante sobre verde', () => {
   const { unmount } = render(<ConfirmacaoSimples titulo="Prosseguir?" descricao="Verificação" confirmar="Continuar" onCancelar={jest.fn()} onConfirmar={jest.fn()} />);
-  expect(screen.getByRole('button', { name: 'Continuar' })).toHaveClass('bg-[#5fd34a]', 'text-[#050607]', 'hover:bg-[#83e66f]');
+  expect(screen.getByRole('button', { name: 'Continuar' })).toHaveClass('bg-brand-green', 'text-on-brand-green', 'hover:brightness-110');
   unmount();
 });
 
 
 test('verificação apresenta cancelar vermelho e confirmar verde, com dimensões consistentes', () => {
-  render(<ConfirmacaoSimples titulo="Verificar?" descricao="Analisou o arquivo?" confirmar="Confirmar" cancelarVermelho
+  render(<ConfirmacaoSimples titulo="Verificar?" descricao="Analisou o arquivo?" confirmar="Confirmar" cancelarVermelho aprovarVerde
     onCancelar={jest.fn()} onConfirmar={jest.fn()} />);
   expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveClass('bg-red-600', 'whitespace-nowrap', 'shrink-0');
-  expect(screen.getByRole('button', { name: 'Confirmar' })).toHaveClass('bg-[#5fd34a]', 'shrink-0');
+  expect(screen.getByRole('button', { name: 'Confirmar' })).toHaveClass('bg-brand-green', 'shrink-0');
 });
 
 
@@ -58,4 +58,20 @@ test('reabertura usa a cor da revisão mesmo partindo de contrato encerrado', ()
   render(<ConfirmacaoSimples titulo="Reabrir contrato encerrado?" descricao="Retornar à revisão" confirmar="Reabrir contrato"
     estadoContextual="encerrado" preservarCorOrigem onCancelar={jest.fn()} onConfirmar={jest.fn()} />);
   expect(screen.getByRole('dialog')).toHaveAttribute('data-tec08-estado', 'revisao');
+});
+
+
+test('aprovação explícita mantém o verde mesmo quando o contexto do modal é conclusão', () => {
+  render(<ConfirmacaoSimples titulo="Aprovar conclusão?" descricao="Decisão auditada" confirmar="Aprovar"
+    estadoContextual="concluido" aprovarVerde onCancelar={jest.fn()} onConfirmar={jest.fn()} />);
+  const botao = screen.getByRole('button', { name: 'Aprovar' });
+  expect(botao).toHaveClass('bg-green-800');
+  expect(botao).toHaveAttribute('data-tec08-acao-aprovar', 'true');
+});
+
+test('confirmação perigosa permanece vermelha, sem receber cor do contexto', () => {
+  render(<ConfirmacaoSimples titulo="Excluir definitivamente?" descricao="Ação permanente" confirmar="Excluir"
+    perigoso estadoContextual="concluido" onCancelar={jest.fn()} onConfirmar={jest.fn()} />);
+  expect(screen.getByRole('button', { name: 'Excluir' })).toHaveClass('bg-red-700');
+  expect(screen.getByRole('button', { name: 'Excluir' })).toHaveAttribute('data-tec08-acao-perigosa', 'true');
 });

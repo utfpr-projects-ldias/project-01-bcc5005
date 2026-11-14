@@ -15,7 +15,7 @@ const texto = (s: number) => Math.round(s * 1000) / 1000;
 export async function resumoMedicao(m: EntityManager, o: Ocorrencia): Promise<ResumoMedicao> {
   const [manual, atividades, provas] = await Promise.all([
     m.query(`SELECT COALESCE(SUM(quantidade),0)::text AS total FROM ocorrencia_lancamentos
-      WHERE ocorrencia_id=$1 AND contrato_id=$2`, [o.id, o.contratoId]) as Promise<Array<{total:string}>>,
+      WHERE ocorrencia_id=$1 AND contrato_id=$2 AND excluido_em IS NULL`, [o.id, o.contratoId]) as Promise<Array<{total:string}>>,
     m.query(`SELECT
        COALESCE(SUM(COALESCE(am.quantidade, CASE WHEN a."ocorrenciaId"=$1 THEN a.quantidade_execucao ELSE 0 END))
          FILTER (WHERE a.status <> 'ARQUIVADA'),0)::text AS registrada,

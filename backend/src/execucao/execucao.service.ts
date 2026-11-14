@@ -44,7 +44,7 @@ export class ExecucaoService {
     const entregaveis = ativos.map(e => {
       const ocorrencias = agenda.filter(o => o.entregavelId === e.id);
       let previsto: string | null = e.quantidadePrevista;
-      let realizado: string | null = e.tipo === 'QUANTITATIVO' ? '0' : e.quantidadeRealizada;
+      let realizado: string | null = e.quantidadeRealizada;
       let fonte = 'DECLARADO';
       let periodos: number | null = null;
       let percentualPonderadoSerie: number | null = null;
@@ -86,7 +86,7 @@ export class ExecucaoService {
         }
         previsto = periodos == null ? null : String(periodos);
       }
-      const percentual = (e.tipo === 'UNICO' && e.percentualExecucao == null && ['CONCLUIDO','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? '')) ? null : calcularFisico({ tipo: e.tipo, percentualManual: numero(e.percentualExecucao), quantidadePrevista: numero(previsto), quantidadeRealizada: numero(realizado), ocorrenciasPrevistas: periodos, ocorrenciasConcluidas: numero(realizado), dataEfetivaMarco: e.tipo === 'MARCO' && ocorrencias.length === 1 && ocorrencias[0]?.status === 'CONCLUIDO' ? e.dataEfetivaMarco : null });
+      const percentual = (e.tipo === 'UNICO' && e.percentualExecucao == null && ['CONCLUIDO','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? '')) ? null : calcularFisico({ tipo: e.tipo, percentualManual: numero(e.percentualExecucao), quantidadePrevista: numero(previsto), quantidadeRealizada: numero(realizado), ocorrenciasPrevistas: periodos, ocorrenciasConcluidas: numero(realizado), dataEfetivaMarco: e.tipo === 'MARCO' && e.statusExecucao === 'CONCLUIDO' ? e.dataEfetivaMarco : null });
       const percentualCalculado = e.tipo==='RECORRENTE'
         ? pesosSerieIncompletos ? null : percentualPonderadoSerie ?? percentual
         : percentual;
@@ -274,7 +274,13 @@ export class ExecucaoService {
       if (Object.values(dto).filter(v => v !== undefined).length !== 1) throw new BadRequestException('Informe somente o campo físico do tipo de entregável');
       if ((e.tipo === 'UNICO' || e.tipo === 'CONTINUO') && typeof dto.percentualManual === 'number' && Number.isFinite(dto.percentualManual) && dto.percentualManual >= 0 && dto.percentualManual <= 100) e.percentualExecucao = dto.percentualManual.toFixed(2);
       else if (e.tipo === 'QUANTITATIVO' && dto.quantidadeRealizada !== undefined) {
-        throw new ConflictException('A execução quantitativa deve ser registrada e aprovada em ocorrências.');
+        const quantidade = dto.quantidadeRealizada;
+        if (typeof quantidade !== 'string' || !/^\d{1,15}(?:\.\d{1,3})?$/.test(quantidade))
+          throw new BadRequestException('Informe uma quantidade não negativa com até três casas decimais.');
+        const ocorrencias = await m.countBy(Ocorrencia, { contratoId, entregavelId: e.id, substituidaEm: IsNull() });
+        if (ocorrencias > 0)
+          throw new ConflictException('Este entregável já é medido por ocorrências. Registre nelas a execução para não contar duas vezes.');
+        e.quantidadeRealizada = quantidade;
       } else if (e.tipo === 'MARCO' && typeof dto.dataEfetivaMarco === 'string' && civil(dto.dataEfetivaMarco)) e.dataEfetivaMarco = dto.dataEfetivaMarco;
       else throw new BadRequestException('Campo de execução incompatível ou inválido');
       await m.save(Entregavel, e);

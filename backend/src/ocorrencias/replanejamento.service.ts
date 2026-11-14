@@ -1,3 +1,4 @@
+import { tituloOcorrenciaRecorrente } from './titulo-recorrente.js';
 import { createHash } from 'node:crypto';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
@@ -69,8 +70,24 @@ export class ReplanejamentoService {
       if (!e.inicioPrevisto || !e.terminoPrevisto || dto.inicioFuturo < e.inicioPrevisto || dto.terminoPrevisto > e.terminoPrevisto || dto.inicioFuturo > dto.terminoPrevisto ||
           dto.inicioFuturo < c.inicioVigencia || dto.terminoPrevisto > c.terminoVigencia)
         throw new BadRequestException('Período futuro deve estar contido na vigência atual deste entregável');
+      if (dto.modoRegistro === 'QUANTITATIVO' && (!dto.metaQuantidade || Number(dto.metaQuantidade) <= 0))
+        throw new BadRequestException('Meta por período deve ser maior que zero para registros quantitativos');
+      if (dto.modoRegistro === 'QUANTITATIVO' && !((dto.unidadeMedida ?? e.unidadeMedida) ?? '').trim())
+        throw new BadRequestException('A ocorrência quantitativa exige unidade de medida');
+      if (dto.modoRegistro === 'DESCRITIVO' && dto.metaQuantidade)
+        throw new BadRequestException('Registros descritivos não utilizam meta numérica');
+      if (dto.unidadeMedida !== undefined && !dto.unidadeMedida.trim())
+        throw new BadRequestException('Unidade de medida não pode ficar vazia');
+      if (dto.unidadeMedida !== undefined && dto.unidadeMedida.trim() !== (e.unidadeMedida ?? '') && ator.perfil !== 'ADMINISTRADOR') {
+        const vinculo = await m.findOneBy(PermissaoContrato, { contratoId, usuarioId: ator.id });
+        const permissoes = permissoesEfetivas(ator.perfil, Boolean(vinculo?.podeEditar), vinculo?.permissoesDetalhadas);
+        if (!permissoes.editarEntregaveis) throw new ForbiddenException('Alterar unidade de medida exige permissão de editar entregáveis');
+      }
       const agenda = await m.find(Ocorrencia, { where: { entregavelId, contratoId, origem: OrigemOcorrencia.RECORRENTE }, order: { id: 'ASC' } });
       if (!agenda.length) throw new ConflictException('Gere a agenda inicial antes de replanejar');
+      if (dto.unidadeMedida !== undefined && dto.unidadeMedida.trim() !== (e.unidadeMedida ?? '') &&
+          agenda.some(o => o.status === StatusOcorrencia.CONCLUIDO || Number(o.quantidadeAprovada ?? 0) > 0 || Number(o.quantidadeRealizada ?? 0) > 0))
+        throw new ConflictException('Não é possível trocar a unidade de uma série com períodos medidos ou concluídos; preserve o histórico');
       const atividades = await m.find(AtividadeEntity, { where: { contratoId }, select: { ocorrenciaId: true } });
       const associacoes = await m.query(`SELECT DISTINCT v."ocorrenciaId" AS id FROM "atividade_ocorrencias" v
         WHERE v."contratoId" = $1`, [contratoId]) as { id: string }[];
@@ -83,16 +100,19 @@ export class ReplanejamentoService {
       const antes = { inicioPrevisto: configuracaoAnterior?.inicioPrevisto ?? e.inicioPrevisto,
         terminoPrevisto: configuracaoAnterior?.terminoPrevisto ?? e.terminoPrevisto,
         periodicidade: e.periodicidade, agendaInicioFuturo: e.agendaInicioFuturo };
-      const confirmacao = hash([contratoId, entregavelId, c.inicioVigencia, c.terminoVigencia, antes, dto.inicioFuturo, dto.terminoPrevisto, dto.periodicidade,
+      const confirmacao = hash([contratoId, entregavelId, c.inicioVigencia, c.terminoVigencia, antes, dto.inicioFuturo, dto.terminoPrevisto, dto.periodicidade, dto.modoRegistro, dto.metaQuantidade, dto.unidadeMedida,
         agenda.map(o => [o.id,o.periodoInicio,o.periodoFim,o.status,o.dataRealizada,o.dataPrevista,o.quantidadeRealizada,o.observacoes,o.substituidaEm,vinculadas.has(o.id)])]);
       const impacto = { confirmacao, substituir: plano.substituir.map(o => ({ id:o.id, inicio:o.periodoInicio, fim:o.periodoFim })), novas: plano.novas, reativar: plano.reativar.length, preservadas: plano.preservadas, total: plano.total };
       if (dto.confirmacao === undefined) return { ...impacto, aplicado: false };
       if (dto.confirmacao !== confirmacao) throw new ConflictException('Agenda mudou: solicite novo impacto antes de confirmar');
       for (const o of plano.substituir) { o.substituidaEm = new Date(); await m.save(Ocorrencia,o); await this.auditar(m,ator,o,{ substituidaEm:null }); }
       for (const p of plano.novas) {
-        const o = await m.save(Ocorrencia,m.create(Ocorrencia,{ contratoId, entregavelId, origem:OrigemOcorrencia.RECORRENTE, status:StatusOcorrencia.NAO_INICIADO, titulo:`${e.nome} - ${p.titulo}`.slice(0,255), periodoInicio:p.inicio, periodoFim:p.fim, dataPrevista:p.fim }));
+        const o = await m.save(Ocorrencia,m.create(Ocorrencia,{ contratoId, entregavelId, origem:OrigemOcorrencia.RECORRENTE, status:StatusOcorrencia.NAO_INICIADO, titulo:tituloOcorrenciaRecorrente(e.nome, p.titulo),
+          modoRegistro:dto.modoRegistro ?? 'DESCRITIVO', metaQuantidade:dto.modoRegistro === 'QUANTITATIVO' ? dto.metaQuantidade : null,
+          periodoInicio:p.inicio, periodoFim:p.fim, dataPrevista:p.fim }));
         await this.auditoria.registrarNaTransacao(m,ator,{ acao:AcaoAuditoria.OCORRENCIA_GERADA, entidadeTipo:'OCORRENCIA', entidadeId:o.id, dadosPosteriores:{ periodoInicio:p.inicio, periodoFim:p.fim } });
       }
+      if (dto.unidadeMedida !== undefined) e.unidadeMedida = dto.unidadeMedida.trim();
       e.agendaInicioFuturo = dto.inicioFuturo;
       // As datas-pai do entregável delimitam a obrigação e nunca são
       // encurtadas por uma alteração da agenda de ocorrências.

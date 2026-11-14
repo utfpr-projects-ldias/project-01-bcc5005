@@ -9,6 +9,9 @@ export type EstadoAtividade = 'REGISTRADA' | 'PENDENTE_CONCLUSAO' | 'VERIFICADA'
 export class AtividadeEntity {
   @PrimaryGeneratedColumn('uuid') id!: string;
   @Column({ type: 'uuid' }) contratoId!: string;
+  /** Grupo opcional: a aprovação segue independente por contrato. */
+  @Column({ name: 'atividade_compartilhada_id', type: 'uuid', nullable: true })
+  atividadeCompartilhadaId!: string | null;
   /** HU09: vínculo opcional, com FK composta garantindo mesmo contrato. */
   @Column({ name: 'ocorrenciaId', type: 'uuid', nullable: true })
   ocorrenciaId!: string | null;

@@ -13,6 +13,8 @@ import { useAtividades, type FiltroEstadoAtividade } from '@/hooks/use-atividade
 import type { Entregavel } from '@/lib/entregaveis';
 import { CartaoAtividade, statusVisualEntregavel, type EstadoVisualEntregavel } from '@/app/atividades/components/cartao-atividade';
 import { ModalCadastroAtividade } from '@/app/atividades/components/modal-cadastro-atividade';
+import { ModalAtividadeCompartilhada } from '@/app/atividades/components/modal-atividade-compartilhada';
+import { ProgressoAtividadeCompartilhada } from '@/app/atividades/components/progresso-atividade-compartilhada';
 import { SeletorEntregavel } from '@/app/ocorrencias/components/seletor-entregavel';
 
 type Filtro = { dataInicio: string; dataFim: string; etapaId: string; entregavelId: string; status: FiltroEstadoAtividade };
@@ -24,6 +26,7 @@ function ListaAtividadesVinculadas({ contratoId, entregavelId, somenteLeitura = 
   const [filtros, setFiltros] = useState<Filtro>(vazio);
   const [pagina, setPagina] = useState(1);
   const [cadastroAberto, setCadastroAberto] = useState(false);
+  const [compartilhadoAberto, setCompartilhadoAberto] = useState(false);
   const [avisoCadastro, setAvisoCadastro] = useState(false);
   const [gatilhoCadastro, setGatilhoCadastro] = useState<HTMLElement | null>(null);
   const fixo = Boolean(entregavelId);
@@ -76,9 +79,16 @@ function ListaAtividadesVinculadas({ contratoId, entregavelId, somenteLeitura = 
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h3 data-pi-titulo data-tec08-titulo-secao-atividades className="text-lg font-semibold">{fixo ? 'Atividades vinculadas' : 'Linha do tempo de atividades'}</h3>
         <p className="mt-1 text-xs text-foreground/65">Diário operacional — {intervaloInvalido ? 'intervalo inválido' : `${total} ${total === 1 ? 'registro' : 'registros'}`}</p></div>
+      <div className="flex flex-wrap items-center gap-2">
+      {podeRegistrar && <button type="button" disabled={!podeAbrirCadastro}
+        onClick={() => setCompartilhadoAberto(true)}
+        className="min-h-9 rounded-lg border border-brand-green/40 px-3 py-2 text-xs font-semibold text-brand-neon disabled:opacity-40">
+        Atividade em vários contratos
+      </button>}
       {<button type="button" disabled={!podeRegistrar || !podeAbrirCadastro} title={!podeRegistrar?'Sem permissão para criar atividade':!podeAbrirCadastro?'É necessário um entregável aberto em uma etapa ativa':'Criar atividade'} onClick={e => { setGatilhoCadastro(e.currentTarget); setCadastroAberto(true); }} className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-brand-green px-3 py-2 text-xs font-semibold text-on-brand-green hover:brightness-105 disabled:cursor-not-allowed disabled:!border-slate-500/30 disabled:!bg-slate-500/15 disabled:!text-foreground/40" data-pi-acao="primaria" aria-label="Nova atividade neste contexto">
         <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 5h16v14H4zM7 9h10M7 13h6"/><path d="M17 14v6M14 17h6"/></svg> Nova atividade
       </button>}
+      </div>
     </div>
     {avisoCadastro && createPortal(<ModalEtapa titulo="Nova atividade" contexto="Requisitos para registro" estadoContextual="normal" ocupado={false} focoRetorno={gatilhoCadastro} onFechar={() => setAvisoCadastro(false)}>
       <p className="text-sm text-foreground/80">{!podeRegistrar ? 'Você não possui permissão para registrar atividades neste contrato.' : 'Para registrar, é necessário pelo menos um entregável aberto e uma etapa ativa no contrato.'}</p>
@@ -105,6 +115,7 @@ function ListaAtividadesVinculadas({ contratoId, entregavelId, somenteLeitura = 
       : <><ol data-pi-linha-tempo className="relative space-y-4 border-l border-brand-green/35 pl-5 before:absolute before:left-[-4px] before:top-2 before:h-2 before:w-2 before:rounded-full before:bg-brand-green">
         {[...atividades].sort((a, b) => new Date(b.dataHora).getTime() - new Date(a.dataHora).getTime()).map(atividade => <li key={atividade.id} className="relative min-w-0 before:absolute before:-left-[25px] before:top-5 before:h-2 before:w-2 before:rounded-full before:border before:border-brand-green before:bg-background">
           <CartaoAtividade contratoId={contratoId} atividade={atividade} permissoes={permissoesDaLista} compacto dentroEntregavel={fixo} estadosEntregaveis={estadoPorEntregavel} onAtualizada={() => { void atualizar(); }} />
+          {atividade.atividadeCompartilhadaId && <ProgressoAtividadeCompartilhada grupoId={atividade.atividadeCompartilhadaId} onAtualizada={() => { void atualizar(); }} />}
         </li>)}</ol>
         </>}
     {totalPaginas > 1 && !loading && !erro && !intervaloInvalido &&
@@ -115,6 +126,8 @@ function ListaAtividadesVinculadas({ contratoId, entregavelId, somenteLeitura = 
         <button type="button" disabled={pagina >= totalPaginas} onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))}
           className="rounded-lg border border-brand-green/30 px-3 py-2 disabled:opacity-40">Próxima</button>
       </nav>}
+    {compartilhadoAberto && <ModalAtividadeCompartilhada contratoInicialId={contratoId}
+      onFechar={() => setCompartilhadoAberto(false)} onSalvo={async () => { setPagina(1); await atualizar(); }} />}
     {cadastroAberto && <ModalCadastroAtividade estadoContextual={estadoPai} contratoId={contratoId} entregavelId={entregavelId || (selecionadoAberto ? filtros.entregavelId : '')} origem={gatilhoCadastro}
       onFechar={() => setCadastroAberto(false)} onSalvo={async () => { setPagina(1); await atualizar(); }} />}
   </section>;

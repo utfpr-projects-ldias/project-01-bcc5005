@@ -1,3 +1,4 @@
+import { avaliarMetasMarco } from '../metas-marco/metas-marco-gate.js';
 import { IsNull, type EntityManager } from 'typeorm';
 import { Entregavel } from './entregavel.entity.js';
 import { TipoEntregavel } from './tipo-entregavel.enum.js';
@@ -18,14 +19,16 @@ export async function aptidaoFisicaParaConclusao(
   const atuais = await m.findBy(Ocorrencia, {
     contratoId: e.contratoId, entregavelId: e.id, substituidaEm: IsNull(),
   });
+  const metas = e.tipo === TipoEntregavel.MARCO ? await avaliarMetasMarco(m, e.contratoId, e.id) : null;
   if (e.tipo === TipoEntregavel.UNICO && atuais.length)
     return negar('Entregável único não utiliza ocorrências');
-  if (e.tipo !== TipoEntregavel.UNICO && !atuais.length)
+  if (e.tipo !== TipoEntregavel.UNICO && e.tipo !== TipoEntregavel.QUANTITATIVO && !(e.tipo === TipoEntregavel.MARCO && metas?.total) && !atuais.length)
     return negar('Este tipo de entregável exige ocorrências aprovadas');
-  if ([TipoEntregavel.CONTINUO, TipoEntregavel.MARCO].includes(e.tipo) && atuais.length !== 1)
+  if (metas?.total && !metas.apto) return negar('Aprove todos os vínculos exigidos nas metas do Marco');
+  if ((e.tipo === TipoEntregavel.CONTINUO || (e.tipo === TipoEntregavel.MARCO && !metas?.total)) && atuais.length !== 1)
     return negar('Este tipo de entregável exige uma ocorrência principal');
-  if (atuais.some(o => o.status !== 'CONCLUIDO'))
-    return negar('Conclua todas as ocorrências do entregável; encerramentos administrativos não contam como execução');
+  if (!(e.tipo === TipoEntregavel.MARCO && metas?.total) && atuais.some(o => o.status !== 'CONCLUIDO'))
+    return negar('Conclua todas as ocorrências ativas do entregável; encerramentos administrativos não contam como execução');
   if (e.tipo === TipoEntregavel.CONTINUO && e.terminoPrevisto &&
       new Date().toISOString().slice(0, 10) < e.terminoPrevisto)
     return negar('A conclusão da obrigação contínua somente pode ser solicitada após o término previsto');
@@ -49,12 +52,17 @@ export async function aptidaoFisicaParaConclusao(
     const medidas = atuais.filter(o => o.origem === 'MANUAL_QUANTITATIVA' && o.modoRegistro !== 'DESCRITIVO');
     if (medidas.length && e.quantidadeRealizada != null && Number(e.quantidadeRealizada) !== 0)
       return negar('Concilie a quantidade informada diretamente com os registros das ocorrências');
-    if (!medidas.length) return negar('Cadastre e aprove ocorrências quantitativas para concluir');
+    if (!medidas.length && (e.quantidadeRealizada == null || Number(e.quantidadeRealizada) < 0))
+      return negar('Registre a execução quantitativa diretamente ou por ocorrências aprovadas');
     const realizada = medidas.length
       ? medidas.filter(o => o.status === 'CONCLUIDO').reduce((n,o) => n + Number(o.quantidadeAprovada ?? o.quantidadeRealizada ?? 0),0)
       : e.quantidadeRealizada == null ? null : Number(e.quantidadeRealizada);
     percentual = calcularFisico({ tipo: 'QUANTITATIVO', quantidadeRealizada: realizada,
       quantidadePrevista: e.quantidadePrevista == null ? null : Number(e.quantidadePrevista) });
+  } else if (e.tipo === TipoEntregavel.MARCO && metas?.total && metas.apto) {
+    // O preparo completo autoriza solicitar conclusão, mas o progresso oficial
+    // permanece 0% até a aprovação registrar a data efetiva do Marco.
+    percentual = 100;
   } else {
     percentual = calcularFisico({ tipo: e.tipo,
       percentualManual: e.percentualExecucao == null ? null : Number(e.percentualExecucao),

@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsUUID, Matches, MaxLength } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, IsUUID, Matches, MaxLength } from 'class-validator';
 
 export class CriarLancamentoOcorrenciaDto {
   /** Gerado uma vez pelo frontend antes do envio: protege contra duplo clique e retry. */
@@ -10,6 +10,9 @@ export class CriarLancamentoOcorrenciaDto {
 export class CorrigirLancamentoOcorrenciaDto {
   @IsString() @Matches(/^\d{1,12}(?:\.\d{1,3})?$/)
   quantidade!: string;
-  @IsString() @MaxLength(200) justificativa!: string;
+  @IsString() @MaxLength(25) justificativa!: string;
 }
 export class VincularComprovanteOcorrenciaDto { @IsUUID() comprovanteId!: string; }
+
+export class BloquearLancamentoOcorrenciaDto { @IsBoolean() bloqueado!: boolean; }
+export class ExcluirLancamentoOcorrenciaDto { @IsString() @MaxLength(25) justificativa!: string; }
