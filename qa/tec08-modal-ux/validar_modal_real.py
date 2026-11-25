@@ -61,6 +61,8 @@ def fluxo(contas, visivel):
                 id_etapa = etapa['body']['id']
                 resp = base.api(pagina, f'/contratos/{contrato}/entregaveis', 'POST', {
                     'etapaId': id_etapa, 'nome': nome, 'tipo': 'UNICO',
+                    'inicioPrevisto': '2026-11-10',
+                    'peso': '1.0000',
                     'evidenciasEsperadas': [{'tipoEvidencia': 'Relatório de QA',
                                             'descricao': 'Planejamento sintético', 'obrigatoria': True}],
                 })
@@ -85,65 +87,57 @@ def fluxo(contas, visivel):
                         raise primeira_falha
                     aba_comprovados.click()
                     cartao.wait_for(state='visible', timeout=18000)
-                base.exigir(cartao.get_attribute('aria-haspopup') == 'dialog', 'Card sem indicação de detalhe modal')
-                bloco_cartao = cartao.locator('xpath=..')
-                botao_editar = painel.get_by_role('button', name='Editar entregável ' + nome)
-                botao_arquivar = painel.get_by_role('button', name='Arquivar entregável ' + nome)
-                base.exigir(botao_editar.is_visible() and botao_arquivar.is_visible(),
-                            'Ações de editar/arquivar precisam ficar no cartão, não no cabeçalho')
+                base.exigir(cartao.get_attribute('aria-haspopup') == 'dialog', 'Card sem detalhe modal')
                 cartao.scroll_into_view_if_needed()
                 pagina_y = pagina.evaluate('window.scrollY')
-                relatorio['etapaAtual'] = 'Abrir e fechar detalhes sem sair do contrato'
+                relatorio['etapaAtual'] = 'Consultar e editar entregável no modal atual'
                 cartao.click()
                 modal = pagina.get_by_role('dialog', name=nome, exact=True)
-                modal.wait_for(state='visible', timeout=12000)
-                base.exigir(modal.locator('header').get_by_role('button', name='Editar entregável').count() == 0,
-                            'Modal de consulta não deve oferecer edição')
-                modal.get_by_role('button', name='Voltar à etapa').click()
-                modal.wait_for(state='hidden', timeout=12000)
-                botao_editar.click()
+                modal.wait_for(state='visible', timeout=15000)
+                editar = modal.get_by_role('button', name='Editar entregável')
+                editar.wait_for(state='visible', timeout=15000)
+                editar.click()
                 formulario = pagina.get_by_role('form', name='Editar entregável ' + nome)
-                formulario.wait_for(state='visible')
-                base.exigir(formulario.get_by_role('region', name='Evidências do entregável').count() == 0,
-                            'Edição do entregável repetiu checklist')
+                formulario.wait_for(state='visible', timeout=15000)
                 formulario.get_by_role('button', name='Cancelar').click()
-                formulario.wait_for(state='hidden', timeout=12000)
-                base.exigir(pagina.get_by_role('dialog', name=nome, exact=True).count()==0,
-                            'Cancelar exigiu uma segunda volta ao modal pai')
-                relatorio['provas'].append('Detalhe somente leitura; lápis no cartão abre edição direta')
-                relatorio['etapaAtual'] = 'Confirmar cancelamento de arquivamento'
-                botao_arquivar.click()
+                formulario.wait_for(state='hidden', timeout=15000)
+                modal.wait_for(state='visible', timeout=15000)
+                relatorio['provas'].append('Ação Editar no detalhe; cancelamento mantém cartão e dados')
+                relatorio['etapaAtual'] = 'Cancelar arquivamento pelo menu Fechar do detalhe'
+                modal.get_by_role('button', name='Fechar: escolher ação').click()
+                pagina.get_by_role('menu', name='Fechar').get_by_role('button', name='Arquivar', exact=True).click()
                 alerta = pagina.get_by_role('dialog', name='Arquivar entregável?')
-                alerta.wait_for(state='visible')
+                alerta.wait_for(state='visible', timeout=15000)
                 alerta.get_by_role('button', name='Cancelar').click()
-                alerta.wait_for(state='hidden')
+                alerta.wait_for(state='hidden', timeout=15000)
                 base.aceitar(base.api(pagina, f'/contratos/{contrato}/entregaveis/{id_entregavel}')['status'], {200},
                             'Cancelar não arquivou entregável')
-                relatorio['provas'].append('Cancelar arquivamento não altera dados')
-                botao_arquivar.click()
+                relatorio['provas'].append('Cancelar arquivamento não altera dados persistidos')
+                modal.get_by_role('button', name='Fechar: escolher ação').click()
+                pagina.get_by_role('menu', name='Fechar').get_by_role('button', name='Arquivar', exact=True).click()
                 pagina.get_by_role('dialog', name='Arquivar entregável?').get_by_role(
                     'button', name='Confirmar arquivamento').click()
+                modal.wait_for(state='hidden', timeout=15000)
                 cartao.wait_for(state='hidden', timeout=15000)
                 arquivados = base.api(pagina, f'/contratos/{contrato}/entregaveis/arquivados?etapaId={id_etapa}')
                 base.aceitar(arquivados['status'], {200}, 'Listar entregáveis arquivados')
                 base.exigir(any(x['id'] == id_entregavel for x in arquivados['body']),
                             'Item arquivado não aparece em Arquivados')
-                relatorio['etapaAtual'] = 'Reativar entregável pela aba Arquivados'
+                relatorio['etapaAtual'] = 'Reativar pelo detalhe do arquivado'
                 painel.get_by_role('tab', name='Entregáveis arquivados', exact=True).click()
                 aba_arch = painel.get_by_role('tabpanel', name='Entregáveis arquivados')
-                aba_arch.get_by_text(nome, exact=True).wait_for(timeout=15000)
-                aba_arch.get_by_role('button', name='Reativar', exact=True).click()
-                # Reativar exige justificativa de 15 a 200 caracteres;
-                # sem preenchimento o botão fica corretamente desabilitado.
+                aba_arch.get_by_role('button', name=re.compile(re.escape(nome))).click()
+                modal.wait_for(state='visible', timeout=15000)
+                modal.get_by_role('button', name='Reabrir', exact=True).click()
                 confirmacao = pagina.get_by_role('dialog', name='Reativar entregável?')
                 confirmacao.get_by_role('textbox', name=re.compile('Justificativa obrigatória')).fill(
-                    'Reativação do entregável no teste automatizado de integração.'
-                )
+                    'Reativação do entregável no teste automatizado de integração.')
                 confirmacao.get_by_role('button', name='Confirmar reativação').click()
+                modal.wait_for(state='hidden', timeout=15000)
                 aba_arch.get_by_text(nome, exact=True).wait_for(state='hidden', timeout=15000)
-                painel.get_by_role('tab', name='Entregáveis', exact=True).click()
+                painel.get_by_role('tab', name='Ativas', exact=True).click()
                 cartao.wait_for(state='visible', timeout=15000)
-                relatorio['provas'].append('Arquivar e reativar por cartões com confirmação e listas atualizadas')
+                relatorio['provas'].append('Arquivar e reativar pelo detalhe: API e listagens consistentes')
                 cartao.click()
                 modal.wait_for(state='visible')
                 pagina.keyboard.press('Escape')

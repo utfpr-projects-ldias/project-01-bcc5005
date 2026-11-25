@@ -143,6 +143,7 @@ describe('HU07-02 — serviço integra escopo, auditoria e transações', () => 
     query: jest.fn(async () => [{ soma: '0' }]),
     getRepository: jest.fn((entity: { name: string }) => entity.name === 'Entregavel' ? repositorio : ({
       findOneBy: jest.fn(async () => ({ id: etapa, ativo: true, modoCalculo })),
+      find: jest.fn(async () => []),
       createQueryBuilder: jest.fn(() => ({ setLock: () => ({ where: () => ({ getOne: async () => ({ id: contrato }) }) }) })),
     })),
   };
@@ -196,6 +197,37 @@ describe('HU07-02 — serviço integra escopo, auditoria e transações', () => 
   });
   it('edição sem campos é rejeitada', async () => {
     await expect(service.editar(contrato, id, {}, ator)).rejects.toThrow(BadRequestException);
+    // DTO ES2023 possui campos próprios undefined apesar de JSON vazio.
+    await expect(service.editar(contrato, id, plainToInstance(EditarEntregavelDto, {}), ator))
+      .rejects.toThrow(BadRequestException);
+  });
+
+  it('PATCH parcial real preserva código/descrição/datas em DTO transformado', async () => {
+    const persistido = Object.assign(exemplo(), {
+      id, codigo: 'Q706-CODIGO-1', descricao: 'Descrição original',
+    });
+    repositorio.findOneBy.mockResolvedValueOnce(persistido);
+    const dto = plainToInstance(EditarEntregavelDto, { nome: '  Revisado  ', peso: '12.50' });
+    // Reproduz precisamente a classe emitida pelo TypeScript ES2023.
+    expect(Object.hasOwn(dto, 'codigo')).toBe(true);
+    expect(dto.codigo).toBeUndefined();
+    const atualizado = await service.editar(contrato, id, dto, ator);
+    expect(atualizado).toEqual(expect.objectContaining({
+      nome: 'Revisado', peso: '12.50', codigo: 'Q706-CODIGO-1',
+      descricao: 'Descrição original', inicioPrevisto: '2026-10-30',
+    }));
+    expect(persistido.codigo).toBe('Q706-CODIGO-1');
+    expect(persistido.descricao).toBe('Descrição original');
+    expect(auditoria.registrarNaTransacao).toHaveBeenCalled();
+  });
+
+  it('PATCH parcial permite limpar explicitamente campo opcional com null', async () => {
+    const persistido = Object.assign(exemplo(), { id, codigo: 'Q706-ANTES', descricao: 'Texto' });
+    repositorio.findOneBy.mockResolvedValueOnce(persistido);
+    const dto = plainToInstance(EditarEntregavelDto, { codigo: null });
+    const atualizado = await service.editar(contrato, id, dto, ator);
+    expect(atualizado.codigo).toBeNull();
+    expect(atualizado.descricao).toBe('Texto');
   });
 });
 

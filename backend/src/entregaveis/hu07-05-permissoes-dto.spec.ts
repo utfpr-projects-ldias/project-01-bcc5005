@@ -46,6 +46,15 @@ describe('HU07-05 — políticas reais declaradas nas rotas de entregáveis', ()
     expect(politica('atualizarChecklist').acao).toBe('entregaveis:editar');
   });
 
+  it('consulta consolidada de evidências requer leitura no próprio contrato', async () => {
+    const p=politica('evidenciasConsolidadas');
+    expect(p).toEqual({acao:'evidencias:listar',escopoOperacional:{tipo:'contrato',parametro:'contratoId'}});
+    buscarVinculo.mockResolvedValueOnce(null);
+    expect(await politicas.permitido(pessoa(PerfilUsuario.COLABORADOR),p,outroContrato)).toBe(false);
+    buscarVinculo.mockResolvedValueOnce({podeEditar:false} as PermissaoContrato);
+    expect(await politicas.permitido(pessoa(PerfilUsuario.COLABORADOR),p,contrato)).toBe(true);
+  });
+
   it('ADMIN pode planejar; GESTOR depende do vínculo e podeEditar; COLABORADOR não altera', async () => {
     for (const metodo of ['criar', 'editar', 'atualizarChecklist'] as const) {
       const p = politica(metodo);

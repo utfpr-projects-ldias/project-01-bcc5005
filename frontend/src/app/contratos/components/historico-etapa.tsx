@@ -17,24 +17,24 @@ export function HistoricoEtapa({ contratoId, etapaId }: { contratoId: string; et
     return () => c.abort();
   }, [aberto, chave, contratoId, etapaId]);
   const atual = dados?.chave === chave ? dados : null;
-  return <section data-tec08-historico-entidade aria-label="Rastreabilidade da etapa" className="rounded-xl border border-brand-green/25 p-3 text-sm">
-    <button type="button" aria-expanded={aberto} onClick={() => setAberto(v => !v)} className="flex w-full items-center justify-between gap-3 text-left font-semibold text-brand-neon">
-      <span>Rastreabilidade da etapa</span><span aria-hidden="true">{aberto ? '−' : '+'}</span>
+  return <section data-pi-historico-neutro data-tec08-historico-entidade aria-label="Rastreabilidade da etapa" className="rounded-xl border border-current/20 p-3 text-sm">
+    <button type="button" aria-expanded={aberto} onClick={() => setAberto(v => !v)} className="flex w-full items-center justify-between gap-3 text-left font-semibold text-foreground">
+      <span>Rastreabilidade da etapa</span><svg aria-hidden="true" className={`h-4 w-4 shrink-0 ${aberto?'rotate-180':''}`} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="m5 7 5 5 5-5"/></svg>
     </button>
     {aberto && <div className="mt-3 space-y-2">
       {!atual ? <p role="status">Consultando histórico…</p> : atual.erro ? <p role="alert">{atual.erro}</p> : <>
         {atual.eventos.length === 0 && <p className="text-foreground/65">Nenhum evento registrado.</p>}
-        <ol className="space-y-3 border-l border-brand-green/25 pl-4">
+        <ol className="space-y-3 border-l border-current/20 pl-4">
           {(todos ? atual.eventos : atual.eventos.slice(0, 5)).map(evento => <li key={evento.id} className="space-y-1 text-xs">
             <p className="font-semibold">{evento.descricao}</p>
             {evento.contexto && <p className="break-words text-foreground/75">{evento.contexto}</p>}
             {evento.nomeArquivo && <p className="break-all text-foreground/75">Arquivo: {evento.nomeArquivo}</p>}
             {evento.justificativa && <p className="break-words text-foreground/80">Justificativa: {evento.justificativa}</p>}
-            <p className="break-words text-foreground/70">Responsável: {evento.ator ? `${evento.ator.nome} (${evento.ator.email})` : 'autor não disponível'}</p>
+            <p className="break-words text-foreground/70">Responsável: {evento.ator ? `${evento.ator.email}` : 'autor não disponível'}</p>
             <time dateTime={evento.ocorridoEm} className="text-foreground/60">{new Date(evento.ocorridoEm).toLocaleString('pt-BR')}</time>
           </li>)}
         </ol>
-        {atual.eventos.length > 5 && <button className="rounded-lg border border-brand-green/30 px-3 py-1 text-xs" type="button" onClick={() => setTodos(v => !v)}>{todos ? 'Mostrar recentes' : 'Ver mais eventos'}</button>}
+        {atual.eventos.length > 5 && <button className="rounded-lg border border-current/20 px-3 py-1 text-xs" type="button" onClick={() => setTodos(v => !v)}>{todos ? 'Mostrar recentes' : 'Ver mais eventos'}</button>}
       </>}
     </div>}
   </section>;

@@ -14,7 +14,7 @@ beforeEach(() => {
 });
 
 test('cadastro manual usa a rota com contrato + entregável e DTO sem entregavelId', async () => {
-  buscar.mockResolvedValue({ ok: true, status: 201 });
+  buscar.mockResolvedValue({ ok: true, status: 201, json: async () => ({ id: 'ocorrencia-criada' }) });
   const { result } = renderHook(() => useOcorrencias('contrato-01'));
   await act(async () => {
     await result.current.criarOcorrenciaManual({ entregavelId: 'entregavel-02', titulo: 'Serviço executado', periodoInicio: '2026-11-01', periodoFim: '2026-11-30' });
@@ -65,4 +65,18 @@ test('prévia de replanejamento não atualiza nem envia confirmação; aplicaç�
   await act(async()=>{await result.current.replanejar('e',{...plano,confirmacao:'token'});});
   expect(buscar).toHaveBeenLastCalledWith(expect.stringContaining('/contratos/c/entregaveis/e/ocorrencias/replanejar'),expect.objectContaining({body:JSON.stringify({...plano,confirmacao:'token'})}));
   expect(atualizar).toHaveBeenCalledTimes(1);
+});
+
+test('somente geração confirmada notifica os resumos do contrato', async () => {
+  const notificar=jest.fn();
+  window.addEventListener('pi:estrutura-operacional-atualizada',notificar);
+  try {
+    buscar.mockResolvedValueOnce({ok:true,status:201,json:async()=>({novasGeradas:12})}).mockResolvedValueOnce({ok:false,status:403});
+    const {result}=renderHook(()=>useOcorrencias('c'));
+    await act(async()=>{await result.current.gerarOcorrenciasRecorrentes('e');});
+    expect(notificar).toHaveBeenCalledTimes(1);
+    expect(notificar.mock.calls[0][0].detail).toEqual({contratoId:'c'});
+    await expect(result.current.gerarOcorrenciasRecorrentes('e')).rejects.toThrow('permissão');
+    expect(notificar).toHaveBeenCalledTimes(1);
+  } finally {window.removeEventListener('pi:estrutura-operacional-atualizada',notificar);}
 });

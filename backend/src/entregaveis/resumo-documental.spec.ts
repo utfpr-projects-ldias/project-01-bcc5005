@@ -1,54 +1,34 @@
 import { jest } from '@jest/globals';
 import { NotFoundException } from '@nestjs/common';
-import { Contrato } from '../contratos/contrato.entity.js';
-import { ComprovanteEvidencia } from './comprovante-evidencia.entity.js';
 import { EntregaveisService } from './entregaveis.service.js';
-
 const cid = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const eid = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const base = { entregavel_id:eid, obrigatorias:2, verificadas:1, total:2, verificadas_total:1, ocorrencias_exigidas:0, ocorrencias_atendidas:0, situacao:'EVIDENCIA_PARCIAL', ocorrencias_total:3, ocorrencias_finalizadas:1, atividades_total:2, atividades_verificadas:1, exigencias_documentais_total:2, exigencias_documentais_atendidas:1 };
 function setup() {
   const contratos = { findOneBy: jest.fn(async () => ({ id: cid })) };
-  const versoes = { find: jest.fn(async () => [
-    { evidenciaEsperadaId: 'x', status: 'PENDENTE_VERIFICACAO' },
-    { evidenciaEsperadaId: 'x', status: 'VERIFICADA' },
-    { evidenciaEsperadaId: 'y', status: 'VERIFICADA' },
-  ]) };
-  const dataSource = { getRepository: jest.fn((entidade: unknown) => entidade === Contrato ? contratos : entidade === ComprovanteEvidencia ? versoes : null) };
-  const entregaveis = { find: jest.fn(async () => [{ id: eid }]) };
-  const evidencias = { find: jest.fn(async () => [
-    { id: 'x', entregavelId: eid, obrigatoria: true }, { id: 'y', entregavelId: eid, obrigatoria: true },
-  ]) };
-  const service = new EntregaveisService(entregaveis as never, evidencias as never, dataSource as never, {} as never, {} as never);
-  return { service, contratos, versoes, entregaveis, evidencias };
+  const query = jest.fn(async (_sql: string, _args: string[]) => [base]);
+  const ds = { getRepository: () => contratos, manager: { query } };
+  const service = new EntregaveisService({} as never, {} as never, ds as never, {} as never, {} as never);
+  return { service, contratos, query };
 }
-
-test('só a versão mais recente comprovada conta; envio novo pendente não herda verificação antiga', async () => {
-  const { service } = setup();
-  expect(await service.resumoDocumental(cid)).toEqual({ [eid]: { obrigatorias: 2, verificadas: 1, total: 2, verificadasTotal: 1 } });
+test('resumo usa a mesma visão transacional de comprovação e limita ao contrato solicitado', async () => {
+  const {service, query} = setup();
+  expect(await service.resumoDocumental(cid)).toEqual({[eid]:{obrigatorias:2,verificadas:1,total:2,verificadasTotal:1,ocorrenciasExigidas:0,ocorrenciasAtendidas:0,situacaoComprovacao:'EVIDENCIA_PARCIAL',ocorrenciasTotal:3,ocorrenciasFinalizadas:1,atividadesTotal:2,atividadesVerificadas:1,exigenciasDocumentaisTotal:2,exigenciasDocumentaisAtendidas:1}});
+  expect(query).toHaveBeenCalledWith(expect.stringContaining('vw_comprovacao_entregavel_r40'),[cid]);
 });
-
 test('contrato inexistente impede consultar contadores de comprovação', async () => {
-  const { service, contratos } = setup();
+  const {service, contratos, query} = setup();
   contratos.findOneBy.mockResolvedValueOnce(null as never);
   await expect(service.resumoDocumental(cid)).rejects.toBeInstanceOf(NotFoundException);
+  expect(query).not.toHaveBeenCalled();
 });
-
-test('evidência opcional integra o total documental, mas não altera obrigatórias', async () => {
-  const { service, evidencias } = setup();
-  evidencias.find.mockResolvedValueOnce([
-    { id: 'x', entregavelId: eid, obrigatoria: true },
-    { id: 'y', entregavelId: eid, obrigatoria: false },
-  ]);
-  expect(await service.resumoDocumental(cid)).toEqual({
-    [eid]: { obrigatorias: 1, verificadas: 0, total: 2, verificadasTotal: 1 },
-  });
+test('evidência opcional integra o total documental sem alterar obrigatórias', async () => {
+  const {service, query} = setup();
+  query.mockResolvedValueOnce([{...base,obrigatorias:1,verificadas:0}]);
+  expect((await service.resumoDocumental(cid))[eid]).toMatchObject({obrigatorias:1,verificadas:0,total:2,verificadasTotal:1});
 });
-
-
-test('zero evidências obrigatórias nunca representa comprovação obrigatória completa', async () => {
-  const { service, evidencias } = setup();
-  evidencias.find.mockResolvedValueOnce([{ id: 'x', entregavelId: eid, obrigatoria: false }]);
-  const resultado = await service.resumoDocumental(cid);
-  expect(resultado[eid]).toEqual({ obrigatorias: 0, verificadas: 0, total: 1, verificadasTotal: 0 });
-  expect(resultado[eid].obrigatorias > 0 && resultado[eid].verificadas === resultado[eid].obrigatorias).toBe(false);
+test('sem exigência não inventa comprovante; exigência da ocorrência é independente', async () => {
+  const {service, query} = setup();
+  query.mockResolvedValueOnce([{...base,obrigatorias:0,verificadas:0,total:1,verificadas_total:0,ocorrencias_exigidas:1,situacao:'SEM_EVIDENCIA'}]);
+  expect((await service.resumoDocumental(cid))[eid]).toMatchObject({obrigatorias:0,verificadas:0,ocorrenciasExigidas:1,ocorrenciasAtendidas:0,situacaoComprovacao:'SEM_EVIDENCIA'});
 });

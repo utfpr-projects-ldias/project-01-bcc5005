@@ -17,21 +17,21 @@ export function estadoDoObjeto({ objeto, status, arquivado, reaberto, pendenteCo
   if (arquivado || status === 'ARQUIVADA' || status === 'ARQUIVADO') return 'arquivado';
   // Solicitações pendentes prevalecem sobre o marcador histórico de reabertura:
   // o usuário precisa ver a decisão que está aguardando análise, não a revisão anterior.
-  if (status === 'PENDENTE_ENCERRAMENTO') return 'finalizado';
-  if (status === 'PENDENTE_CONCLUSAO') return 'concluido';
+  if (status === 'PENDENTE_ENCERRAMENTO' || status === 'PENDENTE_CONCLUSAO' || status === 'PENDENTE_CONCLUSAO_PARCIAL') return 'pendente';
+  if (pendenteConclusao) return 'pendente';
   if (reaberto) return 'revisao';
-  if (pendenteConclusao) return 'concluido';
   if (status === 'CANCELADO') return 'cancelado';
   if (status === 'SUSPENSO') return 'suspenso';
   if (status === 'ENCERRADO' || status === 'ENCERRADA') return 'encerrado';
   if (status === 'FINALIZADO' || status === 'FINALIZADA') return 'finalizado';
-  if (status === 'PENDENTE_ENCERRAMENTO') return 'finalizado';
-  if (status === 'PENDENTE_CONCLUSAO' || pendenteConclusao) return 'concluido';
+  if (status === 'CONCLUIDO_PARCIALMENTE') return 'parcial';
   if (status === 'CONCLUIDO' || status === 'CONCLUIDA' || status === 'VERIFICADA' || status === 'VERIFICADO') return 'concluido';
-  if (status === 'EM_REVISAO') return 'revisao';
+  if (status === 'EM_REVISAO' || (objeto === 'evidencia' && status === 'REJEITADA')) return 'revisao';
   if (status === 'PENDENTE_VERIFICACAO' || status === 'AGUARDANDO_ENVIO' || status === 'SEM_ENVIO') return 'pendente';
   if (status === 'EM_ANDAMENTO' || status === 'EM_EXECUCAO' || status === 'REGISTRADA') return 'andamento';
-  if (objeto === 'etapa' && status === 'PLANEJADA') return 'andamento';
+  if (objeto === 'etapa' && status === 'PLANEJADA') return 'nao-iniciado';
+  if (objeto === 'ocorrencia' && status === 'NAO_INICIADO') return 'nao-iniciado';
+  if (objeto === 'entregavel' && (!status || status === 'NAO_INICIADO' || status === 'PLANEJAMENTO')) return 'nao-iniciado';
   if (status === 'NAO_INICIADO' || status === 'PLANEJADA' || status === 'PLANEJAMENTO') return 'andamento';
   // EM_ENCERRAMENTO no contrato é uma fase administrativa, não execução integral.
   if (objeto === 'contrato' && status === 'EM_ENCERRAMENTO') return 'pendente';
@@ -56,3 +56,18 @@ export const CLASSES_ACAO_MENU: Record<IntencaoAcao, string> = {
   reativar: 'border-teal-500/40 text-teal-700 dark:text-teal-200 hover:bg-teal-500/15',
   excluir: 'border-red-500/40 text-red-700 dark:text-red-200 hover:bg-red-500/15',
 };
+
+/** Rótulo operacional único para lista, modal e tela de detalhe. */
+export function rotuloEstadoEntregavel(status?: string | null, arquivado?: boolean, reaberto?: boolean, regularizacaoSolicitada?: boolean): string {
+  if (arquivado) return 'Arquivado';
+  if (regularizacaoSolicitada) return 'Pendente de regularização documental';
+  if (status === 'PENDENTE_ENCERRAMENTO') return 'Pendente de encerramento';
+  if (status === 'PENDENTE_CONCLUSAO_PARCIAL') return 'Pendente de conclusão parcial';
+  if (status === 'PENDENTE_CONCLUSAO') return 'Pendente de conclusão';
+  if (reaberto) return 'Em revisão';
+  if (status === 'CONCLUIDO_PARCIALMENTE') return 'Concluído parcialmente';
+  if (status === 'CONCLUIDO') return 'Concluído';
+  if (status === 'FINALIZADO') return 'Encerrado';
+  if (status === 'EM_ANDAMENTO') return 'Em andamento';
+  return 'Não iniciado';
+}

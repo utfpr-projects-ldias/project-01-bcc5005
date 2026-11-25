@@ -39,9 +39,9 @@ describe('HU07-05 — regressão contratual frontend → API', () => {
   );
   it('recusa valores inválidos sem enviar o planejamento', () => {
     const qtd = paraTipo('QUANTITATIVO'); qtd.quantidadePrevista = '0';
-    expect(validarEntregavel(qtd).sucesso).toBe(true); // quantidade será validada na configuração pai
+    expect(validarEntregavel(qtd).sucesso).toBe(false); // meta zero nunca constitui planejamento quantitativo válido
     const recorrente = paraTipo('RECORRENTE'); recorrente.periodicidade = 'PERSONALIZADA' as never;
-    expect(validarEntregavel(recorrente).sucesso).toBe(true); // periodicidade sai do formulário comum
+    expect(validarEntregavel(recorrente).sucesso).toBe(false); // rejeita periodicidade fora do catálogo
     const continuo = paraTipo('CONTINUO'); continuo.criterioConclusao = '';
     expect(validarEntregavel(continuo).sucesso).toBe(false);
     const r = paraTipo('UNICO'); r.terminoPrevisto = '2026-09-30';

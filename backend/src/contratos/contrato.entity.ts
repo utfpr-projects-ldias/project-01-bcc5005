@@ -105,6 +105,12 @@ export class Contrato {
 
   @Column({ name: 'conclusao_solicitada_por', type: 'uuid', nullable: true })
   conclusaoSolicitadaPor!: string | null;
+  @Column({ name: 'conclusao_parcial_solicitada', type: 'boolean', default: false })
+  conclusaoParcialSolicitada?: boolean;
+
+  /** Distingue a solicitação administrativa das duas modalidades de conclusão. */
+  @Column({ name: 'encerramento_solicitado', type: 'boolean', default: false })
+  encerramentoSolicitado?: boolean;
 
   /** Trava de reordenação é estado global do contrato, não preferência de sessão. */
   @Column({ name: 'ordem_etapas_bloqueada', type: 'boolean', default: false })

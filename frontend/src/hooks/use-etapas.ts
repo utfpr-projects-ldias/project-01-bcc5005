@@ -5,7 +5,7 @@ import { chaveTexto } from '@/lib/repositorio-consultas';
 
 export const CHAVES_ETAPAS = { lista: (contratoId: string) => ['etapas', 'contrato', contratoId] as const };
 export function useEtapas(contratoId: string, habilitada = true) {
-  return useConsulta(CHAVES_ETAPAS.lista(contratoId), () => listarEtapas(contratoId), { habilitada: habilitada && !!contratoId });
+  return useConsulta(CHAVES_ETAPAS.lista(contratoId), () => listarEtapas(contratoId), { habilitada: habilitada && !!contratoId, validadeMs: 10000 });
 }
 export function useMutacoesEtapas(contratoId: string) {
   const cache = useRepositorioConsultas();
@@ -15,18 +15,24 @@ export function useMutacoesEtapas(contratoId: string) {
       const etapa = await criarEtapa(contratoId, dados);
       cache.invalidar(chave);
       cache.invalidar(['contratos', 'pendentes']);
+      cache.invalidar(['contratos','elegibilidade-conclusao',contratoId]);
+      cache.invalidar(['execucao',contratoId]);
       return etapa;
     },
     editar: async (etapaId: string, dados: Partial<DadosEtapa>) => {
       const etapa = await editarEtapa(contratoId, etapaId, dados);
       cache.invalidar(chave);
       cache.invalidar(['contratos', 'pendentes']);
+      cache.invalidar(['contratos','elegibilidade-conclusao',contratoId]);
+      cache.invalidar(['execucao',contratoId]);
       return etapa;
     },
     reordenar: async (ordemAnterior: string[], ordemNova: string[]) => {
       const lista = await reordenarEtapas(contratoId, ordemAnterior, ordemNova);
       cache.gravar(chaveTexto(chave), lista);
       cache.invalidar(['contratos', 'pendentes']);
+      cache.invalidar(['contratos','elegibilidade-conclusao',contratoId]);
+      cache.invalidar(['execucao',contratoId]);
       return lista;
     },
   };

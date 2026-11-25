@@ -47,9 +47,15 @@ export class EtapasController {
   }
 
   @Patch(':etapaId/solicitar-conclusao')
-  @ExigirPoliticaOperacional('etapas:editar', { tipo:'recurso',recurso:'etapa',parametro:'etapaId',parametroContratoPai:'contratoId' })
+  @ExigirPoliticaOperacional('etapas:solicitar-conclusao', { tipo:'recurso',recurso:'etapa',parametro:'etapaId',parametroContratoPai:'contratoId' })
   solicitarConclusao(@Param('contratoId') contratoId:string,@Param('etapaId') etapaId:string,@Req() req:RequisicaoAutorizada){
     return this.etapas.solicitarConclusao(contratoId,etapaId,req.usuarioDominio!);
+  }
+
+  @Patch(':etapaId/solicitar-conclusao-parcial')
+  @ExigirPoliticaOperacional('etapas:editar', { tipo:'recurso',recurso:'etapa',parametro:'etapaId',parametroContratoPai:'contratoId' })
+  solicitarConclusaoParcial(@Param('contratoId') contratoId:string,@Param('etapaId') etapaId:string,@Req() req:RequisicaoAutorizada){
+    return this.etapas.solicitarConclusao(contratoId,etapaId,req.usuarioDominio!,true);
   }
 
   @Patch(':etapaId/solicitar-encerramento')

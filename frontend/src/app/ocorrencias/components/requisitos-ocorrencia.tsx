@@ -11,28 +11,19 @@ export type RequisitosOcorrencia = {
   evidenciaExigida: FormatoComprovacao;
   permiteEncerramentoExcepcional: boolean;
 };
-const base = 'w-full min-w-0 rounded-xl border border-current/25 bg-background/75 px-3 py-2.5 text-sm text-foreground outline-none transition-colors focus-visible:border-current focus-visible:ring-2 focus-visible:ring-current/20';
 
-function Contador({ rotulo, descricao, quantidade, onChange, minimo = 0, desabilitado = false }: {
+function Contador({ rotulo, descricao, quantidade, onChange, minimo = 0, desabilitado = false, compacto = false }: {
   rotulo: string; descricao: string; quantidade: number; onChange: (valor: number) => void;
-  minimo?: number; desabilitado?: boolean;
+  minimo?: number; desabilitado?: boolean; compacto?: boolean;
 }) {
   const ajustar = (n: number) => onChange(Math.max(minimo, Math.min(99, n)));
-  return <div className="min-w-0 rounded-xl border border-current/15 bg-current/[0.025] p-3">
+  return <div className={compacto?"min-w-0":"min-w-0 rounded-xl border border-current/15 bg-current/[0.025] p-3"}>
     <label className="block text-xs font-semibold" htmlFor={`req-${rotulo.replace(/\W/g,'-').toLowerCase()}`}>{rotulo}</label>
-    <p className="mt-1 min-h-8 text-xs text-foreground/65">{descricao}</p>
-    <div className="mt-2 flex min-w-0 items-stretch overflow-hidden rounded-xl border border-current/25 bg-background focus-within:border-brand-green focus-within:ring-2 focus-within:ring-brand-green/20">
-      <input id={`req-${rotulo.replace(/\W/g,'-').toLowerCase()}`} type="number" min={minimo} max="99" step="1" inputMode="numeric" placeholder="0"
-        disabled={desabilitado} aria-label={rotulo} value={quantidade === 0 ? '' : quantidade}
-        onChange={e => ajustar(e.target.value === '' ? 0 : Number(e.target.value))}
-        className="min-w-0 flex-1 [appearance:textfield] bg-transparent px-3 py-2.5 text-sm tabular-nums text-foreground outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
-      <div className="flex shrink-0 flex-col border-l border-current/20">
-        <button type="button" aria-label={`Aumentar ${rotulo.toLowerCase()}`} disabled={desabilitado || quantidade >= 99} onClick={() => ajustar(quantidade+1)}
-          className="flex h-5 w-8 items-center justify-center text-xs text-foreground/70 hover:bg-current/10 disabled:opacity-30">▲</button>
-        <button type="button" aria-label={`Diminuir ${rotulo.toLowerCase()}`} disabled={desabilitado || quantidade <= minimo} onClick={() => ajustar(quantidade-1)}
-          className="flex h-5 w-8 items-center justify-center border-t border-current/15 text-xs text-foreground/70 hover:bg-current/10 disabled:opacity-30">▼</button>
-      </div>
-    </div>
+    {!compacto && <p className="mt-1 min-h-8 text-xs text-foreground/65">{descricao}</p>}
+    <div className="pi-contador-requisito"><button type="button" aria-label={`Diminuir ${rotulo}`} disabled={desabilitado||quantidade<=minimo} onClick={()=>ajustar(quantidade-1)}>−</button><input id={`req-${rotulo.replace(/\W/g,'-').toLowerCase()}`} type="text" inputMode="numeric" maxLength={2} placeholder="0"
+      disabled={desabilitado} aria-label={rotulo} value={quantidade}
+      onChange={e => {const v=e.target.value; if(/^\d{0,2}$/.test(v)) ajustar(v === '' ? 0 : Number(v));}}
+      title={descricao} className="h-9 min-w-0 text-center text-sm tabular-nums" /><button type="button" aria-label={`Aumentar ${rotulo}`} disabled={desabilitado||quantidade>=99} onClick={()=>ajustar(quantidade+1)}>+</button></div>
   </div>;
 }
 
@@ -46,17 +37,17 @@ export function FormularioRequisitosOcorrencia({ valor, onChange, compacto = fal
     onChange({...novo, minimoEvidenciasVerificadas:total,
       evidenciaExigida:novo.minimoFotos && novo.minimoRelatorios ? 'AMBOS' : novo.minimoFotos ? 'FOTO' : novo.minimoRelatorios ? 'RELATORIO' : 'NENHUMA'});
   };
-  return <fieldset className="min-w-0 space-y-3 rounded-xl border border-current/20 bg-current/[0.025] p-3 sm:p-4">
+  return <fieldset className={compacto?"min-w-0 space-y-2 border-t border-current/15 pt-2":"min-w-0 space-y-3 rounded-xl border border-current/20 bg-current/[0.025] p-3 sm:p-4"}>
     <legend className="px-1 text-sm font-semibold">Requisitos para solicitar conclusão</legend>
 
     <p className="text-xs text-foreground/65">Total de evidências exigidas: {valor.minimoFotos+valor.minimoRelatorios+valor.minimoEvidenciasLivres} / 99</p>
-    <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-      <Contador rotulo="Atividades verificadas" descricao="Quantidade mínima de atividades aprovadas." quantidade={valor.minimoAtividadesVerificadas} onChange={n => onChange({...valor,minimoAtividadesVerificadas:n})}/>
-      <Contador rotulo="Fotografias verificadas" descricao="Quantidade específica de fotos." quantidade={valor.minimoFotos} onChange={n => atualizar('minimoFotos',n)}/>
-      <Contador rotulo="Relatórios verificados" descricao="Quantidade específica de relatórios." quantidade={valor.minimoRelatorios} onChange={n => atualizar('minimoRelatorios',n)}/>
-      <Contador rotulo="Evidências de qualquer formato" descricao="Quantidade adicional, tanto foto quanto relatório." quantidade={valor.minimoEvidenciasLivres} onChange={n => atualizar('minimoEvidenciasLivres',n)}/>
+    <div className={`grid min-w-0 gap-3 sm:grid-cols-2 ${compacto?'md:grid-cols-4':''}`}>
+      <Contador compacto={compacto} rotulo="Atividades" descricao="Quantidade mínima de atividades aprovadas." quantidade={valor.minimoAtividadesVerificadas} onChange={n => onChange({...valor,minimoAtividadesVerificadas:n})}/>
+      <Contador compacto={compacto} rotulo="Fotografias" descricao="Quantidade específica de fotos." quantidade={valor.minimoFotos} onChange={n => atualizar('minimoFotos',n)}/>
+      <Contador compacto={compacto} rotulo="Relatórios" descricao="Quantidade específica de relatórios." quantidade={valor.minimoRelatorios} onChange={n => atualizar('minimoRelatorios',n)}/>
+      <Contador compacto={compacto} rotulo="Evidências (qualquer formato)" descricao="Quantidade adicional de comprovantes válidos, incluindo fotos, relatórios, atas e laudos." quantidade={valor.minimoEvidenciasLivres} onChange={n => atualizar('minimoEvidenciasLivres',n)}/>
     </div>
-    <label className="flex items-start gap-2 rounded-xl border border-current/15 bg-background/40 p-3 text-sm">
+    <label className={compacto?"flex items-start gap-2 text-sm":"flex items-start gap-2 rounded-xl border border-current/15 bg-background/40 p-3 text-sm"}>
       <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 accent-current" checked={valor.permiteEncerramentoExcepcional}
         onChange={e=>onChange({...valor,permiteEncerramentoExcepcional:e.target.checked})}/>
       <span>Permitir solicitar encerramento administrativo com justificativa</span>
@@ -64,14 +55,14 @@ export function FormularioRequisitosOcorrencia({ valor, onChange, compacto = fal
   </fieldset>;
 }
 
-export function ResumoRequisitosOcorrencia({ minimoAtividades, minimoEvidencias, formato, verificadas = 0, fotos = 0, relatorios = 0, minimoFotos, minimoRelatorios, minimoEvidenciasLivres, integrado = false }:{
+export function ResumoRequisitosOcorrencia({ minimoAtividades, minimoEvidencias, formato, verificadas = 0, fotos = 0, relatorios = 0, outras = 0, minimoFotos, minimoRelatorios, minimoEvidenciasLivres, integrado = false }:{
   minimoAtividades: number; minimoEvidencias: number; formato: FormatoComprovacao;
-  verificadas?: number; fotos?: number; relatorios?: number;
+  verificadas?: number; fotos?: number; relatorios?: number; outras?: number;
   minimoFotos?:number|null; minimoRelatorios?:number|null; minimoEvidenciasLivres?:number|null; integrado?:boolean;
 }) {
   const individuais=[minimoFotos,minimoRelatorios,minimoEvidenciasLivres].some(n=>n!=null);
   const exigidas={fotos:minimoFotos??0,relatorios:minimoRelatorios??0,livres:minimoEvidenciasLivres??0};
-  const livresAtendidos=Math.max(0,fotos-exigidas.fotos)+Math.max(0,relatorios-exigidas.relatorios);
+  const livresAtendidos=Math.max(0,fotos-exigidas.fotos)+Math.max(0,relatorios-exigidas.relatorios)+outras;
   const totalEvidencias = individuais ? exigidas.fotos+exigidas.relatorios+exigidas.livres : minimoEvidencias;
   const evidenciasAtendidas = individuais
     ? Math.min(fotos,exigidas.fotos)+Math.min(relatorios,exigidas.relatorios)+Math.min(livresAtendidos,exigidas.livres)

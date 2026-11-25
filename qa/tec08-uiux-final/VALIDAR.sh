@@ -11,15 +11,14 @@ OK=0; ERRO=0
 
 verificar_origem() {
   case "$(git branch --show-current 2>/dev/null)" in
-    tec-08|tec-08-04-05|tec-08--04-05|tec-08-05--01-ajustes|hu09-tec09-ajustes) ;;
-    *) echo 'BLOQUEIO: branch nao autorizada para este QA.' >&2; return 3 ;;
+    bugfixes_sprint4) ;;
+    *) echo 'BLOQUEIO: QA exige bugfixes_sprint4 nesta rodada.' >&2; return 3 ;;
   esac
-  if ! git merge-base --is-ancestor '3eeed69ccb1af2b069cb38ef0563c7b45354072b' HEAD; then
-    echo 'BLOQUEIO: HEAD nao contem o commit-base auditado 3eeed69.' >&2; return 3
+  if [[ "$(git rev-parse HEAD 2>/dev/null)" != 'eb87a47ec9efb936bcc8f0b3320fd833cabc41fa' ]]; then
+    echo 'BLOQUEIO: HEAD diferente do snapshot R6.' >&2; return 3
   fi
-  if ! (cd "$ROOT" && sha256sum -c --status qa/tec08-uiux-final/HASHES.sha256); then
-    echo 'BLOQUEIO: pelo menos um arquivo da implementação difere do pacote validado.' >&2; return 3
-  fi
+  # Os hashes do pacote antigo não correspondem ao frontend após R1–R7.
+  # A integridade desta rodada é verificada pelo preflight SHA-256 do patch.
   if ! git diff --check; then
     echo 'BLOQUEIO: git diff --check apontou erros de espaço ou conflito.' >&2; return 3
   fi

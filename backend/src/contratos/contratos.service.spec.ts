@@ -13,6 +13,7 @@ import {
 
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
+import { ExecucaoService } from '../execucao/execucao.service.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
 import { Contrato } from './contrato.entity.js';
 import { ContratosService } from './contratos.service.js';
@@ -129,9 +130,17 @@ function montarCenario() {
     registrarNaTransacao: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
   };
 
+  const execucao = { consultarNaTransacao: jest.fn<() => Promise<{
+    avanco: number | null; integralEstrito: boolean; configuracaoPendente: boolean;
+    entregaveis: Array<{statusEntregavel: string; percentualExecucao: number | null}>;
+  }>>(async () => ({
+    avanco: 100, integralEstrito: true, configuracaoPendente: false,
+    entregaveis: [{ statusEntregavel: 'CONCLUIDO', percentualExecucao: 100 }],
+  })) };
   const service = new ContratosService(
     repositorio as unknown as Repository<Contrato>,
     auditoria as unknown as AuditoriaService,
+    execucao as unknown as ExecucaoService,
   );
 
   return {
@@ -140,6 +149,7 @@ function montarCenario() {
     auditoria,
     manager,
     eventos,
+    execucao,
   };
 }
 
@@ -619,6 +629,37 @@ describe('Conclusão operacional explícita do contrato', () => {
     expect(c.repositorio.save).not.toHaveBeenCalled();
   });
 
+
+  it('não aprova contrato com 99% físico mesmo com filhos e PDF verificados', async () => {
+    const c = montarCenario();
+    c.repositorio.findOne.mockResolvedValue(contratoBase({ conclusaoSolicitadaEm: new Date() }));
+    Object.assign(c.manager, { query: jest.fn(async (sql: string) => sql.includes('FROM documentos_contratuais')
+      ? [{ verificado: true }] : [{ etapas: 1, entregaveis: 1, evidencias: 1,
+        verificadas: 1, etapas_sem_entregavel: 0, entregaveis_sem_evidencia: 0,
+        pendentes: false, possui_revisao: false }]) });
+    c.execucao.consultarNaTransacao.mockResolvedValueOnce({
+      avanco: 99, integralEstrito: false, configuracaoPendente: false,
+      entregaveis: [{ statusEntregavel: 'CONCLUIDO', percentualExecucao: 99 }],
+    });
+    await expect(c.service.concluir(ID_CONTRATO, ator)).rejects.toBeInstanceOf(ConflictException);
+    expect(c.repositorio.save).not.toHaveBeenCalled();
+  });
+
+  it('nega avanço artificial 100% se o cálculo ponderado não está configurado', async () => {
+    const c = montarCenario();
+    c.repositorio.findOne.mockResolvedValue(contratoBase({ conclusaoSolicitadaEm: new Date() }));
+    Object.assign(c.manager, { query: jest.fn(async (sql: string) => sql.includes('FROM documentos_contratuais')
+      ? [{ verificado: true }] : [{ etapas: 1, entregaveis: 1, evidencias: 1,
+        verificadas: 1, etapas_sem_entregavel: 0, entregaveis_sem_evidencia: 0,
+        pendentes: false, possui_revisao: false }]) });
+    c.execucao.consultarNaTransacao.mockResolvedValueOnce({
+      avanco: null, integralEstrito: true, configuracaoPendente: true,
+      entregaveis: [{ statusEntregavel: 'CONCLUIDO', percentualExecucao: 100 }],
+    });
+    await expect(c.service.concluir(ID_CONTRATO, ator)).rejects.toBeInstanceOf(ConflictException);
+    expect(c.repositorio.save).not.toHaveBeenCalled();
+  });
+
   it('permite ao ADMIN concluir após revisão encerrada e PDF principal verificado, com auditoria', async () => {
     const c = montarCenario();
     const atual = contratoBase({ reabertoEm: null, conclusaoSolicitadaEm: new Date('2026-11-06T19:00:00Z') });
@@ -700,6 +741,24 @@ describe('Rastreabilidade contratual e pendência de conclusão (TEC08)', () => 
     }));
     expect(JSON.stringify(eventos)).not.toContain('nunca-expor');
   });
+  it('pagina o histórico com cursor restrito à mesma raiz e desempate por id', async () => {
+    const c = montarCenario();
+    c.repositorio.findOneBy.mockResolvedValue(contratoBase());
+    const qb = { where: jest.fn().mockReturnThis(), andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(), addOrderBy: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(), getMany: jest.fn().mockResolvedValue([]) };
+    const repo = { createQueryBuilder: jest.fn().mockReturnValue(qb) };
+    Object.assign(c.repositorio, { manager: { getRepository: () => repo } });
+    const antes = '33333333-3333-4333-8333-333333333333';
+    expect(await c.service.historico(ID_CONTRATO, ator, antes)).toEqual([]);
+    expect(qb.where).toHaveBeenCalledWith('evento.contrato_id = :id', { id: ID_CONTRATO });
+    expect(qb.andWhere).toHaveBeenCalledWith(expect.stringContaining('referencia.contrato_id = :id'), { antes });
+    expect(qb.orderBy).toHaveBeenCalledWith('evento.registradoEm', 'DESC');
+    expect(qb.addOrderBy).toHaveBeenCalledWith('evento.id', 'DESC');
+    expect(qb.take).toHaveBeenCalledWith(100);
+    await expect(c.service.historico(ID_CONTRATO, ator, 'invalido')).rejects.toThrow('Cursor de histórico inválido');
+    expect(repo.createQueryBuilder).toHaveBeenCalledTimes(1);
+  });
   it('reabrir sem modificação não marca pendência mesmo com documentação completa', async () => {
     const c = montarCenario();
     c.repositorio.find.mockResolvedValue([contratoBase({ reabertoEm: new Date('2026-11-06T20:00:00Z') })]);
@@ -711,7 +770,8 @@ describe('Rastreabilidade contratual e pendência de conclusão (TEC08)', () => 
     });
     Object.assign(c.repositorio, { manager: { query } });
     expect(await c.service.pendentesConclusao(ator)).toEqual([]);
-    expect(query).toHaveBeenCalledTimes(1);
+    // Sem solicitação de conclusão a carteira não faz consultas operacionais.
+    expect(query).not.toHaveBeenCalled();
   });
 
   it('revisão explícita nunca entra em pendentes antes de Fechar novamente, mesmo após edições', async () => {
@@ -727,6 +787,16 @@ describe('Rastreabilidade contratual e pendência de conclusão (TEC08)', () => 
     expect(query.mock.calls.some(([sql]) => String(sql).includes('eventos_auditoria'))).toBe(false);
   });
 
+  it('mantém solicitação parcial persistida na carteira mesmo sem comprovação completa', async () => {
+    const c = montarCenario();
+    const pedido = contratoBase({ conclusaoSolicitadaEm: new Date('2026-11-24T00:00:00Z'), conclusaoParcialSolicitada: true });
+    c.repositorio.find.mockResolvedValue([pedido]);
+    const query = jest.fn();
+    Object.assign(c.repositorio, { manager: { query } });
+    expect(await c.service.pendentesConclusao(ator)).toEqual([pedido.id]);
+    expect(query).not.toHaveBeenCalled();
+  });
+
   it('não classifica contrato reaberto com etapas reabertas como pendente de conclusão', async () => {
     const cenario = montarCenario();
     cenario.repositorio.find.mockResolvedValue([contratoBase()]);
@@ -735,7 +805,7 @@ describe('Rastreabilidade contratual e pendência de conclusão (TEC08)', () => 
       : [{ pendentes: true }]);
     Object.assign(cenario.repositorio, { manager: { query } });
     expect(await cenario.service.pendentesConclusao(ator)).toEqual([]);
-    expect(query).toHaveBeenCalled();
+    expect(query).not.toHaveBeenCalled();
   });
 });
 
@@ -866,51 +936,99 @@ describe('Decisão independente de aprovação ou devolução à revisão (TEC08
   });
 });
 
+describe('B03 — preparação e terminais contratuais', () => {
+  it('não permite mais entrada direta na fase EM_ENCERRAMENTO; exige solicitação formal', async () => {
+    const c = montarCenario();
+    c.repositorio.findOne.mockResolvedValue(contratoBase({ status: EM_EXECUCAO }));
+    await expect(c.service.iniciarEncerramento(ID_CONTRATO, ator)).rejects.toBeInstanceOf(ConflictException);
+    expect(c.repositorio.save).not.toHaveBeenCalled();
+    expect(c.eventos).toHaveLength(0);
+  });
+  it('não prepara encerramento em contrato finalizado, arquivado ou com solicitação pendente', async () => {
+    for (const estado of [
+      { status: StatusContrato.FINALIZADO }, { arquivadoEm: new Date() },
+      { status: EM_EXECUCAO, conclusaoSolicitadaEm: new Date() },
+    ]) {
+      const c = montarCenario();
+      c.repositorio.findOne.mockResolvedValue(contratoBase(estado));
+      await expect(c.service.iniciarEncerramento(ID_CONTRATO, ator)).rejects.toBeInstanceOf(ConflictException);
+      expect(c.repositorio.save).not.toHaveBeenCalled();
+    }
+  });
+  it('contrato FINALIZADO não pode ser encerrado antecipadamente sem reabertura', async () => {
+    const c = montarCenario();
+    c.repositorio.findOne.mockResolvedValue(contratoBase({ status: StatusContrato.FINALIZADO }));
+    await expect(c.service.encerrarAntecipadamente(ID_CONTRATO,
+      'Encerramento antecipado indevido após decisão final.', ator)).rejects.toBeInstanceOf(ConflictException);
+    expect(c.repositorio.save).not.toHaveBeenCalled();
+    expect(c.eventos).toHaveLength(0);
+  });
+});
+
 describe('ENCERRADO: decisão antecipada auditada, sem conclusão fictícia', () => {
   function preparar(existemEtapas = true) {
     const c = montarCenario();
-    Object.assign(c.repositorio, { findOne: jest.fn(async () => contratoBase({ reabertoEm: null })) });
+    c.repositorio.findOne.mockResolvedValue(contratoBase({ reabertoEm: null }));
     Object.assign(c.manager, { query: jest.fn(async (_sql: string) => [{ existe: existemEtapas }]) });
     return c;
   }
 
-  it('registra encerramento excepcional com justificativa e sem concluir filhos', async () => {
+  it('solicita encerramento sem fechar, e somente aprovação autorizada encerra', async () => {
     const c = preparar();
-    const resultado = await c.service.encerrarAntecipadamente(ID_CONTRATO,
+    const pedido = await c.service.encerrarAntecipadamente(ID_CONTRATO,
       'Execução interrompida por acordo administrativo formal.', ator);
+    expect(pedido.status).toBe(PLANEJAMENTO);
+    expect(pedido.encerramentoSolicitado).toBe(true);
+    expect(pedido.conclusaoSolicitadaEm).toBeInstanceOf(Date);
+    expect(pedido.encerradoEm).toBeNull();
+    expect(pedido.motivoEncerramento).toContain('acordo administrativo');
+    expect(c.eventos[0].dadosPosteriores).toMatchObject({ motivo: 'SOLICITACAO_ENCERRAMENTO_ADMINISTRATIVO' });
+    c.repositorio.findOne.mockResolvedValue(pedido);
+    await expect(c.service.encerrarAntecipadamente(ID_CONTRATO,
+      'Tentativa de duplicar solicitação de encerramento.', ator)).rejects.toBeInstanceOf(ConflictException);
+    const gestor = {...ator, perfil:'GESTOR'} as UsuarioAutenticado;
+    await expect(c.service.concluir(ID_CONTRATO, gestor)).rejects.toBeInstanceOf(ForbiddenException);
+    const resultado = await c.service.concluir(ID_CONTRATO, ator);
     expect(resultado.status).toBe(StatusContrato.ENCERRADO);
     expect(resultado.encerradoEm).toBeInstanceOf(Date);
-    expect(resultado.motivoEncerramento).toContain('acordo administrativo');
-    expect(c.eventos).toHaveLength(1);
-    expect(c.eventos[0]).toMatchObject({
-      acao: AcaoAuditoria.CONTRATO_STATUS_ALTERADO,
-      dadosPosteriores: { status: 'ENCERRADO', motivo: 'ENCERRAMENTO_ANTECIPADO_SEM_CONCLUSAO_TOTAL' },
-    });
+    expect(resultado.encerramentoSolicitado).toBe(false);
+    expect(resultado.conclusaoSolicitadaEm).toBeNull();
+    expect(c.eventos).toHaveLength(2);
+    expect(c.eventos[1].dadosPosteriores).toMatchObject({ status: 'ENCERRADO', motivo: 'ENCERRAMENTO_ADMINISTRATIVO_APROVADO' });
+    expect(c.execucao.consultarNaTransacao).not.toHaveBeenCalled();
   });
 
-  it('permite encerrar antecipadamente durante revisão e preserva anterior no evento', async () => {
+  it('solicita durante revisão e permite devolver a solicitação sem encerrar', async () => {
     const c = preparar();
-    Object.assign(c.repositorio, { findOne: jest.fn(async () => contratoBase({
-      status: StatusContrato.EM_EXECUCAO,
-      reabertoEm: new Date('2026-11-06T12:00:00Z'),
-    })) });
-    const encerrado = await c.service.encerrarAntecipadamente(ID_CONTRATO,
+    c.repositorio.findOne.mockResolvedValue(contratoBase({
+      status: StatusContrato.EM_EXECUCAO, reabertoEm: new Date('2026-11-06T12:00:00Z'),
+    }));
+    const pedido = await c.service.encerrarAntecipadamente(ID_CONTRATO,
       'Encerramento motivado pela administração durante revisão contratual.', ator);
-    expect(encerrado.status).toBe(StatusContrato.ENCERRADO);
-    expect(encerrado.reabertoEm).toBeNull();
+    expect(pedido.status).toBe(StatusContrato.EM_EXECUCAO);
+    expect(pedido.reabertoEm).toBeNull();
     expect(c.eventos[0].dadosAnteriores).toMatchObject({
-      status: StatusContrato.EM_EXECUCAO,
-      reabertoEm: new Date('2026-11-06T12:00:00Z'),
+      status: StatusContrato.EM_EXECUCAO, reabertoEm: new Date('2026-11-06T12:00:00Z'),
     });
+    c.repositorio.findOne.mockResolvedValue(pedido);
+    const revisao = await c.service.devolverParaRevisao(ID_CONTRATO, ator);
+    expect(revisao.status).toBe(StatusContrato.EM_EXECUCAO);
+    expect(revisao.reabertoEm).toBeInstanceOf(Date);
+    expect(revisao.encerramentoSolicitado).toBe(false);
+    expect(revisao.conclusaoSolicitadaEm).toBeNull();
+    expect(revisao.encerradoEm).toBeNull();
+    expect(revisao.motivoEncerramento).toBeNull();
+    expect(c.eventos[1].dadosPosteriores).toMatchObject({ motivo:'ENCERRAMENTO_DEVOLVIDO_PARA_REVISAO' });
   });
 
-  it('permite encerramento administrativo sem etapas, sem fabricar avanço físico', async () => {
+  it('permite solicitar encerramento administrativo sem etapas, sem fabricar avanço físico', async () => {
     const c = preparar(false);
-    const encerrado = await c.service.encerrarAntecipadamente(ID_CONTRATO,
+    const pedido = await c.service.encerrarAntecipadamente(ID_CONTRATO,
       'Interrupção contratual suficientemente justificada.', ator);
-    expect(encerrado.status).toBe(StatusContrato.ENCERRADO);
+    expect(pedido.status).toBe(PLANEJAMENTO);
+    expect(pedido.encerramentoSolicitado).toBe(true);
     expect(c.eventos).toHaveLength(1);
-    expect(c.eventos[0].dadosPosteriores).toMatchObject({ status: 'ENCERRADO' });
+    expect(c.eventos[0].dadosPosteriores).toMatchObject({ encerramentoSolicitado: true });
   });
 
   it('exige permissão granular de encerramento, independente da conclusão', async () => {

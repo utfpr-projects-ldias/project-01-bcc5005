@@ -4,8 +4,8 @@ import type { DadosContrato } from './contratos';
 /** Limites de UX alinhados aos DTOs do NestJS. Textos longos: convenção da equipe,
  * não limites estipulados pelo PRD; podem ser refinados com o cliente. */
 export const LIMITES_CONTRATO = {
-  numeroContrato: 25, processoAdministrativo: 25, orgaoContratante: 30,
-  unidadeResponsavel: 30, objeto: 50, descricao: 400,
+  numeroContrato: 25, processoAdministrativo: 32, orgaoContratante: 30,
+  unidadeResponsavel: 32, objeto: 50, descricao: 400,
   fiscalGestor: 25, observacoes: 200,
 } as const;
 
@@ -54,7 +54,7 @@ export type ErrosContrato = Partial<Record<keyof DadosContrato | 'meses', string
 export function validarContrato(dados: DadosContrato, inicial?: Partial<DadosContrato>):
   | { sucesso: true; dados: DadosContrato }
   | { sucesso: false; erros: ErrosContrato } {
-  const legado: Partial<Record<keyof DadosContrato, string>> = {};
+  const legado: Partial<Record<keyof typeof LIMITES_CONTRATO, string>> = {};
   const paraValidar = { ...dados };
   if (inicial) for (const chave of Object.keys(LIMITES_CONTRATO) as Array<keyof typeof LIMITES_CONTRATO>) {
     const atual = dados[chave];

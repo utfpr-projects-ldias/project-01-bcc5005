@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import type { DataSource, EntityManager, Repository } from 'typeorm';
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { OcorrenciasService } from './ocorrencias.service.js';
@@ -22,6 +23,7 @@ function ambiente(registrados = 13) {
   const repo = { findOne: jest.fn(async () => ocorrencia), save: jest.fn(async () => ocorrencia) };
   const auditoria = { registrarNaTransacao: jest.fn(async () => undefined) };
   const m = {
+    findOneBy: async (entidade: unknown) => entidade === Entregavel ? entregavel : null,
     getRepository: (entidade: unknown) => entidade === Ocorrencia ? repo : {
       findOneBy: async () => entidade === Entregavel ? entregavel : null,
     },

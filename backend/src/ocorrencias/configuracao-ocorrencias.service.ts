@@ -4,20 +4,13 @@ import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
 import { Contrato } from '../contratos/contrato.entity.js';
 import { Entregavel } from '../entregaveis/entregavel.entity.js';
+import { Etapa } from '../etapas/etapa.entity.js';
 import { TipoEntregavel } from '../entregaveis/tipo-entregavel.enum.js';
 import { PermissaoContrato } from '../autorizacao/permissao-contrato.entity.js';
 import { permissoesEfetivas } from '../autorizacao/permissoes-granulares.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
-import { Ocorrencia } from './ocorrencia.entity.js';
 import type { ConfigurarOcorrenciasDto } from './dto/configurar-ocorrencias.dto.js';
 import { ConfiguracaoOcorrencias } from './configuracao-ocorrencias.entity.js';
-
-const civil = (s: string | null | undefined): boolean => {
-  if (!s) return true;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
-  const d = new Date(`${s}T00:00:00Z`);
-  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
-};
 
 @Injectable()
 export class ConfiguracaoOcorrenciasService {
@@ -27,9 +20,9 @@ export class ConfiguracaoOcorrenciasService {
     const e = await this.ds.getRepository(Entregavel).findOneBy({ id: entregavelId, contratoId });
     if (!e) throw new NotFoundException('Entregável não encontrado neste contrato');
     const atual = await this.ds.getRepository(ConfiguracaoOcorrencias).findOneBy({ entregavelId, contratoId });
-    return { ...(atual ?? {}), entregavelId, contratoId, modoVisualizacao: e.tipo === TipoEntregavel.RECORRENTE ? 'CALENDARIO' as const : 'LISTA' as const, tipoOperacional: e.tipo, quantidadePrevista: e.quantidadePrevista,
+    return Object.assign({}, atual, { entregavelId, contratoId, modoVisualizacao: e.tipo === TipoEntregavel.RECORRENTE ? 'CALENDARIO' as const : 'LISTA' as const, tipoOperacional: e.tipo, quantidadePrevista: e.quantidadePrevista,
       unidadeMedida: e.unidadeMedida, periodicidade: e.periodicidade, inicioPrevisto: e.tipo === TipoEntregavel.RECORRENTE ? (e.agendaInicioFuturo ?? atual?.inicioPrevisto ?? e.inicioPrevisto) : e.inicioPrevisto,
-      terminoPrevisto: e.tipo === TipoEntregavel.RECORRENTE ? (atual?.terminoPrevisto ?? e.terminoPrevisto) : e.terminoPrevisto, atualizadoEm: atual?.atualizadoEm ?? null };
+      terminoPrevisto: e.tipo === TipoEntregavel.RECORRENTE ? (atual?.terminoPrevisto ?? e.terminoPrevisto) : e.terminoPrevisto, atualizadoEm: atual?.atualizadoEm ?? null });
   }
 
   async atualizar(contratoId: string, entregavelId: string, dto: ConfigurarOcorrenciasDto, ator: UsuarioAutenticado) {
@@ -39,7 +32,7 @@ export class ConfiguracaoOcorrenciasService {
       throw new BadRequestException('A visualização é definida automaticamente pelo tipo do entregável');
     return this.ds.transaction(async m => {
       const c = await m.findOne(Contrato, { where: { id: contratoId }, lock: { mode: 'pessimistic_write' } });
-      if (!c || c.arquivadoEm || !['PLANEJAMENTO', 'EM_EXECUCAO'].includes(c.status)) throw new ConflictException('Reabra ou retome o contrato antes de configurar ocorrências');
+      if (!c || c.arquivadoEm || c.conclusaoSolicitadaEm || !['PLANEJAMENTO', 'EM_EXECUCAO'].includes(c.status)) throw new ConflictException('Reabra ou retome o contrato antes de configurar ocorrências');
       if (ator.perfil !== 'ADMINISTRADOR') {
         const v = await m.findOneBy(PermissaoContrato, { contratoId, usuarioId: ator.id });
         const p = permissoesEfetivas(ator.perfil, Boolean(v?.podeEditar), v?.permissoesDetalhadas);
@@ -48,7 +41,9 @@ export class ConfiguracaoOcorrenciasService {
       }
       const e = await m.findOne(Entregavel, { where: { id: entregavelId, contratoId }, lock: { mode: 'pessimistic_write' } });
       if (!e) throw new NotFoundException('Entregável não encontrado neste contrato');
-      if (e.arquivadoEm || ['CONCLUIDO','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? '')) throw new ConflictException('Reabra o entregável antes de configurar ocorrências');
+      const etapa = await m.findOneBy(Etapa,{id:e.etapaId,contratoId});
+      if (!etapa || etapa.arquivadoEm || etapa.conclusaoSolicitadaEm || etapa.encerramentoSolicitadoEm || ['CONCLUIDA','CONCLUIDO_PARCIALMENTE','ENCERRADA','FINALIZADA'].includes(etapa.status)) throw new ConflictException('Reabra a etapa antes de configurar ocorrências');
+      if (e.arquivadoEm || e.regularizacaoDocumentalSolicitada || ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? '')) throw new ConflictException('Reabra o entregável antes de configurar ocorrências');
       if (dto.tipoOperacional !== e.tipo ||
           (dto.quantidadePrevista ?? null) !== (e.quantidadePrevista ?? null) ||
           (dto.unidadeMedida ?? null) !== (e.unidadeMedida ?? null) ||

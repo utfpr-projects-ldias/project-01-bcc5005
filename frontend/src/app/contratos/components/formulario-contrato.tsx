@@ -1,6 +1,8 @@
 'use client';
+import { CampoDataCivil } from '@/app/components/campo-data-civil';
 
 import Link from 'next/link';
+import { SeletorResponsavel } from './seletor-responsavel';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import type { UsuarioPublico } from '@/lib/admin-usuarios';
 import { LIMITES_CONTRATO, duracaoMesesSchema, validarContrato, type ErrosContrato } from '@/lib/validacao-contrato';
@@ -23,13 +25,13 @@ function Campo({ titulo, id, obrigatorio = false, ajuda, erro, contador, childre
   contador?: { valor: number; max: number }; children: ReactNode;
 }) {
   return <div className="min-w-0 space-y-1">
-    <label htmlFor={id} className={label}>{titulo}{obrigatorio ? ' *' : ''}</label>
+    {titulo && <label htmlFor={id} className={label}>{titulo}{obrigatorio ? ' *' : ''}</label>}
     {children}
-    <div className="flex flex-wrap items-start justify-between gap-2">
-      <div>{ajuda && <p id={`${id}-ajuda`} className="text-xs text-foreground/60">{ajuda}</p>}
+    {(ajuda || erro || contador) && <div className="flex min-w-0 items-start justify-between gap-2">
+      <div className="min-w-0 flex-1">{ajuda && <p id={`${id}-ajuda`} className="text-xs text-foreground/60">{ajuda}</p>}
         {erro && <p id={`${id}-erro`} role="alert" className="text-xs text-error-text">{erro}</p>}</div>
-      {contador && <span className="text-xs tabular-nums text-foreground/55">{contador.valor}/{contador.max}</span>}
-    </div>
+      {contador && <span className="shrink-0 whitespace-nowrap text-right text-xs tabular-nums text-foreground/55">{contador.valor}/{contador.max}</span>}
+    </div>}
   </div>;
 }
 
@@ -58,15 +60,13 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
   // (conta inativa, lista parcial ou gestor sem permissão de administração).
   // A interface usa o estado neutro, mas preserva o ID original até que o
   // usuário altere explicitamente o campo: editar outros dados não apaga vínculos.
-  const responsavelSelecionavel = !form.responsavelInternoId ||
-    responsaveis.some(usuario => usuario.id === form.responsavelInternoId);
-  const responsavelExibido = responsavelSelecionavel ? (form.responsavelInternoId ?? '') : '';
+
   // Uma única coleção com chaves estáveis evita misturar arrays e opções avulsas no select.
   const statusDisponiveis: StatusContrato[] = !inicial ? ['PLANEJAMENTO', 'EM_EXECUCAO']
     : inicial.status === 'CANCELADO'
       ? (podeReverter ? ['CANCELADO', 'PLANEJAMENTO'] : ['CANCELADO'])
       : [
-          ...(somenteSituacao ? [inicial.status] : [...(['PLANEJAMENTO', 'EM_EXECUCAO'] as StatusContrato[]), ...(inicial.status === 'EM_ENCERRAMENTO' ? ['EM_ENCERRAMENTO' as const] : [])]),
+          ...(somenteSituacao ? [inicial.status] : (['PLANEJAMENTO', 'EM_EXECUCAO'] as StatusContrato[])),
           ...(podeSuspender ? ['SUSPENSO' as const] : []),
           ...(podeEncerrar ? ['ENCERRADO' as const] : []),
           ...(podeCancelar ? ['CANCELADO' as const] : []),
@@ -137,13 +137,12 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
         className="rounded-lg bg-brand-green px-4 py-2 font-semibold text-on-brand-green disabled:opacity-40">Continuar</button>
     </div>
   </form>;
-  return <form data-tec08-formulario-contextual data-tec08-edicao={inicial ? "true" : undefined} data-tec08-criacao={inicial ? undefined : "true"} noValidate onSubmit={e => void enviar(e)} className="space-y-3" aria-label={inicial ? 'Editar dados do contrato' : 'Cadastrar contrato'}>
-    <div className="rounded-2xl border border-brand-green/25 bg-brand-darkgreen/10 p-3 sm:p-4 space-y-3">
-      <div><h2 className="text-lg font-semibold text-brand-neon">Identificação do contrato</h2>
-        <p className="mt-1 text-sm text-foreground/65">Dados administrativos. Campos com * são obrigatórios.</p></div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <Campo titulo="Número do contrato" id="numero" obrigatorio erro={erroDo('numeroContrato')} ajuda="Identificador administrativo conforme o instrumento contratual." contador={{ valor: form.numeroContrato.length, max: LIMITES_CONTRATO.numeroContrato }}>
-          <input id="numero" className={input} inputMode="numeric" pattern="[0-9]*" maxLength={LIMITES_CONTRATO.numeroContrato} value={form.numeroContrato} onChange={e => atualizar('numeroContrato', e.target.value.replace(/\D/g, ''))} {...acessibilidade('numero', 'numeroContrato', true)} /></Campo>
+  return <form data-tec08-formulario-contextual data-tec08-edicao={inicial ? "true" : undefined} data-tec08-criacao={inicial ? undefined : "true"} noValidate onSubmit={e => void enviar(e)} className="pi-form-contrato space-y-3" aria-label={inicial ? 'Editar dados do contrato' : 'Cadastrar contrato'}>
+    <div className="pi-grupo-formulario space-y-2">
+      <div><h2 className="pi-titulo-formulario">Identificação</h2></div>
+      <div className="pi-contrato-identificacao grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(9rem,.75fr)_minmax(0,1fr)_minmax(0,1.4fr)]">
+        <Campo titulo="Número do contrato" id="numero" obrigatorio erro={erroDo('numeroContrato')} contador={{ valor: form.numeroContrato.length, max: LIMITES_CONTRATO.numeroContrato }}>
+          <input id="numero" className={input} inputMode="numeric" pattern="[0-9]*" maxLength={LIMITES_CONTRATO.numeroContrato} value={form.numeroContrato} onChange={e => atualizar('numeroContrato', e.target.value.replace(/\D/g, ''))} {...acessibilidade('numero', 'numeroContrato')} /></Campo>
         <Campo titulo="Órgão contratante" id="orgao" obrigatorio erro={erroDo('orgaoContratante')} contador={{ valor: form.orgaoContratante.length, max: LIMITES_CONTRATO.orgaoContratante }}>
           <input id="orgao" className={input} maxLength={LIMITES_CONTRATO.orgaoContratante} value={form.orgaoContratante} onChange={e => atualizar('orgaoContratante', e.target.value)} {...acessibilidade('orgao', 'orgaoContratante')} /></Campo>
         <Campo titulo="Objeto" id="objeto" obrigatorio erro={erroDo('objeto')} contador={{ valor: form.objeto.length, max: LIMITES_CONTRATO.objeto }}>
@@ -151,25 +150,36 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
       </div>
     </div>
 
-    <fieldset className="space-y-3 rounded-2xl border border-brand-green/25 bg-brand-darkgreen/10 p-3 sm:p-4">
-      <legend className="px-2 text-lg font-semibold text-brand-neon">Vigência</legend>
-      <p className="text-sm text-foreground/65">Informe início e término. Como alternativa, calcule a data de término pela duração em meses.</p>
+    <div className="pi-form-contrato-planejamento">    <div className="pi-grupo-formulario space-y-2">
+      <h2 className="pi-titulo-formulario">Situação operacional</h2>
+      <div className="max-w-xs">
+        <Campo titulo="Status operacional" id="status" obrigatorio ajuda={emRevisao ? 'Fase operacional durante a revisão.' : inicial ? 'Situações especiais exigem autorização. Concluído depende de aprovação separada.' : 'O novo contrato começa em Planejamento ou Em execução.'} erro={erroDo('status')}>
+          <select id="status" className={input} value={valorSelectStatus} onChange={e => selecionarStatus(e.target.value as StatusContrato)} {...acessibilidade('status', 'status', true)}>{statusDisponiveis.map(k => <option key={`contrato-status-${k}`} value={k}>{k === 'ENCERRADO' ? 'Encerrar' : STATUS[k]}</option>)}</select></Campo>
+
+      </div>
+      <p className="text-xs text-foreground/65">
+        A média e os pesos podem ser configurados em Editar execução, no painel do contrato.
+      </p>
+    </div>
+<fieldset className="min-w-0 space-y-2">
+      <legend className="pi-titulo-formulario">Vigência</legend>
+
       <div className="flex flex-wrap gap-2" role="group" aria-label="Modo da vigência">
         <button type="button" aria-pressed={modo === 'data'} onClick={() => { setModo('data'); setErros({}); }} className={`rounded-lg border px-3 py-2 text-sm ${modo === 'data' ? 'border-brand-green bg-brand-green/10 font-semibold' : 'border-brand-green/30'}`}>Informar término</button>
         <button type="button" aria-pressed={modo === 'meses'} onClick={() => { setModo('meses'); setTerminoManualConfirmado(false); setErros({}); }} className={`rounded-lg border px-3 py-2 text-sm ${modo === 'meses' ? 'border-brand-green bg-brand-green/10 font-semibold' : 'border-brand-green/30'}`}>Duração em meses</button>
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="pi-datas-pareadas">
         <Campo titulo="Início da vigência" id="inicio" obrigatorio erro={erroDo('inicioVigencia')}>
-          <input id="inicio" type="date" className={input} value={form.inicioVigencia} onChange={e => atualizar('inicioVigencia', e.target.value)} {...acessibilidade('inicio', 'inicioVigencia')} /></Campo>
+          <CampoDataCivil id="inicio" className={input} value={form.inicioVigencia} onChange={e => atualizar('inicioVigencia', e.target.value)} {...acessibilidade('inicio', 'inicioVigencia')} /></Campo>
         {modo === 'data' ? <Campo titulo="Término da vigência" id="fim" obrigatorio erro={erroDo('terminoVigencia')}>
-          <input id="fim" type="date" className={input} min={form.inicioVigencia || undefined} value={form.terminoVigencia} onChange={e => atualizar('terminoVigencia', e.target.value)} {...acessibilidade('fim', 'terminoVigencia')} /></Campo> :
+          <CampoDataCivil id="fim" className={input} min={form.inicioVigencia || undefined} value={form.terminoVigencia} onChange={e => atualizar('terminoVigencia', e.target.value)} {...acessibilidade('fim', 'terminoVigencia')} /></Campo> :
           <Campo titulo="Duração em meses" id="meses" obrigatorio erro={erros.meses} ajuda="O término é calculado considerando vigência inclusiva.">
             <input id="meses" type="number" min={1} max={1200} step={1} className={input} value={meses} onChange={e => { setMeses(e.target.value); setTerminoManualConfirmado(false); setErros(v => ({ ...v, meses: undefined })); }} aria-invalid={!!erros.meses} aria-describedby={erros.meses ? 'meses-erro' : 'meses-ajuda'} /></Campo>}
       </div>
       {modo === 'meses' && (calculado ? <p role="status" className="text-sm text-foreground/75">Término calculado: <strong>{calculado.split('-').reverse().join('/')}</strong> (vigência inclusiva).</p> :
         <p className="text-sm text-amber-600 dark:text-amber-300">Para mês curto, fim de mês ou data ainda inválida, informe a data final quando disponível. A convenção para casos ambíguos depende de decisão do cliente.</p>)}
       {fimAmbiguo && <Campo titulo="Data de término explícita" id="fim-manual" obrigatorio erro={erroDo('terminoVigencia')}>
-        <input id="fim-manual" type="date" className={input} min={form.inicioVigencia || undefined} value={form.terminoVigencia}
+        <CampoDataCivil id="fim-manual" className={input} min={form.inicioVigencia || undefined} value={form.terminoVigencia}
           onChange={e => { atualizar('terminoVigencia', e.target.value); setTerminoManualConfirmado(Boolean(e.target.value)); }}
           {...acessibilidade('fim-manual', 'terminoVigencia')} />
         {Boolean(form.terminoVigencia) && <label className="mt-2 flex items-start gap-2 text-xs text-foreground/80">
@@ -179,44 +189,32 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
         </label>}</Campo>}
     </fieldset>
 
-    <div className="rounded-2xl border border-brand-green/25 bg-brand-darkgreen/10 p-3 sm:p-4 space-y-3">
-      <h2 className="text-lg font-semibold text-brand-neon">Situação e acompanhamento físico</h2>
-      <div className="grid gap-4 md:grid-cols-2">
-        <Campo titulo="Status operacional" id="status" obrigatorio ajuda={emRevisao ? 'Fase operacional durante a revisão.' : inicial ? 'Situações especiais exigem autorização. Concluído depende de aprovação separada.' : 'O novo contrato começa em Planejamento ou Em execução.'} erro={erroDo('status')}>
-          <select id="status" className={input} value={valorSelectStatus} onChange={e => selecionarStatus(e.target.value as StatusContrato)} {...acessibilidade('status', 'status', true)}>{statusDisponiveis.map(k => <option key={`contrato-status-${k}`} value={k}>{k === 'ENCERRADO' ? 'Encerrar' : STATUS[k]}</option>)}</select></Campo>
+</div>
 
-      </div>
-      <p className="rounded-lg border border-brand-green/20 p-3 text-xs text-foreground/70">
-        O cálculo físico é configurado na aba Execução, conforme as permissões operacionais do contrato.
-      </p>
-    </div>
-
-    <details open className="group rounded-2xl border border-brand-green/25 bg-brand-darkgreen/10 p-3 sm:p-4">
-      <summary className="cursor-pointer text-lg font-semibold text-brand-neon focus-visible:outline-2 focus-visible:outline-brand-green">Informações complementares <span className="text-xs font-normal text-foreground/60">(opcionais)</span></summary>
+    <details open={Boolean(erroDo('processoAdministrativo')||erroDo('unidadeResponsavel')||erroDo('dataAssinatura')||erroDo('fiscalGestor')||erroDo('responsavelInternoId')||erroDo('descricao')||erroDo('observacoes')) || undefined} className="pi-grupo-formulario pi-contrato-complementares group">
+      <summary className="pi-titulo-formulario cursor-pointer focus-visible:outline-2 focus-visible:outline-brand-green">Informações complementares <span className="text-xs font-normal text-foreground/60">(opcionais)</span></summary>
       <div className="mt-3 space-y-3">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="pi-contrato-dados-complementares">
           <Campo titulo="Processo administrativo" id="processo" erro={erroDo('processoAdministrativo')} contador={{ valor: (form.processoAdministrativo ?? '').length, max: LIMITES_CONTRATO.processoAdministrativo }}>
             <input id="processo" className={input} maxLength={LIMITES_CONTRATO.processoAdministrativo} value={form.processoAdministrativo ?? ''} onChange={e => atualizar('processoAdministrativo', e.target.value || null)} {...acessibilidade('processo', 'processoAdministrativo')} /></Campo>
-          <Campo titulo="Unidade responsável" id="unidade" erro={erroDo('unidadeResponsavel')} ajuda="Setor ou unidade interna responsável pela gestão do contrato." contador={{ valor: (form.unidadeResponsavel ?? '').length, max: LIMITES_CONTRATO.unidadeResponsavel }}>
-            <input id="unidade" className={input} maxLength={LIMITES_CONTRATO.unidadeResponsavel} value={form.unidadeResponsavel ?? ''} onChange={e => atualizar('unidadeResponsavel', e.target.value || null)} {...acessibilidade('unidade', 'unidadeResponsavel', true)} /></Campo>
-          <Campo titulo="Data de assinatura" id="assinatura" erro={erroDo('dataAssinatura')} ajuda="Data de formalização do contrato. Preenchimento opcional.">
-            <input id="assinatura" type="date" className={input} value={form.dataAssinatura ?? ''} onChange={e => atualizar('dataAssinatura', e.target.value || null)} {...acessibilidade('assinatura', 'dataAssinatura', true)} /></Campo>
+          <Campo titulo="Unidade responsável" id="unidade" erro={erroDo('unidadeResponsavel')} contador={{ valor: (form.unidadeResponsavel ?? '').length, max: LIMITES_CONTRATO.unidadeResponsavel }}>
+            <input id="unidade" className={input} maxLength={LIMITES_CONTRATO.unidadeResponsavel} value={form.unidadeResponsavel ?? ''} onChange={e => atualizar('unidadeResponsavel', e.target.value || null)} {...acessibilidade('unidade', 'unidadeResponsavel')} /></Campo>
+          <Campo titulo="Data de assinatura" id="assinatura" erro={erroDo('dataAssinatura')}>
+            <CampoDataCivil id="assinatura" className={input} value={form.dataAssinatura ?? ''} onChange={e => atualizar('dataAssinatura', e.target.value || null)} {...acessibilidade('assinatura', 'dataAssinatura')} /></Campo>
           <Campo titulo="Fiscal/gestor público" id="fiscal" erro={erroDo('fiscalGestor')} ajuda="Identificação informativa do representante público; não cria usuário nem acesso externo." contador={{ valor: (form.fiscalGestor ?? '').length, max: LIMITES_CONTRATO.fiscalGestor }}>
             <input id="fiscal" className={input} maxLength={LIMITES_CONTRATO.fiscalGestor} value={form.fiscalGestor ?? ''} onChange={e => atualizar('fiscalGestor', e.target.value || null)} {...acessibilidade('fiscal', 'fiscalGestor', true)} /></Campo>
-          <Campo titulo="Responsável pelo contrato (opcional)" id="responsavel" erro={erroDo('responsavelInternoId')} ajuda="Essa pessoa poderá consultar o contrato. Para permitir alterações, configure o acesso em Funcionários.">
-            <select id="responsavel" className={input} disabled={!podeDefinirResponsavel} value={responsavelExibido} onChange={e => atualizar('responsavelInternoId', e.target.value || null)} {...acessibilidade('responsavel', 'responsavelInternoId', true)}>
-              <option value="">Não atribuído</option>
-              {responsaveis.map(u => <option key={u.id} value={u.id}>{u.email}</option>)}</select></Campo>
+          <Campo titulo="" id="responsavel" erro={erroDo('responsavelInternoId')} ajuda="Essa pessoa poderá consultar o contrato">
+            <SeletorResponsavel id="responsavel" valor={form.responsavelInternoId} itens={responsaveis.filter(usuario => usuario.ativo)}
+              desabilitado={!podeDefinirResponsavel} onChange={id => atualizar('responsavelInternoId', id)} /></Campo>
         </div>
-        <div className="grid gap-3 md:grid-cols-2"><Campo titulo="Descrição" id="descricao" erro={erroDo('descricao')} ajuda="Detalhamento adicional do objeto e do contexto do contrato." contador={{ valor: (form.descricao ?? '').length, max: LIMITES_CONTRATO.descricao }}>
-          <textarea id="descricao" rows={2} className={input} maxLength={LIMITES_CONTRATO.descricao} value={form.descricao ?? ''} onChange={e => atualizar('descricao', e.target.value || null)} {...acessibilidade('descricao', 'descricao', true)} /></Campo>
-        <Campo titulo="Observações" id="observacoes" erro={erroDo('observacoes')} ajuda="Anotações administrativas complementares, sem dados financeiros estruturados." contador={{ valor: (form.observacoes ?? '').length, max: LIMITES_CONTRATO.observacoes }}>
-          <textarea id="observacoes" rows={2} className={input} maxLength={LIMITES_CONTRATO.observacoes} value={form.observacoes ?? ''} onChange={e => atualizar('observacoes', e.target.value || null)} {...acessibilidade('observacoes', 'observacoes', true)} /></Campo></div>
+        <div className="grid gap-3 md:grid-cols-2"><Campo titulo="Descrição" id="descricao" erro={erroDo('descricao')} contador={{ valor: (form.descricao ?? '').length, max: LIMITES_CONTRATO.descricao }}>
+          <textarea id="descricao" rows={4} className={input} maxLength={LIMITES_CONTRATO.descricao} value={form.descricao ?? ''} onChange={e => atualizar('descricao', e.target.value || null)} {...acessibilidade('descricao', 'descricao', true)} /></Campo>
+        <Campo titulo="Observações" id="observacoes" erro={erroDo('observacoes')} contador={{ valor: (form.observacoes ?? '').length, max: LIMITES_CONTRATO.observacoes }}>
+          <textarea id="observacoes" rows={4} className={input} maxLength={LIMITES_CONTRATO.observacoes} value={form.observacoes ?? ''} onChange={e => atualizar('observacoes', e.target.value || null)} {...acessibilidade('observacoes', 'observacoes')} /></Campo></div>
       </div>
     </details>
-    <p role="note" className="rounded-xl border border-brand-green/20 p-3 text-sm text-foreground/70">O contrato será salvo primeiro. Em seguida, você poderá anexar o PDF principal e outros documentos classificados, sem exigir arquivo no cadastro.</p>
     {erroGeral && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-error-text">{erroGeral}</p>}
-    <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-brand-green/20 px-1 pt-4 pb-2">
+    <div className="pi-rodape-formulario flex flex-wrap items-center justify-end gap-2 border-t border-current/15 pt-3">
       {onCancelar ? <button type="button" onClick={onCancelar} disabled={salvando} className="inline-flex min-h-9 cursor-pointer items-center rounded-lg border border-brand-green/35 px-3 py-2 text-sm font-medium text-foreground transition-colors hover:border-brand-green/65 hover:bg-brand-green/10 focus-visible:outline-2 focus-visible:outline-brand-neon disabled:cursor-not-allowed disabled:opacity-50">Cancelar</button> :
         <Link href={inicial ? `/contratos/${encodeURIComponent(inicial.id)}` : '/contratos'} className="inline-flex min-h-9 cursor-pointer items-center rounded-lg border border-brand-green/35 px-3 py-2 text-sm font-medium text-foreground transition-colors hover:border-brand-green/65 hover:bg-brand-green/10 focus-visible:outline-2 focus-visible:outline-brand-neon">Cancelar</Link>}
       <button type="submit" data-tec08-salvar-contextual aria-busy={salvando} disabled={salvando} className="inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border border-brand-green/70 bg-brand-green px-3 py-2 text-sm font-semibold text-on-brand-green transition-[filter,transform,box-shadow] hover:brightness-110 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-brand-neon disabled:cursor-not-allowed disabled:opacity-50">

@@ -6,6 +6,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { SessaoSuperTokensService } from '../src/autorizacao/sessao-supertokens.service.js';
 import { UsuariosService } from '../src/usuarios/usuarios.service.js';
+import { PoliticaAcessoService } from '../src/autorizacao/politica-acesso.service.js';
 import { ContratosService } from '../src/contratos/contratos.service.js';
 import { PerfilUsuario } from '../src/usuarios/perfil-usuario.enum.js';
 
@@ -23,7 +24,7 @@ describe('Contratos API — validação e autorização HTTP', () => {
   const consultarAcesso = jest.fn<(...args: unknown[]) => Promise<unknown>>();
   const idContrato = '11111111-1111-4111-8111-111111111111';
   const body = {
-    numeroContrato: '2026/001',
+    numeroContrato: '2026001',
     orgaoContratante: 'UTFPR',
     objeto: 'Prestação de serviços',
     inicioVigencia: '2026-10-17',
@@ -37,6 +38,8 @@ describe('Contratos API — validação e autorização HTTP', () => {
       .overrideProvider(SessaoSuperTokensService).useValue({ identificar })
       .overrideProvider(UsuariosService).useValue({ buscarAtivoPorSupertokensId: usuario })
       .overrideProvider(ContratosService).useValue({ criar, listar, detalhar, atualizar, consultarAcesso })
+      // E2E HTTP: produção da ACL é testada isoladamente; não acesse PostgreSQL aqui.
+      .overrideProvider(PoliticaAcessoService).useValue({ permitido: async () => true })
       .compile();
     app = fixture.createNestApplication();
     await app.init();
@@ -95,6 +98,8 @@ describe('Contratos API — validação e autorização HTTP', () => {
   it('400: dados financeiros extras e enum inválido são rejeitados', async () => {
     await request(app.getHttpServer()).post('/contratos')
       .send({ ...body, valorContrato: 100 }).expect(400);
+    await request(app.getHttpServer()).post('/contratos')
+      .send({ ...body, numeroContrato: '2026/001' }).expect(400);
     await request(app.getHttpServer()).post('/contratos')
       .send({ ...body, status: 'DESCONHECIDO' }).expect(400);
     expect(criar).not.toHaveBeenCalled();

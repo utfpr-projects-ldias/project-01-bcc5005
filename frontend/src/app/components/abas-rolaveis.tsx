@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 
 /** Aba horizontal com navegação por grupos; nunca quebra nem corta definitivamente os itens.
  * A rolagem por toque/trackpad continua disponível e as setas são controles acessíveis. */
@@ -16,7 +16,7 @@ export function AbasRolaveis({ children, className = '' }: { children: ReactNode
     const atual = max > 0 ? Math.max(0, Math.min(total - 1, Math.round(elemento.scrollLeft / max * (total - 1)))) : 0;
     setPosicao(anterior => anterior.total === total && anterior.atual === atual ? anterior : { total, atual });
   }, []);
-  useEffect(() => {
+  useLayoutEffect(() => {
     atualizar();
     const elemento = faixa.current;
     if (!elemento) return;

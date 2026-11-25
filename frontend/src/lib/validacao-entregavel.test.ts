@@ -13,7 +13,7 @@ test('todos os cinco tipos são aceitos com seus parâmetros específicos; sem p
       expect(resultado.dados.tipo).toBe(tipo);
       expect(resultado.dados).not.toHaveProperty('percentualExecucao');
       expect(resultado.dados).not.toHaveProperty('situacaoComprovacao');
-      expect(resultado.dados.configuracaoPeriodicidade).toEqual(tipo === 'RECORRENTE' ? { versao: 1 } : null);
+      expect(resultado.dados.configuracaoPeriodicidade).toEqual(tipo === 'RECORRENTE' ? { versao: 1, modoRegistro: 'DESCRITIVO' } : null);
     }
   }
 });
@@ -66,7 +66,7 @@ test('alteração estrutural é detectada e não presume replanejamento autoriza
   const inicial = { ...inicialEntregavel('etapa-a'), ...r, id: 'ent-1', contratoId: 'c-1',
     quantidadePrevista: null, quantidadeRealizada: null, unidadeMedida: null, peso: null, periodicidade: 'MENSAL',
     codigo: null, descricao: null, responsavelId: null, inicioPrevisto: r.inicioPrevisto, terminoPrevisto: r.terminoPrevisto,
-    criterioConclusao: null, observacoes: null, configuracaoPeriodicidade: { versao: 1 },
+    criterioConclusao: null, observacoes: null, configuracaoPeriodicidade: { versao: 1, modoRegistro: 'DESCRITIVO' },
     statusExecucao: null, percentualExecucao: null, situacaoComprovacao: null, evidenciasEsperadas: [],
   } as Entregavel;
   expect(mudouEstrutura(r, inicial)).toBe(false);
@@ -119,4 +119,13 @@ test('peso novo não pode ser zero, mas peso legado zero pode permanecer inalter
   const convertido = validarEntregavel(r);
   expect(convertido.sucesso).toBe(true);
   if (convertido.sucesso) expect(convertido.dados.peso).toBe('20.50');
+});
+
+test('recorrente quantitativo exige unidade e preserva a modalidade no planejamento', () => {
+  const r = modelo('RECORRENTE'); r.periodicidade = 'MENSAL'; r.modoRecorrente = 'QUANTITATIVO';
+  expect(validarEntregavel(r).sucesso).toBe(false);
+  r.unidadeMedida = 'computadores';
+  const v = validarEntregavel(r);
+  expect(v.sucesso).toBe(true);
+  if (v.sucesso) expect(v.dados.configuracaoPeriodicidade).toEqual({versao:1, modoRegistro:'QUANTITATIVO'});
 });

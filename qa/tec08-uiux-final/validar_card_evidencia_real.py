@@ -52,6 +52,8 @@ def testar(contas, visivel):
             titulo = 'Obrigação de QA ' + referencia[-8:]
             entrega = base.api(pagina, f'/contratos/{contrato}/entregaveis', 'POST', {
                 'etapaId': etapa['body']['id'], 'nome': titulo, 'tipo': 'UNICO',
+                'inicioPrevisto': '2026-11-10',
+                'peso': '1.0000',
                 'evidenciasEsperadas': [
                     {'tipoEvidencia': 'Relatório de QA', 'descricao': 'Documento demonstrativo', 'obrigatoria': True},
                     {'tipoEvidencia': 'Fotografia de QA', 'descricao': 'Documento opcional', 'obrigatoria': False},
@@ -81,7 +83,11 @@ def testar(contas, visivel):
             cartao.click()
             pai = pagina.get_by_role('dialog', name=titulo, exact=True, include_hidden=True)
             pai.wait_for(state='visible', timeout=15000)
-            assert pai.get_by_role('tablist', name='Consultar evidências').first.get_by_role('tab', name='Evidências', exact=True).is_visible()
+            rel['etapaAtual'] = 'Validar aba Ativas do checklist no detalhe do entregável'
+            aba_ativas = pai.get_by_role('tablist', name='Consultar evidências').first.get_by_role('tab', name='Ativas', exact=True)
+            aba_ativas.wait_for(state='visible', timeout=15000)
+            base.exigir(aba_ativas.get_attribute('aria-selected') == 'true',
+                        'A aba Ativas não está selecionada ao abrir o entregável')
             # Eventos vinculados ao contrato raiz: não expor JSONB bruto.
             historico = base.api(pagina, f'/contratos/{contrato}/entregaveis/{item["id"]}/historico')
             base.aceitar(historico['status'], {200}, 'Histórico do entregável autorizado')
@@ -94,6 +100,7 @@ def testar(contas, visivel):
             rel['provas'].append('Histórico do entregável separado e autorizado por contrato')
             # Clique diretamente no canto esquerdo do card; o botão invisível
             # deve ocupar a superfície toda, sem eliminar o botão Arquivar.
+            rel['etapaAtual'] = 'Abrir cartão de evidência em modo de consulta'
             botao = pai.get_by_role('button', name='Ver detalhes da evidência esperada Relatório de QA')
             botao.wait_for(timeout=15000)
             botao.click(position={'x': 4, 'y': 4})
@@ -105,14 +112,16 @@ def testar(contas, visivel):
                         'Área de comprovação indisponível no modal filho')
             filha.get_by_test_id('status-verificacao').get_by_text('Aguardando envio').wait_for(timeout=15000)
             rel['provas'].append('Card inteiro abre camada aninhada, estado inicial e isolamento ARIA')
-            # O clique no cartão é apenas consulta, inclusive para administradores.
-            base.exigir(filha.get_by_role('button', name='Anexar comprovante').count() == 0,
-                        'Modal de consulta expôs anexação sem clicar no lápis')
+            # Anexação direta sem alternar um modo global de edição.
+            filha.get_by_role('button', name='Anexar comprovante').wait_for(state='visible', timeout=15000)
+            base.exigir(filha.get_by_role('button', name='Editar evidência Relatório de QA').count() == 0,
+                        'Edição geral redundante ainda presente')
             filha.get_by_role('button', name='Fechar evidência').click()
             filha.wait_for(state='hidden', timeout=15000)
-            pai.get_by_role('button', name='Editar evidência Relatório de QA').click()
+            pai.get_by_role('button', name='Ver detalhes da evidência esperada Relatório de QA').click()
             filha = pagina.get_by_role('dialog', name='Relatório de QA', exact=True)
             filha.wait_for(state='visible', timeout=15000)
+            filha.get_by_role('button', name='Anexar comprovante').wait_for(state='visible', timeout=15000)
             # O clipe já abre o seletor nativo; o formulário é montado
             # depois da seleção, não antes. Helper coberto por unit tests.
             rel['etapaAtual']='Anexar primeiro comprovante pela seleção de arquivo'
@@ -146,7 +155,7 @@ def testar(contas, visivel):
             base.exigir(pai.is_visible(), 'Voltar do navegador fechou o entregável em vez da evidência')
             rel['provas'].append('Voltar do navegador/mouse fecha somente a evidência')
             # Evidência verificada migra para a aba Concluídas, sem duplicar cartão na lista ativa.
-            pai.get_by_role('tablist', name='Consultar evidências').first.get_by_role('tab', name='Evidências concluídas').click()
+            pai.get_by_role('tablist', name='Consultar evidências').first.get_by_role('tab', name='Evidências finalizadas').click()
             botao_concluido = pai.get_by_role('button', name='Ver detalhes da evidência esperada Relatório de QA')
             botao_concluido.wait_for(state='visible', timeout=15000)
             botao_concluido.click()

@@ -1,12 +1,11 @@
-import { aptidaoFisicaParaConclusao } from './conclusao-fisica.js';
+import { validarContribuicaoEvidencia } from './quantidade-evidencias.js';
+import { validarSaldoParcelas } from '../execucao/parcelas-execucao.js';
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager, Not, IsNull } from 'typeorm';
 import { Contrato } from '../contratos/contrato.entity.js';
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
-import { documentacaoVerificada, concluirEtapaAposFilhos } from './conclusao-documental.js';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
-import { StatusExecucaoEntregavel } from './status-execucao-entregavel.enum.js';
 import { Entregavel } from './entregavel.entity.js';
 import { Etapa } from '../etapas/etapa.entity.js';
 import { EvidenciaEsperada } from './evidencia-esperada.entity.js';
@@ -21,9 +20,10 @@ export class ArquivamentoPlanejamentoService {
     const contrato = await m.getRepository(Contrato).createQueryBuilder('c')
       .setLock('pessimistic_write').where('c.id = :id', { id: contratoId }).getOne();
     if (!contrato) throw new NotFoundException('Contrato não encontrado');
+    if (contrato.conclusaoSolicitadaEm) throw new ConflictException('Resolva a solicitação do contrato antes de alterar o planejamento');
+    if (['SUSPENSO','CANCELADO'].includes(contrato.status)) throw new ConflictException('Contrato suspenso ou cancelado: alteração não permitida');
     if (contrato.arquivadoEm) throw new ConflictException('Reative o contrato antes de alterar seu planejamento');
-    if ((contrato.status === 'CONCLUIDO' || contrato.status === 'ENCERRADO') ||
-      (contrato.reabertoEm === null && await documentacaoVerificada(m, contratoId)))
+    if (((contrato.status === 'CONCLUIDO' || contrato.status === 'CONCLUIDO_PARCIALMENTE') || contrato.status === 'ENCERRADO' || contrato.status === 'FINALIZADO'))
       throw new ConflictException('Reabra o contrato concluído antes de alterar seu planejamento');
   }
 
@@ -31,8 +31,9 @@ export class ArquivamentoPlanejamentoService {
     if (!e.etapaId) return; // fixtures de teste antigos
     const etapa = await m.getRepository(Etapa).findOneBy({ id: e.etapaId, contratoId: e.contratoId });
     if (!etapa) throw new NotFoundException('Etapa não encontrada');
+    if (etapa.conclusaoSolicitadaEm || etapa.encerramentoSolicitadoEm) throw new ConflictException('Resolva a solicitação da etapa antes de alterar o planejamento');
     if (etapa.arquivadoEm) throw new ConflictException('Etapa arquivada: reative-a antes de alterar seus descendentes');
-    if ((etapa.status === 'CONCLUIDA' || etapa.status === 'ENCERRADA') && !etapa.reabertoEm)
+    if ((['CONCLUIDA', 'CONCLUIDO_PARCIALMENTE', 'ENCERRADA', 'FINALIZADA'].includes(etapa.status)) && !etapa.reabertoEm)
       throw new ConflictException('Reabra a etapa concluída antes de alterar seus descendentes');
   }
 
@@ -43,10 +44,19 @@ export class ArquivamentoPlanejamentoService {
       const e = await repo.findOneBy({ contratoId, id });
       if (!e) throw new NotFoundException('Entregável não encontrado neste contrato');
       await this.etapaAtiva(m, e);
+      if (['PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao??'') || e.regularizacaoDocumentalSolicitada) throw new ConflictException('Resolva a solicitação do entregável antes de arquivar ou reativar');
       if (Boolean(e.arquivadoEm) === arquivar) throw new ConflictException(arquivar ? 'Entregável já arquivado' : 'Entregável já ativo');
-      if (arquivar && (e.statusExecucao === 'CONCLUIDO' ||
-        (e.reabertoEm === null && await documentacaoVerificada(m, contratoId, e.etapaId, id))))
+      if (arquivar && (['CONCLUIDO', 'CONCLUIDO_PARCIALMENTE', 'FINALIZADO'].includes(e.statusExecucao ?? '') && !e.reabertoEm))
         throw new ConflictException('Entregável concluído: reabra antes de arquivar');
+      if (!arquivar) {
+        const contrato = await m.getRepository(Contrato).findOneBy({id:contratoId});
+        if (contrato?.modoCalculo === 'PONDERADO') {
+          const [r] = await m.query(`SELECT COALESCE(SUM(e.peso),0)+COALESCE($3::numeric,0)>100 AS excede
+            FROM entregaveis e JOIN etapas et ON et.id=e.etapa_id AND et.contrato_id=e.contrato_id
+            WHERE e.contrato_id=$1 AND e.id<>$2 AND e.arquivado_em IS NULL AND et.arquivado_em IS NULL`,[contratoId,id,e.peso]);
+          if (r?.excede) throw new ConflictException('A reativação excederia os 100% de peso do contrato. Regularize os pesos antes de reativar.');
+        }
+      }
       const anterior = e.arquivadoEm;
       e.arquivadoEm = arquivar ? new Date() : null;
       e.arquivadoPor = arquivar ? ator.id : null;
@@ -67,7 +77,7 @@ export class ArquivamentoPlanejamentoService {
       if (!e) throw new NotFoundException('Entregável não encontrado neste contrato');
       await this.etapaAtiva(m, e);
       if (e.arquivadoEm) throw new ConflictException('Reative o entregável antes de alterar suas evidências');
-      if (e.statusExecucao === 'CONCLUIDO') throw new ConflictException('Reabra o entregável concluído antes de alterar evidências');
+      if (e.regularizacaoDocumentalSolicitada || ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? '')) throw new ConflictException('Reabra o entregável concluído antes de alterar evidências');
       const repo = m.getRepository(EvidenciaEsperada);
       const evidencia = await repo.findOneBy({ id, entregavelId });
       if (!evidencia) throw new NotFoundException('Evidência não encontrada neste entregável');
@@ -86,6 +96,16 @@ export class ArquivamentoPlanejamentoService {
       evidencia.arquivadoEm = arquivar ? new Date() : null;
       evidencia.arquivadoPor = arquivar ? ator.id : null;
       await repo.save(evidencia);
+      // A reativação volta a participar dos cálculos; validar o estado já restaurado,
+      // na mesma transação, para que um conflito reverta também o arquivamento.
+      if (!arquivar) {
+        const atual = await m.getRepository(ComprovanteEvidencia).findOne({
+          where: { evidenciaEsperadaId: id, contratoId, entregavelId }, order: { criadoEm: 'DESC', id: 'DESC' },
+        });
+        if (atual?.quantidadeDeclarada != null && atual.status !== 'REJEITADA')
+          await validarContribuicaoEvidencia(m,e,atual);
+      }
+      await validarSaldoParcelas(m,e);
       await this.auditoria.registrarNaTransacao(m, ator, {
         acao: arquivar ? AcaoAuditoria.ENTREGAVEL_EVIDENCIA_ESPERADA_ARQUIVADA : AcaoAuditoria.ENTREGAVEL_EVIDENCIA_ESPERADA_REATIVADA,
         entidadeTipo: 'ENTREGAVEL', entidadeId: entregavelId,
@@ -93,39 +113,9 @@ export class ArquivamentoPlanejamentoService {
         dadosPosteriores: { evidenciaEsperadaId: id, tipoEvidencia: evidencia.tipoEvidencia,
           arquivadoEm: evidencia.arquivadoEm, arquivadoPor: evidencia.arquivadoPor, ...(motivo && !arquivar ? { justificativa: motivo } : {}) },
       });
+      // Arquivar evidência altera somente a documentação; solicitação e aprovação
+      // de conclusão continuam sendo operações independentes e auditadas.
       const conclusoes: string[] = [];
-      if (arquivar && !e.reabertoEm) {
-        // Arquivar uma evidência exige permissão explícita. A conclusão que
-        // resulta do checklist completo é um EFEITO DERIVADO do sistema,
-        // assim como já ocorre ao verificar o último comprovante. Não existe
-        // estado intermediário "Pendente de conclusão" para o entregável.
-        // A conclusão MANUAL continua exigindo concluirEntregaveis.
-        if (await documentacaoVerificada(m, contratoId, e.etapaId, entregavelId)) {
-          const revisoesAbertas = await m.getRepository(EvidenciaEsperada).count({
-            where: { entregavelId, arquivadoEm: IsNull(), reabertoEm: Not(IsNull()) },
-          });
-          if (!revisoesAbertas && (await aptidaoFisicaParaConclusao(m, e)).apto) {
-            const anterior = { statusExecucao: e.statusExecucao, reabertoEm: e.reabertoEm ?? null };
-            e.statusExecucao = StatusExecucaoEntregavel.CONCLUIDO;
-            e.reabertoEm = null;
-            await m.getRepository(Entregavel).save(e);
-            await this.auditoria.registrarNaTransacao(m, ator, {
-              acao: AcaoAuditoria.ENTREGAVEL_STATUS_ALTERADO, entidadeTipo: 'ENTREGAVEL', entidadeId: entregavelId,
-              dadosAnteriores: anterior,
-              dadosPosteriores: { statusExecucao: e.statusExecucao, reabertoEm: null,
-                motivo: 'COMPROVACAO_COMPLETA_APOS_ARQUIVAMENTO' },
-            });
-            conclusoes.push('entregável');
-            if (await concluirEtapaAposFilhos(m, contratoId, e.etapaId, async (antes, depois) => {
-              await this.auditoria.registrarNaTransacao(m, ator, {
-                acao: AcaoAuditoria.ETAPA_STATUS_ALTERADO, entidadeTipo: 'ETAPA', entidadeId: e.etapaId,
-                dadosAnteriores: antes,
-                dadosPosteriores: { ...depois, motivo: 'CONCLUSAO_DOS_ENTREGAVEIS' },
-              });
-            }, ator.id)) conclusoes.push('etapa');
-          }
-        }
-      }
       return { id, entregavelId, arquivadoEm: evidencia.arquivadoEm, conclusoes };
     });
   }

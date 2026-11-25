@@ -1,7 +1,7 @@
 /** Contrato HTTP HU06-02 — Etapas reais, sem entidades financeiras ou dados de demonstração. */
-export type StatusEtapa = 'PLANEJADA' | 'EM_ANDAMENTO' | 'CONCLUIDA' | 'ENCERRADA' | 'FINALIZADA';
+export type StatusEtapa = 'PLANEJADA' | 'EM_ANDAMENTO' | 'CONCLUIDA' | 'CONCLUIDO_PARCIALMENTE' | 'ENCERRADA' | 'FINALIZADA';
 export const STATUS_ETAPA: Record<StatusEtapa, string> = {
-  PLANEJADA: 'Planejada', EM_ANDAMENTO: 'Em andamento', CONCLUIDA: 'Concluída', ENCERRADA: 'Encerrada', FINALIZADA: 'Encerrada',
+  PLANEJADA: 'Planejada', EM_ANDAMENTO: 'Em andamento', CONCLUIDA: 'Concluída', CONCLUIDO_PARCIALMENTE: 'Concluída parcialmente', ENCERRADA: 'Encerrada', FINALIZADA: 'Encerrada',
 };
 
 export type Etapa = {
@@ -20,6 +20,7 @@ export type Etapa = {
   observacoes: string | null;
   conclusaoSolicitadaEm?: string | null;
   conclusaoSolicitadaPor?: string | null;
+  conclusaoParcialSolicitada?: boolean;
   encerramentoSolicitadoEm?: string | null;
   encerramentoSolicitadoPor?: string | null;
   encerramentoMotivo?: string | null;
@@ -77,7 +78,7 @@ export const criarEtapa = (contratoId: string, dados: DadosEtapa) => requisitar<
 export const editarEtapa = (contratoId: string, etapaId: string, dados: Partial<DadosEtapa>) => requisitar<Etapa>(
   `${caminho(contratoId)}/${encodeURIComponent(etapaId)}`, { method: 'PATCH', body: JSON.stringify(dados) },
 );
-export const solicitarConclusaoEtapa = (c:string,e:string) => requisitar<Etapa>(`${caminho(c)}/${encodeURIComponent(e)}/solicitar-conclusao`,{method:'PATCH'});
+export const solicitarConclusaoEtapa = (c:string,e:string,parcial=false) => requisitar<Etapa>(`${caminho(c)}/${encodeURIComponent(e)}/solicitar-conclusao${parcial?'-parcial':''}`,{method:'PATCH'});
 export const solicitarEncerramentoEtapa = (c:string,e:string,motivo:string) => requisitar<Etapa>(`${caminho(c)}/${encodeURIComponent(e)}/solicitar-encerramento`,{method:'PATCH',body:JSON.stringify({motivo})});
 export const devolverSolicitacaoEtapa = (c:string,e:string,tipo:'conclusao'|'encerramento',motivo:string) => requisitar<Etapa>(`${caminho(c)}/${encodeURIComponent(e)}/devolver-${tipo}`,{method:'PATCH',body:JSON.stringify({motivo})});
 export const finalizarEtapa = (c: string, e: string, motivo: string) => requisitar<Etapa>(

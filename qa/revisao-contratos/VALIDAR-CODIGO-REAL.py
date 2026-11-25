@@ -22,7 +22,8 @@ UUID = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-
 
 def conferir(resposta, codigo, acao):
     if resposta.get('status') != codigo:
-        raise AssertionError(f'{acao}: esperado HTTP {codigo}, recebido {resposta.get("status")}')
+        raise AssertionError(f'{acao}: esperado HTTP {codigo}, recebido {resposta.get("status")}; ' +
+                             f'retorno={str(resposta.get("body", ""))[:300]}')
     return resposta.get('body')
 
 
@@ -30,6 +31,25 @@ def codigo_valido(contrato):
     assert isinstance(contrato, dict) and UUID.fullmatch(str(contrato.get('id'))), 'UUID interno inválido'
     assert PADRAO.fullmatch(str(contrato.get('codigoPublico'))), 'Código público inválido'
     return contrato['codigoPublico']
+
+
+def dados_contrato_qa(letra, amostra):
+    assert letra in ('A', 'B')
+    # 24 dígitos aleatórios + distinção por contrato. Formato da criação atual:
+    # numeroContrato somente dígitos, órgão até 30, objeto até 50.
+    dados = {
+        'numeroContrato': f'{secrets.randbelow(10**24):024d}' + ('1' if letra == 'A' else '2'),
+        'orgaoContratante': ('Órgão QA ' + 'X' * 30)[:30],
+        'objeto': ('Objeto de QA com texto prolongado ' + 'Y' * 50)[:50],
+        'descricao': ('Texto longo de QA para testar layout responsivo. ' * 9)[:400],
+        'inicioVigencia': '2026-11-01', 'terminoVigencia': '2027-10-31',
+        'status': 'PLANEJAMENTO', 'modoCalculo': 'SIMPLES',
+        'observacoes': f'QA código público: {amostra}-{letra}',
+    }
+    assert re.fullmatch(r'\d{1,25}', dados['numeroContrato'])
+    assert len(dados['orgaoContratante']) <= 30 and len(dados['objeto']) <= 50
+    assert len(dados['descricao']) <= 400 and len(dados['observacoes']) <= 200
+    return dados
 
 
 def executar(page, args):
@@ -40,13 +60,7 @@ def executar(page, args):
     provas.append('SuperTokens: Administrador de domínio autenticado')
     contratos = []
     for letra in ('A', 'B'):
-        dados = {
-          'numeroContrato': 'TESTE-CODIGO-' + amostra + '-' + letra,
-          'orgaoContratante': 'Órgão de teste ' + ('descrição longa ' * 13),
-          'objeto': 'Objeto de QA com texto prolongado ' * 8,
-          'inicioVigencia': '2026-11-01', 'terminoVigencia': '2027-10-31',
-          'status': 'PLANEJAMENTO', 'modoCalculo': 'SIMPLES',
-        }
+        dados = dados_contrato_qa(letra, amostra)
         c = conferir(requisitar(page, args.api_url, '/contratos', 'POST', dados), 201, 'criar contrato '+letra)
         codigo_valido(c)
         assert 'codigoPublico' not in dados, 'Código não deve ser enviado pelo navegador'
@@ -68,22 +82,38 @@ def executar(page, args):
     provas.append('GET da carteira autorizado contém código público')
 
     page.goto(args.frontend_url + '/contratos', wait_until='domcontentloaded')
-    campo = page.get_by_label('Buscar por código, número, órgão ou objeto')
+    page.get_by_role('tab', name='Todos os contratos').click()
+    page.locator('#campo-busca').select_option('todos')
+    campo = page.get_by_role('searchbox', name='Pesquisar contrato')
     campo.wait_for(timeout=20000)
     for texto in ('#' + a['codigoPublico'], a['codigoPublico'], a['numeroContrato']):
         campo.fill(texto)
         page.get_by_text('Código #' + a['codigoPublico']).wait_for(timeout=5000)
-        assert page.get_by_role('link', name='Detalhes').count() == 1, 'Filtro não localizou só o contrato esperado'
+        assert page.get_by_role('button', name=f'Abrir detalhes do contrato {a["numeroContrato"]}').count() == 1, 'Filtro não localizou só o contrato esperado'
     provas.append('Busca UI por #xxxxx, xxxxx e número do contrato preservada')
     campo.fill('#' + '99999' if a['codigoPublico'] != '99999' and contratos[1]['codigoPublico'] != '99999' else '#00000')
     campo.fill('#' + a['codigoPublico'])
-    page.get_by_role('link', name='Detalhes').click()
+    page.get_by_role('button', name=f'Abrir detalhes do contrato {a["numeroContrato"]}').click()
+    modal = page.get_by_role('dialog', name='Detalhes do contrato')
+    modal.wait_for(state='visible', timeout=15000)
+    assert modal.locator('iframe[title="Conteúdo do contrato"]').get_attribute('src') == f'/contratos/{a["id"]}?painel=1'
+    page.goto(args.frontend_url + '/contratos/' + a['id'], wait_until='domcontentloaded')
     page.get_by_text('Código #' + a['codigoPublico']).first.wait_for(timeout=10000)
     provas.append('Detalhe UI exibe o código sem substituir rota UUID')
     page.set_viewport_size({'width': 390, 'height': 844})
     page.reload(wait_until='domcontentloaded')
     page.get_by_text('Código #' + a['codigoPublico']).first.wait_for(timeout=10000)
-    medidas = page.evaluate("() => ({largura: innerWidth, documento: document.documentElement.scrollWidth})")
+    medidas = page.evaluate("""() => {
+      const largura = window.innerWidth;
+      const maiores = [...document.querySelectorAll('body *')]
+        .map(el => ({tag:el.tagName.toLowerCase(), classe: String(el.className?.baseVal ?? el.className ?? '').slice(0,120),
+          texto:(el.textContent ?? '').trim().slice(0,45),
+          direita: Math.round(el.getBoundingClientRect().right),
+          scroll: Math.round(el.scrollWidth), cliente: Math.round(el.clientWidth)}))
+        .filter(x => x.direita > largura + 2 && x.cliente > 0)
+        .slice(0,12);
+      return {largura, documento: document.documentElement.scrollWidth, maiores};
+    }""")
     assert medidas['documento'] <= medidas['largura'] + 2, f'Overflow horizontal mobile: {medidas}'
     provas.append('Detalhe com valores longos visível no viewport de 390px, sem overflow horizontal')
 

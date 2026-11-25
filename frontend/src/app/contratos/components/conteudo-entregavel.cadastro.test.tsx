@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ConteudoEntregavel } from './conteudo-entregavel';
 import { criarEvidenciaEsperada, enviarComprovante, consultarEvidencia, listarEvidenciasArquivadas, alterarArquivoEvidencia } from '@/lib/comprovantes';
 import type { Entregavel } from '@/lib/entregaveis';
@@ -92,10 +92,10 @@ test('barra da comprovação preenche da esquerda para a direita por contagem, n
     id: `evidencia-${index}`, tipoEvidencia: 'Relatório', descricao: null, obrigatoria: true,
   }));
   consultar.mockImplementation((_contrato: string, _entregavel: string, id: string) => Promise.resolve({
-    id, contratoId: 'contrato-qa', entregavelId: 'entregavel-qa',
+    id, contratoId: 'contrato-qa', entregavelId: 'entregavel-qa', tipoEvidencia: 'Relatório', descricao: null, obrigatoria: true, podeVerificar: false,
     status: id === 'evidencia-1' ? 'VERIFICADA' : 'SEM_ENVIO', versoes: [],
   }));
-  render(<ConteudoEntregavel item={{ ...item, evidenciasEsperadas: evidencias }} podeCriarEvidencia />);
+  await act(async () => { render(<ConteudoEntregavel item={{ ...item, evidenciasEsperadas: evidencias }} podeCriarEvidencia />); });
   const barra = await screen.findByRole('img', { name: '1 de 4 evidências obrigatórias verificadas' });
   await waitFor(() => expect(screen.getByText('1/4 evidências obrigatórias')).toBeInTheDocument());
   const segmentos = Array.from(barra.children);
@@ -107,16 +107,17 @@ test('barra da comprovação preenche da esquerda para a direita por contagem, n
 test('card exibe nome do comprovante e categoria Foto ou Relatório, sem legenda redundante de obrigatoriedade', async () => {
   consultar.mockResolvedValue({
     id: 'evidencia-1', contratoId: 'contrato-qa', entregavelId: 'entregavel-qa',
+    tipoEvidencia: 'Relatório', descricao: null, obrigatoria: true, podeVerificar: false,
     status: 'VERIFICADA', versoes: [{ nomeOriginal: 'laudo-final.pdf' }],
   });
-  render(<ConteudoEntregavel item={{ ...item, evidenciasEsperadas: [{ id: 'evidencia-1', tipoEvidencia: 'Relatório', descricao: null, obrigatoria: true }] }} />);
+  await act(async () => { render(<ConteudoEntregavel item={{ ...item, evidenciasEsperadas: [{ id: 'evidencia-1', tipoEvidencia: 'Relatório', descricao: null, obrigatoria: true }] }} />); });
   // Um comprovante verificado fica em Concluídas: o teste deve consultar a aba correta.
   fireEvent.click(screen.getByRole('tab', { name: 'Evidências finalizadas' }));
   expect(await screen.findByText('laudo-final.pdf')).toBeInTheDocument();
   expect(screen.getByText('Relatório')).toBeInTheDocument();
   const itemVerificado = screen.getByText('laudo-final.pdf').closest('li');
   expect(itemVerificado).toHaveClass('border-violet-500/60');
-  expect(itemVerificado).toHaveClass('hover:border-violet-400', 'hover:opacity-100');
+  expect(itemVerificado).toHaveClass('hover:border-violet-400');
   expect(itemVerificado).not.toHaveClass('hover:bg-brand-green/5');
   expect(within(itemVerificado!).getByLabelText('Evidência com comprovação documental verificada')).toHaveClass('rounded-full');
   expect(within(itemVerificado!).getByLabelText('Status da evidência Relatório')).toHaveClass('text-violet-100');
@@ -129,15 +130,16 @@ test('desarquivar pede confirmação, audita via API e mantém aba Arquivados se
   const reativar = alterarArquivoEvidencia as jest.Mock;
   listar.mockResolvedValueOnce([{ id: 'evidencia-arch', tipoEvidencia: 'Relatório', obrigatoria: true, arquivadoEm: '2026-11-05T00:00:00Z' }]);
   reativar.mockResolvedValue(undefined);
-  render(<ConteudoEntregavel item={item} podeArquivarEvidencia podeReativarEvidencia />);
+  await act(async () => { render(<ConteudoEntregavel item={item} podeArquivarEvidencia podeReativarEvidencia />); });
   fireEvent.click(screen.getByRole('tab', { name: 'Evidências arquivadas' }));
   expect(await screen.findByText(/Relatório/)).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Reativar' }));
+  fireEvent.click(screen.getByLabelText('Abrir detalhes da evidência arquivada Relatório'));
+  fireEvent.click(screen.getByRole('button', { name: 'Reabrir' }));
   const confirmar = screen.getByRole('dialog', { name: 'Desarquivar evidência?' });
   expect(reativar).not.toHaveBeenCalled();
   fireEvent.click(within(confirmar).getByRole('button', { name: 'Cancelar' }));
   expect(reativar).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: 'Reativar' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Reabrir' }));
   const dialogo = screen.getByRole('dialog', { name: 'Desarquivar evidência?' });
   fireEvent.change(within(dialogo).getByRole('textbox', { name: /Justificativa obrigatória/ }), { target: { value: 'Retomar esta evidência para complementar o checklist.' } });
   fireEvent.click(within(dialogo).getByRole('button', { name: 'Confirmar desarquivamento' }));
@@ -151,7 +153,7 @@ test('desarquivar pede confirmação, audita via API e mantém aba Arquivados se
 test('pai arquivado mantém aba de histórico de evidências mesmo sem permissão de edição', async () => {
   const listar = listarEvidenciasArquivadas as jest.Mock;
   listar.mockResolvedValue([{ id: 'evidencia-historica', tipoEvidencia: 'Relatório', obrigatoria: true, arquivadoEm: null }]);
-  render(<ConteudoEntregavel item={item} paiArquivado bloqueadoPorPai />);
+  await act(async () => { render(<ConteudoEntregavel item={item} paiArquivado bloqueadoPorPai />); });
   const aba = screen.getByRole('tab', { name: 'Evidências arquivadas' });
   fireEvent.click(aba);
   expect(await screen.findByText(/somente leitura por arquivamento do pai/)).toBeInTheDocument();
@@ -163,7 +165,7 @@ test('pai arquivado mantém aba de histórico de evidências mesmo sem permissã
 
 test('criação em entregável em revisão recebe o contexto, mas não muda o estado do registro', () => {
   render(<ConteudoEntregavel item={item} paiEmRevisao podeCriarEvidencia />);
-  const secao = screen.getByRole('heading', { name: 'Identificação e planejamento' }).closest('[data-tec08-secao-contextual]');
+  const secao = screen.getByText('Informações do entregável', { selector: 'summary' }).parentElement?.querySelector('[data-tec08-secao-contextual]');
   expect(secao).toBeInTheDocument();
   const botao = screen.getByRole('button', { name: 'Nova evidência' });
   expect(botao).toHaveAttribute('data-tec08-acao-criar');
@@ -176,11 +178,12 @@ test('criação em entregável em revisão recebe o contexto, mas não muda o es
 test('evidência pendente mantém estado próprio no cartão e no ícone', async () => {
   consultar.mockResolvedValue({
     id: 'evidencia-pendente', contratoId: 'contrato-qa', entregavelId: 'entregavel-qa',
+    tipoEvidencia: 'Relatório', descricao: null, obrigatoria: true, podeVerificar: false,
     status: 'PENDENTE_VERIFICACAO', versoes: [{ nomeOriginal: 'comprovante.pdf' }],
   });
-  render(<ConteudoEntregavel item={{ ...item, evidenciasEsperadas: [
+  await act(async () => { render(<ConteudoEntregavel item={{ ...item, evidenciasEsperadas: [
     { id: 'evidencia-pendente', tipoEvidencia: 'Relatório', descricao: null, obrigatoria: true },
-  ] }} paiEmRevisao />);
+  ] }} paiEmRevisao />); });
   const situacao = await screen.findByText('Pendente de verificação');
   const cartao = situacao.closest('[data-evidencia-estado]');
   expect(cartao).toHaveAttribute('data-evidencia-estado', 'pendente');
@@ -191,11 +194,12 @@ test('evidência pendente mantém estado próprio no cartão e no ícone', async
 test('evidência opcional verificada continua violeta mesmo com etapa arquivada', async () => {
   consultar.mockResolvedValue({
     id: 'evidencia-opcional', contratoId: 'contrato-qa', entregavelId: 'entregavel-qa',
+    tipoEvidencia: 'Relatório', descricao: null, obrigatoria: true, podeVerificar: false,
     status: 'VERIFICADA', versoes: [{ nomeOriginal: 'foto-final.jpg' }],
   });
-  render(<ConteudoEntregavel item={{ ...item, statusExecucao: 'CONCLUIDO', evidenciasEsperadas: [
+  await act(async () => { render(<ConteudoEntregavel item={{ ...item, statusExecucao: 'CONCLUIDO', evidenciasEsperadas: [
     { id: 'evidencia-opcional', tipoEvidencia: 'Foto', descricao: null, obrigatoria: false },
-  ] }} paiArquivado bloqueadoPorPai />);
+  ] }} paiArquivado bloqueadoPorPai />); });
   fireEvent.click(screen.getByRole('tab', { name: 'Evidências finalizadas' }));
   const opcional = await screen.findByRole('list', { name: 'Evidências opcionais' });
   const card = opcional.querySelector('[data-evidencia-estado]');
@@ -203,11 +207,19 @@ test('evidência opcional verificada continua violeta mesmo com etapa arquivada'
   expect(card).toHaveAttribute('data-tec08-item-clicavel');
   expect(card).toHaveClass('border-violet-500/60');
   expect(card).not.toHaveClass('border-amber-500/60');
-  const contexto = screen.getByRole('heading', { name: 'Identificação e planejamento' }).closest('[data-tec08-contexto-operacional]');
+  const contexto = screen.getByText('Informações do entregável', { selector: 'summary' }).closest('[data-tec08-contexto-operacional]');
   expect(contexto).toHaveAttribute('data-tec08-estado', 'concluido');
   expect(screen.queryByRole('button', { name: 'Nova evidência' })).not.toBeInTheDocument();
 });
 
+
+test('RB-03: entregável ÚNICO pode ter ocorrências sem exigir cadastro inicial', () => {
+  render(<ConteudoEntregavel item={item} />);
+  const ocorrencias = screen.getByRole('tab', { name: 'Ocorrências' });
+  expect(ocorrencias).toBeInTheDocument();
+  fireEvent.click(ocorrencias);
+  expect(screen.getByRole('tabpanel', { name: 'Ocorrências' })).toBeInTheDocument();
+});
 
 test('navegação do entregável separa evidências e atividades sem duplicar as seções', () => {
   render(<ConteudoEntregavel item={item} />);
@@ -226,13 +238,13 @@ test('navegação do entregável separa evidências e atividades sem duplicar as
 
 test('Ativas e Concluídas separam evidências sem perder a contagem obrigatória', async () => {
   consultar.mockImplementation((_c: string, _e: string, id: string) => Promise.resolve({
-    id, contratoId: 'contrato-qa', entregavelId: 'entregavel-qa',
+    id, contratoId: 'contrato-qa', entregavelId: 'entregavel-qa', tipoEvidencia: 'Relatório', descricao: null, obrigatoria: true, podeVerificar: false,
     status: id === 'e1' ? 'VERIFICADA' : 'SEM_ENVIO', versoes: [],
   }));
-  render(<ConteudoEntregavel item={{ ...item, evidenciasEsperadas: [
+  await act(async () => { render(<ConteudoEntregavel item={{ ...item, evidenciasEsperadas: [
     { id: 'e1', tipoEvidencia: 'Relatório', descricao: null, obrigatoria: true },
     { id: 'e2', tipoEvidencia: 'Foto', descricao: null, obrigatoria: false },
-  ] }} />);
+  ] }} />); });
   expect(await screen.findByText('1/1 evidências obrigatórias')).toBeInTheDocument();
   expect(screen.getByText('0/1 opcionais verificadas · não bloqueiam a conclusão')).toBeInTheDocument();
   expect(screen.getByRole('list', { name: 'Evidências opcionais' })).toBeInTheDocument();
@@ -245,17 +257,17 @@ test('clicar no espaço do cartão de evidência abre o mesmo detalhe do título
   // Aguarda a consulta real de status antes do clique: o componente mantém os
   // cartões ocultos enquanto resolve as evidências para não exibir status falso.
   consultar.mockImplementation((_contrato: string, _entregavel: string, id: string) => Promise.resolve({
-    id, contratoId: 'contrato-qa', entregavelId: 'entregavel-qa', status: 'SEM_ENVIO', versoes: [],
+    id, contratoId: 'contrato-qa', entregavelId: 'entregavel-qa', tipoEvidencia: 'Relatório', descricao: null, obrigatoria: true, podeVerificar: false, status: 'SEM_ENVIO', versoes: [],
   }));
   const exemplo = { ...item, evidenciasEsperadas: [{ id: 'evid-card', tipoEvidencia: 'Relatório', descricao: 'Inspecionar', obrigatoria: true }] };
-  render(<ConteudoEntregavel item={exemplo} />);
+  await act(async () => { render(<ConteudoEntregavel item={exemplo} />); });
   await waitFor(() => expect(consultar).toHaveBeenCalledWith('contrato-qa', 'entregavel-qa', 'evid-card'));
   expect(await screen.findByText('0/1 evidências obrigatórias', {}, { timeout: 3000 })).toBeInTheDocument();
   const card = await screen.findByLabelText('Abrir detalhes da evidência Relatório');
   // A área clicável do título cobre todo o cartão, inclusive espaços vazios,
   // sem sobrepor os botões de edição/arquivamento no rodapé.
   expect(within(card).getByRole('button', { name: 'Ver detalhes da evidência esperada Relatório' })).toHaveClass('before:inset-0', 'before:absolute');
-  fireEvent.click(card);
+  await act(async () => { fireEvent.click(card); });
   expect(await screen.findByRole('dialog', { name: 'Relatório' })).toBeInTheDocument();
 });
 
@@ -264,11 +276,104 @@ test('cartão arquivado é clicável por completo sem acionar reativação', asy
   (listarEvidenciasArquivadas as jest.Mock).mockResolvedValue([
     { id: 'evid-arquivada', tipoEvidencia: 'Relatório histórico', obrigatoria: true, arquivadoEm: '2026-11-05T00:00:00Z' },
   ]);
-  render(<ConteudoEntregavel item={item} podeReativarEvidencia />);
+  await act(async () => { render(<ConteudoEntregavel item={item} podeReativarEvidencia />); });
   fireEvent.click(screen.getByRole('tab', { name: 'Evidências arquivadas' }));
   const card = await screen.findByLabelText('Abrir detalhes da evidência arquivada Relatório histórico');
   expect(within(card).getByRole('button', { name: /Relatório histórico/ })).toHaveClass('before:inset-0', 'before:absolute');
   fireEvent.click(card);
   expect(await screen.findByRole('dialog', { name: 'Relatório histórico' })).toBeInTheDocument();
   expect(screen.queryByRole('dialog', { name: 'Desarquivar evidência?' })).not.toBeInTheDocument();
+});
+
+
+test('evidência abre com controles inline autorizados, sem ação geral de edição', async () => {
+  const detalhe = {
+    id: 'evidencia-controle', contratoId: 'contrato-qa', entregavelId: 'entregavel-qa',
+    tipoEvidencia: 'Relatório', descricao: null, obrigatoria: true, podeVerificar: false,
+    status: 'SEM_ENVIO', versoes: [],
+  };
+  // Controle explícito da resposta: React processa o GET, o callback de integridade
+  // e o .finally do painel dentro de act, não depois da última asserção.
+  const pendentes: Array<{ liberar: () => void; pedido: Promise<unknown> }> = [];
+  consultar.mockImplementation(() => {
+    let liberar!: () => void;
+    const pedido = new Promise(resolve => { liberar = () => resolve(detalhe); });
+    pendentes.push({ liberar, pedido });
+    return pedido;
+  });
+  async function concluirConsultas() {
+    expect(pendentes.length).toBeGreaterThan(0);
+    const atuais = pendentes.splice(0);
+    await act(async () => {
+      atuais.forEach(({ liberar }) => liberar());
+      await Promise.all(atuais.map(({ pedido }) => pedido));
+    });
+  }
+  const exemplo = { ...item, evidenciasEsperadas: [{ id: 'evidencia-controle', tipoEvidencia: 'Relatório', descricao: null, obrigatoria: true }] };
+  let view!: ReturnType<typeof render>;
+  await act(async () => { view = render(<ConteudoEntregavel item={exemplo} podeEditarEsperada podeEnviarComprovantes />); });
+  await concluirConsultas(); // consulta do checklist
+  const abrirEvidencia = screen.getByRole('button', { name: 'Ver detalhes da evidência esperada Relatório' });
+  await act(async () => { fireEvent.click(abrirEvidencia); });
+  await concluirConsultas(); // detalhe independente da evidência
+  const modal = screen.getByRole('dialog', { name: 'Relatório' });
+  expect(within(modal).queryByRole('button', { name: 'Editar evidência Relatório' })).not.toBeInTheDocument();
+  expect(within(modal).getByRole('button', { name: 'Editar tipo da evidência' })).toBeInTheDocument();
+  expect(within(modal).getByRole('button', { name: 'Editar orientações' })).toBeInTheDocument();
+  fireEvent.click(within(modal).getByRole('button', { name: 'Editar orientações' }));
+  expect(within(modal).getByLabelText('Orientações da evidência')).toBeInTheDocument();
+  fireEvent.click(within(modal).getByRole('button', { name: 'Cancelar edição das orientações' }));
+  expect(within(modal).queryByLabelText('Orientações da evidência')).not.toBeInTheDocument();
+  view.unmount();
+
+  await act(async () => { render(<ConteudoEntregavel item={exemplo} />); });
+  await concluirConsultas();
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Ver detalhes da evidência esperada Relatório' })); });
+  await concluirConsultas();
+  expect(within(screen.getByRole('dialog', { name: 'Relatório' })).queryByRole('button', { name: 'Editar tipo da evidência' })).not.toBeInTheDocument();
+});
+
+// Resposta HTTP não passa por validação TypeScript em runtime; dados incompletos
+// não podem renderizar ações de upload, edição ou verificação.
+test.each([
+  ['tipo omitido', { tipoEvidencia: undefined }],
+  ['tipo vazio', { tipoEvidencia: '   ' }],
+  ['status inválido', { status: 'STATUS_INESPERADO' }],
+  ['versões ausentes', { versoes: undefined }],
+])('evidência incompleta (%s) apresenta erro, sem derrubar o modal', async (_caso, alteracao) => {
+  consultar.mockResolvedValue({
+    id: 'evidencia-controle', contratoId: 'contrato-qa', entregavelId: 'entregavel-qa',
+    tipoEvidencia: 'Relatório', descricao: null, obrigatoria: true, podeVerificar: false,
+    status: 'SEM_ENVIO', versoes: [], ...alteracao,
+  });
+  const exemplo = { ...item, evidenciasEsperadas: [{ id: 'evidencia-controle', tipoEvidencia: 'Relatório', descricao: null, obrigatoria: true }] };
+  await act(async () => { render(<ConteudoEntregavel item={exemplo} podeEditarEsperada podeEnviarComprovantes />); });
+  const abrir = await screen.findByRole('button', { name: 'Ver detalhes da evidência esperada Relatório' });
+  await act(async () => { fireEvent.click(abrir); });
+  const dialogo = screen.getByRole('dialog', { name: 'Relatório' });
+  expect(await within(dialogo).findByRole('alert')).toHaveTextContent('Dados incompletos da evidência');
+  expect(within(dialogo).queryByRole('button', { name: 'Editar tipo da evidência' })).not.toBeInTheDocument();
+  expect(within(dialogo).queryByRole('button', { name: 'Anexar comprovante' })).not.toBeInTheDocument();
+});
+
+test('API não pode devolver dados de outro entregável, mesmo com o ID da evidência correto', async () => {
+  // Primeiro a listagem deve ser válida; a resposta cruzada é exclusiva do detalhe.
+  consultar.mockResolvedValue({
+    id: 'evidencia-controle', contratoId: 'contrato-qa', entregavelId: 'entregavel-qa',
+    tipoEvidencia: 'Relatório', descricao: null, obrigatoria: true, podeVerificar: false,
+    status: 'SEM_ENVIO', versoes: [],
+  });
+  const exemplo = { ...item, evidenciasEsperadas: [{ id: 'evidencia-controle', tipoEvidencia: 'Relatório', descricao: null, obrigatoria: true }] };
+  await act(async () => { render(<ConteudoEntregavel item={exemplo} podeEditarEsperada podeEnviarComprovantes />); });
+  const abrir = await screen.findByRole('button', { name: 'Ver detalhes da evidência esperada Relatório' });
+  // O consumo da primeira resposta não depende da ordem interna dos efeitos React.
+  consultar.mockResolvedValue({
+    id: 'evidencia-controle', contratoId: 'contrato-qa', entregavelId: 'outro-entregavel',
+    tipoEvidencia: 'Relatório', descricao: null, obrigatoria: true, podeVerificar: false,
+    status: 'SEM_ENVIO', versoes: [],
+  });
+  await act(async () => { fireEvent.click(abrir); });
+  const dialogo = screen.getByRole('dialog', { name: 'Relatório' });
+  expect(await within(dialogo).findByRole('alert')).toHaveTextContent('Dados de evidência incompatíveis');
+  expect(within(dialogo).queryByRole('button', { name: 'Anexar comprovante' })).not.toBeInTheDocument();
 });

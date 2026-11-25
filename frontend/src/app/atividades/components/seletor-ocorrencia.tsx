@@ -1,5 +1,7 @@
 'use client';
+import {CampoContribuicaoDisponivel} from '@/app/contratos/components/campo-contribuicao-disponivel';
 import { useRepositorioConsultasOpcional } from '@/app/components/provedor-consultas';
+import { SeletorVinculosMultiplos } from './seletor-vinculos-multiplos';
 import { useOcorrencias } from '@/hooks/use-ocorrencias';
 
 export type MedicaoAtividade = { ocorrenciaId: string; quantidade: string };
@@ -8,14 +10,14 @@ type Props = {
   valor?: string | null; onChange: (v: string | null) => void;
   valores?: string[]; onChangeMultiplas?: (ids: string[]) => void;
   medicoes?: MedicaoAtividade[]; onMedicoesChange?: (medicoes: MedicaoAtividade[]) => void;
-  unidades?: Record<string,string>;
+  unidades?: Record<string,string>; somenteVinculos?: boolean; somenteMedicoes?: boolean; origemId?:string;
 };
 const campo='w-full min-w-0 rounded-lg border border-current/25 bg-background px-3 py-2 text-sm outline-none focus-visible:border-brand-green focus-visible:ring-2 focus-visible:ring-brand-green/20';
 function Campo({ contratoId, entregavelIds, valor, onChange, valores, onChangeMultiplas,
-  medicoes = [], onMedicoesChange, unidades = {} }: Props) {
+  medicoes = [], onMedicoesChange, unidades = {}, somenteVinculos=false, somenteMedicoes=false, origemId }: Props) {
   const agenda=useOcorrencias(contratoId);
   const opcoes=agenda.ocorrencias.filter(o=>entregavelIds.includes(o.entregavelId) && !o.substituidaEm &&
-    !['PENDENTE_CONCLUSAO','CONCLUIDO','PENDENTE_ENCERRAMENTO','ENCERRADA'].includes(o.status));
+    !['PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','CONCLUIDO','CONCLUIDO_PARCIALMENTE','PENDENTE_ENCERRAMENTO','ENCERRADA'].includes(o.status));
   if(onChangeMultiplas) {
     const escolhidas=valores??[];
     const disponiveis=opcoes.filter(o=>escolhidas.includes(o.id));
@@ -25,43 +27,32 @@ function Campo({ contratoId, entregavelIds, valor, onChange, valores, onChangeMu
       const antigas=medicoes.filter(m=>m.ocorrenciaId!==ocorrenciaId);
       onMedicoesChange(quantidade!==''?[...antigas,{ocorrenciaId,quantidade}]:antigas);
     }
-    return <fieldset className="space-y-3 rounded-xl border border-current/20 p-3 sm:p-4">
-      <legend className="px-1 text-sm font-semibold">Ocorrências e quantidades por execução</legend>
-      <p className="text-xs leading-relaxed text-foreground/70">Selecione todas as ocorrências atendidas. Uma mesma atividade pode participar de várias, com <strong>quantidades diferentes para cada uma</strong>. Vincular sem informar quantidade registra somente a participação.</p>
+    if(somenteMedicoes&&!quantitativas.length)return null;
+    return <div className="space-y-3">
+      {!somenteMedicoes&&<div className="space-y-2">
       {agenda.erro&&<p role="alert" className="text-xs text-error-text">Não foi possível consultar as ocorrências.</p>}
-      {!opcoes.length?<p className="text-sm text-foreground/65">Nenhuma ocorrência aberta para os entregáveis selecionados.</p>:
-        <div className="max-h-44 space-y-1 overflow-y-auto" role="group" aria-label="Selecionar ocorrências">
-          {opcoes.map(o=><label key={o.id} className="flex cursor-pointer items-start gap-3 rounded-lg border border-current/15 p-2.5 text-sm hover:bg-current/[0.06]">
-            <input type="checkbox" className="mt-0.5 h-4 w-4 accent-brand-green" checked={escolhidas.includes(o.id)} onChange={e=>{
-              const proximas=e.target.checked?[...escolhidas,o.id]:escolhidas.filter(id=>id!==o.id);
-              onChangeMultiplas(proximas);
-              if(!e.target.checked){onMedicoesChange?.(medicoes.filter(m=>m.ocorrenciaId!==o.id));if(valor===o.id)onChange(null);}
-            }}/><span className="min-w-0 flex-1 break-words font-medium">{o.titulo}</span>
-            <span className="shrink-0 text-xs text-foreground/55">{o.modoRegistro==='QUANTITATIVO'?'Por quantidade':'Descritiva'}</span>
-          </label>)}
-        </div>}
-      {quantitativas.length>0&&<div className="space-y-3 border-t border-current/15 pt-3">
-        <h4 className="text-sm font-semibold">Quanto foi realizado nesta atividade?</h4>
-        <p className="text-xs text-foreground/65">Os valores informados só entram na meta após a aprovação desta atividade. Não repita aqui quantidades já lançadas manualmente.</p>
+      {!opcoes.length?<p className="text-sm text-foreground/65">Nenhuma ocorrência disponível.</p>:
+        <SeletorVinculosMultiplos rotulo="Selecionar ocorrências" placeholder="Localizar ocorrência…" itens={opcoes.map(o=>({id:o.id,nome:o.titulo,detalhe:o.modoRegistro==='QUANTITATIVO'?'Por quantidade':'Descritiva'}))} valores={escolhidas} onChange={ids=>onChangeMultiplas(ids)}/>}</div>}
+
+      {!somenteVinculos&&quantitativas.length>0&&<div className="space-y-3 border-t border-current/15 pt-3">
+        {!somenteMedicoes&&<h4 className="text-sm font-semibold">Contribuição</h4>}
+
         {quantitativas.map(o=>{
           const quantidade=medicoes.find(m=>m.ocorrenciaId===o.id)?.quantidade??'';
           const meta=Number(o.metaQuantidade??0);const feito=Number(o.quantidadeExecutada??0);
           const unidade=unidades[o.entregavelId]||'unidades';
-          return <div key={o.id} className="rounded-xl border border-current/20 bg-current/[0.025] p-3">
+          return <div key={o.id} className="pi-medicao-atividade-linha">
             <h5 className="break-words text-sm font-semibold">{o.titulo}</h5>
-            <dl className="mt-2 grid grid-cols-3 gap-2 text-xs">
+            <dl className="pi-medicao-atividade-metricas text-xs">
               <div><dt className="text-foreground/60">Meta</dt><dd className="font-semibold tabular-nums">{meta} {unidade}</dd></div>
               <div><dt className="text-foreground/60">Aprovado</dt><dd className="font-semibold tabular-nums">{feito} {unidade}</dd></div>
               <div><dt className="text-foreground/60">Restante</dt><dd className="font-semibold tabular-nums">{Math.max(0,meta-feito)} {unidade}</dd></div>
             </dl>
-            <label className="mt-3 block text-xs font-semibold" htmlFor={`medicao-${o.id}`}>Realizado nesta atividade para esta ocorrência (opcional)</label>
-            <div className="mt-1 flex items-center gap-2"><input id={`medicao-${o.id}`} type="number" inputMode="decimal" min="0" step="0.001" className={campo} placeholder="Ex.: 5" value={quantidade} onChange={e=>mudarMedicao(o.id,e.target.value)}/><span className="shrink-0 text-xs text-foreground/65">{unidade}</span></div>
+            <CampoContribuicaoDisponivel item={{id:o.entregavelId,contratoId,tipo:'QUANTITATIVO',quantidadePrevista:null,quantidadeRealizada:null,unidadeMedida:unidade}} ocorrenciaId={o.id} meta={meta} modo="quantidade" origem="ATIVIDADE" origemId={origemId} valor={quantidade} onValor={v=>mudarMedicao(o.id,v.replace(',','.'))}/>
           </div>;
         })}
       </div>}
-      {disponiveis.filter(o=>o.modoRegistro!=='QUANTITATIVO'||o.metaQuantidade==null).length>0&&
-        <p className="text-xs text-foreground/65">Vínculos descritivos: {disponiveis.filter(o=>o.modoRegistro!=='QUANTITATIVO'||o.metaQuantidade==null).map(o=>o.titulo).join(' · ')}. Não exigem valor numérico.</p>}
-    </fieldset>;
+    </div>;
   }
   const ausente=Boolean(valor&&!opcoes.some(o=>o.id===valor));
   return <label className="block text-sm font-medium">Ocorrência (opcional)

@@ -26,7 +26,7 @@ test('verificação apresenta cancelar vermelho e confirmar verde, com dimensõe
   render(<ConfirmacaoSimples titulo="Verificar?" descricao="Analisou o arquivo?" confirmar="Confirmar" cancelarVermelho aprovarVerde
     onCancelar={jest.fn()} onConfirmar={jest.fn()} />);
   expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveClass('bg-red-600', 'whitespace-nowrap', 'shrink-0');
-  expect(screen.getByRole('button', { name: 'Confirmar' })).toHaveClass('bg-brand-green', 'shrink-0');
+  expect(screen.getByRole('button', { name: 'Confirmar' })).toHaveClass('bg-green-800', 'shrink-0');
 });
 
 

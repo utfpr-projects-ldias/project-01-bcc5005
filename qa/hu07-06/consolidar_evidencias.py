@@ -48,11 +48,30 @@ def validar(relatorios: list[dict]) -> list[str]:
                 erros.append(f'{perfil}: não há cinco tipos reais distintos')
             if not r.get('etapaCriada'):
                 erros.append(f'{perfil}: etapa real HU06 não demonstrada')
-            for trecho in ('Cinco POST', 'Cinco PATCH', 'PostgreSQL', 'Network Chromium',
-                           'Etapa: modal acessível', 'Voltar do mouse/navegador', 'Atualizar entregáveis: transição real aria-busy/disabled',
-                           'Checklist: limite de 10', 'Responsável: seleção única por e-mail'):
+            # Regras verificadas no Chromium atual: operações separadas de
+            # entregável/checklist, atualização automática e ACL granular.
+            # Nunca exigir controles antigos que não existem na UI.
+            requisitos = (
+                'Contrato SIMPLES confirmado na API',
+                'Etapa: detalhe acessível',
+                'Autoatualização: entregável',
+                'Cinco POSTs de entregáveis + dez POSTs de evidências esperadas',
+                'Cinco PATCHs de planejamento e cinco PATCHs de evidência',
+                'Checklist: dois POSTs reais via modal',
+                'Responsável: seleção única por e-mail',
+                'PostgreSQL direto: vínculos, tipos, checklist',
+                'Network Chromium: POST×5 e PATCH×5',
+            )
+            for trecho in requisitos:
                 if not any(trecho in str(p) for p in provas):
                     erros.append(f'{perfil}: falta evidência {trecho}')
+            if perfil == 'gestor-edicao':
+                for trecho in (
+                    'Gestor: controle opcional ausente e POST opcional bloqueado',
+                    'Gestor: PATCH de orientações permitido (200), PATCH de obrigatoriedade negado (403)',
+                ):
+                    if not any(trecho in str(p) for p in provas):
+                        erros.append(f'{perfil}: falta evidência de ACL granular {trecho}')
         elif perfil == 'sem-vinculo':
             if not any('Sem vínculo' in str(p) for p in provas):
                 erros.append('sem-vinculo: falta prova de leitura negada')
@@ -60,6 +79,9 @@ def validar(relatorios: list[dict]) -> list[str]:
             negacoes = r.get('negacoesEscrita') or {}
             if negacoes.get('POST') not in (403, 404) or negacoes.get('PATCH') not in (403, 404):
                 erros.append(f'{perfil}: falta prova estruturada de POST/PATCH 403 ou 404')
+            if not any('Leitor: navegação contextual Etapas → modal da etapa → lista acessível → entregável' in str(p)
+                       for p in provas):
+                erros.append(f'{perfil}: falta prova de navegação real e ações ocultas nos modais')
             if not any('POST/PATCH negados HTTP' in str(p) for p in provas):
                 erros.append(f'{perfil}: falta descrição da negação POST/PATCH')
     return erros

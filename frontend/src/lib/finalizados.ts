@@ -11,12 +11,13 @@ const ENCERRADOS: Partial<Record<RecursoFinalizado, readonly string[]>> = {
 };
 /** Arquivado não é sinônimo de encerrado. Para atividades/evidências, o estado verificado é o único terminal operacional. */
 export function resultadoFinalizacao(recurso: RecursoFinalizado, status: string | null | undefined): ResultadoFinalizacao {
-  if (status === CONCLUIDOS[recurso]) return 'concluido';
+  if (status === CONCLUIDOS[recurso] || (status === 'CONCLUIDO_PARCIALMENTE' && ['ocorrencia','entregavel','etapa','contrato'].includes(recurso))) return 'concluido';
   if (status && ENCERRADOS[recurso]?.includes(status)) return 'encerrado';
   return null;
 }
 /** O termo "Finalizados" é reservado à aba, não substitui a situação efetiva dos registros. */
 export function etiquetaFinalizacao(recurso: RecursoFinalizado, status: string | null | undefined): string | null {
+  if (status === 'CONCLUIDO_PARCIALMENTE') return recurso === 'ocorrencia' || recurso === 'etapa' ? 'Concluída parcialmente' : 'Concluído parcialmente';
   const resultado = resultadoFinalizacao(recurso, status);
   if (!resultado) return null;
   if (resultado === 'concluido') {

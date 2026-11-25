@@ -70,26 +70,74 @@ def argumentos():
     return a
 
 
+def nome_qa_entregavel(execucao: str) -> str:
+    """Nome sintético deve caber no limite real (42); sem corte silencioso do input."""
+    sufixo = execucao[-6:]
+    nome = f'QA TEC08-03 Entregável {sufixo}'
+    exigir(len(nome) <= 42, 'Fixture de entregável excede o limite do formulário')
+    return nome
+
+
+def numero_contrato_real(page, contrato_id: str) -> str:
+    """Número efetivamente persistido: não derivar da etiqueta textual do QA.
+
+    O contrato B é criado pela API com número exclusivamente numérico, e
+    seu rótulo da execução fica nas observações.
+    """
+    exigir(base.uuid_ok(contrato_id), 'ID de contrato de QA inválido')
+    consulta = base.api(page, f'/contratos/{contrato_id}')
+    exigir(consulta.get('status') == 200 and isinstance(consulta.get('body'), dict),
+           f'Não foi possível consultar contrato de QA criado: HTTP {consulta.get("status")}')
+    dado = consulta['body']
+    exigir(dado.get('id') == contrato_id, 'Consulta retornou contrato diferente do criado')
+    numero = dado.get('numeroContrato')
+    exigir(isinstance(numero, str) and re.fullmatch(r'\d{1,25}', numero),
+           'Número do contrato persistido não respeita o formato da API')
+    return numero
+
+
 def criacao_pela_ui(page, execucao):
-    page.goto(WEB + '/contratos/novo', wait_until='domcontentloaded')
+    # Fluxo atual: cadastro em modal na carteira. Validar a resposta real
+    # da API, a presença do cartão e o ID do iframe de detalhe antes de
+    # visitar a rota interna usada também pelo painel contextual.
+    page.goto(WEB + '/contratos', wait_until='domcontentloaded')
+    page.get_by_role('button', name='Cadastrar contrato').click()
     form = page.get_by_role('form', name='Cadastrar contrato')
-    form.get_by_label('Número do contrato').fill(f'QA-TEC08-03-{execucao}-A')
+    # O campo do formulário remove caracteres não numéricos e o backend exige até 25 dígitos.
+    numero = f'{secrets.randbelow(10**25):025d}'
+    form.get_by_label('Número do contrato').fill(numero)
     form.get_by_label('Órgão contratante').fill('LABORATORIO QA TEC08-03')
     form.get_by_label('Objeto').fill('CONTRATO SINTETICO DEV AUTOMATIZADO')
     form.get_by_label('Início da vigência').fill('2026-01-01')
     form.get_by_label('Término da vigência').fill('2027-12-31')
     form.get_by_role('button', name='Cadastrar contrato').click()
-    dialogo = page.get_by_role('dialog', name='Confirmar cadastro?')
-    dialogo.get_by_role('button', name='Confirmar cadastro').click()
-    # O cadastro abre a Visão geral; o upload é sempre uma decisão separada.
-    # /contratos/novo tambem satisfaz **/contratos/*: nao aceitar a URL atual
-    # como se fosse o contrato recem-criado. Esperar rota com UUID real.
+    dialogo = page.get_by_role('dialog', name='Confirmar cadastro do contrato?')
+    with page.expect_response(lambda r: r.request.method == 'POST' and
+                              r.url.split('?')[0].endswith('/contratos'),
+                              timeout=30000) as confirmacao:
+        dialogo.get_by_role('button', name='Cadastrar contrato').click()
+    resposta_criacao = confirmacao.value
+    exigir(resposta_criacao.status == 201,
+           f'Cadastro pela UI: HTTP {resposta_criacao.status}, retorno={resposta_criacao.text()[:300]}')
+    contrato = resposta_criacao.json()['id']
+    exigir(base.uuid_ok(contrato), 'Cadastro via UI não retornou UUID de contrato')
+    page.get_by_role('tab', name='Todos os contratos').click()
+    page.locator('#campo-busca').select_option('todos')
+    page.get_by_role('searchbox', name='Pesquisar contrato').fill(numero)
+    cartao = page.get_by_role('button', name=f'Abrir detalhes do contrato {numero}', exact=True)
+    cartao.wait_for(state='visible', timeout=25000)
+    cartao.click()
+    modal = page.get_by_role('dialog', name='Detalhes do contrato')
+    modal.wait_for(state='visible', timeout=15000)
+    exigir(modal.locator('iframe[title="Conteúdo do contrato"]').get_attribute('src') ==
+           f'/contratos/{contrato}?painel=1', 'O cartão abriu um contrato diferente do cadastrado')
+    # A rota interna é a mesma carregada pelo iframe; facilita a validação
+    # da UI do documento com locators de página, sem alterar o contrato.
+    page.goto(WEB + f'/contratos/{contrato}', wait_until='domcontentloaded')
     page.wait_for_function(
         r"""() => /^\/contratos\/[0-9a-fA-F-]{36}\/?$/.test(window.location.pathname)""",
         timeout=30000,
     )
-    contrato = page.url.split('/contratos/')[1].split('?')[0].strip('/')
-    exigir(base.uuid_ok(contrato), 'Cadastro via UI não retornou UUID de contrato')
     page.get_by_role('tab', name='Documentos').click()
     page.get_by_role('tabpanel', name='Documentos').wait_for(state='visible', timeout=20000)
     page.locator('#documentos-contratuais').get_by_role('button', name='Anexar documento').click()
@@ -176,8 +224,12 @@ def confirmar_documento(page, nome, resultado):
 
 def baixar_e_conferir(page, nome, dados, pasta):
     painel = page.locator('#documentos-contratuais')
+    # Os cartões de documento agora abrem um detalhe; o download fica no modal.
+    painel.get_by_role('button', name=f'Ver detalhes de {nome}', exact=True).click()
+    detalhe = page.get_by_role('dialog', name=nome, exact=True)
+    detalhe.wait_for(state='visible', timeout=15000)
     with page.expect_download(timeout=30000) as esperado:
-        painel.get_by_role('button', name=f'Baixar {nome}').click()
+        detalhe.get_by_role('button', name='Baixar arquivo', exact=True).click()
     download = esperado.value
     exigir(download.suggested_filename == nome, 'Nome do download diferente do solicitado')
     arquivo = pasta / ('download-' + secrets.token_hex(5))
@@ -187,6 +239,9 @@ def baixar_e_conferir(page, nome, dados, pasta):
                'SHA-256 do download via UI divergente')
     finally:
         arquivo.unlink(missing_ok=True)
+        # Liberar a interface para anexos e filtros subsequentes do mesmo QA.
+        detalhe.locator('[data-tec08-fechar-modal]').first.click(timeout=15000)
+        detalhe.wait_for(state='hidden', timeout=15000)
 
 
 def registrar_relatorio(pasta, rel, erro):
@@ -260,7 +315,7 @@ def executar(contas, visivel=False):
                 # O botão abre confirmação auditável: aguardar resposta somente
                 # depois do preenchimento da justificativa obrigatória.
                 pagina_retomada.get_by_role('button', name='Retomar contrato suspenso').click()
-                confirmacao = pagina_retomada.get_by_role('dialog', name='Retomar contrato suspenso?')
+                confirmacao = pagina_retomada.get_by_role('dialog', name='Reabrir contrato suspenso?')
                 confirmacao.wait_for(state='visible', timeout=12000)
                 confirmacao.get_by_label('Justificativa obrigatória (15 a 200 caracteres)').fill(
                     'Retomada controlada do contrato sintético após suspensão de QA.')
@@ -412,7 +467,7 @@ def executar(contas, visivel=False):
             admin.get_by_role('tabpanel', name='Etapas').wait_for(state='visible', timeout=20000)
             etapas_area = admin.locator('section[aria-labelledby="titulo-etapas"]')
             etapas_area.get_by_role('button', name='Nova etapa').click()
-            form_etapa = etapas_area.get_by_role('form', name='Criar etapa')
+            form_etapa = admin.get_by_role('form', name='Criar etapa')
             nome_etapa = 'QA TEC08-03 Etapa Modal ' + execucao[-6:]
             form_etapa.locator('#etapa-nome').fill(nome_etapa)
             with admin.expect_response(lambda r: r.request.method == 'POST' and
@@ -451,18 +506,54 @@ def executar(contas, visivel=False):
             modal_etapa.wait_for(state='visible', timeout=15000)
             bloco_entregaveis = modal_etapa.get_by_role('region', name='Entregáveis da etapa')
             bloco_entregaveis.get_by_role('button', name='Novo entregável').click()
-            form_entregavel = bloco_entregaveis.get_by_role('form', name='Cadastrar entregável')
-            nome_entregavel = 'QA TEC08-03 Entregável de referência ' + execucao[-6:]
-            form_entregavel.locator('input[id$="-nome"]').fill(nome_entregavel)
-            form_entregavel.get_by_role('button', name='+ Adicionar evidência esperada').click()
-            form_entregavel.get_by_label('Tipo de evidência *').select_option('Relatório')
-            form_entregavel.get_by_label('Descrição (opcional)').last.fill('Relatório planejado, não entregue')
+            form_entregavel = admin.get_by_role('form', name='Cadastrar entregável')
+            nome_entregavel = nome_qa_entregavel(execucao)
+            campo_nome = form_entregavel.locator('input[id$="-nome"]')
+            campo_nome.fill(nome_entregavel)
+            exigir(campo_nome.input_value() == nome_entregavel,
+                   'Formulário truncou o nome do entregável antes do POST')
+            form_entregavel.locator('input[id$="-inicioPrevisto"]').fill('2026-11-10')
+            form_entregavel.locator('input[id$="-peso"]').fill('1.0000')
             with admin.expect_response(lambda r: r.request.method == 'POST' and
-                                       r.url.split('?')[0].endswith(f'/contratos/{a}/entregaveis') and r.status == 201,
-                                       timeout=25000):
+                                       r.url.split('?')[0].endswith(f'/contratos/{a}/entregaveis'),
+                                       timeout=25000) as requisicao_cadastro:
                 form_entregavel.get_by_role('button', name='Cadastrar entregável').click()
-            titulo_item = bloco_entregaveis.get_by_role('link', name=nome_entregavel, exact=True)
-            titulo_item.wait_for(state='visible', timeout=25000)
+            resposta_cadastro = requisicao_cadastro.value
+            exigir(resposta_cadastro.status == 201,
+                   f'Cadastro de entregável retornou HTTP {resposta_cadastro.status}: {resposta_cadastro.text()[:180]}')
+            resposta_item = resposta_cadastro.json()
+            exigir(isinstance(resposta_item, dict) and base.uuid_ok(resposta_item.get('id')),
+                   'Cadastro de entregável não retornou UUID válido')
+            exigir(resposta_item.get('nome') == nome_entregavel,
+                   f'API persistiu nome diferente do digitado: {resposta_item.get("nome")!r} != {nome_entregavel!r}')
+            id_item = resposta_item['id']
+            consulta_item = admin.request.get(f'{base.BASE_API}/contratos/{a}/entregaveis/{id_item}')
+            exigir(consulta_item.status == 200 and consulta_item.json().get('nome') == nome_entregavel,
+                   f'GET do entregável não confirmou o nome persistido: HTTP {consulta_item.status}')
+            href_item = f'/contratos/{a}/entregaveis/{id_item}'
+            # Identificar o link pela URL retornada no POST, não por algoritmo
+            # de nome acessível do Playwright num modal aninhado. Ainda exigir
+            # nome acessível, âncora sem aria-hidden e navegação por teclado.
+            titulo_item = bloco_entregaveis.locator(
+                f'li[data-tec08-item-clicavel] a[href="{href_item}"]')
+            try:
+                titulo_item.wait_for(state='visible', timeout=25000)
+            except Exception as erro:
+                diagnostico = bloco_entregaveis.evaluate(
+                    "el => ({abas: [...el.querySelectorAll('[role=tab]')].map(t => ({nome:t.textContent,ativa:t.getAttribute('aria-selected')})), links:[...el.querySelectorAll('a')].map(a => ({texto:a.innerText, nome:a.getAttribute('aria-label'), url:a.getAttribute('href'), papel:a.getAttribute('role'), popup:a.getAttribute('aria-haspopup'), visivel:!!a.getClientRects().length}))})")
+                # Preservar o DOM diagnosticado integralmente no ZIP do QA, sem cookies/tokens.
+                arquivo_dom = pasta / 'diagnostico-entregavel-dom.json'
+                arquivo_dom.write_text(json.dumps({
+                    'entregavelId': id_item, 'hrefEsperado': href_item,
+                    'nomeEsperado': nome_entregavel, 'dom': diagnostico,
+                }, ensure_ascii=False, indent=2), encoding='utf-8')
+                arquivo_dom.chmod(0o600)
+                rel['diagnosticoEntregavelDOM'] = arquivo_dom.name
+                raise AssertionError(f'Entregável criado não ficou visível na aba ativa: {diagnostico}') from erro
+            exigir(titulo_item.count() == 1 and titulo_item.get_attribute('aria-label') == nome_entregavel,
+                   'Cartão do entregável não corresponde ao nome persistido')
+            exigir(titulo_item.evaluate("a => a.tagName === 'A' && !a.closest('[aria-hidden=true]') && a.tabIndex >= 0"),
+                   'O cartão existe visualmente, mas não está acessível como link')
             # Playwright pode rolar automaticamente ANTES do clique. Medir antes
             # do auto-scroll gera falso positivo ao comparar com o fechamento.
             titulo_item.scroll_into_view_if_needed()
@@ -471,11 +562,26 @@ def executar(contas, visivel=False):
             modal_item = admin.get_by_role('dialog', name=nome_entregavel)
             modal_item.wait_for(state='visible', timeout=25000)
             exigir(admin.url.split('?')[0] == f'{WEB}/contratos/{a}', 'Clique no entregável navegou em vez de abrir modal')
+            # O checklist agora é cadastrado no detalhe, separado do formulário
+            # de planejamento. Garantir a persistência real antes de conferir status.
+            modal_item.get_by_role('tab', name='Evidências', exact=True).click()
+            modal_item.get_by_role('button', name='Nova evidência').click()
+            cadastro_evidencia = admin.get_by_role('dialog', name='Nova evidência esperada')
+            cadastro_evidencia.get_by_label('Tipo de evidência').select_option('Relatório')
+            cadastro_evidencia.get_by_label('Orientações (opcional)').fill('Relatório planejado, não entregue')
+            with admin.expect_response(lambda r: r.request.method == 'POST' and
+                                       r.url.split('?')[0].endswith('/evidencias-esperadas') and r.status == 201,
+                                       timeout=25000):
+                cadastro_evidencia.get_by_role('button', name='Cadastrar evidência').click()
             # A evidência sem comprovante aparece como Aguardando envio.
             # Nao aceitar "Status indisponivel" ou conteudo inventado como prova.
             status_evidencia = modal_item.get_by_label('Status da evidência Relatório')
             status_evidencia.get_by_text('Aguardando envio', exact=True).wait_for(state='visible', timeout=20000)
-            modal_item.get_by_text('0/1 evidências obrigatórias verificadas', exact=True).wait_for(state='visible', timeout=10000)
+            # O contador textual resume 0/1; 'verificadas' integra o nome acessível
+            # da barra de progresso (role=img), sem confundir prova com avanço físico.
+            modal_item.get_by_text('0/1 evidências obrigatórias', exact=True).wait_for(state='visible', timeout=10000)
+            modal_item.get_by_role('img', name='0 de 1 evidências obrigatórias verificadas', exact=True).wait_for(
+                state='visible', timeout=10000)
             area_modal = modal_item.locator('[data-tec08-corpo-modal]').first
             botao_evidencia = modal_item.get_by_role('button', name='Ver detalhes da evidência esperada Relatório')
             # Scroll so deve ser >0 se a propria area permitir rolar.
@@ -612,26 +718,28 @@ def executar(contas, visivel=False):
             aba_todos.wait_for(state='visible', timeout=20000)
             aba_todos.click()
             admin.locator('#campo-busca').select_option('todos')
-            numero_qa = f'QA-TEC08-03-{execucao}-A'
+            numero_qa = numero_contrato_real(admin, a)
             busca = admin.get_by_role('searchbox', name='Pesquisar contrato')
             busca.wait_for(state='visible', timeout=20000)
             busca.fill(numero_qa)
-            # A lista é uma grade, não o antigo ul.space-y-4. Cada cartão possui
-            # link acessível cujo nome é o número do contrato.
-            cartao = admin.get_by_role('link', name=f'Abrir contrato {numero_qa}', exact=True)
+            # O cartão é um botão contextual que abre um iframe de detalhe,
+            # não um link de navegação. Validar o contrato raiz do iframe.
+            cartao = admin.get_by_role('button', name=f'Abrir detalhes do contrato {numero_qa}', exact=True)
             cartao.wait_for(state='visible', timeout=25000)
-            exigir(cartao.get_attribute('href') == f'/contratos/{a}',
-                   'Pesquisa retornou outro contrato ou link com UUID incorreto')
             resumo = cartao.get_by_test_id('resumo-planejamento-contrato')
+            # Verificar o resumo NA CARTEIRA antes de abrir o modal contextual.
+            # Quando o diálogo está aberto, o fundo pode ficar inerte ao leitor
+            # de acessibilidade; não confundir isso com indicadores ausentes.
             resumo.scroll_into_view_if_needed()
             # Indicadores atuais usam role=img/aria-label. Não existe mais
             # <progress>, nem o rótulo legado de entregas não medidas.
             # Houve 1 etapa, 1 entregável e 1 evidência obrigatória neste cenário,
-            # mas nenhum comprovante foi enviado: os três numeradores são zero.
+            # mas nenhum comprovante foi enviado: os quatro numeradores são zero.
             esperados = (
-                '0 de 1 etapas concluídas e comprovadas',
-                '0 de 1 entregáveis documentalmente comprovados',
-                '0 de 1 evidências obrigatórias verificadas',
+                '0 de 1 etapas finalizadas',
+                '0 de 1 entregáveis finalizados',
+                '0 de 1 evidências verificadas',
+                '0 de 1 exigências obrigatórias atendidas',
             )
             for rotulo in esperados:
                 try:
@@ -648,6 +756,11 @@ def executar(contas, visivel=False):
                         f'Carteira não exibe indicador real {rotulo!r}: {diagnostico}'
                     ) from erro
             rel['provas'].append('Lista de contratos mostra etapas/entregáveis/evidências esperadas reais sem progresso fictício')
+            cartao.click()
+            modal = admin.get_by_role('dialog', name='Detalhes do contrato')
+            modal.wait_for(state='visible', timeout=15000)
+            exigir(modal.locator('iframe[title="Conteúdo do contrato"]').get_attribute('src') ==
+                   f'/contratos/{a}?painel=1', 'Pesquisa abriu outro contrato ou iframe incorreto')
         except Exception as exc:
             falha = exc
             try:

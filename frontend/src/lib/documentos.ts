@@ -156,7 +156,7 @@ export async function excluirDocumentoArquivado(contratoId: string, id: string):
 export async function editarDocumento(contratoId: string, id: string, dados: { categoria: CategoriaDocumento; descricao?: string }): Promise<DocumentoContratual> {
   const resposta = await requisitar(`${base(contratoId)}/${encodeURIComponent(id)}`, {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ categoria: dados.categoria, descricao: dados.descricao.trim() || null }),
+    body: JSON.stringify({ categoria: dados.categoria, descricao: dados.descricao?.trim() || null }),
   });
   return resposta.json() as Promise<DocumentoContratual>;
 }

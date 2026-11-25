@@ -1,4 +1,5 @@
 'use client';
+import { CampoDataCivil } from '@/app/components/campo-data-civil';
 
 import { useState, type FormEvent } from 'react';
 import { ErroEtapa, STATUS_ETAPA, type DadosEtapa, type Etapa } from '@/lib/etapas';
@@ -57,26 +58,23 @@ export function FormularioEtapa({ inicial, onSalvar, onCancelar, onSalvandoMudou
     } finally { setSalvando(false); onSalvandoMudou?.(false); }
   }
   return <form data-tec08-formulario-contextual data-tec08-edicao={inicial ? "true" : undefined} data-tec08-criacao={inicial ? undefined : "true"} noValidate aria-label={inicial ? `Editar etapa ${inicial.nome}` : 'Criar etapa'} onSubmit={(e) => void enviar(e)}
-    className="min-w-0 space-y-4 rounded-2xl border border-brand-green/40 bg-brand-darkgreen/10 p-4 md:p-5">
-    <h4 className="text-lg font-semibold text-brand-neon">{inicial ? 'Editar etapa' : 'Nova etapa'}</h4>
-    <p className="text-sm text-foreground/65">{somenteMetadados ? 'Etapa finalizada: edite apenas nome, código, descrição e observações. Prazos e situação exigem reabertura autorizada.' : 'Somente o nome é obrigatório. A ordem é definida pelo sistema. Conclusão e encerramento são solicitados no menu da etapa e exigem aprovação.'}</p>
-    <div className="grid gap-4 md:grid-cols-[1fr_2fr]">
+    className="pi-form-etapa min-w-0 space-y-3">
+    {somenteMetadados && <p className="text-sm text-foreground/65">Etapa finalizada: prazos e situação exigem reabertura autorizada.</p>}
+    <h4 className="pi-titulo-formulario">Identificação</h4>
+    <div className="grid gap-3 sm:grid-cols-[minmax(8rem,11rem)_minmax(0,1fr)]">
       <div><label htmlFor="etapa-codigo" className="mb-1 block text-sm font-medium">Código</label>
-        <input id="etapa-codigo" maxLength={somenteMetadados ? Math.max(LIMITES_ETAPA.codigo, (inicial?.codigo ?? '').length) : LIMITES_ETAPA.codigo} className={campoClasse} value={dados.codigo ?? ''} {...erroCampo('codigo')}
-          onChange={(e) => mudar('codigo', e.target.value || null)} /><span className="block text-right text-[11px] text-foreground/50">{(dados.codigo ?? '').length}/{LIMITES_ETAPA.codigo}</span>{mensagem('codigo')}</div>
+        <input id="etapa-codigo" maxLength={somenteMetadados ? Math.max(LIMITES_ETAPA.codigo, (inicial?.codigo ?? '').length) : LIMITES_ETAPA.codigo} inputMode="numeric" className={campoClasse} value={dados.codigo ?? ''} {...erroCampo('codigo')}
+          onChange={(e) => mudar('codigo', e.target.value.replace(/\D/g,'') || null)} /><span className="block text-right text-[11px] text-foreground/50">{(dados.codigo ?? '').length}/{LIMITES_ETAPA.codigo}</span>{mensagem('codigo')}</div>
       <div><label htmlFor="etapa-nome" className="mb-1 block text-sm font-medium">Nome *</label>
         <input id="etapa-nome" maxLength={somenteMetadados ? Math.max(LIMITES_ETAPA.nome, (inicial?.nome ?? '').length) : LIMITES_ETAPA.nome} required className={campoClasse} value={dados.nome} {...erroCampo('nome')}
           onChange={(e) => mudar('nome', e.target.value)} /><span className="block text-right text-[11px] text-foreground/50">{dados.nome.length}/{LIMITES_ETAPA.nome}</span>{mensagem('nome')}</div>
     </div>
-    <div><label htmlFor="etapa-descricao" className="mb-1 block text-sm font-medium">Descrição</label>
-      <textarea id="etapa-descricao" maxLength={somenteMetadados ? Math.max(LIMITES_ETAPA.descricao, (inicial?.descricao ?? '').length) : LIMITES_ETAPA.descricao} rows={3} className={campoClasse} value={dados.descricao ?? ''}
-        onChange={(e) => mudar('descricao', e.target.value || null)} /><span className="block text-right text-[11px] text-foreground/50">{(dados.descricao ?? '').length}/{LIMITES_ETAPA.descricao}</span>{mensagem('descricao')}</div>
-    {!somenteMetadados && <div className="grid gap-4 md:grid-cols-3">
+    {!somenteMetadados && <div className="pi-etapa-planejamento">
       <div><label htmlFor="etapa-inicioPrevisto" className="mb-1 block text-sm font-medium">Início previsto</label>
-        <input type="date" id="etapa-inicioPrevisto" className={campoClasse} value={dados.inicioPrevisto ?? ''} {...erroCampo('inicioPrevisto')}
+        <CampoDataCivil  id="etapa-inicioPrevisto" className={campoClasse} value={dados.inicioPrevisto ?? ''} {...erroCampo('inicioPrevisto')}
           onChange={(e) => mudar('inicioPrevisto', e.target.value || null)} />{mensagem('inicioPrevisto')}</div>
       <div><label htmlFor="etapa-terminoPrevisto" className="mb-1 block text-sm font-medium">Término previsto</label>
-        <input type="date" id="etapa-terminoPrevisto" className={campoClasse} value={dados.terminoPrevisto ?? ''} {...erroCampo('terminoPrevisto')}
+        <CampoDataCivil  id="etapa-terminoPrevisto" className={campoClasse} value={dados.terminoPrevisto ?? ''} {...erroCampo('terminoPrevisto')}
           onChange={(e) => mudar('terminoPrevisto', e.target.value || null)} />{mensagem('terminoPrevisto')}</div>
       <div><label htmlFor="etapa-status" className="mb-1 block text-sm font-medium">Status</label>
         <select id="etapa-status" className={campoClasse} value={dados.status} {...erroCampo('status')}
@@ -85,12 +83,17 @@ export function FormularioEtapa({ inicial, onSalvar, onCancelar, onSalvandoMudou
           {inicial?.status === 'CONCLUIDA' && <option value="CONCLUIDA" disabled>Concluída (após aprovação)</option>}
         </select>{mensagem('status')}</div>
     </div>}
+    <div className="grid gap-3 sm:grid-cols-2">
+    <div><label htmlFor="etapa-descricao" className="mb-1 block text-sm font-medium">Descrição</label>
+      <textarea id="etapa-descricao" maxLength={somenteMetadados ? Math.max(LIMITES_ETAPA.descricao, (inicial?.descricao ?? '').length) : LIMITES_ETAPA.descricao} rows={4} className={campoClasse} value={dados.descricao ?? ''}
+        onChange={(e) => mudar('descricao', e.target.value || null)} /><span className="block text-right text-[11px] text-foreground/50">{(dados.descricao ?? '').length}/{LIMITES_ETAPA.descricao}</span>{mensagem('descricao')}</div>
     <div><label htmlFor="etapa-observacoes" className="mb-1 block text-sm font-medium">Observações</label>
-      <textarea id="etapa-observacoes" maxLength={somenteMetadados ? Math.max(LIMITES_ETAPA.observacoes, (inicial?.observacoes ?? '').length) : LIMITES_ETAPA.observacoes} rows={2} className={campoClasse} value={dados.observacoes ?? ''}
+      <textarea id="etapa-observacoes" maxLength={somenteMetadados ? Math.max(LIMITES_ETAPA.observacoes, (inicial?.observacoes ?? '').length) : LIMITES_ETAPA.observacoes} rows={4} className={campoClasse} value={dados.observacoes ?? ''}
         onChange={(e) => mudar('observacoes', e.target.value || null)} /><span className="block text-right text-[11px] text-foreground/50">{(dados.observacoes ?? '').length}/{LIMITES_ETAPA.observacoes}</span>{mensagem('observacoes')}</div>
+    </div>
     {erroGeral && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-error-text">{erroGeral}</p>}
-    <div className="flex flex-wrap justify-end gap-2">
-      <button type="button" onClick={onCancelar} disabled={salvando} className="rounded-lg border border-brand-green/40 px-4 py-2 text-sm transition-colors hover:bg-brand-green/10 disabled:opacity-50">Voltar sem salvar</button>
+    <div className="pi-rodape-formulario flex flex-wrap justify-end gap-2 border-t border-current/15 pt-3">
+      <button type="button" onClick={onCancelar} disabled={salvando} className="rounded-lg border border-brand-green/40 px-4 py-2 text-sm transition-colors hover:bg-brand-green/10 disabled:opacity-50">Cancelar</button>
       <button type="submit" aria-busy={salvando} disabled={salvando} className="rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-on-brand-green disabled:opacity-50">
         {salvando ? 'Salvando etapa...' : 'Salvar etapa'}
       </button>

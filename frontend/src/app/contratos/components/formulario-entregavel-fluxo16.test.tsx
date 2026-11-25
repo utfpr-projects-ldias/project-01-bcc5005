@@ -6,6 +6,6 @@ it('cadastro foca planejamento do entregável e tipo operacional fica na engrena
   expect(screen.queryByLabelText('Periodicidade fixa *')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /Adicionar evidência esperada/ })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('checkbox', { name: /Mesma data do início/ }));
-  expect(screen.getByLabelText('Data prevista')).toBeInTheDocument();
+  expect(screen.getByLabelText('Data prevista *')).toBeInTheDocument();
   expect(screen.queryByLabelText('Término previsto')).not.toBeInTheDocument();
 });

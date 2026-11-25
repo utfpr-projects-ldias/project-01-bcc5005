@@ -78,6 +78,8 @@ import { StatusOcorrencia } from './status-ocorrencia.enum.js';
   '"quantidade_realizada" IS NULL OR "quantidade_realizada" >= 0',
 )
 export class Ocorrencia {
+  @Column({name:"execucoes_percentuais", type:"boolean", default:false})
+  execucoesPercentuais?: boolean;
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
@@ -189,6 +191,10 @@ export class Ocorrencia {
     default: StatusOcorrencia.NAO_INICIADO,
   })
   status!: StatusOcorrencia;
+
+  /** Pedido de regularização documental não revoga a aprovação física anterior. */
+  @Column({ name: 'regularizacao_documental_solicitada', type: 'boolean', default: false })
+  regularizacaoDocumentalSolicitada!: boolean;
 
   /**
    * Quantidade efetivamente realizada.

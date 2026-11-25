@@ -139,6 +139,8 @@ describe('HU09-01 — entidade Ocorrencia', () => {
       'PENDENTE_CONCLUSAO',
       'EM_REVISAO',
       'CONCLUIDO',
+      'PENDENTE_ENCERRAMENTO',
+      'ENCERRADA',
     ]);
 
     expect(
@@ -162,7 +164,7 @@ describe('HU09-01 — entidade Ocorrencia', () => {
 
     expect(indice).toMatchObject({
       unique: true,
-      where: `"origem" = 'RECORRENTE'`,
+      where: `"origem" = 'RECORRENTE' AND "substituida_em" IS NULL`,
     });
 
     expect(indice?.columns).toEqual([

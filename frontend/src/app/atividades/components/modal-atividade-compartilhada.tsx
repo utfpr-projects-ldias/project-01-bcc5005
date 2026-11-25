@@ -22,9 +22,9 @@ function EditorContrato({ contratoId, valor, onChange, nome }: {
   const permitido = Boolean(acesso.dados?.permissoes?.registrarAtividades && !acesso.erro);
   const podeVincularOcorrencia = Boolean(acesso.dados?.permissoes?.vincularAtividadesOcorrencia);
   const podeMedirOcorrencia = Boolean(acesso.dados?.permissoes?.registrarExecucaoOcorrencia);
-  const etapasAbertas = new Set((etapas.dados??[]).filter(e=>!e.arquivadoEm && !e.conclusaoSolicitadaEm && !e.encerramentoSolicitadoEm && !['CONCLUIDA','ENCERRADA'].includes(e.status)).map(e=>e.id));
+  const etapasAbertas = new Set((etapas.dados??[]).filter(e=>!e.arquivadoEm && !e.conclusaoSolicitadaEm && !e.encerramentoSolicitadoEm && !['CONCLUIDA','CONCLUIDO_PARCIALMENTE','ENCERRADA'].includes(e.status)).map(e=>e.id));
   const entregaveisValidos = (entregaveis.dados ?? []).filter(e => !e.arquivadoEm && etapasAbertas.has(e.etapaId) &&
-    !['CONCLUIDO', 'FINALIZADO', 'PENDENTE_CONCLUSAO', 'PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? ''));
+    !['CONCLUIDO', 'CONCLUIDO_PARCIALMENTE', 'FINALIZADO', 'PENDENTE_CONCLUSAO', 'PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? ''));
   const registros = ocorrencias.ocorrencias.filter(o => valor.entregavelIds.includes(o.entregavelId) &&
     !['CONCLUIDO', 'ENCERRADA', 'PENDENTE_CONCLUSAO', 'PENDENTE_ENCERRAMENTO'].includes(o.status));
   return <section className="min-w-0 space-y-3 rounded-xl border border-brand-green/25 p-3" aria-label={`Vínculos do contrato ${nome}`}>
@@ -130,7 +130,7 @@ export function ModalAtividadeCompartilhada({ contratoInicialId, onFechar, onSal
         return <div key={v.contratoId} className="space-y-1">
           <div className="flex items-center justify-end"><button type="button" disabled={vinculos.length <= 1}
             onClick={() => setVinculos(lista => lista.filter(x => x.contratoId !== v.contratoId))}
-            className="text-xs text-red-400 underline disabled:opacity-30">Remover contrato</button></div>
+            className="text-xs text-error-text underline disabled:opacity-30">Remover contrato</button></div>
           <EditorContrato contratoId={v.contratoId} nome={contrato ? `${contrato.codigoPublico} · ${contrato.objeto}` : 'Contrato'}
             valor={v} onChange={novo => setVinculos(lista => lista.map(x => x.contratoId === novo.contratoId ? novo : x))}/>
         </div>;

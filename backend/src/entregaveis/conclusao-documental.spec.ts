@@ -10,14 +10,13 @@ describe('fechamento documental sem presumir estado operacional', () => {
   test('uma evidência pendente impede conclusão', async () => {
     expect(await documentacaoVerificada(manager({...pronta, verificadas:1}), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')).toBe(false);
   });
-  test('sem itens ou com filhos vazios jamais fecha por 0/0', async () => {
+  test('sem filhos não fecha; ausência legítima de exigência não impede conclusão', async () => {
     expect(await documentacaoVerificada(manager({...pronta, etapas:0, entregaveis:0,evidencias:0,verificadas:0}), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')).toBe(false);
-    expect(await documentacaoVerificada(manager({...pronta, entregaveis_sem_evidencia:1}), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')).toBe(false);
+    expect(await documentacaoVerificada(manager({...pronta, evidencias:0, verificadas:0}), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')).toBe(true);
   });
 });
 
 import { filhosPendentesDeConclusao, concluirEtapaAposFilhos } from './conclusao-documental.js';
-import { Etapa } from '../etapas/etapa.entity.js';
 import { StatusEtapa } from '../etapas/status-etapa.enum.js';
 
 describe('cascata segura e auditável', () => {
@@ -68,5 +67,6 @@ test('SQL de conclusão ignora opcionais, preserva obrigatórias e não conclui 
   const sql: string[] = [];
   const m = { query: async (q: string) => { sql.push(q); return [{ etapas:1, entregaveis:1, evidencias:1, verificadas:1, etapas_sem_entregavel:0, entregaveis_sem_evidencia:0 }]; } } as unknown as EntityManager;
   expect(await documentacaoVerificada(m, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')).toBe(true);
-  expect(sql[0]).toContain('ev.obrigatoria IS TRUE');
+  expect(sql[0]).toContain('vw_comprovacao_entregavel_r40');
+  expect(sql[0]).toContain('v.obrigatorias+v.ocorrencias_exigidas');
 });

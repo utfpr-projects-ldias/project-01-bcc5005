@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AuditoriaModule } from '../auditoria/auditoria.module.js';
+import { ExecucaoModule } from '../execucao/execucao.module.js';
 import { ArmazenamentoModule } from '../armazenamento/armazenamento.module.js';
 import { ExclusaoContratoService } from './exclusao-contrato.service.js';
 import { Contrato } from './contrato.entity.js';
@@ -12,6 +13,7 @@ import { ContratosService } from './contratos.service.js';
   imports: [
     TypeOrmModule.forFeature([Contrato]),
     AuditoriaModule,
+    ExecucaoModule,
     ArmazenamentoModule,
   ],
   controllers: [ContratosController],

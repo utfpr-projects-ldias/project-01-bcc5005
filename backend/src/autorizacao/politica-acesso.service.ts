@@ -28,13 +28,13 @@ export class PoliticaAcessoService {
     return Boolean(contrato);
   }
 
-  private async disponivelParaOperacao(contratoId: string): Promise<boolean> {
+  private async disponivelParaOperacao(contratoId: string, acao: string): Promise<boolean> {
     // TypeORM mantém manager em Repository reais. Em produção a consulta é sempre
     // feita ao banco, não a parâmetros da requisição ou filtros de frontend.
     const encontrado = await this.contratos.findOne({
-      where: { id: contratoId }, select: { id: true, arquivadoEm: true, status: true },
+      where: { id: contratoId }, select: { id: true, arquivadoEm: true, status: true, conclusaoSolicitadaEm: true },
     });
-    return Boolean(encontrado && !encontrado.arquivadoEm && encontrado.status !== 'CONCLUIDO' && encontrado.status !== 'ENCERRADO' && encontrado.status !== 'CANCELADO' && encontrado.status !== 'SUSPENSO');
+    return Boolean(encontrado && !encontrado.arquivadoEm && !encontrado.conclusaoSolicitadaEm && encontrado.status !== 'CONCLUIDO' && (encontrado.status !== 'CONCLUIDO_PARCIALMENTE' || ['evidencias:anexar','evidencias:verificar','evidencias:reabrir','ocorrencias:vincular-evidencia','ocorrencias:solicitar-conclusao','ocorrencias:concluir','ocorrencias:reabrir','entregaveis:solicitar-conclusao','entregaveis:concluir','etapas:solicitar-conclusao','etapas:concluir','documentos:anexar','contratos:solicitar-conclusao'].includes(acao)) && encontrado.status !== 'FINALIZADO' && encontrado.status !== 'ENCERRADO' && encontrado.status !== 'CANCELADO' && encontrado.status !== 'SUSPENSO');
   }
 
   async permitido(usuario: UsuarioAutenticado, politica: Politica, contratoId?: string): Promise<boolean> {
@@ -46,18 +46,19 @@ export class PoliticaAcessoService {
       if (!escopo || escopo.tipo !== operacao.escopo ||
         (escopo.tipo === 'recurso' && escopo.recurso !== operacao.recurso)) return false;
       if (!uuidValido(contratoId)) return false;
-      if (operacao.classe !== 'leitura' && !await this.disponivelParaOperacao(contratoId)) return false;
+      // Toda mutação do catálogo exige chave granular declarada, inclusive para ADMIN.
+      // Leitura mantém acesso por vínculo/responsabilidade sem exigir chave granular.
+      const granular = ACAO_PERMISSAO[politica.acao];
+      if (operacao.classe !== 'leitura' && !granular) return false;
+      if (operacao.classe !== 'leitura' && !await this.disponivelParaOperacao(contratoId, politica.acao)) return false;
       if (admin) return true;
       if (usuario.perfil !== PerfilUsuario.GESTOR && usuario.perfil !== PerfilUsuario.COLABORADOR) return false;
       const vinculo = await this.vinculos.findOneBy({ usuarioId: usuario.id, contratoId });
       if (!vinculo) return operacao.classe === 'leitura' && await this.responsavelPodeLer(contratoId, usuario.id);
-      const granular = ACAO_PERMISSAO[politica.acao];
-      if (granular) {
-        const efetivas = permissoesEfetivas(usuario.perfil, vinculo.podeEditar, vinculo.permissoesDetalhadas);
-        return efetivas[granular];
-      }
-      // PQ-04: ações de planejamento sem delegação específica continuam restritas.
-      return operacao.classe !== 'planejamento' || (usuario.perfil === PerfilUsuario.GESTOR && Boolean(vinculo.podeEditar));
+      if (operacao.classe === 'leitura') return true;
+      // Após o fail-closed acima, a chave existe em todas as operações mutáveis.
+      const efetivas = permissoesEfetivas(usuario.perfil, vinculo.podeEditar, vinculo.permissoesDetalhadas);
+      return granular ? efetivas[granular] : false;
     }
 
     switch (politica.acao) {
@@ -100,9 +101,10 @@ export class PoliticaAcessoService {
         return Boolean(vinculo && permissoesEfetivas(usuario.perfil, vinculo.podeEditar, vinculo.permissoesDetalhadas).reabrirContrato);
       }
       case 'contratos:visualizar':
+      case 'contratos:solicitar-conclusao':
       case 'contratos:editar': {
         if (!uuidValido(contratoId)) return false;
-        if (politica.acao === 'contratos:editar' && !await this.disponivelParaOperacao(contratoId)) return false;
+        if (politica.acao !== 'contratos:visualizar' && !await this.disponivelParaOperacao(contratoId, politica.acao)) return false;
         if (admin) return true;
         const vinculo = await this.vinculos.findOneBy({ usuarioId: usuario.id, contratoId });
         if (!vinculo) return politica.acao === 'contratos:visualizar' && await this.responsavelPodeLer(contratoId, usuario.id);

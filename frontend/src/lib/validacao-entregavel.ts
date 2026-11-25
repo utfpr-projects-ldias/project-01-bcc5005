@@ -8,6 +8,7 @@ export type RascunhoEntregavel = {
   etapaId: string; nome: string; codigo: string; descricao: string; tipo: TipoEntregavel;
   responsavelId: string; inicioPrevisto: string; terminoPrevisto: string;
   quantidadePrevista: string; unidadeMedida: string; periodicidade: PeriodicidadeEntregavel | '';
+  modoRecorrente?: 'DESCRITIVO' | 'QUANTITATIVO';
   peso: string; criterioConclusao: string; observacoes: string;
   evidenciasEsperadas: ItemChecklistFormulario[];
 };
@@ -15,7 +16,7 @@ export type DadosPlanejamentoEntregavel = {
   etapaId: string; nome: string; tipo: TipoEntregavel; codigo: string | null; descricao: string | null;
   responsavelId: string | null; inicioPrevisto: string | null; terminoPrevisto: string | null;
   quantidadePrevista: string | null; unidadeMedida: string | null;
-  periodicidade: PeriodicidadeEntregavel | null; configuracaoPeriodicidade: { versao: 1 } | null;
+  periodicidade: PeriodicidadeEntregavel | null; configuracaoPeriodicidade: Entregavel['configuracaoPeriodicidade'] | null;
   peso: string | null; criterioConclusao: string | null; observacoes: string | null;
   evidenciasEsperadas: { id?: string; tipoEvidencia: string; descricao: string | null; obrigatoria: boolean }[];
 };
@@ -45,21 +46,22 @@ export function inicialEntregavel(etapaId: string, item?: Entregavel): RascunhoE
     tipo: item?.tipo ?? 'UNICO', responsavelId: item?.responsavelId ?? '',
     inicioPrevisto: item?.inicioPrevisto ?? '', terminoPrevisto: item?.terminoPrevisto ?? '',
     quantidadePrevista: item?.quantidadePrevista ?? '', unidadeMedida: item?.unidadeMedida ?? '',
-    periodicidade: item?.periodicidade ?? '', peso: item?.peso == null ? '' : String(Number(item.peso)),
+    periodicidade: item?.periodicidade ?? '', modoRecorrente: item ? item.configuracaoPeriodicidade?.modoRegistro : 'DESCRITIVO', peso: item?.peso == null ? '' : String(Number(item.peso)),
     criterioConclusao: item?.criterioConclusao ?? '', observacoes: item?.observacoes ?? '',
     evidenciasEsperadas: (item?.evidenciasEsperadas ?? []).map((e, indice) => ({ ...e, chave: `existente-${indice}-${e.id}` })),
   };
 }
 export function mudouEstrutura(r: RascunhoEntregavel, inicial?: Entregavel): boolean {
   return !!inicial && (r.tipo !== inicial.tipo ||
-    (r.tipo === 'RECORRENTE' && r.periodicidade !== (inicial.periodicidade ?? '')) ||
+    (r.tipo === 'RECORRENTE' && (r.periodicidade !== (inicial.periodicidade ?? '') || r.modoRecorrente !== inicial.configuracaoPeriodicidade?.modoRegistro)) ||
     r.inicioPrevisto !== (inicial.inicioPrevisto ?? '') || r.terminoPrevisto !== (inicial.terminoPrevisto ?? '') ||
     r.etapaId !== inicial.etapaId);
 }
 export function validarEntregavel(r: RascunhoEntregavel, inicial?: Entregavel): { sucesso: true; dados: DadosPlanejamentoEntregavel } | { sucesso: false; erros: ErrosEntregavel } {
   const erros: ErrosEntregavel = {};
   const nome = r.nome.trim();
-  if (!nome || (nome.length > 42 && nome !== inicial?.nome)) erros.nome = 'Informe o nome (até 42 caracteres).';
+  if (!nome) erros.nome = 'Informe o nome do entregável.';
+  else if ([...nome].length > 42 && nome !== inicial?.nome) erros.nome = 'O nome do entregável deve ter no máximo 42 caracteres.';
   for (const [campo, maximo] of [['codigo', 15], ['descricao', 200], ['unidadeMedida', 40], ['criterioConclusao', 200], ['observacoes', 100]] as const) {
     const t = r[campo];
     if (t && (!t.trim() || (t.length > maximo && t !== (inicial?.[campo] ?? '')))) erros[campo] = `Revise o campo (até ${maximo} caracteres e sem valor somente com espaços).`;
@@ -77,7 +79,9 @@ export function validarEntregavel(r: RascunhoEntregavel, inicial?: Entregavel): 
   }
   if (r.tipo === 'CONTINUO' && !r.terminoPrevisto) erros.terminoPrevisto = 'Informe o término previsto do serviço contínuo.';
   if (r.tipo === 'RECORRENTE') {
-    if (!r.periodicidade) erros.periodicidade = 'Selecione a periodicidade.';
+    if (!r.modoRecorrente) erros.periodicidade = 'Defina a modalidade de medição recorrente.';
+    if (r.modoRecorrente === 'QUANTITATIVO' && !r.unidadeMedida.trim()) erros.unidadeMedida = 'Informe a unidade de medida.';
+    if (!r.periodicidade || !PERIODICIDADES.includes(r.periodicidade)) erros.periodicidade = 'Selecione uma periodicidade válida.';
     if (!r.inicioPrevisto || !r.terminoPrevisto)
       erros.inicioPrevisto = 'Defina início e término da agenda recorrente.';
   }
@@ -101,7 +105,7 @@ export function validarEntregavel(r: RascunhoEntregavel, inicial?: Entregavel): 
     quantidadePrevista: r.tipo === 'QUANTITATIVO' ? opcional(r.quantidadePrevista) : null,
     unidadeMedida: ['QUANTITATIVO', 'RECORRENTE'].includes(r.tipo) ? opcional(r.unidadeMedida) : null,
     periodicidade: r.tipo === 'RECORRENTE' && r.periodicidade ? r.periodicidade as PeriodicidadeEntregavel : null,
-    configuracaoPeriodicidade: r.tipo === 'RECORRENTE' && r.periodicidade ? { versao: 1 } : null,
+    configuracaoPeriodicidade: r.tipo === 'RECORRENTE' && r.periodicidade ? { versao: 1, ...(r.modoRecorrente ? {modoRegistro:r.modoRecorrente} : {}) } : null,
     peso: opcional(r.peso.replace(',', '.')), criterioConclusao: opcional(r.criterioConclusao), observacoes: opcional(r.observacoes),
     evidenciasEsperadas: r.evidenciasEsperadas.map((e) => ({
       ...(e.id ? { id: e.id } : {}), tipoEvidencia: e.tipoEvidencia.trim(), descricao: opcional(e.descricao ?? ''), obrigatoria: e.obrigatoria,

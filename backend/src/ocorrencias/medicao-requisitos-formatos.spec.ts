@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import type { EntityManager } from 'typeorm';
 import type { Ocorrencia } from './ocorrencia.entity.js';
 import { proximoStatusAutomatico, resumoMedicao } from './medicao-ocorrencia.js';
@@ -10,10 +11,10 @@ const base = (dados: Partial<Ocorrencia> = {}): Ocorrencia => ({
 } as Ocorrencia);
 
 function simular(fotos: number, relatorios: number) {
-  const consultar = jest.fn().mockImplementation((sql: string) => {
-    if (sql.includes('ocorrencia_lancamentos')) return Promise.resolve([{ total: '10' }]);
-    if (sql.includes('atividade_ocorrencia_medicoes')) return Promise.resolve([{ registrada: '0', verificada: '0', verificadas: '0', pendentes: '0' }]);
-    return Promise.resolve([{ fotos: String(fotos), relatorios: String(relatorios) }]);
+  const consultar = jest.fn(async (sql: string) => {
+    if (sql.includes('ocorrencia_lancamentos')) return [{ total: '10' }];
+    if (sql.includes('atividade_ocorrencia_medicoes')) return [{ registrada: '0', verificada: '0', verificadas: '0', pendentes: '0' }];
+    return [{ fotos: String(fotos), relatorios: String(relatorios) }];
   });
   return { query: consultar } as unknown as EntityManager;
 }

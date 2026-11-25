@@ -83,3 +83,9 @@ describe('DTOs de contratos — validação de entrada', () => {
     expect(validarAtualizacao({ senha: 'invasao' }).length).toBeGreaterThan(0);
   });
 });
+
+  test('limites 32 de processo administrativo e unidade responsável, sem truncar valores', () => {
+    expect(validarCriacao({ ...base, processoAdministrativo: 'P'.repeat(32), unidadeResponsavel: 'U'.repeat(32) })).toHaveLength(0);
+    expect(validarCriacao({ ...base, processoAdministrativo: 'P'.repeat(33) }).length).toBeGreaterThan(0);
+    expect(validarAtualizacao({ unidadeResponsavel: 'U'.repeat(33) }).length).toBeGreaterThan(0);
+  });

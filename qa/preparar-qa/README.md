@@ -34,4 +34,4 @@ O Administrador deve realizar login no Chromium e pressionar ENTER no terminal *
 
 O empacotador usa uma lista fechada de nomes de relatórios; não copia `.env`, `credenciais.json`, cookies, tokens, `venv`, navegadores nem outras pastas. É seguro usar `git add .` **apenas depois de conferir o staging** e o `.gitignore`.
 
-O *gate global* da HU06 continua pendente de inspeção visual/manual (inclusive expiração natural de sessão), caso não seja realizada. O runner não marca esses campos como verdadeiros artificialmente.
+O *gate funcional* da HU06 é automático: exige evidências reais de Chromium, API, PostgreSQL, cinco perfis e logout 401. Avaliação estética subjetiva, expiração natural de sessão e aprovação do PR não são testes funcionais e não são inventadas como evidência.

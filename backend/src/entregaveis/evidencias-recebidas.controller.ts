@@ -12,7 +12,7 @@ import type { ArquivoComprovante } from './evidencias-recebidas.service.js';
 import { EvidenciasRecebidasService } from './evidencias-recebidas.service.js';
 import { ArquivamentoPlanejamentoService } from './arquivamento-planejamento.service.js';
 import { ExclusaoPlanejamentoService } from './exclusao-planejamento.service.js';
-import { EditarEvidenciaEsperadaDto, EnviarComprovanteDto } from './dto/evidencias-recebidas.dto.js';
+import { EditarVinculosEvidenciaDto, EditarContribuicaoEvidenciaDto, EditarEvidenciaEsperadaDto, EnviarComprovanteDto, VerificarComprovanteDto } from './dto/evidencias-recebidas.dto.js';
 const maxArquivo = lerInteiroPositivo(process.env.ARQUIVOS_MAX_ARQUIVO_BYTES, POLITICA_PROVISORIA.maxArquivoBytes);
 const recurso = { tipo: 'recurso' as const, recurso: 'entregavel' as const, parametro: 'entregavelId', parametroContratoPai: 'contratoId' };
 
@@ -54,6 +54,11 @@ export class EvidenciasRecebidasController {
     return this.exclusao.excluir('evidencia', c, id, req.usuarioDominio!, e);
   }
 
+  @Get('destinos-compartilhamento')
+  @ExigirPoliticaOperacional('entregaveis:visualizar', recurso)
+  destinos(@Param('contratoId') c: string, @Param('entregavelId') e: string, @Req() req: RequisicaoAutorizada) {
+    return this.service.listarDestinos(c,e,req.usuarioDominio!);
+  }
   @Get(':esperadaId')
   @ExigirPoliticaOperacional('entregaveis:visualizar', recurso)
   detalhe(@Param('contratoId') c: string, @Param('entregavelId') e: string,
@@ -66,6 +71,25 @@ export class EvidenciasRecebidasController {
     @Param('esperadaId') id: string, @Body() dto: EditarEvidenciaEsperadaDto, @Req() req: RequisicaoAutorizada) {
     return this.service.editarEsperada(c, e, id, dto, req.usuarioDominio!);
   }
+  @Patch(':esperadaId/vinculos')
+  @ExigirPoliticaOperacional('evidencias:editaresperada', recurso)
+  editarVinculos(@Param('contratoId') c: string, @Param('entregavelId') e: string,
+    @Param('esperadaId') id: string, @Body() dto: EditarVinculosEvidenciaDto, @Req() req: RequisicaoAutorizada) {
+    return this.service.editarVinculos(c,e,id,dto,req.usuarioDominio!);
+  }
+  @Patch(':esperadaId/contribuicao')
+  @ExigirPoliticaOperacional('execucao:atualizar', recurso)
+  editarDeclaracao(@Param('contratoId') c: string, @Param('entregavelId') e: string,
+    @Param('esperadaId') id: string, @Body() dto: EditarContribuicaoEvidenciaDto, @Req() req: RequisicaoAutorizada) {
+    return this.service.editarContribuicao(c,e,id,'rascunho',dto,req.usuarioDominio!);
+  }
+  @Patch(':esperadaId/comprovantes/:comprovanteId/contribuicao')
+  @ExigirPoliticaOperacional('execucao:atualizar', recurso)
+  editarContribuicao(@Param('contratoId') c: string, @Param('entregavelId') e: string,
+    @Param('esperadaId') id: string, @Param('comprovanteId') comprovante: string,
+    @Body() dto: EditarContribuicaoEvidenciaDto, @Req() req: RequisicaoAutorizada) {
+    return this.service.editarContribuicao(c,e,id,comprovante,dto,req.usuarioDominio!);
+  }
   @Patch(':esperadaId/reabrir')
   @ExigirPoliticaOperacional('evidencias:reabrir', { tipo: 'contrato', parametro: 'contratoId' })
   reabrir(@Param('contratoId') c: string, @Param('entregavelId') e: string,
@@ -76,7 +100,7 @@ export class EvidenciasRecebidasController {
   @Post(':esperadaId/comprovantes')
   @HttpCode(HttpStatus.CREATED)
   @ExigirPoliticaOperacional('evidencias:anexar', { tipo: 'contrato', parametro: 'contratoId' })
-  @UseInterceptors(FileInterceptor('arquivo', { limits: { fileSize: maxArquivo, files: 1, fields: 1, parts: 2 } }))
+  @UseInterceptors(FileInterceptor('arquivo', { limits: { fileSize: maxArquivo, files: 1, fields: 12, parts: 13 } }))
   enviar(@Param('contratoId') c: string, @Param('entregavelId') e: string,
     @Param('esperadaId') id: string, @UploadedFile() arquivo: ArquivoComprovante | undefined,
     @Body() dto: EnviarComprovanteDto, @Req() req: RequisicaoAutorizada) {
@@ -87,8 +111,16 @@ export class EvidenciasRecebidasController {
   @HttpCode(HttpStatus.OK)
   @ExigirPoliticaOperacional('evidencias:verificar', { tipo: 'contrato', parametro: 'contratoId' })
   verificar(@Param('contratoId') c: string, @Param('entregavelId') e: string,
-    @Param('esperadaId') id: string, @Param('comprovanteId') comprovante: string, @Req() req: RequisicaoAutorizada) {
-    return this.service.verificar(c, e, id, comprovante, req.usuarioDominio!);
+    @Param('esperadaId') id: string, @Param('comprovanteId') comprovante: string, @Req() req: RequisicaoAutorizada, @Body() dto: VerificarComprovanteDto) {
+    return this.service.verificar(c, e, id, comprovante, req.usuarioDominio!, dto);
+  }
+  @Post(':esperadaId/comprovantes/:comprovanteId/rejeitar')
+  @HttpCode(HttpStatus.OK)
+  @ExigirPoliticaOperacional('evidencias:verificar', { tipo: 'contrato', parametro: 'contratoId' })
+  rejeitar(@Param('contratoId') c: string, @Param('entregavelId') e: string,
+    @Param('esperadaId') id: string, @Param('comprovanteId') comprovante: string,
+    @Req() req: RequisicaoAutorizada, @Body() dto: JustificativaDecisaoDto) {
+    return this.service.rejeitar(c, e, id, comprovante, dto.motivo, req.usuarioDominio!);
   }
   @Get(':esperadaId/comprovantes/:comprovanteId/download')
   @ExigirPoliticaOperacional('entregaveis:visualizar', recurso)

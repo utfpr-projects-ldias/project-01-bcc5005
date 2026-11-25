@@ -6,7 +6,7 @@ import type { AuditoriaService } from '../auditoria/auditoria.service.js';
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
 import { PerfilUsuario } from './perfil-usuario.enum.js';
 import { Usuario } from './usuario.entity.js';
-import type { IdentidadesFuncionariosService } from './identidades-funcionarios.service.js';
+import { RevogacaoSessoesPendenteError, type IdentidadesFuncionariosService } from './identidades-funcionarios.service.js';
 import { MinhaContaService } from './minha-conta.service.js';
 
 const ator = { id: 'uuid-admin', supertokensUserId: 'st-admin', perfil: PerfilUsuario.ADMINISTRADOR, email: 'admin@qa.org' };
@@ -108,4 +108,30 @@ test('alteração do nome é negada se a sessão não corresponde à identidade 
 test('nome não pode ser alterado sem sobrenome', async () => {
   await expect(svc.alterarNome('NomeUnico', ator)).rejects.toThrow();
   expect(transacao).not.toHaveBeenCalled();
+});
+
+describe('B02 — compensação do e-mail próprio e revogação de sessão', () => {
+  it('confirma novo e-mail após erro de COMMIT sem voltar o Core para o anterior', async () => {
+    encontrar.mockResolvedValueOnce(criarAdmin()).mockResolvedValueOnce(Object.assign(criarAdmin(), { email: 'nova@qa.org' }));
+    transacao.mockImplementationOnce(async (f) => { await f(manager); throw new Error('COMMIT incerto'); });
+    const resultado = await svc.alterarEmail('nova@qa.org', 'senha', ator);
+    expect(resultado.email).toBe('nova@qa.org');
+    expect(alterarEmail).toHaveBeenCalledTimes(1);
+  });
+  it('não compensa e-mail próprio se a consulta de reconciliação falhar', async () => {
+    encontrar.mockResolvedValueOnce(criarAdmin()).mockRejectedValueOnce(new Error('sem conexão'));
+    transacao.mockImplementationOnce(async (f) => { await f(manager); throw new Error('COMMIT incerto'); });
+    await expect(svc.alterarEmail('nova@qa.org', 'senha', ator)).rejects.toThrow('confirmação indeterminada');
+    expect(alterarEmail).toHaveBeenCalledTimes(1);
+  });
+  it('não audita conclusão de senha quando revogação de sessões permanece pendente', async () => {
+    definirSenha.mockRejectedValueOnce(new RevogacaoSessoesPendenteError());
+    await expect(svc.alterarSenha('Atual!123456', 'Nova!123456', ator))
+      .rejects.toThrow('sessões anteriores podem continuar ativas');
+    expect(auditoriaAcao).toHaveBeenCalledTimes(2);
+    const callback = auditoriaAcao.mock.calls[1][1] as unknown as () => Promise<{evento: {acao: string; dadosPosteriores: unknown}}>;
+    const evento = (await callback()).evento;
+    expect(evento.acao).toBe(AcaoAuditoria.USUARIO_SENHA_REVOGACAO_PENDENTE);
+    expect(JSON.stringify(evento)).not.toContain('Nova!123456');
+  });
 });

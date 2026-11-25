@@ -1,6 +1,6 @@
 import {
   ErroDocumento, formatarDataDocumento, formatarTamanhoDocumento, listarDocumentos, enviarDocumento,
-  obterDownloadDocumento, validarSelecaoDocumento,
+  obterDownloadDocumento, validarSelecaoDocumento, editarDocumento,
 } from './documentos';
 
 const id = '11111111-1111-4111-8111-111111111111';
@@ -69,4 +69,12 @@ test('mensagens de arquivo inválido não exigem conhecimento técnico', () => {
   const grande = new File(['arquivo'], 'grande.pdf', { type: 'application/pdf' });
   Object.defineProperty(grande, 'size', { value: 16 * 1024 * 1024 + 1 });
   expect(validarSelecaoDocumento(grande, 'CONTRATO_PRINCIPAL')).toMatch(/limite atual.*16 MB/i);
+});
+
+
+test('edição da categoria aceita descrição opcional sem lançar TypeError nem enviar undefined', async () => {
+  buscar.mockResolvedValue({ ok: true, json: async () => ({ id: 'doc', categoria: 'ANEXO', descricao: null }) });
+  await editarDocumento(id, 'doc', { categoria: 'ANEXO' });
+  expect(buscar).toHaveBeenCalledWith(expect.stringContaining('/documentos/doc'),
+    expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ categoria: 'ANEXO', descricao: null }) }));
 });

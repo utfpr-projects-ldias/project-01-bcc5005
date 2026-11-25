@@ -15,3 +15,8 @@ export function IconeReabertura({ className = 'h-4 w-4', ...props }: SVGProps<SV
     <path d="M12 2.5a9.5 9.5 0 1 0 9.42 10.72h-2.54a7 7 0 1 1-2.38-6.4l-2.92 2.92H22V2l-3.72 3.73A9.45 9.45 0 0 0 12 2.5Zm0 6.2a3.3 3.3 0 1 0 0 6.6 3.3 3.3 0 0 0 0-6.6Z" />
   </svg>;
 }
+
+/** Conclusão parcial: círculo sem marca de conclusão integral. */
+export function IconeConclusaoParcial({className='h-4 w-4',...props}:SVGProps<SVGSVGElement>) {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true" {...props}><circle cx="12" cy="12" r="9"/></svg>;
+}

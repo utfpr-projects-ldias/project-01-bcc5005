@@ -4,6 +4,7 @@ import { jest } from '@jest/globals';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { AtividadesService } from './atividades.service.js';
+import { Contrato } from '../contratos/contrato.entity.js';
 import { AtividadeEntity } from './atividade.entity.js';
 import { TransicaoAtividadeDto } from './dto/transicao-atividade.dto.js';
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
@@ -20,7 +21,7 @@ function montar(estado: 'REGISTRADA' | 'PENDENTE_CONCLUSAO' | 'VERIFICADA' | 'AR
     arquivadaEm: estado === 'ARQUIVADA' ? new Date() : null,
   });
   const manager = {
-    findOne: jest.fn(async () => item),
+    findOne: jest.fn(async (entidade: unknown) => entidade===Contrato ? {id:contrato,status:'EM_EXECUCAO'} : item),
     save: jest.fn(async () => item),
   };
   const registrar = jest.fn();
@@ -40,13 +41,13 @@ describe('HU08-05-01 — estados e auditoria transacional de atividades', () => 
     expect(c.item.status).toBe('PENDENTE_CONCLUSAO');
     await c.service.verificar(contrato, id, usuario, 'Conferido pelo gestor');
     expect(c.item.status).toBe('VERIFICADA');
-    expect(c.manager.findOne).toHaveBeenNthCalledWith(1, AtividadeEntity,
-      expect.objectContaining({ lock: { mode: 'pessimistic_write' } }));
     expect(c.manager.findOne).toHaveBeenNthCalledWith(2, AtividadeEntity,
+      expect.objectContaining({ lock: { mode: 'pessimistic_write' } }));
+    expect(c.manager.findOne).toHaveBeenNthCalledWith(3, AtividadeEntity,
       expect.objectContaining({ relations: { entregaveis: true, ocorrencias: true } }));
     const chamadas = c.manager.findOne.mock.calls as unknown as Array<[unknown, Record<string, unknown>]>;
-    expect(chamadas[0][1]).not.toHaveProperty('relations');
-    expect(chamadas[1][1]).not.toHaveProperty('lock');
+    expect(chamadas[1][1]).not.toHaveProperty('relations');
+    expect(chamadas[2][1]).not.toHaveProperty('lock');
     expect(c.registrar).toHaveBeenCalledWith(expect.objectContaining({ acao: AcaoAuditoria.ATIVIDADE_VERIFICADA }));
     await expect(c.service.update(contrato, id, { titulo: 'Alterado' }, usuario))
       .rejects.toBeInstanceOf(ConflictException);

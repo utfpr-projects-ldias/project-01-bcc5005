@@ -71,8 +71,8 @@ function CabecalhoInterno({ rota, children }: { rota: string; children: ReactNod
   }
 
   if (embutido && rota.startsWith('/contratos/')) {
-    return <main id="conteudo-principal" data-visualizacao="painel-contrato" className="min-h-screen min-w-0 bg-background px-3 py-4 font-sans text-foreground sm:px-5">
-      <div className="mx-auto w-full min-w-0 max-w-7xl">{children}</div>
+    return <main id="conteudo-principal" data-visualizacao="painel-contrato" className="min-h-screen min-w-0 bg-background px-3 py-0 font-sans text-foreground sm:px-5">
+      <div className="w-full min-w-0">{children}</div>
     </main>;
   }
 
@@ -103,7 +103,7 @@ function CabecalhoInterno({ rota, children }: { rota: string; children: ReactNod
         onCancelar={() => setConfirmarSaida(false)} onConfirmar={() => void sair()} />}
       <MenuMobile />
       <main id="conteudo-principal" className="min-w-0 flex-1 px-4 py-5 md:px-6">
-        <div className="mx-auto w-full min-w-0 max-w-7xl">{children}</div>
+        <div className={`mx-auto w-full min-w-0 ${rota === "/contratos" ? "max-w-[1920px]" : "max-w-7xl"}`}>{children}</div>
       </main>
     </div>
   </div>;

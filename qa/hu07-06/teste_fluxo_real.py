@@ -1,10 +1,11 @@
 """Contratos puros do QA real, sem simular aprovação nem substituir Playwright/Postgres."""
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock, Mock
 from contextlib import redirect_stderr
 from io import StringIO
+from pathlib import Path
 import sys
-from validar_fluxo_real import argumentos, conferir_db_por_api, validar_transicoes_refresh, validar_relatorio_retomada
+from validar_fluxo_real import argumentos, conferir_db_por_api, validar_checklist_api, validar_acesso_obrigatoriedade, validar_relatorio_retomada, verificar_navegacao_leitor, validar_acl_planejamento_leitor
 
 class ValidacaoReal(unittest.TestCase):
     contrato = '11111111-1111-4111-8111-111111111111'
@@ -46,25 +47,72 @@ class ValidacaoReal(unittest.TestCase):
                     argumentos()
         self.assertEqual(erro.exception.code, 2)
 
-if __name__ == '__main__':
-    unittest.main()
 
+class TesteChecklistApi(unittest.TestCase):
+    """Planejamento e comprovação são objetos distintos: lista pós-POST real."""
 
-class TesteRefreshReal(unittest.TestCase):
-    def test_transicao_de_650ms_e_provada_pelo_dom(self):
-        eventos = [
-            {'t': 100, 'ocupado': False, 'desabilitado': False},
-            {'t': 104, 'ocupado': True, 'desabilitado': True},
-            {'t': 762, 'ocupado': False, 'desabilitado': False},
+    def itens(self):
+        return [
+            {'id': '11111111-1111-4111-8111-111111111111',
+             'tipoEvidencia': 'Relatório', 'obrigatoria': True},
+            {'id': '22222222-2222-4222-8222-222222222222',
+             'tipoEvidencia': 'Foto', 'obrigatoria': False},
         ]
-        self.assertEqual(round(validar_transicoes_refresh(eventos)), 658)
 
-    def test_nao_aceita_loading_inexistente_nem_rapido(self):
+    def test_dois_documentos_validos_com_obrigatoria_e_opcional(self):
+        validar_checklist_api(self.itens(), pode_alterar_obrigatoriedade=True)
+
+    def test_reprova_falta_duplicacao_tipo_incorreto_ou_obrigatoriedade(self):
+        casos = [self.itens()[:1], self.itens()*2,
+                 [self.itens()[0], self.itens()[0]],
+                 [dict(self.itens()[0], obrigatoria=False), self.itens()[1]],
+                 [self.itens()[0], dict(self.itens()[1], tipoEvidencia='Outro')]]
+        for caso in casos:
+            with self.subTest(caso=caso), self.assertRaises(AssertionError):
+                validar_checklist_api(caso, pode_alterar_obrigatoriedade=True)
+
+
+class TestePermissaoObrigatoriedade(unittest.TestCase):
+    """Os dois papéis possuem capacidades diferentes mesmo com edição comum."""
+
+    @staticmethod
+    def checklist_gestor():
+        return [
+            {'id': '11111111-1111-4111-8111-111111111111', 'tipoEvidencia': 'Relatório', 'obrigatoria': True},
+            {'id': '22222222-2222-4222-8222-222222222222', 'tipoEvidencia': 'Foto', 'obrigatoria': True},
+        ]
+
+    def test_gestor_com_edicao_nao_recebe_alterar_obrigatoriedade_implicitamente(self):
+        self.assertFalse(validar_acesso_obrigatoriedade(
+            {'permissoes': {'alterarObrigatoriedade': False}}, 'gestor-edicao'))
+        validar_checklist_api(self.checklist_gestor(), pode_alterar_obrigatoriedade=False)
+
+    def test_admin_pode_opcional_e_gestor_nao_pode(self):
+        self.assertTrue(validar_acesso_obrigatoriedade(
+            {'permissoes': {'alterarObrigatoriedade': True}}, 'administrador'))
         with self.assertRaises(AssertionError):
-            validar_transicoes_refresh([{'t': 0, 'ocupado': False, 'desabilitado': False}])
+            validar_checklist_api(self.checklist_gestor(), pode_alterar_obrigatoriedade=True)
         with self.assertRaises(AssertionError):
-            validar_transicoes_refresh([{'t': 0, 'ocupado': True, 'desabilitado': True},
-                                            {'t': 100, 'ocupado': False, 'desabilitado': False}])
+            validar_checklist_api([
+                self.checklist_gestor()[0],
+                {**self.checklist_gestor()[1], 'obrigatoria': False},
+            ], pode_alterar_obrigatoriedade=False)
+
+    def test_sinalizacao_de_permissao_inesperada_reprova(self):
+        for perfil, valor in [('administrador', False), ('gestor-edicao', True)]:
+            with self.subTest(perfil=perfil), self.assertRaisesRegex(AssertionError, 'Permissão'):
+                validar_acesso_obrigatoriedade({'permissoes': {'alterarObrigatoriedade': valor}}, perfil)
+        with self.assertRaises(AssertionError):
+            validar_acesso_obrigatoriedade({'permissoes': {}}, 'gestor-edicao')
+
+    def test_roteiro_cobre_negacao_http_e_edicao_autorizada(self):
+        fonte = (Path(__file__).resolve().parent / 'validar_fluxo_real.py').read_text()
+        self.assertIn("'POST', {", fonte)
+        self.assertIn("'PATCH', {'obrigatoria': False}", fonte)
+        self.assertIn("get_by_role('button', name='Editar orientações')", fonte)
+        self.assertIn("get_by_role('button', name='Salvar orientações')", fonte)
+        self.assertIn("negada['status'] == 403", fonte)
+        self.assertIn("tentativa['status'] == 403", fonte)
 
 
 class TesteRetomadaSegura(unittest.TestCase):
@@ -96,63 +144,130 @@ class TesteRetomadaSegura(unittest.TestCase):
             with self.assertRaises(AssertionError):
                 validar_relatorio_retomada(p, '44444444-4444-4444-8444-444444444444', 'administrador')
 
-class TesteChecklistDezItens(unittest.TestCase):
-    """Regressão do strict mode: rótulos 1 e 10 não devem ser confundidos."""
+class TesteNovoFluxo(unittest.TestCase):
+    """Garante que o QA não retorne ao formulário antigo com checklist embutido."""
 
-    def test_remover_indice_um_com_dez_botoes_requer_nome_exato(self):
-        import re
-        from validar_fluxo_real import verificar_checklist_maximo
+    def test_qa_exige_cadastro_individual_de_evidencias_e_patches_proprios(self):
+        from pathlib import Path
+        codigo = (Path(__file__).resolve().parent / 'validar_fluxo_real.py').read_text()
+        self.assertIn('cadastrar_checklist_no_detalhe(', codigo)
+        self.assertIn("'/evidencias-esperadas'", codigo)
+        self.assertIn('Cinco POSTs de entregáveis + dez POSTs de evidências', codigo)
+        self.assertIn("page.get_by_role('dialog', name='Relatório'", codigo)
+        self.assertNotIn('preencher_checklist(form', codigo)
+        self.assertNotIn('verificar_checklist_maximo(form', codigo)
+        self.assertIn('validar_checklist_api(evidencias, pode_alterar_obrigatoriedade=', codigo)
 
-        class BotaoAdicionar:
-            def __init__(self, formulario):
-                self.formulario = formulario
-            def click(self):
-                if self.formulario.quantidade >= 10:
-                    raise AssertionError('Adição ultrapassou o limite de dez')
-                self.formulario.quantidade += 1
-            def is_disabled(self):
-                return self.formulario.quantidade == 10
-            def is_enabled(self):
-                return self.formulario.quantidade < 10
 
-        class BotaoRemover:
-            def __init__(self, formulario):
-                self.formulario = formulario
-            def click(self):
-                if self.formulario.quantidade < 1:
-                    raise AssertionError('Tentou remover item inexistente')
-                self.formulario.quantidade -= 1
+class TesteNavegacaoRealLeitor(unittest.TestCase):
+    """Sem navegador no teste unitário; controla os nós acessíveis e a ordem das ações.
 
-        class ColecaoRemover:
-            def __init__(self, formulario):
-                self.formulario = formulario
-            def count(self):
-                return self.formulario.quantidade
+    A prova integrada continua obrigatória no Chromium; estes casos impedem
+    regressão para busca de texto fora do modal ou ausência de ACL na janela aberta.
+    """
+    contrato = ValidacaoReal.contrato
+    entregavel = ValidacaoReal.entregavel
 
-        class FormularioSimulado:
-            def __init__(self):
-                self.quantidade = 0
-                self.buscas_exatas = 0
-            def get_by_role(self, role, *, name, exact=False):
-                if role != 'button':
-                    raise AssertionError('Ação inesperada')
-                if isinstance(name, re.Pattern):
-                    if name.search('Adicionar evidência esperada'):
-                        return BotaoAdicionar(self)
-                    if name.search('Remover evidência esperada'):
-                        return ColecaoRemover(self)
-                if name == 'Remover evidência esperada 1':
-                    # Quando há 10 itens, a busca parcial também acha o índice 10.
-                    if not exact and self.quantidade == 10:
-                        raise AssertionError('Playwright strict mode: índices 1 e 10 ambíguos')
-                    self.buscas_exatas += int(exact)
-                    return BotaoRemover(self)
-                raise AssertionError(f'Nome não reconhecido: {name!r}')
+    def preparar(self):
+        page, painel = MagicMock(), MagicMock()
+        abrir, modal_etapa, bloco, lista = [MagicMock() for _ in range(4)]
+        modal_entregavel, link = MagicMock(), MagicMock()
+        abrir.count.return_value = 1
+        modal_etapa.get_attribute.return_value = 'true'
+        modal_entregavel.get_attribute.return_value = 'true'
+        modal_etapa.get_by_role.return_value = MagicMock()
+        modal_entregavel.get_by_role.return_value = MagicMock()
+        bloco.get_by_role.return_value = MagicMock()
+        abrir_edicao_etapa = MagicMock()
+        abrir_edicao_etapa.count.return_value = 0
+        criar_entregavel = MagicMock()
+        criar_entregavel.count.return_value = 0
+        editar_entregavel = MagicMock()
+        editar_entregavel.count.return_value = 0
+        voltar_entregavel, voltar_etapa = MagicMock(), MagicMock()
+        def no_modal_etapa(role, *, name=None, exact=None):
+            if role == 'region' and name == 'Entregáveis da etapa': return bloco
+            if role == 'button' and name == 'Editar etapa': return abrir_edicao_etapa
+            if role == 'button' and name == 'Voltar às etapas': return voltar_etapa
+            raise AssertionError(f'Acesso inesperado ao modal da etapa: {role}/{name}')
+        def no_bloco(role, *, name=None, exact=None):
+            if role == 'list' and name == 'Entregáveis planejados da etapa': return lista
+            if role == 'button' and name == 'Novo entregável': return criar_entregavel
+            raise AssertionError(f'Acesso inesperado no bloco: {role}/{name}')
+        def no_modal_entregavel(role, *, name=None, exact=None):
+            if role == 'button' and name == 'Editar entregável': return editar_entregavel
+            if role == 'button' and name == 'Voltar à etapa': return voltar_entregavel
+            raise AssertionError(f'Acesso inesperado no entregável: {role}/{name}')
+        modal_etapa.get_by_role.side_effect = no_modal_etapa
+        bloco.get_by_role.side_effect = no_bloco
+        modal_entregavel.get_by_role.side_effect = no_modal_entregavel
+        painel.get_by_role.return_value = abrir
+        def obter_dialogo(role, *, name=None, exact=None):
+            if role != 'dialog': raise AssertionError('Esperado um diálogo')
+            if exact: return modal_entregavel
+            return modal_etapa
+        page.get_by_role.side_effect = obter_dialogo
+        lista.locator.return_value = link
+        link.count.return_value = 1
+        link.get_attribute.return_value = 'QA Entregável Leitor'
+        link.evaluate.return_value = True
+        eventos=[]
+        abrir.click.side_effect = lambda: eventos.append('abrir-etapa')
+        link.click.side_effect = lambda: eventos.append('abrir-entregavel')
+        voltar_entregavel.click.side_effect = lambda: eventos.append('voltar-entregavel')
+        voltar_etapa.click.side_effect = lambda: eventos.append('voltar-etapa')
+        etapa = {'nome':'QA Etapa Leitor'}
+        entregavel = {'id': self.entregavel, 'nome': 'QA Entregável Leitor'}
+        return (page, painel, etapa, entregavel, eventos,
+                abrir, modal_etapa, lista, link, abrir_edicao_etapa, criar_entregavel,
+                editar_entregavel)
 
-        formulario = FormularioSimulado()
-        resultado = {'provas': []}
-        verificar_checklist_maximo(formulario, resultado)
-        self.assertEqual(formulario.quantidade, 0)
-        self.assertEqual(formulario.buscas_exatas, 10)
-        self.assertEqual(len(resultado['provas']), 1)
-        self.assertIn('limite de 10', resultado['provas'][0])
+    def test_gestor_e_colaborador_percorrem_modais_e_exigem_acl_em_cada_nivel(self):
+        for perfil in ('gestor-leitura', 'colaborador'):
+            with self.subTest(perfil=perfil):
+                (page, painel, etapa, entregavel, eventos, abrir, modal, lista, link,
+                 sem_editar_etapa, sem_criar, sem_editar) = self.preparar()
+                saida = {'provas': []}
+                verificar_navegacao_leitor(page, painel, etapa, entregavel, self.contrato, saida)
+                self.assertEqual(eventos, ['abrir-etapa', 'abrir-entregavel', 'voltar-entregavel', 'voltar-etapa'])
+                lista.wait_for.assert_called_once_with(state='visible', timeout=25000)
+                self.assertIn('navegação contextual', saida['provas'][0])
+                sem_editar_etapa.count.assert_called_once()
+                sem_criar.count.assert_called_once()
+                sem_editar.count.assert_called_once()
+                link.evaluate.assert_called_once()
+                self.assertEqual(page.get_by_text.call_count, 0)
+
+    def test_modal_nao_aberto_ou_edicao_exposta_reprova(self):
+        for falha in ('etapa-ausente', 'edicao-etapa', 'cadastro', 'edicao-entregavel'):
+            with self.subTest(falha=falha):
+                (page, painel, etapa, entregavel, _, abrir, _, _, _,
+                 editar_etapa, criar, editar) = self.preparar()
+                if falha == 'etapa-ausente': abrir.count.return_value = 0
+                if falha == 'edicao-etapa': editar_etapa.count.return_value = 1
+                if falha == 'cadastro': criar.count.return_value = 1
+                if falha == 'edicao-entregavel': editar.count.return_value = 1
+                with self.assertRaises(AssertionError):
+                    verificar_navegacao_leitor(page, painel, etapa, entregavel, self.contrato, {'provas': []})
+
+    def test_vinculo_legado_nao_pode_parecer_somente_leitura_se_delegou_edicao(self):
+        chaves = ('criarEtapas', 'editarEtapas', 'reordenarEtapas',
+                  'criarEntregaveis', 'editarEntregaveis', 'criarEvidencias', 'editarEvidencias')
+        permitir_nada = {'permissoes': {chave: False for chave in chaves}}
+        validar_acl_planejamento_leitor(permitir_nada, 'gestor-leitura')
+        validar_acl_planejamento_leitor(permitir_nada, 'colaborador')
+        for chave in chaves:
+            with self.subTest(chave=chave):
+                acesso = {'permissoes': {**permitir_nada['permissoes'], chave: True}}
+                with self.assertRaisesRegex(AssertionError, chave):
+                    validar_acl_planejamento_leitor(acesso, 'gestor-leitura')
+
+    def test_link_de_entregavel_errado_reprova(self):
+        page, painel, etapa, entregavel, _, _, _, _, link, _, _, _ = self.preparar()
+        link.get_attribute.return_value = 'Entregável de outro contrato'
+        with self.assertRaisesRegex(AssertionError, 'Nome acessível'):
+            verificar_navegacao_leitor(page, painel, etapa, entregavel, self.contrato, {'provas': []})
+
+
+if __name__ == '__main__':
+    unittest.main()

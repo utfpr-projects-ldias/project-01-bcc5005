@@ -17,7 +17,7 @@ export function useRepositorioConsultas() {
   if (!repositorio) throw new Error('ProvedorConsultas ausente da arvore de componentes');
   return repositorio;
 }
-export function useConsulta<T>(chave: ChaveConsulta, consultar: (signal: AbortSignal) => Promise<T>, opcoes: { habilitada?: boolean; validadeMs?: number } = {}) {
+export function useConsulta<T>(chave: ChaveConsulta, consultar: (signal: AbortSignal) => Promise<T>, opcoes: { habilitada?: boolean; validadeMs?: number; manterDadosNoEscopo?: string } = {}) {
   const repositorio = useRepositorioConsultas();
   const chaveId = chaveTexto(chave);
   const habilitada = opcoes.habilitada !== false;
@@ -32,8 +32,19 @@ export function useConsulta<T>(chave: ChaveConsulta, consultar: (signal: AbortSi
     // O fetcher e registrado na entrada da chave e a consulta nao reinicia por rerender.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repositorio, chaveId, habilitada, validadeMs]);
+  const escopo = opcoes.manterDadosNoEscopo;
+  const [anterior, setAnterior] = useState<{escopo:string;chave:string;dados:T}|null>(null);
+  // Somente mantém a lista da consulta anterior quando muda um filtro do mesmo contrato.
+  // Não conserva dados em caso de erro, desabilitação ou troca de escopo.
+  if ((!habilitada || estado.erro || !escopo || (anterior && anterior.escopo !== escopo)) && anterior) setAnterior(null);
+  else if (habilitada && escopo && !estado.erro && estado.dados !== undefined &&
+      (anterior?.chave !== chaveId || anterior.dados !== estado.dados)) {
+    setAnterior({escopo,chave:chaveId,dados:estado.dados});
+  }
+  const dadosAnteriores=habilitada&&!estado.erro&&estado.dados===undefined&&escopo&&anterior?.escopo===escopo&&anterior.chave!==chaveId?anterior.dados:undefined;
   return {
     ...estado,
+    dados: estado.dados??dadosAnteriores,
     carregando: habilitada && (estado.carregando || (estado.dados === undefined && !estado.erro)),
     atualizar: () => repositorio.buscar(chaveId, consultar, { forcar: true }),
   };

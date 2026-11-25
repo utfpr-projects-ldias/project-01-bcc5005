@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import type { QueryRunner } from 'typeorm';
 import { SolicitacaoConclusaoContratos1796500000000 } from './migrations/1796500000000-SolicitacaoConclusaoContratos.js';
 

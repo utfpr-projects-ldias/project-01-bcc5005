@@ -8,6 +8,7 @@ import { Entregavel } from '../entregaveis/entregavel.entity.js';
 import { Ocorrencia } from '../ocorrencias/ocorrencia.entity.js';
 import { AtividadeEntity } from '../atividades/atividade.entity.js';
 import { ComprovanteEvidencia } from '../entregaveis/comprovante-evidencia.entity.js';
+import { comprovanteValidoParaMeta, comprovantesCandidatosMeta } from './comprovante-valido-meta.js';
 import { MetaMarco, VinculoMetaMarco } from './meta-marco.entity.js';
 import type { CriarMetaMarcoDto, EditarMetaMarcoDto } from './metas-marco.dto.js';
 
@@ -37,7 +38,7 @@ export class MetasMarcoService {
     const e = await m.findOne(Entregavel, { where: { id: entregavelId, contratoId },
       ...(alterar ? { lock: { mode: 'pessimistic_write' as const } } : {}) });
     if (!e || e.arquivadoEm || e.tipo !== 'MARCO') throw new NotFoundException('Marco indisponível');
-    if (alterar && ['CONCLUIDO', 'FINALIZADO', 'PENDENTE_CONCLUSAO', 'PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? ''))
+    if (alterar && ['CONCLUIDO', 'CONCLUIDO_PARCIALMENTE', 'FINALIZADO', 'PENDENTE_CONCLUSAO', 'PENDENTE_CONCLUSAO_PARCIAL', 'PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? ''))
       throw new ConflictException('Reabra o Marco ou devolva a solicitação antes de alterar suas metas');
     return e;
   }
@@ -59,15 +60,14 @@ export class MetasMarcoService {
   private async elegivel(m: EntityManager, meta: MetaMarco, vinculo: VinculoMetaMarco): Promise<boolean> {
     if (meta.tipo === 'OCORRENCIA' && vinculo.ocorrenciaId) {
       const o = await m.findOne(Ocorrencia, { where: { id: vinculo.ocorrenciaId, contratoId: meta.contratoId } });
-      return Boolean(o && !o.substituidaEm && o.status === 'CONCLUIDO');
+      return Boolean(o && !o.substituidaEm && ['CONCLUIDO','CONCLUIDO_PARCIALMENTE'].includes(o.status));
     }
     if (meta.tipo === 'ATIVIDADE' && vinculo.atividadeId) {
       const a = await m.findOne(AtividadeEntity, { where: { id: vinculo.atividadeId, contratoId: meta.contratoId } });
       return Boolean(a && !a.excluidaEm && !a.arquivadaEm && a.status === 'VERIFICADA');
     }
     if (meta.tipo === 'EVIDENCIA' && vinculo.comprovanteId) {
-      const c = await m.findOne(ComprovanteEvidencia, { where: { id: vinculo.comprovanteId, contratoId: meta.contratoId } });
-      return Boolean(c && c.status === 'VERIFICADA' && c.verificadoEm);
+      return comprovanteValidoParaMeta(m, meta.contratoId, vinculo.comprovanteId);
     }
     return false;
   }
@@ -76,9 +76,9 @@ export class MetasMarcoService {
     const ativos = vinculos.filter(v => v.status !== 'REJEITADO');
     const conferencias = await Promise.all(ativos.map(async v => ({ id: v.id, elegivel: v.status === 'APROVADO' && await this.elegivel(m, meta, v) })));
     const aprovados = conferencias.filter(v => v.elegivel).length;
-    return { ...meta, quantidadeAprovada: aprovados, percentualPreparacao: Math.min(100, aprovados / meta.quantidadeExigida * 100),
+    return Object.assign({}, meta, { quantidadeAprovada: aprovados, percentualPreparacao: Math.min(100, aprovados / meta.quantidadeExigida * 100),
       pronto: aprovados >= meta.quantidadeExigida,
-      vinculos: ativos.map(v => ({...v, elegivel: conferencias.find(x => x.id === v.id)?.elegivel ?? false })) };
+      vinculos: ativos.map(v => Object.assign({}, v, { elegivel: conferencias.find(x => x.id === v.id)?.elegivel ?? false })) });
   }
   async listar(contratoId: string, entregavelId: string, ator: UsuarioAutenticado) {
     await this.autorizar(ator, contratoId, 'metas-marco:listar');
@@ -133,6 +133,8 @@ export class MetasMarcoService {
     }
     const c = await m.findOne(ComprovanteEvidencia, { where: { id: registroId, contratoId: meta.contratoId } });
     if (!c) throw new NotFoundException('Comprovante não pertence ao contrato deste Marco');
+    if (!await comprovanteValidoParaMeta(m, meta.contratoId, registroId))
+      throw new ConflictException('Comprovante desatualizado, reaberto ou arquivado não pode sustentar uma meta');
     return { comprovanteId: registroId };
   }
   async candidatos(contratoId: string, entregavelId: string, metaId: string, ator: UsuarioAutenticado) {
@@ -149,8 +151,7 @@ export class MetasMarcoService {
         return atividades.filter(a => !a.excluidaEm && !a.arquivadaEm && a.entregaveis.some(e => e.contratoId === contratoId))
           .map(a => ({ id: a.id, titulo: a.titulo }));
       }
-      const comprovantes = await m.find(ComprovanteEvidencia, { where: { contratoId, status: 'VERIFICADA' } });
-      return comprovantes.filter(c => c.verificadoEm).map(c => ({ id: c.id, titulo: c.nomeOriginal }));
+      return comprovantesCandidatosMeta(m, contratoId);
     });
   }
   async vincular(contratoId: string, entregavelId: string, metaId: string, registroId: string, ator: UsuarioAutenticado) {

@@ -1,0 +1,23 @@
+'use client';
+import { useProgresso } from '@/hooks/use-progresso';
+import { useEntregaveis, useResumoDocumentalContrato } from '@/hooks/use-entregaveis';
+import { useOcorrencias } from '@/hooks/use-ocorrencias';
+import { dataPlanejada, ROTULOS_TIPO } from '@/lib/entregaveis';
+import { rotuloEstadoEntregavel } from '@/lib/identidade-operacional';
+import { EtiquetaAtraso } from '@/app/components/etiqueta-atraso';
+const numero = (v:string|number|null|undefined) => v == null || !Number.isFinite(Number(v)) ? '—' : Number(v).toLocaleString('pt-BR',{maximumFractionDigits:3});
+export function MatrizAcompanhamento({contratoId,abrir}:{contratoId:string;abrir:(id:string,origem?:HTMLElement)=>void}){
+ const {progresso,loading,erro}=useProgresso(contratoId);
+ const entregaveis=useEntregaveis(contratoId);
+ const documentos=useResumoDocumentalContrato(contratoId);
+ const itens=progresso?.entregaveis??[];
+ const porId=new Map((entregaveis.dados??[]).map(e=>[e.id,e]));
+ return <section aria-label="Matriz de execução" className="space-y-3">
+ {loading?<p role="status">Consultando matriz…</p>:erro?<p role="alert">{erro}</p>:!itens.length?<p className="text-sm text-foreground/65">Nenhum entregável considerado na execução.</p>:<div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead className="text-foreground/65"><tr>{['Entregável','Previsto','Realizado','Avanço','Comprovação','Execução','Alertas'].map(t=><th key={t} scope="col" className="px-2 py-2 font-medium">{t}</th>)}</tr></thead><tbody className="divide-y divide-slate-500/20">{itens.map(e=>{const item=porId.get(e.entregavelId),doc=documentos.dados?.[e.entregavelId];const un=e.tipo==='QUANTITATIVO'?item?.unidadeMedida??'':e.tipo==='RECORRENTE'?'períodos':'';const comprovacao=doc?.situacaoComprovacao??item?.situacaoComprovacao;return <tr key={e.entregavelId}><th scope="row" className="min-w-36 px-2 py-3"><button type="button" className="text-left font-semibold hover:underline" onClick={ev=>abrir(e.entregavelId,ev.currentTarget)}>{e.nome}</button><p className="font-normal text-foreground/65">{ROTULOS_TIPO[e.tipo]}</p></th><td className="px-2 py-3">{e.previsto==null?'—':`${numero(e.previsto)} ${un}`}</td><td className="px-2 py-3">{e.realizado==null?'—':`${numero(e.realizado)} ${un}`}</td><td className="px-2 py-3 tabular-nums">{e.percentualExecucao==null?'—':`${numero(e.percentualExecucao)}%`}</td><td className="px-2 py-3">{comprovacao==='COMPROVADO'?'Comprovado':comprovacao==='EVIDENCIA_PARCIAL'?'Parcial':comprovacao==='SEM_EVIDENCIA'?'Sem evidência':'—'}</td><td className="px-2 py-3">{rotuloEstadoEntregavel(e.statusEntregavel,false,Boolean(e.reabertoEm),Boolean(e.regularizacaoDocumentalSolicitada))}</td><td className="px-2 py-3"><EtiquetaAtraso atrasado={e.atrasado} finalizadoComAtraso={e.finalizadoComAtraso}/>{!e.atrasado&&!e.finalizadoComAtraso?'—':null}</td></tr>;})}</tbody></table></div>}
+ </section>;
+}
+export function CronogramaContrato({contratoId,abrir,abrirOcorrencia}:{contratoId:string;abrir:(id:string,origem?:HTMLElement)=>void;abrirOcorrencia:(id:string)=>void}){
+ const entregaveis=useEntregaveis(contratoId);const agenda=useOcorrencias(contratoId);
+ const itens=[...(entregaveis.dados??[]).filter(e=>!e.arquivadoEm).flatMap(e=>e.terminoPrevisto||e.inicioPrevisto?[{id:e.id,data:e.terminoPrevisto??e.inicioPrevisto!,nome:e.nome,tipo:'Entregável',atrasado:e.atrasado,acao:(el:HTMLElement)=>abrir(e.id,el)}]:[]),...agenda.ocorrencias.filter(o=>!o.substituidaEm).flatMap(o=>o.periodoFim||o.dataPrevista||o.periodoInicio?[{id:o.id,data:o.periodoFim??o.dataPrevista??o.periodoInicio!,nome:o.titulo,tipo:'Ocorrência',atrasado:o.atrasado,acao:()=>abrirOcorrencia(o.id)}]:[])].sort((a,b)=>a.data.localeCompare(b.data)||a.nome.localeCompare(b.nome,'pt-BR'));
+ return <section aria-label="Cronograma de obrigações" className="space-y-2">{entregaveis.carregando||agenda.loading?<p role="status">Consultando cronograma…</p>:entregaveis.erro||agenda.erro?<p role="alert">Não foi possível consultar o cronograma.</p>:!itens.length?<p className="text-sm text-foreground/65">Nenhuma obrigação com data prevista.</p>:<ol className="max-h-96 divide-y divide-slate-500/20 overflow-y-auto">{itens.map(e=><li key={`${e.tipo}:${e.id}`} className="flex min-w-0 flex-wrap items-center gap-3 py-2 text-sm"><time className="shrink-0 text-xs tabular-nums text-foreground/65" dateTime={e.data}>{dataPlanejada(e.data)}</time><button type="button" className="min-w-0 flex-1 break-words text-left hover:underline" onClick={ev=>e.acao(ev.currentTarget)}>{e.nome}</button><span className="text-xs text-foreground/65">{e.tipo}</span><EtiquetaAtraso atrasado={e.atrasado}/></li>)}</ol>}</section>;
+}

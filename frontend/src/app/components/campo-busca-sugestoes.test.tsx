@@ -47,7 +47,7 @@ test('lista contextual usa a cor da entidade mesmo quando renderizada em portal'
   // JSDOM não calcula color-mix de maneira confiável; verificamos a leitura
   // do token contextual e a renderização do portal sem deslocar o formulário.
   expect(estilo).toHaveBeenCalled();
-  expect(screen.getByRole('listbox')).toHaveStyle({ position: 'fixed' });
+  expect((screen.getByRole('listbox') as HTMLElement).style.position).toBe('fixed');
   expect(screen.getByRole('combobox')).toHaveAttribute('aria-haspopup', 'listbox');
   estilo.mockRestore();
 });
