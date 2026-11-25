@@ -16,3 +16,17 @@ test('troca do modo de cálculo usa API persistente e versão, não estado visua
   }));
   expect(atualizar).toHaveBeenCalledTimes(1);
 });
+
+
+test('R46: alteração confirmada dos pesos notifica o painel contratual mesmo se a reconsulta falhar', async () => {
+  fetchMock.mockResolvedValue({ ok: true });
+  atualizar.mockRejectedValueOnce(new Error('consulta cancelada'));
+  const avisar = jest.fn();
+  window.addEventListener('pi:estrutura-operacional-atualizada',avisar);
+  try {
+    const { result } = renderHook(()=>useProgresso('c'));
+    await act(async()=> { await result.current.atualizarPesoIndividual('e','v','25'); });
+    expect(avisar).toHaveBeenCalledTimes(1);
+    expect((avisar.mock.calls[0][0] as CustomEvent).detail).toEqual({contratoId:'c'});
+  } finally { window.removeEventListener('pi:estrutura-operacional-atualizada',avisar); }
+});

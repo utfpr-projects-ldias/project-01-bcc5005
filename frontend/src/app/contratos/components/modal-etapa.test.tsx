@@ -24,7 +24,7 @@ test('abrir edição cria dialog, bloqueia scroll, Esc fecha e devolve foco ao b
     const modal = screen.getByRole('dialog', { name: 'Editar etapa · QA' });
     expect(modal).toHaveAttribute('aria-modal', 'true');
     expect(document.body.style.overflow).toBe('hidden');
-    expect(screen.getByRole('button', { name: 'Fechar edição da etapa' })).toHaveFocus();
+    expect(screen.getByRole('heading', { name: 'Editar etapa · QA' })).toHaveFocus(); // Foco inicial acessível no título do diálogo
     fireEvent.keyDown(modal, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(gatilho).toHaveFocus();
@@ -165,7 +165,7 @@ test('modal de evidência não reserva altura vazia; a rastreabilidade expandida
   </ModalEtapa>);
   const modal = screen.getByRole('dialog', { name: 'Evidência pequena' });
   expect(modal.className).not.toContain('min-h-[min(72dvh,630px)]');
-  expect(modal.className).toContain('max-h-[min(64dvh,590px)]');
+  expect(modal.className).toContain('max-h-[min(78dvh,700px)]');
   expect(modal.querySelector('.overflow-y-auto')).toBeInTheDocument();
 });
 
@@ -190,8 +190,8 @@ test('as tres camadas ficam centralizadas, etapa e entregavel com mesma largura 
     <ModalEtapa titulo="Entregável alinhado" camada="aninhada" ocupado={false} onFechar={() => {}}><p>entregável</p></ModalEtapa>
     <ModalEtapa titulo="Evidência alinhada" camada="evidencia" ocupado={false} onFechar={() => {}}><p>evidência</p></ModalEtapa></>);
   for (const [titulo, largura] of [
-    ['Etapa alinhada', 'max-w-3xl'],
-    ['Entregável alinhado', 'max-w-3xl'],
+    ['Etapa alinhada', 'max-w-5xl'],
+    ['Entregável alinhado', 'max-w-5xl'],
     ['Evidência alinhada', 'max-w-xl'],
   ]) {
     const dialogo = screen.getByRole('dialog', { name: titulo });
@@ -225,8 +225,8 @@ test('modal filho centralizado mantém painel pai VISÍVEL, inativo e com sua se
   expect(todos[0]).toHaveClass('pointer-events-none');
   expect(painelPai).toHaveAttribute('aria-hidden', 'true');
   expect(painelFilho).not.toHaveClass('invisible');
-  expect(painelPai).toHaveClass('max-w-3xl');
-  expect(painelFilho).toHaveClass('max-w-3xl');
+  expect(painelPai).toHaveClass('max-w-5xl');
+  expect(painelFilho).toHaveClass('max-w-5xl');
   expect(painelFilho.parentElement).toHaveClass('items-center');
   expect(painelPai.querySelector('button')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Fechar edição da etapa' }));
@@ -250,8 +250,8 @@ test('Etapa e entregável continuam renderizados e visíveis sob a evidência, s
     expect(painel.parentElement).toHaveClass('items-center', 'justify-center');
   }
   expect(paineis[1].querySelector('[aria-label="Fechar edição da etapa"]')).toBeInTheDocument();
-  expect(paineis[0]).toHaveClass('max-w-3xl');
-  expect(paineis[1]).toHaveClass('max-w-3xl');
+  expect(paineis[0]).toHaveClass('max-w-5xl');
+  expect(paineis[1]).toHaveClass('max-w-5xl');
   expect(paineis[2]).toHaveClass('max-w-xl');
 });
 
@@ -338,9 +338,20 @@ test('modal de entregável aninhado conserva largura e altura do modal da etapa'
   </>);
   const paines = Array.from(document.querySelectorAll<HTMLElement>('[data-tec08-modal] > [role="dialog"]'));
   expect(paines).toHaveLength(2);
-  expect(paines[0]).toHaveClass('max-w-3xl');
-  expect(paines[1]).toHaveClass('max-w-3xl');
+  expect(paines[0]).toHaveClass('max-w-5xl');
+  expect(paines[1]).toHaveClass('max-w-5xl');
   expect(paines[0]).toHaveClass('h-[min(82dvh,730px)]');
   expect(paines[1]).toHaveClass('h-[min(82dvh,730px)]');
   view.unmount();
+});
+
+test('consulta interna preserva o documento e não cria uma camada modal', () => {
+  const fechar = jest.fn();
+  const anterior = document.body.style.overflow;
+  render(<ModalEtapa interno retornoEsquerda titulo="01 · Infraestrutura" ocupado={false} rotuloFechar="Voltar às etapas" onFechar={fechar}><p>Entregáveis disponíveis</p></ModalEtapa>);
+  expect(screen.getByRole('region', {name:'01 · Infraestrutura'})).toBeInTheDocument();
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(document.body.style.overflow).toBe(anterior);
+  fireEvent.click(screen.getByRole('button',{name:'Voltar às etapas'}));
+  expect(fechar).toHaveBeenCalledTimes(1);
 });

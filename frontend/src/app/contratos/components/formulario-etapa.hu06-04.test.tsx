@@ -47,8 +47,8 @@ test('formulário não executa encerramento direto e limita nome, código e text
   expect(screen.queryByRole('option', { name: 'Encerrada' })).not.toBeInTheDocument();
   expect(screen.getByLabelText('Nome *')).toHaveAttribute('maxlength', '36');
   expect(screen.getByLabelText('Código')).toHaveAttribute('maxlength', '15');
-  expect(screen.getByLabelText('Descrição')).toHaveAttribute('maxlength', '500');
-  expect(screen.getByLabelText('Observações')).toHaveAttribute('maxlength', '200');
+  expect(screen.getByLabelText('Descrição')).toHaveAttribute('maxlength', '400');
+  expect(screen.getByLabelText('Observações')).toHaveAttribute('maxlength', '150');
   expect(screen.queryByRole('button', { name: /encerramento/i })).not.toBeInTheDocument();
 });
 

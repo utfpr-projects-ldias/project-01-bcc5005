@@ -150,16 +150,28 @@ def documento_base(contrato):
     return f'/contratos/{contrato}/documentos'
 
 
-def criar_contrato(page, rotulo):
+def dados_contrato_qa(rotulo):
+    # CriarContratoDto: número numérico (até 25), órgão (até 30), objeto (até 50).
+    # O rótulo humano da execução fica nas observações, não no identificador numérico.
     obj = {
-        'numeroContrato': f'QA-TEC08-02-{rotulo}', 'orgaoContratante': 'LABORATORIO QA TEC08-02',
-        'objeto': 'TESTE AUTOMATIZADO DEV - NAO USAR COMO CONTRATO REAL',
+        'numeroContrato': f'{secrets.randbelow(10**25):025d}',
+        'orgaoContratante': 'LABORATORIO QA TEC08-02',
+        'objeto': 'TESTE AUTOMATIZADO DEV - CONTRATO SINTETICO',
         'inicioVigencia': '2026-01-01', 'terminoVigencia': '2027-12-31',
         'status': 'PLANEJAMENTO', 'modoCalculo': 'SIMPLES',
-        'observacoes': 'QA permanente da TEC08-02; rastreabilidade de testes automatizados',
+        'observacoes': 'QA TEC08-02; execução: ' + str(rotulo)[:70],
     }
+    exigir(bool(re.fullmatch(r'\d{1,25}', obj['numeroContrato'])), 'Fixture: número inválido')
+    exigir(len(obj['orgaoContratante']) <= 30 and len(obj['objeto']) <= 50, 'Fixture: texto acima do DTO')
+    return obj
+
+
+def criar_contrato(page, rotulo):
+    obj = dados_contrato_qa(rotulo)
     r = api(page, '/contratos', 'POST', obj)
-    aceitar(r['status'], {201}, 'Cadastro de contrato sintético')
+    if r['status'] != 201:
+        raise AssertionError(f'Cadastro de contrato sintético: HTTP {r["status"]}, ' +
+                             f'retorno={str(r.get("body", ""))[:300]}')
     exigir(isinstance(r['body'], dict) and uuid_ok(r['body'].get('id')), 'Contrato não retornou UUID')
     return r['body']['id']
 
@@ -413,6 +425,9 @@ def ciclo(args, contas):
                 relatorio['provas'].append('GESTOR: grava em A, lê B, não grava em B; download íntegro')
                 # Logout real e revogação de sessão, sem armazenar token.
                 gestor.get_by_role('button', name='Sair', exact=True).click()
+                saida = gestor.get_by_role('dialog', name='Sair da conta?')
+                saida.wait_for(state='visible', timeout=15000)
+                saida.get_by_role('button', name='Sair da conta', exact=True).click()
                 gestor.get_by_role('heading', name='Acesse sua conta').wait_for(timeout=25000)
                 aceitar(api(gestor, documento_base(a))['status'], {401}, 'Após logout GESTOR')
                 relatorio['provas'].append('Logout SuperTokens real: acesso anterior retorna 401')

@@ -1,0 +1,71 @@
+'use client';
+import { listarDestinosCompartilhamento, type DestinoCompartilhamento } from '@/lib/comprovantes';
+import { useState } from 'react';
+import { createPortal } from 'react-dom';
+import { ModalContribuicaoDestino } from './modal-contribuicao-destino';
+import { ModalEtapa } from './modal-etapa';
+import { DestinosEvidenciaContrato } from './destinos-evidencia-contrato';
+import { useConsulta } from '@/app/components/provedor-consultas';
+import {CampoContribuicaoDisponivel} from '@/app/contratos/components/campo-contribuicao-disponivel';
+import { useEtapas } from '@/hooks/use-etapas';
+import { SeletorVinculosMultiplos } from '@/app/atividades/components/seletor-vinculos-multiplos';
+import { listarAtividadesVinculaveis } from '@/hooks/use-atividades';
+import { useOcorrencias } from '@/hooks/use-ocorrencias';
+import { useAcessoContrato, useListaContratos } from '@/hooks/use-contratos';
+import { useMeuPerfil } from '@/hooks/use-meu-perfil';
+import type { Entregavel } from '@/lib/entregaveis';
+import type { Resumo, CadastroExecucao } from './execucoes-entregavel';
+export type VinculosCadastroEvidencia = {ocorrencias:string[];atividades:string[];destinos?:DestinoCompartilhamento[]};
+export function EditorVinculosEvidencia({item,tipoEvidencia,dados,onChange,vinculos,onVinculos}:{item:Entregavel;tipoEvidencia:string;dados:CadastroExecucao;onChange:(v:CadastroExecucao)=>void;vinculos:VinculosCadastroEvidencia;onVinculos:(v:VinculosCadastroEvidencia)=>void}) {
+ const [aba,setAba]=useState<'contratos'|'entregaveis'|'ocorrencias'|'atividades'>('entregaveis');
+ const [editarOrigem,setEditarOrigem]=useState(false);
+ const [periodo,setPeriodo]=useState('');
+ const etapas=useEtapas(item.contratoId);
+ const [extra,setExtra]=useState<string|null>(null);const [busca,setBusca]=useState('');
+ const acesso=useAcessoContrato(item.contratoId),perfil=useMeuPerfil();
+ const contratos=useListaContratos();
+ const admin=perfil.dados?.perfil==='ADMINISTRADOR';
+ const p=acesso.dados?.permissoes;
+ const podeO=Boolean(admin||p?.vincularEvidenciasOcorrencia),podeA=Boolean(admin||p?.editarAtividades);
+ const compartilhamentos=useConsulta(['evidencias-destinos',item.contratoId,item.id],signal=>listarDestinosCompartilhamento(item.contratoId,item.id,signal),{habilitada:Boolean(admin||p?.enviarComprovantes)});
+ const opcoes=(compartilhamentos.dados??[]).filter(o=>!o.tipo||o.tipo.trim().toLocaleLowerCase('pt-BR')===tipoEvidencia.trim().toLocaleLowerCase('pt-BR'));
+ const selecionados=vinculos.destinos??[];
+ const grupos=[...new Map(opcoes.map(o=>[o.contratoId,o.contrato])).entries()];
+ const locais=opcoes.filter(o=>o.contratoId===item.contratoId);
+ const contagem=(id:string)=>selecionados.filter(d=>opcoes.some(o=>o.contratoId===id&&o.entregavelId===d.entregavelId));
+ const agenda=useOcorrencias(item.contratoId,podeO||Boolean(admin||p?.editarExecucaoFisica));
+ const atividades=useConsulta(['atividades',item.contratoId,'vinculaveis-evidencia',item.id],signal=>listarAtividadesVinculaveis(item.contratoId,item.id,signal,true),{habilitada:podeA});
+ const ocorrencias=agenda.ocorrencias.filter(o=>o.entregavelId===item.id&&!o.substituidaEm);
+ const destinos=ocorrencias.filter(o=>['NAO_INICIADO','EM_ANDAMENTO','EM_REVISAO'].includes(o.status)).filter(o=>vinculos.ocorrencias.includes(o.id)||dados.ocorrenciaId===o.id).filter(o=>podeO&&(o.modoRegistro==='QUANTITATIVO'&&['QUANTITATIVO','RECORRENTE'].includes(item.tipo)&&Boolean(admin||p?.registrarExecucaoOcorrencia)&&Number(o.metaQuantidade)>0||o.modoRegistro==='DESCRITIVO'&&['RECORRENTE','CONTINUO'].includes(item.tipo)&&Boolean(admin||p?.editarExecucaoFisica)));
+ const diretoQuantidade=item.tipo==='QUANTITATIVO'&&Number(item.quantidadeRealizada??0)===0&&Number(item.quantidadePrevista)>0&&!agenda.loading&&!agenda.erro&&!agenda.ocorrencias.some(o=>o.entregavelId===item.id&&!o.substituidaEm)&&Boolean(admin||p?.editarExecucaoFisica);
+ const direto=item.tipo==='UNICO'&&Boolean(admin||p?.editarExecucaoFisica);
+ const resumo=useConsulta<Resumo>(['execucao',item.contratoId,'lancamentos',item.id],async signal=>{const r=await fetch(`${(process.env.NEXT_PUBLIC_API_URL??'http://localhost:3001').replace(/\/$/,'')}/contratos/${encodeURIComponent(item.contratoId)}/entregaveis/${encodeURIComponent(item.id)}/lancamentos`,{signal,credentials:'include',cache:'no-store'});if(!r.ok)throw new Error('Execuções indisponíveis');return r.json();},{habilitada:editarOrigem&&item.tipo==='QUANTITATIVO'});
+ const referenciasDiretas=(resumo.dados?.referenciasQuantitativas??[]).filter(r=>!r.ocorrenciaId);
+ const prova=Boolean(dados.comprovaExecucaoId||dados.origemQuantidade==='COMPROVACAO');
+ const novo=Boolean(dados.percentual||dados.quantidade);
+ const periodoAlvo=destinos.find(o=>o.id===(dados.ocorrenciaId||periodo))??(destinos.length===1?destinos[0]:undefined);
+ const modoAlvo=diretoQuantidade?'quantidade':direto?'percentual':periodoAlvo?.modoRegistro==='QUANTITATIVO'?'quantidade':periodoAlvo?'percentual':undefined;
+ const ocorrenciaAlvo=direto||diretoQuantidade?undefined:periodoAlvo?.id;
+ function mudarContribuicao(v:string){
+  if(!v){onChange({});return;}
+  if(modoAlvo==='quantidade')onChange({ocorrenciaId:ocorrenciaAlvo,quantidade:v.replace(',','.'),referenciaExecucao:dados.referenciaExecucao??crypto.randomUUID(),origemQuantidade:'NOVA_EXECUCAO'});
+  else if(modoAlvo==='percentual')onChange({ocorrenciaId:ocorrenciaAlvo,percentual:v.replace(',','.')});
+ }
+ return <section className="pi-editor-vinculos-evidencia min-w-0 space-y-3">
+  <div className="pi-atividade-vinculos-abas" role="group" aria-label="Vínculos"><button type="button" aria-pressed={aba==='contratos'} onClick={()=>setAba('contratos')}>Contratos <span>{new Set([item.contratoId,...opcoes.filter(o=>selecionados.some(d=>d.entregavelId===o.entregavelId)).map(o=>o.contratoId)]).size}</span></button><button type="button" aria-pressed={aba==='entregaveis'} onClick={()=>setAba('entregaveis')}>Entregáveis <span>{1+selecionados.length}</span></button><button type="button" aria-pressed={aba==='ocorrencias'} onClick={()=>setAba('ocorrencias')}>Ocorrências <span>{vinculos.ocorrencias.length+selecionados.reduce((n,d)=>n+(d.ocorrenciaIds?.length??0),0)}</span></button><button type="button" aria-pressed={aba==='atividades'} onClick={()=>setAba('atividades')}>Atividades <span>{vinculos.atividades.length}</span></button></div>
+  {aba==='contratos'?<div className="space-y-2"><div className="pi-busca-vinculos"><label className="relative block min-w-0"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><input type="search" aria-label="Localizar contrato" value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Localizar contrato…" className="w-full rounded-lg border border-current/20 py-2 pl-9 pr-3 text-sm"/></label><span className="text-xs text-foreground/65">{new Set([item.contratoId,...opcoes.filter(o=>selecionados.some(d=>d.entregavelId===o.entregavelId)).map(o=>o.contratoId)]).size} selecionado(s)</span></div><div className="pi-vinculos-opcoes"><div className="pi-contrato-vinculo" data-selecionado="true"><strong>Contrato {contratos.dados?.find(c=>c.id===item.contratoId)?.numeroContrato??'atual'} · Atual</strong><span className="truncate text-xs text-foreground/65">{contratos.dados?.find(c=>c.id===item.contratoId)?.objeto}</span><span className="pi-vinculo-contadores">Entregáveis <b>{1+contagem(item.contratoId).length}</b> Ocorrências <b>{vinculos.ocorrencias.length}</b></span></div>{grupos.filter(([id,n])=>id!==item.contratoId&&`${n} ${contratos.dados?.find(c=>c.id===id)?.objeto??''}`.toLocaleLowerCase('pt-BR').includes(busca.toLocaleLowerCase('pt-BR'))).map(([id,n])=><button key={id} type="button" className="pi-contrato-vinculo text-left" data-selecionado={contagem(id).length>0} onClick={()=>setExtra(id)}><strong className="truncate">Contrato {n}</strong><span className="block truncate text-xs text-foreground/65">{contratos.dados?.find(c=>c.id===id)?.objeto}</span><span className="pi-vinculo-contadores">Entregáveis <b>{contagem(id).length}</b> Ocorrências <b>{contagem(id).reduce((a,d)=>a+(d.ocorrenciaIds?.length??0),0)}</b></span></button>)}</div></div>:aba==='entregaveis'?<><DestinosEvidenciaContrato somenteEntregaveis origem={{id:item.id,nome:item.nome,detalhe:etapas.dados?.find(e=>e.id===item.etapaId)?.nome,contribuicao:dados.quantidade?`${dados.quantidade} ${item.unidadeMedida??'unidades'}`:dados.percentual?`${dados.percentual}%`:prova?'Comprovação de execução existente':undefined,configurar:()=>setEditarOrigem(true)}} contratoId={item.contratoId} opcoes={locais.filter(o=>o.entregavelId!==item.id)} selecionados={selecionados} onChange={destinos=>onVinculos({...vinculos,destinos})}/>{compartilhamentos.erro&&<p role="alert" className="text-xs text-error-text">Não foi possível consultar destinos adicionais.</p>}</>:aba==='ocorrencias'?(podeO?<SeletorVinculosMultiplos itens={ocorrencias.map(o=>({id:o.id,nome:o.titulo,detalhe:o.modoRegistro==='QUANTITATIVO'?'Por quantidade':'Descritiva'}))} valores={vinculos.ocorrencias} onChange={ids=>{onVinculos({...vinculos,ocorrencias:ids});if(dados.ocorrenciaId&&!ids.includes(dados.ocorrenciaId)&&!prova)onChange({});}} rotulo="Ocorrências vinculadas" placeholder="Localizar ocorrência…"/>:<p className="text-xs text-foreground/65">Sem autorização para vincular ocorrências.</p>):(podeA?<SeletorVinculosMultiplos itens={(atividades.dados?.data??[]).map(a=>({id:a.id,nome:a.titulo,detalhe:a.tipo}))} valores={vinculos.atividades} onChange={ids=>onVinculos({...vinculos,atividades:ids})} rotulo="Atividades vinculadas" placeholder="Localizar atividade…"/>:<p className="text-xs text-foreground/65">Sem autorização para vincular atividades.</p>)}
+  {aba==='ocorrencias'&&locais.some(o=>o.entregavelId!==item.id&&selecionados.some(d=>d.entregavelId===o.entregavelId))&&<button type="button" className="pi-vinculo-acao" onClick={()=>setExtra(item.contratoId)}>Configurar ocorrências dos demais entregáveis</button>}
+  {(agenda.erro||atividades.erro)&&<p className="text-xs text-error-text">Não foi possível consultar todos os vínculos.</p>}
+  {editarOrigem&&<ModalContribuicaoDestino nome={item.nome} fechar={()=>{setEditarOrigem(false);setPeriodo('');}}>
+   {item.tipo==='QUANTITATIVO'&&!agenda.ocorrencias.some(o=>o.entregavelId===item.id&&!o.substituidaEm)&&referenciasDiretas.length>0&&<label className="block space-y-1 text-xs">Comprovar execução direta existente<select className="block w-full rounded-lg border border-current/25 p-2 text-sm" value={prova?dados.referenciaExecucao??'':''} onChange={e=>{const fonte=referenciasDiretas.find(r=>r.referencia===e.target.value);onChange(fonte?{quantidade:fonte.quantidade,origemQuantidade:'COMPROVACAO',referenciaExecucao:fonte.referencia}:{});}}><option value="">Nenhuma referência (nova contribuição opcional)</option>{referenciasDiretas.map(r=><option key={r.referencia} value={r.referencia}>{r.rotulo} · {Number(r.quantidade).toLocaleString('pt-BR')} {item.unidadeMedida}</option>)}</select></label>}
+   {prova?<p className="text-xs text-foreground/70">Comprova uma execução existente, sem acrescentar progresso.</p>:<>
+    {!direto&&!diretoQuantidade&&destinos.length>1&&<label className="block text-xs">Ocorrência<select className="mt-1 block w-full rounded-lg border border-current/25 bg-transparent p-2 text-sm" value={periodoAlvo?.id??''} onChange={e=>{setPeriodo(e.target.value);onChange({});}}><option value="">Selecione a ocorrência</option>{destinos.map(o=><option key={o.id} value={o.id}>{o.titulo}</option>)}</select></label>}
+    {modoAlvo&&<CampoContribuicaoDisponivel item={item} ocorrenciaId={ocorrenciaAlvo} modo={modoAlvo} valor={(modoAlvo==='quantidade'?dados.quantidade:dados.percentual)??''} onValor={mudarContribuicao}/>}
+   </>}
+   {!prova&&novo&&<p className="text-xs text-foreground/65">Reconhecimento após verificação. Não repita uma execução já registrada.</p>}
+   {!prova&&!novo&&!direto&&!diretoQuantidade&&!destinos.length&&<p className="text-xs text-foreground/65">Este entregável não permite contribuição física direta nesta configuração. Vincule uma ocorrência compatível, se houver.</p>}
+   {!prova&&novo&&vinculos.atividades.length>0&&<p className="text-xs text-foreground/65">A contribuição só será aceita se as atividades vinculadas não tiverem a mesma medição.</p>}
+  </ModalContribuicaoDestino>}
+  {extra&&createPortal(<ModalEtapa titulo={`Contrato ${grupos.find(([id])=>id===extra)?.[1]??'atual'}`} contexto="Vínculos da evidência" camada="edicao" larguraFormulario="atividade" ocupado={false} onFechar={()=>setExtra(null)}><DestinosEvidenciaContrato contratoId={extra} opcoes={extra===item.contratoId?locais:opcoes.filter(o=>o.contratoId===extra)} selecionados={selecionados} onChange={destinos=>onVinculos({...vinculos,destinos})}/><div className="mt-4 flex justify-end"><button type="button" data-pi-acao="primaria" className="rounded-lg px-4 py-2 text-sm font-semibold" onClick={()=>setExtra(null)}>Concluir</button></div></ModalEtapa>,document.body)}
+ </section>;
+}

@@ -1,7 +1,7 @@
 /** Contrato real HU05-06: a API NestJS usa camelCase e enums de domínio. */
 import { consultarUsuariosPaginados, type UsuarioPublico, type OperacaoPermissao } from './admin-usuarios';
 
-export type StatusContrato = 'PLANEJAMENTO' | 'EM_EXECUCAO' | 'EM_ENCERRAMENTO' | 'CONCLUIDO' | 'FINALIZADO' | 'ENCERRADO' | 'SUSPENSO' | 'CANCELADO';
+export type StatusContrato = 'PLANEJAMENTO' | 'EM_EXECUCAO' | 'EM_ENCERRAMENTO' | 'CONCLUIDO' | 'CONCLUIDO_PARCIALMENTE' | 'FINALIZADO' | 'ENCERRADO' | 'SUSPENSO' | 'CANCELADO';
 export type ModoCalculo = 'SIMPLES' | 'PONDERADO';
 export type Contrato = {
   id: string;
@@ -29,6 +29,8 @@ export type Contrato = {
   motivoEncerramento?: string | null;
   conclusaoSolicitadaEm?: string | null;
   conclusaoSolicitadaPor?: string | null;
+  conclusaoParcialSolicitada?: boolean;
+  encerramentoSolicitado?: boolean;
 };
 export type DadosContrato = Omit<Contrato, 'id' | 'codigoPublico' | 'ordemEtapasBloqueada' | 'arquivadoEm' | 'arquivadoPor' | 'reabertoEm' | 'encerradoEm' | 'encerradoPor' | 'motivoEncerramento'> & { retomarOperacao?: boolean };
 /** Formato apenas de leitura: o servidor gera e mantém esse valor. */
@@ -37,14 +39,14 @@ export function rotuloCodigoPublico(codigo: string): string { return `#${codigo}
 export type PermissoesContrato = Record<OperacaoPermissao, boolean>;
 export type AcessoContrato = { podeEditar: boolean; permissoes?: PermissoesContrato };
 export const STATUS: Record<StatusContrato, string> = {
-  PLANEJAMENTO: 'Planejamento', EM_EXECUCAO: 'Em execução', EM_ENCERRAMENTO: 'Em encerramento',
-  CONCLUIDO: 'Concluído', FINALIZADO: 'Encerrado', ENCERRADO: 'Encerrado', SUSPENSO: 'Suspenso', CANCELADO: 'Cancelado',
+  PLANEJAMENTO: 'Planejamento', EM_EXECUCAO: 'Em execução', EM_ENCERRAMENTO: 'Em execução',
+  CONCLUIDO: 'Concluído', CONCLUIDO_PARCIALMENTE: 'Concluído parcialmente', FINALIZADO: 'Encerrado', ENCERRADO: 'Encerrado', SUSPENSO: 'Suspenso', CANCELADO: 'Cancelado',
 };
 /** Ordem única de apresentação: fluxo implementado primeiro, situações administrativas ao fim. */
 export const ORDEM_STATUS: readonly StatusContrato[] = [
-  'PLANEJAMENTO', 'EM_EXECUCAO', 'CONCLUIDO', 'ENCERRADO', 'SUSPENSO', 'CANCELADO',
+  'PLANEJAMENTO', 'EM_EXECUCAO', 'CONCLUIDO', 'CONCLUIDO_PARCIALMENTE', 'ENCERRADO', 'SUSPENSO', 'CANCELADO',
 ];
-export const MODOS: Record<ModoCalculo, string> = { SIMPLES: 'Simples', PONDERADO: 'Ponderado' };
+export const MODOS: Record<ModoCalculo, string> = { SIMPLES: 'Média simples', PONDERADO: 'Média ponderada' };
 const API = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001').replace(/\/$/, '');
 
 export class ErroContrato extends Error {
@@ -103,8 +105,8 @@ export type EventoHistoricoContrato = {
   entidadeTipo?: string; contexto?: string; nomeArquivo?: string | null; justificativa?: string | null;
   ator?: { nome: string; email: string } | null;
 };
-export const consultarHistoricoContrato = (id: string, signal?: AbortSignal) =>
-  requisitar<EventoHistoricoContrato[]>(`/contratos/${encodeURIComponent(id)}/historico`, { signal });
+export const consultarHistoricoContrato = (id: string, signal?: AbortSignal, antes?: string) =>
+  requisitar<EventoHistoricoContrato[]>(`/contratos/${encodeURIComponent(id)}/historico${antes ? `?antes=${encodeURIComponent(antes)}` : ""}`, { signal });
 export const consultarPendentesConclusao = () => requisitar<string[]>('/contratos/pendentes-conclusao');
 export const listarContratos = () => requisitar<Contrato[]>('/contratos');
 export const buscarContrato = (id: string) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}`);
@@ -132,7 +134,7 @@ export async function finalizarContrato(c: string, motivo: string): Promise<Cont
 }
 export const concluirContrato = (id: string) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/concluir`, { method: 'PATCH' });
 export const encerrarContratoAntecipadamente = (id: string, motivo: string) =>
-  requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/encerrar-antecipadamente`, {
+  requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/solicitar-encerramento`, {
     method: 'PATCH', body: JSON.stringify({ motivo }),
   });
 export const devolverContratoParaRevisao = (id: string) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/devolver-revisao`, { method: 'PATCH' });
@@ -185,8 +187,8 @@ export function terminoPorMeses(inicio: string, meses: number): string | null {
 export function dataCivil(valor: string | null | undefined): string { return valor?.slice(0, 10) ?? ''; }
 
 /** Pré-validação retornada pela API; não substitui checagem transacional na gravação. */
-export type ElegibilidadeConclusao = { apto: boolean; solicitada: boolean; pendencias: string[] };
+export type ElegibilidadeConclusao = { apto: boolean; aptoParcial?: boolean; solicitada: boolean; pendencias: string[] };
 export const consultarElegibilidadeConclusao = (id: string, signal?: AbortSignal) =>
   requisitar<ElegibilidadeConclusao>(`/contratos/${encodeURIComponent(id)}/elegibilidade-conclusao`, { signal });
-export const solicitarConclusaoContrato = (id: string) =>
-  requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/solicitar-conclusao`, { method: 'PATCH' });
+export const solicitarConclusaoContrato = (id: string, parcial = false) =>
+  requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/solicitar-conclusao${parcial?'-parcial':''}`, { method: 'PATCH' });

@@ -23,6 +23,7 @@ export function coresDecisao(estado: EstadoContextual) {
     case 'encerrado': return { borda:'border-slate-400/70', texto:'text-slate-300', foco:'focus-visible:outline-slate-400', campo:'focus-visible:border-slate-400', botao:'border-slate-400 bg-slate-700 text-white hover:bg-slate-600' };
     case 'finalizado': return { borda:'border-purple-500/65', texto:'text-purple-300', foco:'focus-visible:outline-purple-400', campo:'focus-visible:border-purple-400', botao:'border-purple-500 bg-purple-700 text-white hover:bg-purple-600' };
     case 'concluido': return { borda:'border-violet-500/65', texto:'text-violet-300', foco:'focus-visible:outline-violet-400', campo:'focus-visible:border-violet-400', botao:'border-violet-500 bg-violet-700 text-white hover:bg-violet-600' };
+    case 'parcial': return { borda:'border-amber-500/65', texto:'text-amber-800 dark:text-amber-200', foco:'focus-visible:outline-amber-400', campo:'focus-visible:border-amber-400', botao:'border-amber-500 bg-amber-800 text-white hover:bg-amber-700' };
     case 'pendente': return { borda:'border-yellow-500/65', texto:'text-yellow-300', foco:'focus-visible:outline-yellow-400', campo:'focus-visible:border-yellow-400', botao:'border-yellow-500 bg-yellow-700 text-white hover:bg-yellow-600' };
     default: return { borda:'border-slate-500/55', texto:'text-foreground', foco:'focus-visible:outline-slate-400', campo:'focus-visible:border-slate-400', botao:'border-slate-500 bg-slate-700 text-white hover:bg-slate-600' };
   }

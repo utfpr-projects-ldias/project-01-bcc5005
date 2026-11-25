@@ -11,6 +11,7 @@ export type AcaoLegada =
   | 'contratos:listar'
   | 'contratos:visualizar'
   | 'contratos:editar'
+  | 'contratos:solicitar-conclusao'
   | 'contratos:concluir'
   | 'contratos:encerrar'
   | 'contratos:cancelar'

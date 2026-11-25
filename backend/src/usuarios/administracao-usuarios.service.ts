@@ -10,7 +10,7 @@ import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
 import { PerfilUsuario } from './perfil-usuario.enum.js';
 import { Usuario } from './usuario.entity.js';
-import { IdentidadesFuncionariosService } from './identidades-funcionarios.service.js';
+import { IdentidadesFuncionariosService, RevogacaoSessoesPendenteError } from './identidades-funcionarios.service.js';
 import { normalizarNomeCompleto } from './nome-completo.js';
 import type { CriarFuncionarioDto } from './dto/criar-funcionario.dto.js';
 import type { AtualizarFuncionarioDto } from './dto/atualizar-funcionario.dto.js';
@@ -66,6 +66,7 @@ export class AdministracaoUsuariosService {
     if (jaExiste) throw new ConflictException('E-mail já cadastrado');
 
     const supertokensUserId = await this.identidades.criar(email, dto.senhaInicial);
+    let callbackConcluido = false;
     try {
       const usuario = await this.dataSource.transaction(async (manager) => {
         const autor = await manager.getRepository(Usuario).findOne({ where: { id: ator.id }, lock: { mode: 'pessimistic_write' } });
@@ -82,10 +83,31 @@ export class AdministracaoUsuariosService {
           dadosAnteriores: null,
           dadosPosteriores: { email: salvo.email, nome: salvo.nome, perfil: salvo.perfil, ativo: true },
         });
+        callbackConcluido = true;
         return salvo;
       });
       return this.publico(usuario);
     } catch (error: unknown) {
+      // Se a callback terminou, uma rejeição pode ter ocorrido na confirmação do COMMIT.
+      // Nunca excluir a identidade externa sem saber o resultado da transação.
+      if (callbackConcluido) {
+        let persistido: Usuario | null;
+        try {
+          persistido = await this.repositorio.findOneBy({ supertokensUserId });
+        } catch {
+          this.logger.error('Resultado indeterminado do COMMIT de criação; consulta de reconciliação indisponível');
+          throw new InternalServerErrorException('Cadastro com confirmação indeterminada; contate o suporte técnico');
+        }
+        if (persistido) {
+          if (persistido.email === email) {
+            this.logger.warn('COMMIT de criação confirmado por leitura após erro de confirmação');
+            return this.publico(persistido);
+          }
+          this.logger.error('Identidade existente com dados divergentes; exige reconciliação técnica');
+          throw new InternalServerErrorException('Cadastro com confirmação indeterminada; contate o suporte técnico');
+        }
+      }
+      // Em erro pré-COMMIT (ou ausência confirmada), a compensação continua obrigatória.
       try {
         await this.identidades.excluirCriacaoIncompleta(supertokensUserId);
       } catch {
@@ -123,6 +145,7 @@ export class AdministracaoUsuariosService {
     let idCore: string | undefined;
     let anterior: string | undefined;
     let mudouNoCore = false;
+    let callbackConcluido = false;
     try {
       return await this.dataSource.transaction(async (manager) => {
         const repo = manager.getRepository(Usuario);
@@ -143,7 +166,7 @@ export class AdministracaoUsuariosService {
         if (await repo.findOneBy({ email })) throw new ConflictException('E-mail já cadastrado');
         anterior = alvo.email;
         idCore = alvo.supertokensUserId;
-        // ST não participa do commit local. Compensação EXTERNA também cobre erro no COMMIT.
+        // ST não participa do commit local: reconciliar o resultado se a confirmação falhar.
         await this.identidades.alterarEmail(idCore, email);
         mudouNoCore = true;
         alvo.email = email;
@@ -153,10 +176,28 @@ export class AdministracaoUsuariosService {
           entidadeTipo: 'USUARIO', entidadeId: alvo.id,
           dadosAnteriores: { email: anterior }, dadosPosteriores: { email },
         });
+        callbackConcluido = true;
         return this.publico(alvo);
       });
     } catch (erro: unknown) {
       if (mudouNoCore && idCore && anterior) {
+        if (callbackConcluido) {
+          let persistido: Usuario | null;
+          try { persistido = await this.repositorio.findOneBy({ id }); }
+          catch {
+            this.logger.error('Resultado indeterminado do COMMIT de e-mail; reconciliação indisponível');
+            throw new InternalServerErrorException('E-mail com confirmação indeterminada; contate o suporte técnico');
+          }
+          if (!persistido || persistido.supertokensUserId !== idCore ||
+              (persistido.email !== email && persistido.email !== anterior)) {
+            this.logger.error('E-mail com estado persistido divergente; exige reconciliação técnica');
+            throw new InternalServerErrorException('E-mail com confirmação indeterminada; contate o suporte técnico');
+          }
+          if (persistido.email === email) {
+            this.logger.warn('COMMIT de e-mail confirmado por leitura após erro de confirmação');
+            return this.publico(persistido);
+          }
+        }
         try { await this.identidades.alterarEmail(idCore, anterior); }
         catch {
           this.logger.error('Falha compensando e-mail após erro de banco/commit/auditoria; reconciliação manual necessária');
@@ -179,7 +220,22 @@ export class AdministracaoUsuariosService {
       evento: { acao: AcaoAuditoria.USUARIO_SENHA_REDEFINICAO_SOLICITADA,
         entidadeTipo: 'USUARIO', entidadeId: alvo.id, dadosPosteriores: { situacao: 'SOLICITADA' } },
     }));
-    await this.identidades.definirNovaSenha(alvo.supertokensUserId, novaSenha);
+    try {
+      await this.identidades.definirNovaSenha(alvo.supertokensUserId, novaSenha);
+    } catch (erro) {
+      if (!(erro instanceof RevogacaoSessoesPendenteError)) throw erro;
+      try {
+        await this.auditoria.executarComAuditoria(ator, async () => ({
+          resultado: undefined,
+          evento: { acao: AcaoAuditoria.USUARIO_SENHA_REVOGACAO_PENDENTE,
+            entidadeTipo: 'USUARIO', entidadeId: alvo.id,
+            dadosPosteriores: { situacao: 'SENHA_ALTERADA_SESSOES_PENDENTES' } },
+        }));
+      } catch {
+        this.logger.error('Senha atualizada, revogação de sessões pendente e auditoria parcial; intervenção necessária');
+      }
+      throw new InternalServerErrorException('Senha alterada, mas sessões anteriores podem continuar ativas; contate o suporte técnico');
+    }
     try {
       await this.auditoria.executarComAuditoria(ator, async () => ({
         resultado: undefined,

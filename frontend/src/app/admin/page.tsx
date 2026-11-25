@@ -10,7 +10,13 @@ export default function AdministracaoPage() {
   const { dados: perfil, carregando } = useMeuPerfil();
   const podeGerenciar = Boolean(perfil?.ativo && perfil.perfil === 'ADMINISTRADOR');
   const [aba, setAba] = useState<'funcionarios'|'conta'>('funcionarios');
-  useEffect(() => { if (new URLSearchParams(window.location.search).get('aba') === 'conta') setAba('conta'); }, []);
+  useEffect(() => {
+    let ativo = true;
+    queueMicrotask(() => {
+      if (ativo && new URLSearchParams(window.location.search).get('aba') === 'conta') setAba('conta');
+    });
+    return () => { ativo = false; };
+  }, []);
   const selecionada = podeGerenciar && aba === 'funcionarios' ? 'funcionarios' : 'conta';
   return <section className="min-w-0 space-y-5" aria-label="Administração">
     <header className="space-y-1"><h2 className="text-xl font-semibold">Administração</h2>

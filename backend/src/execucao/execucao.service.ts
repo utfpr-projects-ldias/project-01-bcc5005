@@ -1,3 +1,5 @@
+import { iniciarHierarquiaOperacional } from './inicio-operacional.js';
+import { resumirFisicoEntregavel } from './resumo-fisico-entregavel.js';
 import { createHash } from 'node:crypto';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager, IsNull } from 'typeorm';
@@ -7,25 +9,18 @@ import { Etapa } from '../etapas/etapa.entity.js';
 import { Entregavel } from '../entregaveis/entregavel.entity.js';
 import { Ocorrencia } from '../ocorrencias/ocorrencia.entity.js';
 import { ConfiguracaoOcorrencias } from '../ocorrencias/configuracao-ocorrencias.entity.js';
-import { calcularPeriodosRecorrentes } from '../ocorrencias/ocorrencias.service.js';
-import { avaliarAgendaRecorrente } from '../ocorrencias/avaliar-agenda-recorrente.js';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
 import { PermissaoContrato } from '../autorizacao/permissao-contrato.entity.js';
 import { permissoesEfetivas } from '../autorizacao/permissoes-granulares.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
-import { agregarFisico, arredondar, calcularFisico } from './motor-progresso.js';
+import { agregarFisico, arredondar } from './motor-progresso.js';
 import type { AtualizarPesosDto } from './pesos.dto.js';
 import type { AtualizarPesoIndividualDto } from './peso-individual.dto.js';
 import type { AtualizarExecucaoDto } from './execucao.dto.js';
 import type { AtualizarModoCalculoDto } from './modo-calculo.dto.js';
 const versaoPesos = (c: Contrato, itens: Entregavel[]) => createHash('sha256').update(JSON.stringify([c.modoCalculo, itens.map(e => [e.id, e.peso]).sort((a,b) => String(a[0]).localeCompare(String(b[0])))] )).digest('hex');
-const numero = (v: string | null | undefined) => v == null ? null : Number(v);
 const civil = (s: string) => { const d = new Date(`${s}T00:00:00Z`); return Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === s; };
-const decimal = (valores: string[]) => {
-  const soma = valores.reduce((s, v) => { const [i, f = ''] = v.split('.'); return s + BigInt(i) * 1000n + BigInt(f.padEnd(3, '0')); }, 0n);
-  return `${soma / 1000n}.${String(soma % 1000n).padStart(3, '0')}`;
-};
 @Injectable()
 export class ExecucaoService {
   constructor(private readonly ds: DataSource, private readonly auditoria: AuditoriaService) {}
@@ -34,83 +29,46 @@ export class ExecucaoService {
     // Snapshot consistente: nenhuma mistura de planejamento e execução de transações diferentes.
     return this.ds.transaction('REPEATABLE READ', m => this.resumo(m, contratoId));
   }
-  private async resumo(m: EntityManager, contratoId: string) {
+  /** Usa o mesmo motor do painel, sem nova transação (conclusão sob lock). */
+  async consultarNaTransacao(m: EntityManager, contratoId: string) {
+    return this.resumo(m, contratoId, true);
+  }
+  private async resumo(m: EntityManager, contratoId: string, verificarIntegral = false) {
     const contrato = await m.findOneBy(Contrato, { id: contratoId });
     if (!contrato) throw new NotFoundException('Contrato não encontrado');
     const etapas = await m.findBy(Etapa, { contratoId, arquivadoEm: IsNull() });
     const ativos = (await m.findBy(Entregavel, { contratoId, arquivadoEm: IsNull() })).filter(e => etapas.some(et => et.id === e.etapaId));
     const agenda = await m.findBy(Ocorrencia, { contratoId, substituidaEm: IsNull() });
     const configuracoes = await m.findBy(ConfiguracaoOcorrencias, { contratoId });
-    const entregaveis = ativos.map(e => {
+    const entregaveis = await Promise.all(ativos.map(async e => {
       const ocorrencias = agenda.filter(o => o.entregavelId === e.id);
-      let previsto: string | null = e.quantidadePrevista;
-      let realizado: string | null = e.quantidadeRealizada;
-      let fonte = 'DECLARADO';
-      let periodos: number | null = null;
-      let percentualPonderadoSerie: number | null = null;
-      let pesosSerieIncompletos = false;
-      // Registros descritivos não têm medida física: não substituem a quantidade
-      // declarada nem transformam a situação documental em avanço de unidades.
-      const ocorrenciasMedidas = ocorrencias.filter(o => o.origem === 'MANUAL_QUANTITATIVA' && o.modoRegistro !== 'DESCRITIVO');
-      if (e.tipo === 'QUANTITATIVO' && ocorrenciasMedidas.length) {
-        // Ocorrências medidas detalham a mesma realização, nunca somar o total declarado novamente.
-        const quantidades = ocorrenciasMedidas.filter(o => o.status === 'CONCLUIDO').flatMap(o => (o.quantidadeAprovada ?? o.quantidadeRealizada) == null ? [] : [o.quantidadeAprovada ?? o.quantidadeRealizada!]);
-        realizado = quantidades.length ? decimal(quantidades) : null;
-        fonte = e.quantidadeRealizada != null && Number(e.quantidadeRealizada) !== 0 ? 'CONFLITO_QUANTIDADE' : 'OCORRENCIAS';
-        if (fonte === 'CONFLITO_QUANTIDADE') realizado = null;
-      }
-      if (e.tipo === 'RECORRENTE') {
-        fonte = 'AGENDA';
-        const configuracao = configuracoes.find(cfg => cfg.entregavelId === e.id);
-        // O entregável mantém os limites contratuais; a configuração de agenda
-        // controla a grade corrente. Aprovados históricos não são reescritos.
-        const inicio = e.agendaInicioFuturo ?? e.inicioPrevisto;
-        const fim = e.agendaInicioFuturo ? (configuracao?.terminoPrevisto ?? e.terminoPrevisto) : e.terminoPrevisto;
-        if (inicio && fim && e.periodicidade && ocorrencias.length) {
-          try {
-            const grade = calcularPeriodosRecorrentes(inicio, fim, e.periodicidade);
-            const gradeAvaliada = avaliarAgendaRecorrente(ocorrencias, grade, inicio);
-            if (gradeAvaliada.completa) {
-              periodos = gradeAvaliada.total;
-              realizado = String(gradeAvaliada.concluidas);
-              const comPeso = ocorrencias.filter(o => o.pesoPeriodo != null);
-              if (comPeso.length) {
-                const pesosValidos = comPeso.length === ocorrencias.length &&
-                  Math.abs(comPeso.reduce((a,o)=>a+Number(o.pesoPeriodo),0)-100)<0.00001;
-                if (pesosValidos) percentualPonderadoSerie = arredondar(ocorrencias.reduce((a,o)=>
-                  a + (o.status === 'CONCLUIDO' ? Number(o.pesoPeriodo) : 0),0));
-                else pesosSerieIncompletos = true;
-              }
-            } else realizado = null;
-          } catch { /* Sem períodos completos, não publicar percentual aproximado. */ }
-        }
-        previsto = periodos == null ? null : String(periodos);
-      }
-      const percentual = (e.tipo === 'UNICO' && e.percentualExecucao == null && ['CONCLUIDO','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? '')) ? null : calcularFisico({ tipo: e.tipo, percentualManual: numero(e.percentualExecucao), quantidadePrevista: numero(previsto), quantidadeRealizada: numero(realizado), ocorrenciasPrevistas: periodos, ocorrenciasConcluidas: numero(realizado), dataEfetivaMarco: e.tipo === 'MARCO' && e.statusExecucao === 'CONCLUIDO' ? e.dataEfetivaMarco : null });
-      const percentualCalculado = e.tipo==='RECORRENTE'
-        ? pesosSerieIncompletos ? null : percentualPonderadoSerie ?? percentual
-        : percentual;
-      if (pesosSerieIncompletos) fonte='PESOS_SERIE_INCOMPLETOS';
+      const { previsto, realizado, fonte, percentualCalculado, statusEntregavel, atrasado, finalizadoComAtraso } = await resumirFisicoEntregavel(m, e, ocorrencias, configuracoes.find(cfg => cfg.entregavelId === e.id));
       const etapa = etapas.find(et => et.id === e.etapaId);
-      return { entregavelId: e.id, nome: e.nome, tipo: e.tipo, statusEntregavel: e.statusExecucao, realizado, previsto, fonte,
-        percentualExecucao: percentualCalculado == null ? null : arredondar(percentualCalculado), pesoOperacional: e.peso,
+      return { entregavelId: e.id, nome: e.nome, tipo: e.tipo, statusEntregavel, atrasado, finalizadoComAtraso, regularizacaoDocumentalSolicitada: Boolean(e.regularizacaoDocumentalSolicitada), reabertoEm: e.reabertoEm ?? null, realizado, previsto, fonte,
+        percentualExecucao: percentualCalculado == null ? null : percentualCalculado < 100 ? Math.min(99.99, arredondar(percentualCalculado)) : arredondar(percentualCalculado), pesoOperacional: e.peso,
         dataEfetivaMarco: e.dataEfetivaMarco ?? null, inicioPrevisto: e.inicioPrevisto, terminoPrevisto: e.terminoPrevisto,
-        situacaoAdministrativa: e.statusExecucao === 'FINALIZADO' ? 'FINALIZADO' : e.statusExecucao,
+        situacaoAdministrativa: statusEntregavel,
         statusFisico: percentualCalculado == null ? 'NAO_AVALIADO' : percentualCalculado === 100 ? 'CONCLUIDO' : percentualCalculado > 0 ? 'EM_ANDAMENTO' : 'NAO_INICIADO',
-        editavel: !contrato.arquivadoEm && ['PLANEJAMENTO','EM_EXECUCAO'].includes(contrato.status) && etapa?.status !== 'ENCERRADA' && etapa?.status !== 'CONCLUIDA' && etapa?.status !== 'FINALIZADA' && !['CONCLUIDO','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? ''),
-        comprovacao: 'NAO_AVALIADA' as const, percentualBruto: percentualCalculado };
-    });
+        editavel: !contrato.arquivadoEm && !contrato.conclusaoSolicitadaEm && ['PLANEJAMENTO','EM_EXECUCAO'].includes(contrato.status) && Boolean(etapa && !etapa.arquivadoEm && !etapa.conclusaoSolicitadaEm && !etapa.encerramentoSolicitadoEm && !['ENCERRADA','CONCLUIDA','CONCLUIDO_PARCIALMENTE','FINALIZADA'].includes(etapa.status)) && !['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? ''),
+        comprovacao: e.situacaoComprovacao ?? 'SEM_EVIDENCIA', percentualBruto: percentualCalculado };
+    }));
     const agregado = agregarFisico(entregaveis.map(e => ({ percentual: e.percentualBruto, peso: e.pesoOperacional })));
     return { contratoId, statusContrato: contrato.status, modoCalculo: contrato.modoCalculo, versaoPesos: versaoPesos(contrato, ativos), ...agregado,
       avanco: contrato.modoCalculo === 'PONDERADO' ? agregado.avancoPonderado : agregado.avancoSimples,
-      editavelPesos: !contrato.arquivadoEm && ['PLANEJAMENTO','EM_EXECUCAO'].includes(contrato.status),
+      editavelPesos: !contrato.arquivadoEm && !contrato.conclusaoSolicitadaEm && ['PLANEJAMENTO','EM_EXECUCAO'].includes(contrato.status),
       configuracaoPendente: contrato.modoCalculo === 'PONDERADO' && !agregado.pesosValidos,
-      entregaveis: entregaveis.map(({ percentualBruto: _, ...e }) => e) };
+      ...(verificarIntegral ? { integralFisicoEstrito: entregaveis.length > 0 && entregaveis.every(e => e.percentualBruto === 100 && ['CONCLUIDO','CONCLUIDO_PARCIALMENTE'].includes(e.statusEntregavel ?? '')), integralEstrito: entregaveis.length > 0 &&
+        entregaveis.every(e => e.percentualBruto === 100 && e.statusEntregavel === 'CONCLUIDO') } : {}),
+      entregaveis: entregaveis.map(e => {
+        const publico = { ...e };
+        delete (publico as Partial<typeof e>).percentualBruto;
+        return { ...publico, participacaoOperacional: contrato.modoCalculo === 'SIMPLES' ? 100 / ativos.length : e.pesoOperacional != null ? Number(e.pesoOperacional) : 0 };
+      }) };
   }
   async atualizarModoCalculo(contratoId: string, dto: AtualizarModoCalculoDto, ator: UsuarioAutenticado) {
     return this.ds.transaction(async m => {
       const contrato = await m.findOne(Contrato, { where: { id: contratoId }, lock: { mode: 'pessimistic_write' } });
-      if (!contrato || contrato.arquivadoEm || !['PLANEJAMENTO', 'EM_EXECUCAO'].includes(contrato.status)) {
+      if (!contrato || contrato.arquivadoEm || contrato.conclusaoSolicitadaEm || !['PLANEJAMENTO', 'EM_EXECUCAO'].includes(contrato.status)) {
         throw new ConflictException('O contrato não permite alteração do modo de cálculo.');
       }
       // A mesma permissão necessária para definir os pesos governa a troca do modo.
@@ -128,8 +86,8 @@ export class ExecucaoService {
         throw new ConflictException('O modo de cálculo ou os pesos foram alterados. Atualize a página.');
       }
       if (dto.modoCalculo === ModoCalculo.PONDERADO &&
-        !agregarFisico(ativos.map(e => ({ percentual: 0, peso: e.peso }))).pesosValidos) {
-        throw new BadRequestException('Configure pesos totalizando exatamente 100% antes de ativar o cálculo ponderado.');
+        agregarFisico(ativos.map(e => ({ percentual: 0, peso: e.peso }))).avancoPonderado === null && ativos.length > 0) {
+        throw new BadRequestException('Os pesos não podem ultrapassar 100% ou conter valores inválidos.');
       }
       if (contrato.modoCalculo !== dto.modoCalculo) {
         const anterior = contrato.modoCalculo;
@@ -147,13 +105,12 @@ export class ExecucaoService {
   }
 
   /** Persiste um peso por vez, com concorrência otimista e auditoria.
-   *  O modo ponderado jamais fica com soma diferente de 100%.
-   *  Durante a configuração parcial, o contrato permanece em média simples.
+   *  O modo ponderado admite distribuição parcial, sem normalizar os pesos.
    */
   async atualizarPesoIndividual(contratoId: string, entregavelId: string, dto: AtualizarPesoIndividualDto, ator: UsuarioAutenticado) {
     return this.ds.transaction(async m => {
       const contrato = await m.findOne(Contrato, { where: { id: contratoId }, lock: { mode: 'pessimistic_write' } });
-      if (!contrato || contrato.arquivadoEm || !['PLANEJAMENTO', 'EM_EXECUCAO'].includes(contrato.status))
+      if (!contrato || contrato.arquivadoEm || contrato.conclusaoSolicitadaEm || !['PLANEJAMENTO', 'EM_EXECUCAO'].includes(contrato.status))
         throw new ConflictException('Contrato indisponível para configurar pesos.');
       if (ator.perfil !== 'ADMINISTRADOR') {
         const vinculo = await m.findOneBy(PermissaoContrato, { contratoId, usuarioId: ator.id });
@@ -170,20 +127,9 @@ export class ExecucaoService {
       if (!/^(?:100(?:\.0{1,4})?|\d{1,2}(?:\.\d{1,4})?)$/.test(dto.peso))
         throw new BadRequestException('Peso deve estar entre 0% e 100%, com até quatro casas decimais.');
       const anteriores = alvo.peso;
-      // Configuração incremental: uma redistribuição pode deixar a soma parcial.
-      // Não manter um cálculo ponderado inválido, nem descartar os pesos existentes.
-      const somaValidaDepois = agregarFisico(ativos.map(e => ({
-        percentual: 0, peso: e.id === entregavelId ? dto.peso : e.peso,
-      }))).pesosValidos;
-      if (contrato.modoCalculo === ModoCalculo.PONDERADO && !somaValidaDepois) {
-        contrato.modoCalculo = ModoCalculo.SIMPLES;
-        await m.save(Contrato, contrato);
-        await this.auditoria.registrarNaTransacao(m, ator, {
-          acao: AcaoAuditoria.CONTRATO_EDITADO, entidadeTipo: 'CONTRATO', entidadeId: contrato.id,
-          dadosAnteriores: { modoCalculo: ModoCalculo.PONDERADO },
-          dadosPosteriores: { modoCalculo: ModoCalculo.SIMPLES, motivo: 'Redistribuição de pesos incompleta' },
-        });
-      }
+      const distribuicao = agregarFisico(ativos.map(e => ({ percentual: 0, peso: e.id === entregavelId ? dto.peso : e.peso })));
+      if (contrato.modoCalculo === ModoCalculo.PONDERADO && distribuicao.avancoPonderado === null)
+        throw new BadRequestException('A soma dos pesos não pode ultrapassar 100%.');
       if (anteriores !== dto.peso) {
         alvo.peso = dto.peso;
         await m.save(Entregavel, alvo);
@@ -199,7 +145,7 @@ export class ExecucaoService {
   async atualizarPesos(contratoId: string, dto: AtualizarPesosDto, ator: UsuarioAutenticado) {
     return this.ds.transaction(async m => {
       const c = await m.findOne(Contrato, { where: { id: contratoId }, lock: { mode: 'pessimistic_write' } });
-      if (!c || c.arquivadoEm || !['PLANEJAMENTO','EM_EXECUCAO'].includes(c.status)) throw new ConflictException('Contrato bloqueado');
+      if (!c || c.arquivadoEm || c.conclusaoSolicitadaEm || !['PLANEJAMENTO','EM_EXECUCAO'].includes(c.status)) throw new ConflictException('Contrato bloqueado');
       if (ator.perfil !== 'ADMINISTRADOR') {
         const v = await m.findOneBy(PermissaoContrato, { contratoId, usuarioId: ator.id });
         const p = permissoesEfetivas(ator.perfil, Boolean(v?.podeEditar), v?.permissoesDetalhadas);
@@ -210,7 +156,7 @@ export class ExecucaoService {
       if (versaoPesos(c, ativos) !== dto.versao) throw new ConflictException('Pesos ou planejamento foram alterados. Atualize antes de salvar.');
       const pesos = new Map(dto.pesos.map(p=>[p.entregavelId,p.peso]));
       if (pesos.size !== dto.pesos.length || pesos.size !== ativos.length || ativos.some(e=>!pesos.has(e.id))) throw new BadRequestException('Informe o peso de cada entregável ativo do contrato');
-      if (!agregarFisico(ativos.map(e=>({ percentual:0,peso:pesos.get(e.id)! }))).pesosValidos) throw new BadRequestException('Soma dos pesos deve ser exatamente 100%');
+      if (agregarFisico(ativos.map(e=>({ percentual:0,peso:pesos.get(e.id)! }))).avancoPonderado === null) throw new BadRequestException('A soma dos pesos não pode ultrapassar 100%.');
       for (const e of ativos) {
         const anterior = e.peso; const novo = pesos.get(e.id)!;
         if (anterior != null && Number(anterior) === Number(novo)) continue;
@@ -219,7 +165,7 @@ export class ExecucaoService {
       }
       const anterior = c.modoCalculo;
       c.modoCalculo = 'PONDERADO' as Contrato['modoCalculo']; await m.save(Contrato,c);
-      await this.auditoria.registrarNaTransacao(m,ator,{ acao:AcaoAuditoria.CONTRATO_EDITADO, entidadeTipo:'CONTRATO', entidadeId:c.id, dadosAnteriores:{ modoCalculo:anterior }, dadosPosteriores:{ modoCalculo:c.modoCalculo, somaPesos:100 } });
+      await this.auditoria.registrarNaTransacao(m,ator,{ acao:AcaoAuditoria.CONTRATO_EDITADO, entidadeTipo:'CONTRATO', entidadeId:c.id, dadosAnteriores:{ modoCalculo:anterior }, dadosPosteriores:{ modoCalculo:c.modoCalculo, somaPesos:agregarFisico(ativos.map(e=>({percentual:0,peso:e.peso}))).somaPesos } });
       return this.resumo(m,contratoId);
     });
   }
@@ -229,7 +175,7 @@ export class ExecucaoService {
   async usarOcorrencias(contratoId: string, id: string, ator: UsuarioAutenticado) {
     return this.ds.transaction(async m => {
       const contrato = await m.findOne(Contrato, { where: { id: contratoId }, lock: { mode: 'pessimistic_write' } });
-      if (!contrato || contrato.arquivadoEm || !['PLANEJAMENTO', 'EM_EXECUCAO'].includes(contrato.status))
+      if (!contrato || contrato.arquivadoEm || contrato.conclusaoSolicitadaEm || !['PLANEJAMENTO', 'EM_EXECUCAO'].includes(contrato.status))
         throw new ConflictException('Contrato indisponível para conciliação de execução');
       if (ator.perfil !== 'ADMINISTRADOR') {
         const vinculo = await m.findOneBy(PermissaoContrato, { contratoId, usuarioId: ator.id });
@@ -240,7 +186,7 @@ export class ExecucaoService {
       if (!entregavel || entregavel.arquivadoEm || entregavel.tipo !== 'QUANTITATIVO')
         throw new NotFoundException('Entregável quantitativo não encontrado');
       const etapa = await m.findOneBy(Etapa, { id: entregavel.etapaId, contratoId });
-      if (!etapa || etapa.arquivadoEm || ['CONCLUIDA', 'ENCERRADA'].includes(etapa.status) || ['CONCLUIDO','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(entregavel.statusExecucao ?? ''))
+      if (!etapa || etapa.arquivadoEm || etapa.conclusaoSolicitadaEm || etapa.encerramentoSolicitadoEm || ['CONCLUIDA', 'CONCLUIDO_PARCIALMENTE', 'ENCERRADA', 'FINALIZADA'].includes(etapa.status) || ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(entregavel.statusExecucao ?? ''))
         throw new ConflictException('Reabra a etapa e o entregável antes da conciliação');
       const registros = await m.countBy(Ocorrencia, { contratoId, entregavelId: id, substituidaEm: IsNull() });
       if (registros > 0) throw new ConflictException('Já existem ocorrências. Não é seguro alterar a fonte de execução automaticamente');
@@ -261,7 +207,7 @@ export class ExecucaoService {
   async atualizar(contratoId: string, id: string, dto: AtualizarExecucaoDto, ator: UsuarioAutenticado) {
     return this.ds.transaction(async m => {
       const contrato = await m.findOne(Contrato, { where: { id: contratoId }, lock: { mode: 'pessimistic_write' } });
-      if (!contrato || contrato.arquivadoEm || !['PLANEJAMENTO','EM_EXECUCAO'].includes(contrato.status)) throw new ConflictException('Contrato indisponível para execução');
+      if (!contrato || contrato.arquivadoEm || contrato.conclusaoSolicitadaEm || !['PLANEJAMENTO','EM_EXECUCAO'].includes(contrato.status)) throw new ConflictException('Contrato indisponível para execução');
       if (ator.perfil !== 'ADMINISTRADOR') {
         const v = await m.findOneBy(PermissaoContrato, { contratoId, usuarioId: ator.id });
         if (!v || !permissoesEfetivas(ator.perfil, v.podeEditar, v.permissoesDetalhadas).editarExecucaoFisica) throw new ForbiddenException('Sem permissão de execução');
@@ -269,11 +215,13 @@ export class ExecucaoService {
       const e = await m.findOne(Entregavel, { where: { id, contratoId }, lock: { mode: 'pessimistic_write' } });
       if (!e || e.arquivadoEm) throw new NotFoundException('Entregável indisponível');
       const etapa = await m.findOneBy(Etapa, { id: e.etapaId, contratoId });
-      if (!etapa || etapa.arquivadoEm || ['ENCERRADA','CONCLUIDA','FINALIZADA'].includes(etapa.status) || ['CONCLUIDO','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? '')) throw new ConflictException('Etapa indisponível para execução');
+      if (!etapa || etapa.arquivadoEm || etapa.conclusaoSolicitadaEm || etapa.encerramentoSolicitadoEm || ['ENCERRADA','CONCLUIDA','CONCLUIDO_PARCIALMENTE','FINALIZADA'].includes(etapa.status) || ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? '')) throw new ConflictException('Etapa indisponível para execução');
       const antes = { percentualExecucao: e.percentualExecucao, quantidadeRealizada: e.quantidadeRealizada, dataEfetivaMarco: e.dataEfetivaMarco };
       if (Object.values(dto).filter(v => v !== undefined).length !== 1) throw new BadRequestException('Informe somente o campo físico do tipo de entregável');
+      if (e.execucoesIntegradas && dto.percentualManual !== undefined) throw new ConflictException('Utilize os lançamentos da aba Geral para alterar a execução integrada.');
       if ((e.tipo === 'UNICO' || e.tipo === 'CONTINUO') && typeof dto.percentualManual === 'number' && Number.isFinite(dto.percentualManual) && dto.percentualManual >= 0 && dto.percentualManual <= 100) e.percentualExecucao = dto.percentualManual.toFixed(2);
       else if (e.tipo === 'QUANTITATIVO' && dto.quantidadeRealizada !== undefined) {
+        if(e.quantidadeDiretaIntegrada)throw new ConflictException('Utilize as atividades ou evidências de execução direta, preservando a rastreabilidade.');
         const quantidade = dto.quantidadeRealizada;
         if (typeof quantidade !== 'string' || !/^\d{1,15}(?:\.\d{1,3})?$/.test(quantidade))
           throw new BadRequestException('Informe uma quantidade não negativa com até três casas decimais.');
@@ -286,7 +234,8 @@ export class ExecucaoService {
       await m.save(Entregavel, e);
       await this.auditoria.registrarNaTransacao(m, ator, { acao: AcaoAuditoria.ENTREGAVEL_EXECUCAO_ATUALIZADA, entidadeTipo: 'ENTREGAVEL', entidadeId: e.id, dadosAnteriores: antes,
         dadosPosteriores: { percentualExecucao: e.percentualExecucao, quantidadeRealizada: e.quantidadeRealizada, dataEfetivaMarco: e.dataEfetivaMarco } });
-      // Não alterar statusExecucao legado nem situacaoComprovacao: o fechamento documental usa ambos em fluxos existentes.
+      if(Number(e.percentualExecucao??0)>0||Number(e.quantidadeRealizada??0)>0||e.dataEfetivaMarco)await iniciarHierarquiaOperacional(m,this.auditoria,ator,contratoId,id);
+      // Não alterar situacaoComprovacao nem concluir automaticamente.
       return this.resumo(m, contratoId);
     });
   }

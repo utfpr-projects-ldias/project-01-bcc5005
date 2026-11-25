@@ -1,6 +1,5 @@
 import 'reflect-metadata';
 import { jest } from '@jest/globals';
-import { ConflictException } from '@nestjs/common';
 import { AtividadesService } from '../atividades/atividades.service.js';
 import { AtividadeEntity } from '../atividades/atividade.entity.js';
 import { Entregavel } from './entregavel.entity.js';
@@ -63,22 +62,21 @@ function cenario({ outraAtividade = false, documentoPronto = true }: {
 }
 
 describe('HU08 — verificação da última atividade e fechamento auditável', () => {
-  it('conclui entregável e etapa quando a última atividade é verificada e os arquivos já estão verificados', async () => {
+  it('atividade verificada não autoriza conclusão automática de entregável nem etapa reaberta', async () => {
     const c = cenario();
     await c.service.verificar(contratoId, atividadeId, ator, '');
     expect(c.atividade.status).toBe('VERIFICADA');
-    expect(c.entregavel.statusExecucao).toBe('CONCLUIDO');
-    expect(c.entregavel.reabertoEm).toBeNull();
-    expect(c.etapa.status).toBe('CONCLUIDA');
-    expect(c.acoes).toEqual([
-      AcaoAuditoria.ATIVIDADE_VERIFICADA, AcaoAuditoria.ENTREGAVEL_STATUS_ALTERADO,
-      AcaoAuditoria.ETAPA_STATUS_ALTERADO,
-    ]);
+    expect(c.entregavel.statusExecucao).toBe('EM_ANDAMENTO');
+    expect(c.entregavel.reabertoEm).toBeInstanceOf(Date);
+    expect(c.etapa.status).toBe('EM_ANDAMENTO');
+    expect(c.etapa.reabertoEm).toBeInstanceOf(Date);
+    expect(c.acoes).toEqual([AcaoAuditoria.ATIVIDADE_VERIFICADA]);
+    expect(c.repoEntregavel.save).not.toHaveBeenCalled();
+    expect(c.repoEtapa.save).not.toHaveBeenCalled();
     // A conclusão do contrato segue exigindo confirmação própria.
     expect(c.manager.getRepository).not.toHaveBeenCalledWith(Contrato);
-    // Para reabrir a atividade, primeiro é obrigatório reabrir o contexto.
-    await expect(c.service.reabrir(contratoId, atividadeId, ator, 'Correção posterior necessária'))
-      .rejects.toBeInstanceOf(ConflictException);
+    // O aceite deve ocorrer por solicitação e decisão próprias, nunca por atividade.
+    expect(c.entregavel.statusExecucao).not.toBe('CONCLUIDO');
   });
   it('não fecha entregável após verificar atividade se execução física estiver incompleta', async () => {
     const c = cenario();

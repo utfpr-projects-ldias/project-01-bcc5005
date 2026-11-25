@@ -31,7 +31,7 @@ export class CriarContratoDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(25)
+  @MaxLength(32)
   processoAdministrativo?: string | null;
 
   @IsString()
@@ -41,7 +41,7 @@ export class CriarContratoDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(30)
+  @MaxLength(32)
   unidadeResponsavel?: string | null;
 
   @IsString()

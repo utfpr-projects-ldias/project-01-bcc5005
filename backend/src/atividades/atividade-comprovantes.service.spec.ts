@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import { ConflictException } from '@nestjs/common';
 import type { DataSource, EntityManager } from 'typeorm';
 import type { AuditoriaService } from '../auditoria/auditoria.service.js';

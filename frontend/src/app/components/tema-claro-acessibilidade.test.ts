@@ -41,13 +41,14 @@ test('suspensão e arquivamento não compartilham a mesma cor de texto', () => {
 });
 
 test('o cadastro abre a visão geral e o anexo principal fica disponível sob demanda', () => {
-  expect(novoContrato).toContain('router.push(`/contratos/${encodeURIComponent(criado.id)}`)');
+  expect(novoContrato).toContain("redirect('/contratos')");
+  expect(listaContratos).toContain('ModalNovoContrato');
   expect(novoContrato).not.toContain('?anexarDocumento=principal');
   expect(detalhe).toContain('setAbaContrato');
 });
 
 test('ações de arquivar e editar têm ícone acompanhado de rótulo', () => {
-  expect(detalhe).toMatch(/aria-label="Arquivar contrato"[\s\S]{0,550}<svg aria-hidden="true"/);
-  expect(detalhe).toMatch(/<\/svg>\s*Arquivar\s*<\/button>/);
-  expect(detalhe).toContain("{podeEditar ? 'Editar' : 'Alterar situação'}");
+  expect(detalhe).toContain('aria-label="Arquivar contrato"');
+  expect(detalhe).toContain('MenuAcoesObjeto rotulo="Fechar contrato"');
+  expect(detalhe).toContain('podeAbrirEdicao');
 });

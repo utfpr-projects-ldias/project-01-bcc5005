@@ -7,6 +7,7 @@ import { jest } from '@jest/globals';
 import request from 'supertest';
 import { AtividadesController } from '../src/atividades/atividades.controller.js';
 import { AtividadesService } from '../src/atividades/atividades.service.js';
+import { AtividadeComprovantesService } from '../src/atividades/atividade-comprovantes.service.js';
 import { AutorizacaoGuard } from '../src/autorizacao/autorizacao.guard.js';
 import { PoliticaAcessoService } from '../src/autorizacao/politica-acesso.service.js';
 import { ResolverEscopoContratoService } from '../src/autorizacao/resolver-escopo-contrato.service.js';
@@ -65,6 +66,7 @@ describe('HU08 — contrato HTTP e segurança sem banco destrutivo', () => {
       controllers: [AtividadesController],
       providers: [
         { provide: AtividadesService, useValue: servico },
+        { provide: AtividadeComprovantesService, useValue: {} },
         { provide: SessaoSuperTokensService, useValue: sessoes },
         { provide: UsuariosService, useValue: usuarios },
         { provide: PoliticaAcessoService, useValue: autorizacao },
@@ -85,10 +87,10 @@ describe('HU08 — contrato HTTP e segurança sem banco destrutivo', () => {
     expect(criar).toHaveBeenCalledTimes(2);
     expect(criar).toHaveBeenLastCalledWith(contratoId, expect.objectContaining({ entregavelIds: [entregavel1, entregavel2] }), expect.objectContaining({ perfil: PerfilUsuario.COLABORADOR }));
   });
-  it('rejeita vínculos vazios, repetidos e ocorrenciaId antes da HU09', async () => {
+  it('rejeita entregáveis vazios/repetidos e admite vínculo opcional HU09', async () => {
     expect((await post(contratoId, payload([]))).status).toBe(400);
     expect((await post(contratoId, payload([entregavel1, entregavel1]))).status).toBe(400);
-    expect((await post(contratoId, { ...payload([entregavel1]), ocorrenciaId: entregavel2 })).status).toBe(400);
+    expect((await post(contratoId, { ...payload([entregavel1]), ocorrenciaId: entregavel2 })).status).toBe(201);
   });
   it('nega leitura e escrita em outro contrato sem revelar dados', async () => {
     expect((await post(contratoAlheio, payload([entregavel1]))).status).toBe(404);

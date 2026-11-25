@@ -11,7 +11,11 @@ export function ProgressoAtividadeCompartilhada({ grupoId, onAtualizada }: { gru
     try { setResumo(await consultarCompartilhada(grupoId)); setErro(''); }
     catch (e) { setErro(e instanceof Error ? e.message : 'Consulta indisponível'); }
   }, [grupoId]);
-  useEffect(() => { void carregar(); }, [carregar]);
+  useEffect(() => {
+    let ativo = true;
+    queueMicrotask(() => { if (ativo) void carregar(); });
+    return () => { ativo = false; };
+  }, [carregar]);
   const disponiveis = resumo?.atividades.filter(a => a.podeAprovar).length ?? 0;
   const solicitaveis = resumo?.atividades.filter(a => a.podeSolicitar).length ?? 0;
   async function solicitar() {

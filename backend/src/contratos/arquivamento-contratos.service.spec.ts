@@ -19,7 +19,7 @@ function cenario() {
     const resultado = await executar(manager);
     return (resultado as {resultado: Contrato}).resultado;
   });
-  const service = new ContratosService({} as never, { executarComAuditoria: evento } as never);
+  const service = new ContratosService({} as never, { executarComAuditoria: evento } as never, {} as never);
   return { service, atual, evento, repo };
 }
 
@@ -40,4 +40,11 @@ test('arquivar duas vezes gera conflito; usuário não ADMIN é proibido', async
   await service.alterarArquivamento(id, true, admin);
   await expect(service.alterarArquivamento(id, true, admin)).rejects.toBeInstanceOf(ConflictException);
   await expect(service.alterarArquivamento(id, false, gestor)).rejects.toBeInstanceOf(ForbiddenException);
+});
+
+test('contrato aguardando decisão não pode ser arquivado', async () => {
+  const { service, atual, repo } = cenario();
+  Object.assign(atual, { conclusaoSolicitadaEm: new Date() });
+  await expect(service.alterarArquivamento(id, true, admin)).rejects.toBeInstanceOf(ConflictException);
+  expect(repo.save).not.toHaveBeenCalled();
 });

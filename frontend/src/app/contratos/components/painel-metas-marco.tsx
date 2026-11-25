@@ -1,4 +1,5 @@
 'use client';
+import { CampoDataCivil } from '@/app/components/campo-data-civil';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import type { PermissoesContrato } from '@/lib/contratos';
 import { candidatosMetaMarco, criarMetaMarco, decidirVinculoMeta, editarMetaMarco, listarMetasMarco, vincularMetaMarco,
@@ -24,7 +25,7 @@ export function PainelMetasMarco({contratoId,entregavelId,permissoes,readOnly=fa
   const [expandida,setExpandida]=useState<string|null>(null);
   const [candidatos,setCandidatos]=useState<{id:string;titulo:string}[]>([]);
   const [registro,setRegistro]=useState('');
-  const [justificativa,setJustificativa]=useState('');
+  const [justificativas,setJustificativas]=useState<Record<string,string>>({});
   const atualizar=useCallback(async()=>{const r=await listarMetasMarco(contratoId,entregavelId);setResumo(r);},[contratoId,entregavelId]);
   useEffect(()=>{let ativo=true;listarMetasMarco(contratoId,entregavelId).then(r=>{if(ativo){setResumo(r);setErro('');}}).catch(e=>{if(ativo)setErro(e instanceof Error?e.message:'Não foi possível consultar metas.');}).finally(()=>{if(ativo)setCarregando(false);});return()=>{ativo=false;};},[contratoId,entregavelId]);
   const permitido=(chave: keyof PermissoesContrato)=>!readOnly&&Boolean(permissoes?.[chave]);
@@ -34,14 +35,14 @@ export function PainelMetasMarco({contratoId,entregavelId,permissoes,readOnly=fa
     const dados = {...form,titulo:form.titulo.trim(),dataPrevista:form.dataPrevista||null,inicioPrevisto:form.inicioPrevisto||null,terminoPrevisto:form.terminoPrevisto||null};
     await executar(async()=>{if(editarId){const {tipo: _tipo, ...alteracoes}=dados;void _tipo;await editarMetaMarco(contratoId,entregavelId,editarId,alteracoes);}else await criarMetaMarco(contratoId,entregavelId,dados);setForm(null);setEditarId(null);});
   }
-  async function abrirMeta(meta:MetaMarco){if(expandida===meta.id){setExpandida(null);return;}setExpandida(meta.id);setRegistro('');setCandidatos([]);setErro('');try{setCandidatos(await candidatosMetaMarco(contratoId,entregavelId,meta.id));}catch(e){setErro(e instanceof Error?e.message:'Não foi possível consultar registros.');}}
+  async function abrirMeta(meta:MetaMarco){if(expandida===meta.id){setExpandida(null);return;}setExpandida(meta.id);setRegistro('');setJustificativas({});setCandidatos([]);setErro('');try{setCandidatos(await candidatosMetaMarco(contratoId,entregavelId,meta.id));}catch(e){setErro(e instanceof Error?e.message:'Não foi possível consultar registros.');}}
   if(carregando)return <p role="status" className="p-4 text-sm">Carregando metas do Marco...</p>;
   return <section className="min-w-0 space-y-4 rounded-xl border border-current/20 p-4" aria-label="Metas preparatórias do Marco">
     <header className="flex flex-wrap items-center justify-between gap-3">
       <div><h3 className="font-semibold">Metas do Marco</h3><p className="text-xs text-foreground/60">Preparação operacional, independente da conclusão física 0% ou 100%.</p></div>
       {permitido('criarMetasMarco')&&<button type="button" disabled={ocupado} onClick={()=>{setForm({...vazio,tipo});setEditarId(null);}} className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white">Nova meta</button>}
     </header>
-    {erro&&<p role="alert" className="rounded-lg border border-red-500/35 p-2 text-sm text-red-400">{erro}</p>}
+    {erro&&<p role="alert" className="rounded-lg border border-red-500/35 p-2 text-sm text-error-text">{erro}</p>}
     <div className="space-y-2 rounded-lg border border-violet-500/20 p-3">
       <div className="flex justify-between text-sm"><strong>Preparação das metas</strong><span>{resumo?.concluidas??0}/{resumo?.total??0} atendidas · {resumo?.percentualPreparacao??0}%</span></div>
       <Progresso nome="Progresso de preparação do Marco" valor={resumo?.percentualPreparacao??0}/>
@@ -53,9 +54,9 @@ export function PainelMetasMarco({contratoId,entregavelId,permissoes,readOnly=fa
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-xs sm:col-span-2">Título<input autoFocus required maxLength={60} className={INPUT} value={form.titulo} onChange={e=>setForm(f=>f?{...f,titulo:e.target.value}:f)}/></label>
         <label className="text-xs">Quantidade de registros exigida<input required type="number" min={1} max={100} step={1} className={INPUT} value={form.quantidadeExigida} onChange={e=>setForm(f=>f?{...f,quantidadeExigida:Number(e.target.value)}:f)}/></label>
-        <label className="text-xs">Data prevista (opcional)<input type="date" className={INPUT} value={form.dataPrevista??''} onChange={e=>setForm(f=>f?{...f,dataPrevista:e.target.value||null,inicioPrevisto:null,terminoPrevisto:null}:f)}/></label>
-        <label className="text-xs">Início previsto (alternativo)<input type="date" className={INPUT} disabled={!!form.dataPrevista} value={form.inicioPrevisto??''} onChange={e=>setForm(f=>f?{...f,inicioPrevisto:e.target.value||null}:f)}/></label>
-        <label className="text-xs">Término previsto (alternativo)<input type="date" className={INPUT} disabled={!!form.dataPrevista} value={form.terminoPrevisto??''} onChange={e=>setForm(f=>f?{...f,terminoPrevisto:e.target.value||null}:f)}/></label>
+        <label className="text-xs">Data prevista (opcional)<CampoDataCivil className={INPUT} value={form.dataPrevista??''} onChange={e=>setForm(f=>f?{...f,dataPrevista:e.target.value||null,inicioPrevisto:null,terminoPrevisto:null}:f)}/></label>
+        <label className="text-xs">Início previsto (alternativo)<CampoDataCivil className={INPUT} disabled={!!form.dataPrevista} value={form.inicioPrevisto??''} onChange={e=>setForm(f=>f?{...f,inicioPrevisto:e.target.value||null}:f)}/></label>
+        <label className="text-xs">Término previsto (alternativo)<CampoDataCivil className={INPUT} disabled={!!form.dataPrevista} value={form.terminoPrevisto??''} onChange={e=>setForm(f=>f?{...f,terminoPrevisto:e.target.value||null}:f)}/></label>
       </div>
       <div className="flex justify-end gap-2"><button type="button" onClick={()=>setForm(null)} className="rounded-lg border border-current/25 px-3 py-2 text-xs">Cancelar</button><button disabled={ocupado} className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white">Salvar meta</button></div>
     </form>}
@@ -70,9 +71,13 @@ export function PainelMetasMarco({contratoId,entregavelId,permissoes,readOnly=fa
       {expandida===m.id&&<div className="space-y-3 border-t border-current/15 pt-3">
         {m.vinculos.length===0&&<p className="text-xs text-foreground/60">Nenhum vínculo solicitado.</p>}
         {m.vinculos.map(v=><div key={v.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-current/15 p-2 text-xs">
-          <div className="min-w-0"><span className="font-semibold">{v.status==='APROVADO'?v.elegivel?'Aprovado':'Revalidação necessária':'Pendente de aprovação'}</span>
+          <div className="min-w-0"><span className="font-semibold">{v.status==='APROVADO'?v.elegivel?'Aprovado':'Revalidação necessária':v.status==='REJEITADO'?'Em revisão':'Pendente de aprovação'}</span>
             <p className="truncate text-foreground/55" title={v.ocorrenciaId||v.atividadeId||v.comprovanteId||''}>{v.ocorrenciaId||v.atividadeId||v.comprovanteId}</p></div>
-          {v.status==='PENDENTE'&&permitido('aprovarVinculosMetasMarco')&&<div className="flex gap-2"><button type="button" disabled={ocupado} onClick={()=>void executar(()=>decidirVinculoMeta(contratoId,entregavelId,m.id,v.id,false,justificativa))} className="rounded-lg border border-red-500/50 px-2 py-1 text-red-400">Rejeitar</button>
+          {v.status==='PENDENTE'&&permitido('aprovarVinculosMetasMarco')&&<div className="flex flex-wrap items-center gap-2">
+            <label className="text-xs">Justificativa para rejeição (opcional)
+              <input aria-label="Justificativa da rejeição do vínculo" maxLength={200} value={justificativas[v.id] ?? ''}
+                onChange={e=>setJustificativas(atuais=>({...atuais,[v.id]:e.target.value}))} className={INPUT} />
+            </label><button type="button" disabled={ocupado} onClick={()=>void executar(()=>decidirVinculoMeta(contratoId,entregavelId,m.id,v.id,false,justificativas[v.id] ?? ''))} className="rounded-lg border border-red-500/50 px-2 py-1 text-error-text">Rejeitar</button>
             <button type="button" disabled={ocupado} onClick={()=>void executar(()=>decidirVinculoMeta(contratoId,entregavelId,m.id,v.id,true))} className="rounded-lg bg-green-600 px-2 py-1 font-semibold text-white">Aprovar</button></div>}</div>)}
         {permitido('vincularMetasMarco')&&<div className="space-y-2">
           <label className="text-xs">Selecionar {TIPOS.find(t=>t.id===m.tipo)?.rotulo.toLowerCase()} já concluídas/verificadas

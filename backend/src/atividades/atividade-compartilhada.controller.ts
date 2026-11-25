@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Req, UsePipes, ValidationPipe } from '@nestjs/common';
 import { ExigirPolitica } from '../autorizacao/politica.decorator.js';
 import type { RequisicaoAutorizada } from '../autorizacao/usuario-autenticado.js';
 import { AtividadeCompartilhadaService } from './atividade-compartilhada.service.js';
@@ -22,6 +22,10 @@ export class AtividadeCompartilhadaController {
   detalhar(@Param('id') id: string, @Req() req: RequisicaoAutorizada) {
     return this.service.resumo(id, req.usuarioDominio!);
   }
+
+  @Delete(':id/contratos/:contratoId')
+  @ExigirPolitica('contratos:listar')
+  desvincular(@Param('id') id:string,@Param('contratoId') contratoId:string,@Req() req:RequisicaoAutorizada){return this.service.desvincularContrato(id,contratoId,req.usuarioDominio!);}
 
   @Post(':id/solicitar')
   @ExigirPolitica('contratos:listar')

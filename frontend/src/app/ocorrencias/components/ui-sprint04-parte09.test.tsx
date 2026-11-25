@@ -1,4 +1,4 @@
-import {fireEvent, render, screen} from '@testing-library/react';
+import {act, fireEvent, render, screen} from '@testing-library/react';
 import {AnelProgresso} from './anel-progresso';
 import {ResumoRequisitosOcorrencia} from './requisitos-ocorrencia';
 import {CalendarioOcorrencias} from './calendario-ocorrencias';
@@ -17,12 +17,12 @@ test('somente requisitos configurados entram no resumo', () => {
   expect(screen.queryByText('Evidências')).not.toBeInTheDocument();
 });
 
-test('agenda mensal recorrente tem navegação, sem etiqueta Hoje ou frase redundante', () => {
+test('agenda mensal recorrente tem navegação, sem etiqueta Hoje ou frase redundante', async () => {
   const abrir=jest.fn();
   const registro={id:'a',titulo:'Registro do período',periodoInicio:'2026-11-13',periodoFim:'2026-11-13',status:'NAO_INICIADO',substituidaEm:null} as Ocorrencia;
-  render(<CalendarioOcorrencias registros={[registro]} periodicidade="SEMANAL" aoAbrir={abrir}/>);
+  await act(async () => { render(<CalendarioOcorrencias registros={[registro]} periodicidade="SEMANAL" aoAbrir={abrir}/>); });
   expect(screen.queryByText('Hoje')).not.toBeInTheDocument();
   expect(screen.queryByText('Selecione um dia para ver as ocorrências do período.')).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button',{name:'Próximo período'}));
+  await act(async () => { fireEvent.click(screen.getByRole('button',{name:'Próximo período'})); });
   expect(screen.getByRole('button',{name:'Período anterior'})).toBeEnabled();
 });

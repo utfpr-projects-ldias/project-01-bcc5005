@@ -16,7 +16,7 @@ import urllib.error
 import urllib.request
 
 RAIZ = Path(__file__).resolve().parents[2]
-BRANCHES = {'tec-08--04-05', 'tec-08-04-05'}
+BRANCHES = {'tec-08--04-05', 'tec-08-04-05', 'bugfixes_sprint4'}
 UUID = re.compile(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
 
 # Executado EXCLUSIVAMENTE no container backend. A saída não expõe storage_key,

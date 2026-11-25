@@ -68,7 +68,10 @@ export function validarArquivo(
 ): { nomeOriginal: string; mimeEfetivo: string; tamanho: number } {
   validarPolitica(politica);
   if (typeof nomeOriginal !== 'string' || nomeOriginal.length < 1 || nomeOriginal.length > 180 ||
-      nomeOriginal === '.' || nomeOriginal === '..' || /[/\\\u0000-\u001f\u007f]/.test(nomeOriginal) ||
+      nomeOriginal === '.' || nomeOriginal === '..' || nomeOriginal.split('').some(letra => {
+        const code = letra.charCodeAt(0);
+        return letra === '/' || letra === '\\' || code < 32 || code === 127;
+      }) ||
       nomeOriginal.startsWith('.') || nomeOriginal.trim() !== nomeOriginal) {
     throw new ArquivoInvalidoError('Nome do arquivo inválido');
   }
@@ -108,7 +111,10 @@ function assinaturaCorresponde(mime: string, dados: Buffer): boolean {
     case 'text/plain': {
       try {
         const texto = new TextDecoder('utf-8', { fatal: true }).decode(dados);
-        return !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(texto);
+        return Array.from(texto).every(letra => {
+          const code = letra.charCodeAt(0);
+          return code === 9 || code === 10 || code === 13 || (code >= 32 && code !== 127);
+        });
       } catch {
         return false;
       }

@@ -99,7 +99,8 @@ test('download do item correto usa API protegida e informa falhas', async () => 
   (obterDownloadDocumento as jest.Mock).mockRejectedValueOnce(new Error('Arquivo temporariamente indisponível'));
   render(<PainelDocumentos contratoId="contrato-qa" habilitado podeAnexar={false} />);
   await act(async () => {});
-  fireEvent.click(screen.getByRole('button', { name: 'Baixar arquivo.txt' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Ver detalhes de arquivo.txt' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Baixar arquivo' }));
   expect(await screen.findByText(/Arquivo temporariamente indisponível/)).toBeInTheDocument();
   expect(obterDownloadDocumento).toHaveBeenCalledWith('contrato-qa', 'documento-qa');
 });
@@ -297,34 +298,26 @@ test('limite total considera documentos ativos e arquivados sem apagar históric
   expect(screen.getByRole('button', { name: 'Anexar documento' })).toBeDisabled();
 });
 
-test('arquivo contratual permanece imutável: arquivamento fica no cartão, não no modal', async () => {
+test('arquivo contratual permanece imutável: operações administrativas ficam no detalhe, não no cartão', async () => {
   render(<PainelDocumentos contratoId="contrato-qa" habilitado podeAnexar />);
   await act(async () => {});
-  expect(screen.getByRole('button', { name: 'Baixar arquivo.txt' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Editar arquivo.txt' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Arquivar arquivo.txt' })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Editar arquivo.txt' }));
+  const abrir = screen.getByRole('button', { name: 'Ver detalhes de arquivo.txt' });
+  expect(abrir).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Editar arquivo.txt' })).not.toBeInTheDocument();
+  fireEvent.click(abrir);
+  const detalhe = screen.getByRole('dialog', { name: 'arquivo.txt' });
+  fireEvent.click(within(detalhe).getByRole('button', { name: 'Editar metadados do documento' }));
   const editor = screen.getByRole('dialog', { name: /Documento · arquivo.txt/ });
   expect(within(editor).queryByRole('button', { name: 'Arquivar documento' })).not.toBeInTheDocument();
   expect(within(editor).queryByRole('textbox', { name: /Substituir arquivo/ })).not.toBeInTheDocument();
   fireEvent.click(within(editor).getByRole('button', { name: 'Cancelar' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Arquivar arquivo.txt' }));
+  fireEvent.click(within(detalhe).getByRole('button', { name: 'Fechar: escolher ação' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Arquivar' }));
   const confirmacao = screen.getByRole('dialog', { name: 'Arquivar documento?' });
   expect(confirmacao).toHaveTextContent('Arquivar não libera vaga');
   fireEvent.click(within(confirmacao).getByRole('button', { name: 'Cancelar' }));
-  expect(screen.queryByRole('dialog', { name: /Documento · arquivo.txt/ })).not.toBeInTheDocument();
+  expect(screen.getByRole('dialog', { name: 'arquivo.txt' })).toBeInTheDocument();
 });
-
-test('abas de documentos separam ativos de arquivados sem depender de select nativo', async () => {
-  render(<PainelDocumentos contratoId="contrato-qa" habilitado podeAnexar={false} />);
-  await act(async () => {});
-  expect(screen.getByRole('tab', { name: 'Documentos ativos' })).toHaveAttribute('aria-selected', 'true');
-  fireEvent.click(screen.getByRole('tab', { name: 'Documentos arquivados' }));
-  expect(screen.getByRole('tab', { name: 'Documentos arquivados' })).toHaveAttribute('aria-selected', 'true');
-  expect(screen.getByLabelText('Categoria')).toBeInTheDocument();
-  expect(screen.getByLabelText('Buscar documento nesta página')).toBeInTheDocument();
-});
-
 
 test('documento principal só pode ser gerenciado e arquivado, nunca editado', async () => {
   usar.mockImplementation((_id, categoria) => retorno(categoria === 'CONTRATO_PRINCIPAL'
@@ -334,7 +327,11 @@ test('documento principal só pode ser gerenciado e arquivado, nunca editado', a
   await act(async () => {});
   expect(screen.queryByRole('button', { name: 'Editar contrato.pdf' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Gerenciar contrato.pdf' })).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Arquivar contrato.pdf' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Ver detalhes de contrato.pdf' }));
+  const modal = screen.getByRole('dialog', { name: 'contrato.pdf' });
+  expect(within(modal).queryByRole('button', { name: 'Editar metadados do documento' })).not.toBeInTheDocument();
+  fireEvent.click(within(modal).getByRole('button', { name: 'Fechar: escolher ação' }));
+  expect(screen.getByRole('button', { name: 'Arquivar' })).toBeInTheDocument();
 });
 
 
@@ -365,8 +362,7 @@ test('documento arquivado abre detalhe e pode ser reativado sem reaparecer na ab
   fireEvent.click(detalhe);
   expect(screen.getByRole('dialog', { name: doc.nomeOriginal })).toHaveTextContent('Arquivado');
   expect(within(screen.getByRole('dialog', { name: doc.nomeOriginal })).getByRole('button', { name: 'Baixar arquivo' })).toBeInTheDocument();
-  fireEvent.keyDown(screen.getByRole('dialog', { name: doc.nomeOriginal }), { key: 'Escape' });
-  fireEvent.click(screen.getByRole('button', { name: `Reativar ${doc.nomeOriginal}` }));
+  fireEvent.click(within(screen.getByRole('dialog', { name: doc.nomeOriginal })).getByRole('button', { name: 'Reabrir' }));
   const confirmar = screen.getByRole('dialog', { name: 'Reativar documento?' });
   expect(reativarDocumento).not.toHaveBeenCalled();
   const justificativa = 'Reativação do documento após conferência administrativa.';

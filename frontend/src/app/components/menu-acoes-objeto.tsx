@@ -1,5 +1,6 @@
 'use client';
 import { Children, Fragment, isValidElement, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCamadaInterativa } from '@/lib/camadas-interativas';
 import { createPortal } from 'react-dom';
 import { IconeConclusao, IconeReabertura } from './icones-ciclo-vida';
 
@@ -13,8 +14,8 @@ function temAcaoDisponivel(conteudo: ReactNode): boolean {
 }
 
 /** Menu universal: só exibe ações autorizadas recebidas do módulo. Não altera permissões nem regras da API. */
-export function MenuAcoesObjeto({ children, rotulo = 'Fechar', disabled = false, acaoDireta, pendenteConclusao = false }: {
-  children?: ReactNode; rotulo?: string; disabled?: boolean;
+export function MenuAcoesObjeto({ children, rotulo = 'Fechar', disabled = false, acaoDireta, pendenteConclusao = false, icone, somenteIcone = false }: {
+  children?: ReactNode; rotulo?: string; disabled?: boolean; icone?: ReactNode; somenteIcone?: boolean;
   /** Abertura direta de uma única transição, sem um segundo menu de seleção. */
   acaoDireta?: () => void;
   /** Sinalizador visual: a decisão de conclusão está pendente, sem aprová-la automaticamente. */
@@ -25,9 +26,13 @@ export function MenuAcoesObjeto({ children, rotulo = 'Fechar', disabled = false,
   const reabertura = rotulo.toLocaleLowerCase('pt-BR').startsWith('reabrir');
   const botao = useRef<HTMLButtonElement>(null);
   const painel = useRef<HTMLDivElement>(null);
+  useCamadaInterativa(aberto, () => painel.current, () => { setAberto(false); botao.current?.focus({preventScroll:true}); }, 1000);
   const [posicao, setPosicao] = useState({top: 0, left: 0, acima: false});
   useEffect(() => {
-    if (disabled && aberto) setAberto(false);
+    if (!disabled || !aberto) return;
+    let ativo = true;
+    queueMicrotask(() => { if (ativo) setAberto(false); });
+    return () => { ativo = false; };
   }, [disabled, aberto]);
   useEffect(() => {
     if (!aberto || !temOpcoes) return;
@@ -47,18 +52,19 @@ export function MenuAcoesObjeto({ children, rotulo = 'Fechar', disabled = false,
     const fechar = (e: PointerEvent) => {
       if (e.target instanceof Node && !painel.current?.contains(e.target) && !botao.current?.contains(e.target)) setAberto(false);
     };
-    const teclado = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setAberto(false); botao.current?.focus(); } };
-    document.addEventListener('pointerdown', fechar);
-    document.addEventListener('keydown', teclado);
+    const fecharContexto = () => setAberto(false);
+    document.addEventListener('pointerdown', fechar, true);
+    window.addEventListener('pi:fechar-menus', fecharContexto);
+    window.addEventListener('blur', fecharContexto);
     window.addEventListener('resize', reposicionar);
     window.addEventListener('scroll', reposicionar, true);
-    return () => { window.cancelAnimationFrame(foco); document.removeEventListener('pointerdown', fechar); document.removeEventListener('keydown', teclado);
+    return () => { window.cancelAnimationFrame(foco); document.removeEventListener('pointerdown', fechar, true); window.removeEventListener('pi:fechar-menus', fecharContexto); window.removeEventListener('blur', fecharContexto);
       window.removeEventListener('resize', reposicionar); window.removeEventListener('scroll', reposicionar, true); };
   }, [aberto, temOpcoes]);
   if (!temOpcoes) return null;
   return <>
     <button ref={botao} type="button" disabled={disabled} aria-expanded={acaoDireta ? undefined : aberto}
-      aria-haspopup={acaoDireta ? undefined : 'menu'} aria-label={acaoDireta ? rotulo : `${rotulo}: escolher ação`}
+      aria-haspopup={acaoDireta ? undefined : 'menu'} title={somenteIcone ? rotulo : undefined} aria-label={acaoDireta || somenteIcone ? rotulo : `${rotulo}: escolher ação`}
       data-pi-controle-fechamento={pendenteConclusao ? 'pendente-conclusao' : acaoDireta ? 'reabrir-direto' : 'menu'}
       onClick={() => {
          if (acaoDireta) { setAberto(false); acaoDireta(); return; }
@@ -67,10 +73,10 @@ export function MenuAcoesObjeto({ children, rotulo = 'Fechar', disabled = false,
            left: Math.max(12, Math.min(r.right - 274, window.innerWidth - 286)), acima: false });
          setAberto(v => !v);
        }}
-      className={`inline-flex min-h-9 shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-2 disabled:opacity-50 ${'border-slate-400/40 bg-slate-500/10 text-foreground hover:bg-slate-500/20 focus-visible:outline-violet-400'}`}>
-      {pendenteConclusao ? <IconeConclusao className="h-[17px] w-[17px] shrink-0 text-violet-400" /> : (reabertura || acaoDireta) ? <IconeReabertura className="h-[17px] w-[17px] shrink-0 text-green-500" /> : <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>}
-      {rotulo}
-      {!acaoDireta && <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m6 9 6 6 6-6"/></svg>}
+      className={somenteIcone ? "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg hover:bg-current/10 focus-visible:outline-2 focus-visible:outline-current disabled:opacity-40" : `inline-flex min-h-9 shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-2 disabled:opacity-50 ${'border-slate-400/40 bg-slate-500/10 text-foreground hover:bg-slate-500/20 focus-visible:outline-violet-400'}`}>
+      {icone ?? (pendenteConclusao ? <IconeConclusao className="h-[17px] w-[17px] shrink-0 text-violet-400" /> : (reabertura || acaoDireta) ? <IconeReabertura className="h-[17px] w-[17px] shrink-0 text-green-500" /> : <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>)}
+      {!somenteIcone && rotulo}
+      {!somenteIcone && !acaoDireta && <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m6 9 6 6 6-6"/></svg>}
     </button>
     {!acaoDireta && aberto && createPortal(<div ref={painel} role="menu" aria-label={rotulo}
       onPointerDown={evento => evento.stopPropagation()}

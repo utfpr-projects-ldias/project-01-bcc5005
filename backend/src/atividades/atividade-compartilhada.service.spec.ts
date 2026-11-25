@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import { ForbiddenException } from '@nestjs/common';
 import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
 import type { DataSource } from 'typeorm';
@@ -6,7 +7,6 @@ import type { AuditoriaService } from '../auditoria/auditoria.service.js';
 import type { AtividadesService } from './atividades.service.js';
 import { AtividadeCompartilhadaService } from './atividade-compartilhada.service.js';
 import { AtividadeCompartilhada, } from './atividade-compartilhada.entity.js';
-import { AtividadeEntity } from './atividade.entity.js';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const grupoId = id(900);

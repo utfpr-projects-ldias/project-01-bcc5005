@@ -72,7 +72,7 @@ test('Patch 26: superfícies e ações usam tokens do próprio contexto, incluin
   expect(css).toContain('[data-pi-painel-contextual]');
   expect(css).toContain('[data-pi-acao="secundaria"]');
   expect(css).toContain('[data-pi-acao="primaria"]');
-  expect(css).toContain('--pi-acao-bg: #486129');
+  expect(css).toContain('--pi-acao-bg: #166534');
   expect(css).toContain('background-color: var(--pi-acao-bg) !important');
 });
 

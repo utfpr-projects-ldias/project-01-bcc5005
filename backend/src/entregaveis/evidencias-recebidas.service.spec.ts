@@ -8,6 +8,7 @@ import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
 import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
 import { Contrato } from '../contratos/contrato.entity.js';
 import { Entregavel } from './entregavel.entity.js';
+import { TipoEntregavel } from './tipo-entregavel.enum.js';
 import { StatusExecucaoEntregavel } from './status-execucao-entregavel.enum.js';
 import { Etapa } from '../etapas/etapa.entity.js';
 import { EvidenciaEsperada } from './evidencia-esperada.entity.js';
@@ -58,12 +59,12 @@ function cenario() {
     descricao: 'Planejado',
     obrigatoria: true,
   } as EvidenciaEsperada;
-  const entregavel = {
+  const entregavel = Object.assign(new Entregavel(), {
     id: entregavelId,
     contratoId,
     responsavelId: null,
-    tipo: 'UNICO', percentualExecucao: 100,
-  } as Entregavel;
+    tipo: TipoEntregavel.UNICO, percentualExecucao: 100,
+  });
   const queryContrato = {
     setLock: jest.fn().mockReturnThis(),
     where: jest.fn().mockReturnThis(),
@@ -154,6 +155,8 @@ function cenario() {
     ]),
   };
   const m = {
+    findOneBy: jest.fn(async (k:unknown) => k===Entregavel?entregavel:k===Etapa?await etapas.findOneBy():null),
+    update: jest.fn(async () => ({ affected: 1 })),
     findBy: jest.fn(async () => []),
     query: jest.fn(async () => [
       {
@@ -238,7 +241,7 @@ test('ADMIN autorizado pode verificar seu próprio envio e registra autoria da v
   );
 });
 
-test('verificar última evidência conclui entregável e etapa; contrato exige aceite explícito', async () => {
+test('verificar última evidência não conclui automaticamente entregável, etapa ou contrato', async () => {
   const a = cenario();
   a.entregavel.etapaId = 'etapa-qa';
   a.m.query.mockResolvedValue([
@@ -258,13 +261,9 @@ test('verificar última evidência conclui entregável e etapa; contrato exige a
     comprovanteId,
     autor,
   );
-  expect(resultado.conclusoes).toEqual(['entregável', 'etapa']);
-  expect(a.entregaveis.save).toHaveBeenCalledWith(
-    expect.objectContaining({ statusExecucao: 'CONCLUIDO' }),
-  );
-  expect(a.etapas.save).toHaveBeenCalledWith(
-    expect.objectContaining({ status: 'CONCLUIDA' }),
-  );
+  expect(resultado.conclusoes).toEqual([]);
+  expect(a.entregaveis.save).not.toHaveBeenCalled();
+  expect(a.etapas.save).not.toHaveBeenCalled();
   expect(a.contratos.save).not.toHaveBeenCalled();
   expect(a.auditoria.registrarNaTransacao).not.toHaveBeenCalledWith(
     a.m,
@@ -326,7 +325,7 @@ test('gestor com vínculo de edição verifica em transação e registra auditor
   );
 });
 
-test('nova verificação encerra entregável e etapa; contrato reaberto depende de conclusão manual', async () => {
+test('nova verificação preserva revisão e exige conclusão explícita em toda hierarquia', async () => {
   const a = cenario();
   a.entregavel.etapaId = 'etapa-qa';
   a.entregavel.reabertoEm = new Date('2026-11-05T10:00:00Z');
@@ -357,9 +356,10 @@ test('nova verificação encerra entregável e etapa; contrato reaberto depende 
     comprovanteId,
     autor,
   );
-  expect(resultado.conclusoes).toEqual(['entregável', 'etapa']);
-  expect(a.entregavel.reabertoEm).toBeNull();
-  expect(etapa.reabertoEm).toBeNull();
+  // A etapa em revisão explícita não pode ser automaticamente reaprovada.
+  expect(resultado.conclusoes).toEqual([]);
+  expect(a.entregavel.reabertoEm).toEqual(new Date('2026-11-05T10:00:00Z'));
+  expect(etapa.reabertoEm).toEqual(new Date('2026-11-05T10:00:00Z'));
   expect(a.contrato.reabertoEm).toEqual(new Date('2026-11-05T10:00:00Z'));
   expect(a.contratos.save).not.toHaveBeenCalled();
 });
@@ -476,7 +476,7 @@ test('detalhe atribui autoria/consulta somente eventos da evidência corrente, s
   );
 });
 
-test('cadastro exige limite de dez evidências incluindo itens arquivados', async () => {
+test('cadastro exige limite de dez evidências ativas', async () => {
   const a = cenario();
   a.esperadas.count.mockResolvedValue(10);
   await expect(
@@ -488,7 +488,7 @@ test('cadastro exige limite de dez evidências incluindo itens arquivados', asyn
     ),
   ).rejects.toBeInstanceOf(ConflictException);
   expect(a.esperadas.save).not.toHaveBeenCalled();
-  expect(a.esperadas.count).toHaveBeenCalledWith({ where: { entregavelId } });
+  expect(a.esperadas.count).toHaveBeenCalledWith({ where: { entregavelId, arquivadoEm: expect.anything() } });
 });
 
 test('novo tipo Foto recusa texto antes de gravar blob; registros antigos continuam compatíveis', async () => {
@@ -513,10 +513,7 @@ test('novo tipo Foto recusa texto antes de gravar blob; registros antigos contin
 
 test('comprovante já verificado não pode receber nova versão nem substituir o arquivo', async () => {
   const a = cenario();
-  const bloqueado = {
-    ...a.status,
-    status: 'VERIFICADA' as const,
-  } as ComprovanteEvidencia;
+  const bloqueado = Object.assign({}, a.status, { status: 'VERIFICADA' as const }) as ComprovanteEvidencia;
   a.queryComprovante.getOne.mockResolvedValueOnce(bloqueado);
   a.storage.salvar.mockResolvedValueOnce({
     chave: 'a'.repeat(32),
@@ -544,4 +541,64 @@ test('comprovante já verificado não pode receber nova versão nem substituir o
   expect(a.comprovantes.save).not.toHaveBeenCalled();
   expect(a.storage.removerOrfao).toHaveBeenCalledTimes(1);
   expect(a.auditoria.registrarNaTransacao).not.toHaveBeenCalled();
+});
+
+
+test('rejeição auditada revoga quantidade aprovada e mantém o comprovante', async () => {
+  const a = cenario();
+  Object.assign(a.status, { status: 'VERIFICADA', quantidadeDeclarada: '25.000',
+    quantidadeAprovada: '25.000', verificadoPor: gestorId, verificadoEm: new Date() });
+  const resposta = await a.service.rejeitar(
+    contratoId, entregavelId, esperadaId, comprovanteId,
+    'Quantidade e documento inconsistentes', gestor,
+  );
+  expect(resposta.status).toBe('REJEITADA');
+  expect(resposta.quantidadeAprovada).toBeNull();
+  expect(a.comprovantes.save).toHaveBeenCalledTimes(1);
+  expect(a.auditoria.registrarNaTransacao).toHaveBeenCalledWith(a.m, gestor,
+    expect.objectContaining({ acao: AcaoAuditoria.ENTREGAVEL_COMPROVANTE_REJEITADO,
+      dadosAnteriores: expect.objectContaining({ quantidadeAprovada: '25.000' }),
+      dadosPosteriores: expect.objectContaining({ justificativa: 'Quantidade e documento inconsistentes' }),
+    }),
+  );
+});
+
+test('rejeição sem justificativa não grava nem audita', async () => {
+  const a = cenario();
+  await expect(a.service.rejeitar(contratoId, entregavelId, esperadaId, comprovanteId,
+    'curto', gestor)).rejects.toBeInstanceOf(BadRequestException);
+  expect(a.comprovantes.save).not.toHaveBeenCalled();
+  expect(a.auditoria.registrarNaTransacao).not.toHaveBeenCalled();
+});
+
+test('rejeição por gestor somente leitura é proibida', async () => {
+  const a = cenario();
+  a.vinculos.findOneBy.mockResolvedValue({ contratoId, usuarioId: gestorId, podeEditar: false });
+  await expect(a.service.rejeitar(contratoId, entregavelId, esperadaId, comprovanteId,
+    'Rejeição devidamente justificada', gestor)).rejects.toBeInstanceOf(ForbiddenException);
+  expect(a.comprovantes.save).not.toHaveBeenCalled();
+});
+
+test('tipo de evidência com arquivo anexado não pode mudar, mesmo pendente', async()=>{
+  const a=cenario();
+  a.comprovantes.findOne.mockResolvedValue(a.status);
+  await expect(a.service.editarEsperada(contratoId,entregavelId,esperadaId,{tipoEvidencia:'Foto'},autor)).rejects.toThrow('arquivo anexado');
+  expect(a.esperadas.save).not.toHaveBeenCalled();
+});
+
+test('contribuição de uma evidência verificada exige reabertura', async()=>{
+  const a=cenario();
+  a.queryComprovante.getOne.mockResolvedValue({...a.status,status:'VERIFICADA'} as ComprovanteEvidencia);
+  await expect(a.service.editarContribuicao(contratoId,entregavelId,esperadaId,comprovanteId,{modalidade:'PERCENTUAL',valor:'20'},autor)).rejects.toThrow('pendente de verificação');
+  expect(a.comprovantes.save).not.toHaveBeenCalled();
+});
+
+
+test('permite declarar percentual antes do arquivo, sem verificar ou reservar execução', async () => {
+  const a=cenario();
+  Object.assign(a.entregavel,{percentualExecucao:'0'});
+  await a.service.criarEsperada(contratoId,entregavelId,{tipoEvidencia:'Relatório',obrigatoria:true,rascunhoEnvio:{percentualExecucao:'20'}},autor);
+  expect(a.esperadas.save).toHaveBeenCalledWith(expect.objectContaining({rascunhoEnvio:{percentualExecucao:'20'}}));
+  expect(a.storage.salvar).not.toHaveBeenCalled();
+  expect(a.comprovantes.save).not.toHaveBeenCalled();
 });

@@ -4,10 +4,13 @@ const API = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001').replace
 export type VinculoCompartilhado = {
   contratoId: string; entregavelIds: string[]; ocorrenciaIds: string[];
   medicoes: { ocorrenciaId: string; quantidade: string }[];
+  medicoesDiretas?: {entregavelId:string;quantidade:string}[];
+  parcelasPercentuais?:{entregavelId:string;ocorrenciaId?:string;percentual:string}[];
+  percentualExecucao?:string; entregavelExecucaoId?:string; ocorrenciaExecucaoId?:string;
 };
 export type NovaCompartilhada = {
   titulo: string; dataHora: string; descricao: string; tipo: string;
-  observacoes?: string; local?: string; duracao?: string; vinculos: VinculoCompartilhado[];
+  responsavelId?: string; responsavel?: string; participantes?: string[]; observacoes?: string; local?: string; duracao?: string; vinculos: VinculoCompartilhado[];
 };
 export type ResumoCompartilhada = {
   id: string; total: number; aprovadas: number; pendentes: number;
@@ -44,3 +47,5 @@ export function solicitarCompartilhada(id: string, contratoIds?: string[]) {
     method: 'POST', body: JSON.stringify(contratoIds ? { contratoIds } : {}),
   });
 }
+
+export function desvincularContratoCompartilhada(id:string,contratoId:string){return json<{vinculado:boolean}>(`/${encodeURIComponent(id)}/contratos/${encodeURIComponent(contratoId)}`,{method:'DELETE'});}

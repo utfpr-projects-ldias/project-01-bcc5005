@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# Diagnóstico somente leitura por padrão. Nunca é chamado na inicialização.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")"
+ROOT=$(pwd -P)
+bloquear() { echo "BLOQUEADO: $*" >&2; exit 2; }
+[[ $(basename "$ROOT") == project-01-bcc5005 ]] || bloquear 'Diretório do projeto inesperado.'
+[[ $(git branch --show-current) == bugfixes_sprint4 || $(git branch --show-current) == develop ]] || bloquear 'Somente branches de desenvolvimento autorizadas.'
+[[ ${NODE_ENV:-development} == development && -z ${DOCKER_HOST:-} && -z ${DOCKER_CONTEXT:-} ]] || bloquear 'Ambiente remoto ou não local.'
+[[ ${1:---consultar} == --consultar || ${1:-} == --executar ]] && [[ $# -le 1 ]] || bloquear 'Use --consultar ou --executar.'
+[[ -f .env && -f docker-compose.yml ]] || bloquear 'Configuração local ausente.'
+contexto=$(docker context show)
+endpoint=$(docker context inspect "$contexto" --format '{{.Endpoints.docker.Host}}')
+[[ $endpoint == unix:///var/run/docker.sock || $endpoint == "unix:///run/user/$(id -u)/docker.sock" ]] || bloquear 'Daemon Docker remoto ou desconhecido.'
+compose=(docker compose --project-directory "$ROOT" --env-file "$ROOT/.env" -f "$ROOT/docker-compose.yml" -p project-01-bcc5005)
+"${compose[@]}" config --format json | python3 qa/tec08-uiux-final/validar-reset-dev.py "$ROOT"
+for nome in postgres_data arquivos_contratuais_data; do
+  [[ $(docker volume inspect "project-01-bcc5005_$nome" --format '{{index .Labels "com.docker.compose.project"}}:{{index .Labels "com.docker.compose.volume"}}:{{.Driver}}:{{len .Options}}') == "project-01-bcc5005:$nome:local:0" ]] || bloquear 'Volume existente não pertence a este Compose.'
+done
+"${compose[@]}" ps --services --status running | grep -qx database || bloquear 'Inicie o banco local antes de consultar.'
+db_id=$("${compose[@]}" ps -q database)
+[[ -n $db_id && $(docker inspect "$db_id" --format '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/data"}}{{.Type}}:{{.Name}}{{end}}{{end}}') == volume:project-01-bcc5005_postgres_data ]] || bloquear 'O banco em execução não usa o volume local esperado.'
+read_db() { "${compose[@]}" exec -T database sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" "$@"' sh "$@"; }
+admin=$(read_db -Atqc "SELECT count(*) FROM public.usuarios WHERE ativo AND perfil='ADMINISTRADOR'")
+[[ $admin =~ ^[0-9]+$ && $admin -gt 0 ]] || bloquear 'Administrador ativo ausente. Use o seed existente antes do reset.'
+# Não imprime nomes, credenciais, documentos ou conteúdos dos registros.
+read_db <<'SQL'
+BEGIN READ ONLY;
+SELECT tipo, status_execucao, count(*) AS total,
+       count(*) FILTER (WHERE percentual_execucao = 100) AS percentual_legado_100,
+       count(*) FILTER (WHERE quantidade_realizada > 0) AS quantidade_legada
+ FROM public.entregaveis GROUP BY tipo,status_execucao ORDER BY tipo,status_execucao;
+SELECT status, count(*) AS total, count(*) FILTER (WHERE quantidade_aprovada > 0) AS com_medicao_aprovada FROM public.ocorrencias GROUP BY status;
+SELECT status, count(*) FROM public.execucoes_entregavel GROUP BY status;
+SELECT status_execucao, count(*) FROM public.ocorrencia_lancamentos GROUP BY status_execucao;
+SELECT 'contratos' AS objeto,count(*) FROM public.contratos UNION ALL SELECT 'atividades',count(*) FROM public.atividades UNION ALL SELECT 'evidencias',count(*) FROM public.evidencias_esperadas UNION ALL SELECT 'arquivos',count(*) FROM public.comprovantes_evidencia UNION ALL SELECT 'migrations',count(*) FROM public.migrations;
+COMMIT;
+SQL
+if [[ ${1:---consultar} == --consultar ]]; then
+  echo 'Somente consulta. Para apagar a carteira de TESTE e seus arquivos: ./reset-dev --executar'; exit 0
+fi
+[[ -t 0 ]] || bloquear 'Confirmação interativa obrigatória.'
+echo 'ATENÇÃO: todos os dados operacionais e arquivos deste projeto local serão apagados permanentemente. Usuários, autenticação, migrations e estrutura serão preservados. Sem backup automático.'
+read -r -p 'Digite APAGAR_DADOS_OPERACIONAIS_DEV: ' resposta
+[[ $resposta == APAGAR_DADOS_OPERACIONAIS_DEV ]] || bloquear 'Confirmação incorreta; nada apagado.'
+"${compose[@]}" stop frontend backend
+trap 'echo "Reset interrompido. Confira o erro antes de iniciar as aplicações; o banco pode já ter sido limpo." >&2' ERR
+# Confirma que o destino montado realmente é um volume, antes de apagar o banco.
+"${compose[@]}" run --rm --no-deps -T --entrypoint sh backend -ec 'test "$ARQUIVOS_DIRETORIO" = /var/lib/contratos-arquivos; grep -q " /var/lib/contratos-arquivos " /proc/self/mountinfo'
+read_db <<'SQL'
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+-- Sem CASCADE: dependência não mapeada interrompe e reverte a transação.
+TRUNCATE TABLE public.execucoes_entregavel, public.vinculos_metas_marco, public.metas_marco,
+ public.atividade_comprovantes, public.atividade_ocorrencia_medicoes, public.ocorrencia_comprovantes,
+ public.ocorrencia_lancamentos, public.atividade_ocorrencias, public.atividade_entregaveis,
+ public.atividades, public.atividades_compartilhadas, public.configuracoes_ocorrencias,
+ public.ocorrencias, public.comprovantes_evidencia, public.evidencias_esperadas,
+ public.documentos_contratuais, public.permissoes_contrato, public.entregaveis, public.etapas, public.contratos RESTART IDENTITY;
+DELETE FROM public.eventos_auditoria WHERE contrato_id IS NOT NULL OR entidade_tipo IN ('CONTRATO','ETAPA','ENTREGAVEL','DOCUMENTO','EVIDENCIA','OCORRENCIA','ATIVIDADE');
+ALTER SEQUENCE public.seq_contratos_codigo_publico RESTART WITH 1;
+ALTER SEQUENCE public.seq_etapas_codigo_publico RESTART WITH 1;
+ALTER SEQUENCE public.seq_entregaveis_codigo_publico RESTART WITH 1;
+ALTER SEQUENCE public.seq_evidencias_codigo_publico RESTART WITH 1;
+COMMIT;
+SQL
+"${compose[@]}" run --rm --no-deps -T --entrypoint sh backend -ec 'test "$ARQUIVOS_DIRETORIO" = /var/lib/contratos-arquivos; grep -q " /var/lib/contratos-arquivos " /proc/self/mountinfo; find /var/lib/contratos-arquivos -mindepth 1 -maxdepth 1 -exec rm -rf -- {} \;; test -z "$(ls -A /var/lib/contratos-arquivos)"'
+"${compose[@]}" up -d backend frontend
+trap - ERR
+read_db -Atqc "SELECT 'contratos restantes='||count(*) FROM public.contratos; SELECT 'administradores ativos='||count(*) FROM public.usuarios WHERE ativo AND perfil='ADMINISTRADOR';"
+echo 'RESET DEV concluído. Estrutura, migrations, usuários e autenticação preservados.'

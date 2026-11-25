@@ -27,6 +27,53 @@ PERFIS = {
 }
 
 
+# Mesmos limites efetivamente usados no formulário e nos DTOs de Etapa.
+# Não gerar dados de teste que o próprio HTML vai truncar silenciosamente.
+LIMITE_NOME_ETAPA = 36
+LIMITE_CODIGO_ETAPA = 15
+
+
+def gerar_dados_etapas_qa(marca: str) -> tuple[list[str], list[str], str, str]:
+    """Prepara cadastros e edição REALMENTE válidos e distintos (HU06)."""
+    garantir(bool(re.fullmatch(r"[0-9A-F]{8}", marca)), "Identificador HU06 inválido")
+    nomes = [f"QA HU06-05 Planejamento {marca}", f"QA HU06-05 Execução {marca}"]
+    codigos = [f"H605-{marca}-A", f"H605-{marca}-B"]
+    # "Planejamento ... Editada" e "...-A-E" excediam maxLength (R21).
+    nome_editado = f"QA HU06-05 Plano {marca} Editada"
+    codigo_editado = f"H605-{marca}-E"
+    for nome in [*nomes, nome_editado]:
+        garantir(0 < len(nome) <= LIMITE_NOME_ETAPA,
+                 f"Fixture HU06 inválida: nome de {len(nome)} caracteres (máx. {LIMITE_NOME_ETAPA})")
+    for codigo in [*codigos, codigo_editado]:
+        garantir(0 < len(codigo) <= LIMITE_CODIGO_ETAPA,
+                 f"Fixture HU06 inválida: código de {len(codigo)} caracteres (máx. {LIMITE_CODIGO_ETAPA})")
+    garantir(len(set(nomes + [nome_editado])) == 3, "Fixture HU06: nomes repetidos")
+    garantir(len(set(codigos + [codigo_editado])) == 3, "Fixture HU06: códigos repetidos")
+    return nomes, codigos, nome_editado, codigo_editado
+
+
+def confirmar_campo_editado(form, campo: str, esperado: str, limite: int) -> None:
+    """Comprova valor no DOM ANTES do PATCH; Playwright pode truncar fill()."""
+    entrada = form.locator(f"#etapa-{campo}")
+    atributo = entrada.get_attribute("maxlength")
+    garantir(atributo is not None and atributo.isdecimal(),
+             f"Formulário HU06: campo {campo} sem maxLength válido")
+    limite_html = int(atributo)
+    garantir(limite_html == limite,
+             f"Formulário HU06: maxLength de {campo} mudou ({limite_html}, QA espera {limite})")
+    recebido = entrada.input_value()
+    garantir(recebido == esperado,
+             f"Formulário HU06 truncou/alterou {campo}: esperado {esperado!r}, exibido {recebido!r}")
+
+
+def conferir_patch_etapa(etapa: dict, *, nome: str, codigo: str, status: str) -> None:
+    """Identifica exatamente qual valor persistido divergiu após o PATCH 200."""
+    for campo, esperado in (("nome", nome), ("codigo", codigo), ("status", status)):
+        recebido = etapa.get(campo)
+        garantir(recebido == esperado,
+                 f"PATCH de {campo} não persistiu: esperado {esperado!r}, API retornou {recebido!r}")
+
+
 def garantir(condicao: bool, mensagem: str) -> None:
     if not condicao:
         raise AssertionError(mensagem)
@@ -132,6 +179,47 @@ def comprovar_ui(page, painel, itens: list[dict]) -> None:
         garantir(etapa["nome"] in linhas.nth(indice).inner_text(), f"Ordem da UI difere da API na posição {indice + 1}")
 
 
+
+def verificar_detalhe_leitor(page, painel, etapa: dict) -> None:
+    """Verifica ações proibidas depois de abrir o modal REAL da etapa."""
+    nome = etapa['nome']
+    botao = painel.get_by_role('button', name=re.compile(
+        r'^Abrir detalhes da etapa \d+: ' + re.escape(nome) + r'$'))
+    botao.wait_for(state='visible', timeout=20000)
+    garantir(botao.count() == 1, f'Etapa de leitura {nome!r} ausente/duplicada na interface')
+    botao.click()
+    modal = page.get_by_role('dialog', name=re.compile(
+        r'^\d+\s*·\s*' + re.escape(nome) + r'$'))
+    modal.wait_for(state='visible', timeout=20000)
+    garantir(modal.get_attribute('aria-modal') == 'true', 'Etapa não abriu em modal acessível')
+    garantir(modal.get_by_role('button', name='Editar etapa', exact=True).count() == 0,
+             'Usuário somente leitura recebeu ação Editar etapa no detalhe aberto')
+    modal.get_by_role('button', name='Voltar às etapas', exact=True).click()
+    modal.wait_for(state='detached', timeout=15000)
+
+
+def confirmar_retorno_edicao_no_detalhe(page, painel, nome_editado: str) -> None:
+    """Depois do PATCH, a UI VOLTA ao modal da etapa (não à lista).
+
+    A mudança de nome vem da consulta real invalidada pelo hook useEtapas.
+    Confirmamos a atualização no DOM do diálogo, fechamos pelo controle
+    próprio do produto e só depois procuramos o cartão na lista de etapas.
+    Um botão atrás de um diálogo não é um elemento visível/clicável.
+    """
+    detalhe = page.get_by_role('dialog', name=re.compile(
+        r'^\d+\s*·\s*' + re.escape(nome_editado) + r'$'))
+    detalhe.wait_for(state='visible', timeout=25000)
+    garantir(detalhe.get_attribute('aria-modal') == 'true',
+             'Após edição, o detalhe da etapa não retornou ao modal acessível')
+    detalhe.get_by_role('button', name='Voltar às etapas', exact=True).click()
+    detalhe.wait_for(state='detached', timeout=15000)
+    cartao = painel.get_by_role('button', name=re.compile(
+        r'^Abrir detalhes da etapa \d+: ' + re.escape(nome_editado) + r'$'))
+    cartao.wait_for(state='visible', timeout=20000)
+    garantir(cartao.count() == 1,
+             'A etapa editada não apareceu de forma única na lista após fechar o detalhe')
+
+
 def salvar_json(caminho: Path, conteudo: dict) -> None:
     caminho.parent.mkdir(parents=True, exist_ok=True)
     fd = caminho.open("x", encoding="utf-8")
@@ -214,8 +302,29 @@ def main() -> int:
                          "Contrato não vinculado exibiu painel protegido")
                 saida["provas"].append("Gestor/Colaborador sem vínculo: acesso HTTP negado e painel não exposto")
             else:
+                # O contrato abre em "Visão geral"; Etapas fica em tabpanel hidden.
+                # Selecionar a aba pela UI é parte do QA real, não um mock.
+                aba_etapas = page.get_by_role("tab", name="Etapas", exact=True)
+                aba_etapas.wait_for(state="visible", timeout=20000)
+                aba_etapas.click()
+                garantir(aba_etapas.get_attribute("aria-selected") == "true",
+                         "A aba Etapas não foi selecionada após clique")
                 painel = page.locator('section[aria-labelledby="titulo-etapas"]')
                 painel.wait_for(timeout=20000)
+                # Controle real por teclado na viewport escolhida, com foco visível
+                # e tabulação. Não afirmar auditoria WCAG completa ou estética.
+                aba_etapas.focus()
+                garantir(page.evaluate("document.activeElement?.getAttribute('role') === 'tab'"),
+                         "A aba Etapas não recebeu foco pelo navegador")
+                page.keyboard.press("Tab")
+                garantir(page.evaluate("""() => {
+                    const el = document.activeElement;
+                    return el && el !== document.body && el !== document.documentElement &&
+                      (el.matches('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])'));
+                }"""), "Teclado Tab não alcançou um controle acessível no contrato")
+                saida["provas"].append("Teclado real: foco navegável com Tab após a aba Etapas")
+                saida["provas"].append("Viewport real: mobile 390px" if args.largura <= 430
+                                       else "Viewport real: desktop 1280px")
                 # Confirma a consulta originada pelo componente Next, ANTES dos
                 # fetches diretos do próprio validador (sem mocks/fixtures).
                 page.wait_for_function("""() => {
@@ -238,13 +347,32 @@ def main() -> int:
                 print("[OK] UI exibiu", len(itens), "etapas reais na ordem da API")
 
                 if not editar:
-                    garantir(painel.get_by_role("button", name="Nova etapa").count() == 0, "UI expôs Nova etapa sem escrita")
-                    garantir(painel.get_by_role("button", name=re.compile("Editar etapa")).count() == 0, "UI expôs Editar sem escrita")
-                    # Corpo inválido previne escrita, mesmo se a autorização estiver quebrada.
+                    garantir(painel.get_by_role("button", name="Nova etapa", exact=True).count() == 0,
+                             "UI expôs Nova etapa sem escrita")
+                    garantir(painel.get_by_role("button", name=re.compile(r"^(Subir|Descer) etapa ")).count() == 0,
+                             "UI expôs reordenação para perfil de leitura")
+                    # Etapas de QA foram criadas pelos cenários de escrita anteriores.
+                    # Sem abrir o modal, a ausência de Editar etapa seria falso positivo.
+                    permissoes = acesso['body'].get('permissoes')
+                    garantir(isinstance(permissoes, dict), 'Leitor HU06 sem mapa de permissões')
+                    chaves = ('criarEtapas', 'editarEtapas', 'reordenarEtapas')
+                    inesperadas = [chave for chave in chaves if permissoes.get(chave) is not False]
+                    garantir(not inesperadas,
+                             f'Fixture HU06 não é somente leitura: {inesperadas}; revisar delegações do vínculo')
+                    garantir(bool(itens), "Não há etapa real para testar o detalhe somente leitura")
+                    candidatas = [e for e in itens if not e.get('arquivadoEm') and
+                                  e.get('status') not in ('CONCLUIDA', 'FINALIZADA', 'ENCERRADA')]
+                    garantir(bool(candidatas), "Nenhuma etapa ativa permite testar o modal de leitura")
+                    verificar_detalhe_leitor(page, painel, candidatas[0])
+                    # O backend deve recusar também PATCH da etapa específica.
+                    # Corpo inválido garante que o guard opere antes da validação do DTO.
                     probe = chamar_api(page, api, caminho_lista, "POST", {"__hu06_05_probe": True})
-                    garantir(probe["status"] in (403, 404), f"POST sem permissão deveria ser negado ANTES do DTO: {probe['status']}")
-                    saida["provas"].append("Usuário leitura: sem botões de gestão + POST bloqueado no backend")
-                    print("[OK] Perfil leitor: UI sem escrita e API negou POST")
+                    patch = chamar_api(page, api, caminho_lista + '/' + quote(candidatas[0]['id']),
+                                       "PATCH", {"__hu06_05_probe": True})
+                    garantir(probe['status'] in (403, 404) and patch['status'] in (403, 404),
+                             f"Escrita de etapas sem autorização: POST {probe['status']}, PATCH {patch['status']}")
+                    saida["provas"].append("Usuário leitura: modal de etapa acessível sem edição, sem reordenar; POST/PATCH 403 ou 404")
+                    print("[OK] Perfil leitor: modal real sem escrita e API negou POST/PATCH")
                 else:
                     garantir(painel.get_by_role("button", name="Nova etapa", exact=True).count() == 1,
                              "Gestor/Admin autorizado não vê botão Nova etapa")
@@ -262,16 +390,15 @@ def main() -> int:
                 if args.escrita:
                     print("[AVISO] Serão adicionadas DUAS etapas permanentes ao contrato:", args.contrato_id)
                     marca = secrets.token_hex(4).upper()
-                    nomes = [f"QA HU06-05 Planejamento {marca}", f"QA HU06-05 Execução {marca}"]
-                    codigos = [f"H605-{marca}-A", f"H605-{marca}-B"]
+                    nomes, codigos, nome_editado, codigo_editado = gerar_dados_etapas_qa(marca)
                     for nome, codigo in zip(nomes, codigos):
                         painel.get_by_role("button", name="Nova etapa").click()
-                        form = painel.get_by_role("form", name="Criar etapa")
+                        form = page.get_by_role("form", name="Criar etapa")
                         form.locator("#etapa-nome").fill(nome)
                         form.locator("#etapa-codigo").fill(codigo)
                         with page.expect_response(lambda r: r.request.method == "POST" and urlsplit(r.url).path == caminho_lista and r.status == 201, timeout=15000):
                             form.get_by_role("button", name="Salvar etapa").click()
-                        painel.get_by_role("heading", name=nome, exact=True).wait_for(timeout=15000)
+                        painel.get_by_role("button", name=re.compile(r"Abrir detalhes da etapa \d+: " + re.escape(nome))).wait_for(timeout=15000)
                         atual = etapas_http(page, api, args.contrato_id)
                         novos = [e for e in atual if e["codigo"] == codigo and e["nome"] == nome]
                         garantir(len(novos) == 1, f"POST de {codigo} não persistiu exatamente um registro")
@@ -280,19 +407,34 @@ def main() -> int:
                     saida["provas"].append("Dois POST via formulários reais, IDs de PostgreSQL confirmados por GET")
 
                     id_a, id_b = saida["idsEtapasCriadas"]
-                    nome_editado = nomes[0] + " Editada"
-                    painel.get_by_role("button", name=f"Editar etapa {nomes[0]}").click()
-                    form = painel.get_by_role("form", name=f"Editar etapa {nomes[0]}")
+                    painel.get_by_role("button", name=re.compile(r"Abrir detalhes da etapa \d+: " + re.escape(nomes[0]))).click()
+                    page.get_by_role("dialog", name=re.compile(r"\d+\s*·\s*" + re.escape(nomes[0]))).get_by_role("button", name="Editar etapa").click()
+                    form = page.get_by_role("form", name=f"Editar etapa {nomes[0]}")
                     form.locator("#etapa-nome").fill(nome_editado)
-                    form.locator("#etapa-codigo").fill(codigos[0] + "-E")
+                    form.locator("#etapa-codigo").fill(codigo_editado)
                     form.locator("#etapa-status").select_option("EM_ANDAMENTO")
-                    with page.expect_response(lambda r: r.request.method == "PATCH" and urlsplit(r.url).path.endswith("/" + id_a) and r.status == 200, timeout=15000):
+                    # Confere DOM de verdade ANTES de enviar; maxLength do input
+                    # trunca valores, mas Playwright fill() não sinaliza erro.
+                    confirmar_campo_editado(form, "nome", nome_editado, LIMITE_NOME_ETAPA)
+                    confirmar_campo_editado(form, "codigo", codigo_editado, LIMITE_CODIGO_ETAPA)
+                    garantir(form.locator("#etapa-status").input_value() == "EM_ANDAMENTO",
+                             "Formulário HU06 não selecionou o status EM_ANDAMENTO")
+                    with page.expect_response(lambda r: r.request.method == "PATCH" and urlsplit(r.url).path == caminho_lista + "/" + id_a and r.status == 200, timeout=15000) as resposta_patch:
                         form.get_by_role("button", name="Salvar etapa").click()
-                    painel.get_by_role("heading", name=nome_editado, exact=True).wait_for(timeout=15000)
+                    # Verificar o corpo realmente enviado pelo frontend (sem mocks).
+                    enviado = resposta_patch.value.request.post_data_json
+                    garantir(isinstance(enviado, dict), "PATCH da UI não enviou JSON válido")
+                    for campo, esperado in (("nome", nome_editado), ("codigo", codigo_editado), ("status", "EM_ANDAMENTO")):
+                        garantir(enviado.get(campo) == esperado,
+                                 f"PATCH enviado pela UI difere no campo {campo}: esperado {esperado!r}, enviado {enviado.get(campo)!r}")
+                    # O frontend volta ao DETALHE da etapa depois de salvar;
+                    # a lista de cartões está atrás do modal. Primeiro validar
+                    # os dados persistidos e o detalhe atualizado, fechar o modal
+                    # e só então continuar para a reordenação na aba Etapas.
                     atual = etapas_http(page, api, args.contrato_id)
-                    a = next(e for e in atual if e["id"] == saida["idsEtapasCriadas"][0])
-                    garantir(a["nome"] == nome_editado and a["codigo"] == codigos[0] + "-E" and a["status"] == "EM_ANDAMENTO",
-                             "PATCH de nome/código/status não persistiu")
+                    a = next(e for e in atual if e["id"] == id_a)
+                    conferir_patch_etapa(a, nome=nome_editado, codigo=codigo_editado, status="EM_ANDAMENTO")
+                    confirmar_retorno_edicao_no_detalhe(page, painel, nome_editado)
                     saida["provas"].append("PATCH real de nome, código e status confirmado pela API")
                     print("[OK] Edição real persistiu nome, código e status")
 
@@ -311,6 +453,9 @@ def main() -> int:
                     print("[OK] Reordenação real gravada no PostgreSQL")
 
                     page.reload(wait_until="domcontentloaded")
+                    aba_etapas = page.get_by_role("tab", name="Etapas", exact=True)
+                    aba_etapas.click()
+                    garantir(aba_etapas.get_attribute("aria-selected") == "true", "F5: aba Etapas não selecionada")
                     painel = page.locator('section[aria-labelledby="titulo-etapas"]')
                     painel.wait_for(timeout=20000)
                     comprovar_ui(page, painel, depois)
@@ -328,6 +473,9 @@ def main() -> int:
                             time.sleep(1)
                         garantir(teste["status"] == 200, "Backend não respondeu após restart")
                         page.reload(wait_until="domcontentloaded")
+                        aba_etapas = page.get_by_role("tab", name="Etapas", exact=True)
+                        aba_etapas.click()
+                        garantir(aba_etapas.get_attribute("aria-selected") == "true", "Reinício: aba Etapas não selecionada")
                         painel = page.locator('section[aria-labelledby="titulo-etapas"]')
                         painel.wait_for(timeout=20000)
                         reiniciadas = etapas_http(page, api, args.contrato_id)
@@ -358,6 +506,9 @@ def main() -> int:
             # Sessão encerrada via logout real comprova 401 imediato; não representa
             # expiração natural do token nem revogação administrativa remota.
             page.get_by_role("button", name="Sair", exact=True).click()
+            confirmacao_saida = page.get_by_role("dialog", name="Sair da conta?")
+            confirmacao_saida.wait_for(state="visible", timeout=15000)
+            confirmacao_saida.get_by_role("button", name="Sair da conta", exact=True).click()
             page.get_by_role("heading", name="Acesse sua conta").wait_for(timeout=15000)
             retorno = chamar_api(page, api, f"/contratos/{quote(args.contrato_id)}/etapas")
             garantir(retorno["status"] == 401, f"Após logout SuperTokens, API deveria responder 401; veio {retorno['status']}")

@@ -30,8 +30,8 @@ describe('HU06-03 — validação civil das Etapas', () => {
 
 test('Patch35: nome, código, descrição e observações respeitam limites menores', () => {
   const base = { ...DADOS_ETAPA_INICIAIS, nome:'A' };
-  expect(validarEtapa({ ...base, nome:'A'.repeat(50) }).sucesso).toBe(true);
-  expect(validarEtapa({ ...base, nome:'A'.repeat(51) }).sucesso).toBe(false);
+  expect(validarEtapa({ ...base, nome:'A'.repeat(36) }).sucesso).toBe(true);
+  expect(validarEtapa({ ...base, nome:'A'.repeat(37) }).sucesso).toBe(false);
   expect(validarEtapa({ ...base, codigo:'X'.repeat(16) }).sucesso).toBe(false);
   expect(validarEtapa({ ...base, descricao:'X'.repeat(501) }).sucesso).toBe(false);
   expect(validarEtapa({ ...base, observacoes:'X'.repeat(501) }).sucesso).toBe(false);

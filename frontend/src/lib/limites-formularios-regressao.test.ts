@@ -9,7 +9,7 @@ const contrato = {
 };
 
 test('limites administrativos reduzidos sem alterar números técnicos', () => {
-  expect(LIMITES_CONTRATO).toMatchObject({ numeroContrato:25, orgaoContratante:30, objeto:50, descricao:500, observacoes:200 });
+  expect(LIMITES_CONTRATO).toMatchObject({ numeroContrato:25, orgaoContratante:30, objeto:50, descricao:400, observacoes:200 });
   expect(contratoSchema.safeParse({...contrato, numeroContrato: 'X'.repeat(26)}).success).toBe(false);
   expect(contratoSchema.safeParse({...contrato, orgaoContratante: 'X'.repeat(31)}).success).toBe(false);
 });

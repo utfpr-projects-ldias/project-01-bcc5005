@@ -37,7 +37,7 @@ export class AtualizarContratoDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(25)
+  @MaxLength(32)
   processoAdministrativo?: string | null;
 
   @ValidateIf((_, v) => v !== undefined)
@@ -48,7 +48,7 @@ export class AtualizarContratoDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(30)
+  @MaxLength(32)
   unidadeResponsavel?: string | null;
 
   @ValidateIf((_, v) => v !== undefined)

@@ -25,6 +25,26 @@ export class GestaoPermissoesService {
     }
   }
 
+  /** Bloqueia autor/alvo em ordem estável: mesma disciplina das edições de funcionários. */
+  private async bloquearAutorEAlvo(manager: import('typeorm').EntityManager,
+    ator: UsuarioAutenticado, usuarioId: string): Promise<Usuario | null> {
+    if (ator?.perfil !== PerfilUsuario.ADMINISTRADOR) {
+      throw new ForbiddenException('Somente Administrador pode gerir vínculos');
+    }
+    const funcionarios = manager.getRepository(Usuario);
+    const bloqueados = new Map<string, Usuario>();
+    for (const id of [...new Set([ator.id, usuarioId])].sort()) {
+      const registro = await funcionarios.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
+      if (registro) bloqueados.set(id, registro);
+    }
+    const admin = bloqueados.get(ator.id);
+    if (!admin?.ativo || admin.perfil !== PerfilUsuario.ADMINISTRADOR ||
+        admin.supertokensUserId !== ator.supertokensUserId) {
+      throw new ForbiddenException('Administrador não está ativo');
+    }
+    return bloqueados.get(usuarioId) ?? null;
+  }
+
   async listar(usuarioId: string, ator: UsuarioAutenticado) {
     await this.validarAdministrador(ator);
     const alvo = await this.db.getRepository(Usuario).findOneBy({ id: usuarioId });
@@ -41,8 +61,7 @@ export class GestaoPermissoesService {
     try { detalhes = dto.permissoesDetalhadas === undefined ? undefined : validarPermissoes(dto.permissoesDetalhadas); }
     catch { throw new BadRequestException('Conjunto de permissões detalhadas inválido'); }
     return this.db.transaction(async (manager) => {
-      const funcionarios = manager.getRepository(Usuario);
-      const alvo = await funcionarios.findOne({ where: { id: usuarioId }, lock: { mode: 'pessimistic_write' } });
+      const alvo = await this.bloquearAutorEAlvo(manager, ator, usuarioId);
       if (!alvo) throw new NotFoundException('Funcionário não encontrado');
       if (!alvo.ativo || alvo.perfil === PerfilUsuario.ADMINISTRADOR) {
         throw new ForbiddenException('Somente funcionários ativos podem receber vínculo');
@@ -77,6 +96,7 @@ export class GestaoPermissoesService {
   async revogar(usuarioId: string, contratoId: string, ator: UsuarioAutenticado): Promise<void> {
     await this.validarAdministrador(ator);
     await this.db.transaction(async (manager) => {
+      await this.bloquearAutorEAlvo(manager, ator, usuarioId);
       const vinculos = manager.getRepository(PermissaoContrato);
       const vinculo = await vinculos.findOne({
         where: { usuarioId, contratoId }, lock: { mode: 'pessimistic_write' },

@@ -207,3 +207,20 @@ describe('Bugfix Sprint 04 — Parte 08: meta e vínculos têm autorizações di
       .toEqual({ editarMetaOcorrencia: true, vincularAtividadesOcorrencia: false });
   });
 });
+
+describe('decisão de execução manual independente da edição e conclusão', () => {
+  it('nega a aprovação sem concessão explícita e não concede conclusão com a aprovação', () => {
+    expect(permissoesEfetivas('GESTOR', true, null).aprovarExecucaoManual).toBe(false);
+    const editor = permissoesEfetivas('COLABORADOR', true, { editarExecucaoFisica:true, registrarExecucaoOcorrencia:true, concluirEntregaveis:true, concluirOcorrencias:true });
+    expect(editor.aprovarExecucaoManual).toBe(false);
+    const aprovador = permissoesEfetivas('COLABORADOR', false, { aprovarExecucaoManual:true });
+    expect(aprovador.aprovarExecucaoManual).toBe(true);
+    expect(aprovador.editarExecucaoFisica).toBe(false);
+    expect(aprovador.concluirEntregaveis).toBe(false);
+    expect(aprovador.concluirOcorrencias).toBe(false);
+    expect(permissoesEfetivas('ADMINISTRADOR', false, {}).aprovarExecucaoManual).toBe(true);
+    expect(ACAO_PERMISSAO['ocorrencias:decidir-lancamento']).toBe('aprovarExecucaoManual');
+    expect(ACAO_PERMISSAO['execucao:decidir-lancamento']).toBe('aprovarExecucaoManual');
+    expect(validarPermissoes({aprovarExecucaoManual:true})).toEqual({aprovarExecucaoManual:true});
+  });
+});

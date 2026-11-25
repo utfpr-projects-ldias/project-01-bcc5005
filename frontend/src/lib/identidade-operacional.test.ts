@@ -6,14 +6,17 @@ test.each([
   ['contrato', 'FINALIZADO', 'finalizado'],
   ['contrato', 'CONCLUIDO', 'concluido'],
   ['contrato', 'PLANEJAMENTO', 'andamento'],
-  ['etapa', 'PLANEJADA', 'andamento'],
-  ['ocorrencia', 'NAO_INICIADO', 'andamento'],
+  ['etapa', 'PLANEJADA', 'nao-iniciado'],
+  ['ocorrencia', 'NAO_INICIADO', 'nao-iniciado'],
   ['etapa', 'CONCLUIDA', 'concluido'],
+  ['etapa', 'CONCLUIDO_PARCIALMENTE', 'parcial'],
+  ['entregavel', 'CONCLUIDO_PARCIALMENTE', 'parcial'],
   ['etapa', 'ENCERRADA', 'encerrado'],
   ['etapa', 'FINALIZADA', 'finalizado'],
-  ['entregavel', 'PENDENTE_CONCLUSAO', 'concluido'],
-  ['ocorrencia', 'PENDENTE_ENCERRAMENTO', 'finalizado'],
-  ['atividade', 'PENDENTE_CONCLUSAO', 'concluido'],
+  ['entregavel', 'PENDENTE_CONCLUSAO', 'pendente'],
+  ['entregavel', 'NAO_INICIADO', 'nao-iniciado'],
+  ['ocorrencia', 'PENDENTE_ENCERRAMENTO', 'pendente'],
+  ['atividade', 'PENDENTE_CONCLUSAO', 'pendente'],
   ['atividade', 'VERIFICADA', 'concluido'],
   ['evidencia', 'PENDENTE_VERIFICACAO', 'pendente'],
   ['evidencia', 'SEM_ENVIO', 'pendente'],
@@ -42,6 +45,6 @@ test('etapa reaberta usa identidade de revisão independentemente do status arma
 
 
 test('solicitação pendente prevalece sobre marcador de reabertura antigo', () => {
-  expect(estadoDoObjeto({ objeto: 'entregavel', status: 'PENDENTE_CONCLUSAO', reaberto: true })).toBe('concluido');
-  expect(estadoDoObjeto({ objeto: 'entregavel', status: 'PENDENTE_ENCERRAMENTO', reaberto: true })).toBe('finalizado');
+  expect(estadoDoObjeto({ objeto: 'entregavel', status: 'PENDENTE_CONCLUSAO', reaberto: true })).toBe('pendente');
+  expect(estadoDoObjeto({ objeto: 'entregavel', status: 'PENDENTE_ENCERRAMENTO', reaberto: true })).toBe('pendente');
 });

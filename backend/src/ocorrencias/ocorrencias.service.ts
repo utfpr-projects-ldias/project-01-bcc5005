@@ -1,3 +1,6 @@
+import { protegerReferenciaManual } from '../execucao/proteger-referencia-execucao.js';
+import { iniciarHierarquiaOperacional } from '../execucao/inicio-operacional.js';
+import { estadoOcorrenciaReconhecida, indicadoresPrazo } from '../entregaveis/estado-operacional-entregavel.js';
 import {
   BadRequestException,
   ConflictException,
@@ -8,6 +11,8 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, IsNull, Repository } from 'typeorm';
+import { chavesDefinidas } from '../common/chaves-definidas.js';
+import { hojeCivil } from '../common/data-civil.js';
 
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
@@ -23,10 +28,11 @@ import { PeriodicidadeEntregavel } from '../entregaveis/periodicidade-entregavel
 import { TipoEntregavel } from '../entregaveis/tipo-entregavel.enum.js';
 import { AtividadeEntity } from '../atividades/atividade.entity.js';
 import { Ocorrencia } from './ocorrencia.entity.js';
+import { ConfiguracaoOcorrencias } from './configuracao-ocorrencias.entity.js';
 import { tituloOcorrenciaRecorrente } from './titulo-recorrente.js';
 import { OrigemOcorrencia } from './origem-ocorrencia.enum.js';
 import { StatusOcorrencia } from './status-ocorrencia.enum.js';
-import { resumoMedicao, proximoStatusAutomatico, type ResumoMedicao } from './medicao-ocorrencia.js';
+import { resumoMedicao, proximoStatusAutomatico, conclusaoTemporalPermitida, type ResumoMedicao } from './medicao-ocorrencia.js';
 import type { CriarOcorrenciaManualDto } from './dto/criar-ocorrencia-manual.dto.js';
 import type { AtualizarOcorrenciaDto } from './dto/atualizar-ocorrencia.dto.js';
 
@@ -122,6 +128,7 @@ export function validarDadosOcorrencia(dto: { titulo?: string | null; periodoIni
     const d = new Date(`${v}T00:00:00Z`);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || !Number.isFinite(d.getTime()) || d.toISOString().slice(0,10) !== v) throw new BadRequestException('Data civil inválida');
   }
+  if (dto.dataRealizada && dto.dataRealizada > hojeCivil()) throw new BadRequestException('A data realizada não pode ser futura.');
   if (dto.periodoInicio && dto.periodoFim && dto.periodoInicio > dto.periodoFim) throw new BadRequestException('Período invertido');
   if (dto.titulo !== undefined && (typeof dto.titulo !== 'string' || !dto.titulo.trim())) throw new BadRequestException('Título obrigatório');
   if (dto.quantidadeRealizada != null && !/^\d{1,15}(?:\.\d{1,3})?$/.test(dto.quantidadeRealizada)) throw new BadRequestException('Quantidade decimal inválida');
@@ -200,22 +207,22 @@ export class OcorrenciasService implements OnModuleInit {
 
   // Mesmo lock raiz da HU08: uma mutação não pode atravessar uma conclusão
   // concorrente do contrato, da etapa ou do entregável.
-  private async bloquearContratoAberto(m: EntityManager, contratoId: string) {
+  private async bloquearContratoAberto(m: EntityManager, contratoId: string, documental = false) {
     const contrato = await m.findOne(Contrato, {
       where: { id: contratoId }, lock: { mode: 'pessimistic_write' },
     });
-    if (!contrato || contrato.arquivadoEm || !['PLANEJAMENTO', 'EM_EXECUCAO'].includes(contrato.status)) {
+    if (!contrato || contrato.arquivadoEm || contrato.conclusaoSolicitadaEm || !['PLANEJAMENTO', 'EM_EXECUCAO', ...(documental ? ['CONCLUIDO_PARCIALMENTE'] : [])].includes(contrato.status)) {
       throw new ConflictException('Reabra ou retome o contrato antes de alterar ocorrências');
     }
     return contrato;
   }
 
-  private async exigirEntregavelAberto(m: EntityManager, entregavel: Entregavel) {
-    if (entregavel.arquivadoEm || ['CONCLUIDO','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(entregavel.statusExecucao ?? '')) {
+  private async exigirEntregavelAberto(m: EntityManager, entregavel: Entregavel, regularizacao = false) {
+    if (entregavel.arquivadoEm || entregavel.regularizacaoDocumentalSolicitada || (['CONCLUIDO','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(entregavel.statusExecucao ?? '') || (entregavel.statusExecucao === 'CONCLUIDO_PARCIALMENTE' && !regularizacao))) {
       throw new ConflictException('Reabra o entregável antes de alterar ocorrências');
     }
     const etapa = await m.findOne(Etapa, { where: { id: entregavel.etapaId, contratoId: entregavel.contratoId } });
-    if (!etapa || etapa.conclusaoSolicitadaEm || etapa.encerramentoSolicitadoEm || etapa.arquivadoEm || etapa.status === 'CONCLUIDA' || etapa.status === 'ENCERRADA' || etapa.status === 'FINALIZADA') {
+    if (!etapa || etapa.conclusaoSolicitadaEm || etapa.encerramentoSolicitadoEm || etapa.arquivadoEm || (etapa.status === 'CONCLUIDA' || (etapa.status === 'CONCLUIDO_PARCIALMENTE' && !regularizacao)) || etapa.status === 'ENCERRADA' || etapa.status === 'FINALIZADA') {
       throw new ConflictException('Reabra a etapa antes de alterar ocorrências');
     }
   }
@@ -260,16 +267,34 @@ export class OcorrenciasService implements OnModuleInit {
       }
 
       const inicioAgenda = entregavel.agendaInicioFuturo ?? entregavel.inicioPrevisto;
-      if (inicioAgenda < contrato.inicioVigencia || entregavel.terminoPrevisto > contrato.terminoVigencia) {
+      // Após replanejar, a configuração vigente (não o fim original do entregável)
+      // determina a grade. Uma geração comum não pode recriar períodos substituídos.
+      const configAgenda = entregavel.agendaInicioFuturo ? await m.findOneBy(ConfiguracaoOcorrencias, { entregavelId, contratoId }) : null;
+      if (entregavel.agendaInicioFuturo && !configAgenda?.terminoPrevisto) throw new ConflictException('Agenda replanejada sem configuração vigente. Regularize o planejamento.');
+      const fimAgenda = configAgenda?.terminoPrevisto ?? entregavel.terminoPrevisto;
+      if (inicioAgenda < contrato.inicioVigencia || fimAgenda > contrato.terminoVigencia || fimAgenda > entregavel.terminoPrevisto) {
         throw new ConflictException('A agenda deve estar contida na vigência do contrato; revise o planejamento');
       }
       const periodos = calcularPeriodosRecorrentes(
         inicioAgenda,
-        entregavel.terminoPrevisto,
+        fimAgenda,
         entregavel.periodicidade,
       );
-      validarRequisitosMinimos(requisitos?.minimoEvidenciasVerificadas, requisitos?.evidenciaExigida, requisitos);
-      if (requisitos?.modoRegistro === 'QUANTITATIVO' && (!entregavel.unidadeMedida || !requisitos.metaQuantidade || !(Number(requisitos.metaQuantidade) > 0)))
+      if (entregavel.agendaInicioFuturo) {
+        const repo = m.getRepository(Ocorrencia);
+        for (const p of periodos) {
+          const atual = await repo.findOneBy({entregavelId, contratoId, periodoInicio:p.inicio, periodoFim:p.fim, origem:OrigemOcorrencia.RECORRENTE, substituidaEm:IsNull()});
+          if (!atual) throw new ConflictException('A agenda replanejada está incompleta. Use o replanejamento com confirmação, sem recriar períodos históricos.');
+        }
+        return {entregavelId, periodosPrevistos:periodos.length, novasGeradas:0};
+      }
+      const minimoEvidencias = minimoInicialEvidencias(requisitos);
+      validarRequisitosMinimos(minimoEvidencias, requisitos?.evidenciaExigida ?? 'NENHUMA', requisitos);
+      const modoPlanejado = entregavel.configuracaoPeriodicidade?.modoRegistro;
+      if (modoPlanejado && requisitos?.modoRegistro && modoPlanejado !== requisitos.modoRegistro) throw new BadRequestException('A medição deve respeitar o planejamento do entregável.');
+      if (!modoPlanejado) throw new BadRequestException('Defina a modalidade recorrente no planejamento do entregável antes de gerar ocorrências.');
+      const modoGeracao = modoPlanejado;
+      if (modoGeracao === 'QUANTITATIVO' && (!entregavel.unidadeMedida || !requisitos?.metaQuantidade || !(Number(requisitos.metaQuantidade) > 0)))
         throw new BadRequestException('Recorrente quantitativo requer unidade do entregável e meta positiva por ocorrência.');
       const repo = m.getRepository(Ocorrencia);
       let geradas = 0;
@@ -283,10 +308,7 @@ export class OcorrenciasService implements OnModuleInit {
           substituidaEm: IsNull(),
         });
 
-        if (existente) {
-          if (existente.substituidaEm) throw new ConflictException('Período substituído: use o replanejamento confirmado');
-          continue;
-        }
+        if (existente) continue;
 
         const nova = repo.create({
           entregavelId,
@@ -300,15 +322,15 @@ export class OcorrenciasService implements OnModuleInit {
           exigeAtividade: (requisitos?.minimoAtividadesVerificadas ?? 1) > 0,
           minimoAtividadesVerificadas: requisitos?.minimoAtividadesVerificadas ?? 1,
           evidenciaExigida: requisitos?.evidenciaExigida ?? 'NENHUMA',
-          minimoEvidenciasVerificadas: requisitos?.minimoEvidenciasVerificadas ?? 0,
+          minimoEvidenciasVerificadas: minimoEvidencias,
           minimoFotos: requisitos?.minimoFotos ?? null,
           minimoRelatorios: requisitos?.minimoRelatorios ?? null,
           minimoEvidenciasLivres: requisitos?.minimoEvidenciasLivres ?? null,
           permiteEncerramentoExcepcional: requisitos?.permiteEncerramentoExcepcional ?? true,
           // Calendário recorrente mantém meta por período somente quando a obrigação
           // está explicitamente configurada com quantidade/unidade.
-          modoRegistro: requisitos?.modoRegistro ?? 'DESCRITIVO',
-          metaQuantidade: requisitos?.modoRegistro === 'QUANTITATIVO' ? requisitos.metaQuantidade! : null,
+          modoRegistro: modoGeracao,
+          metaQuantidade: modoGeracao === 'QUANTITATIVO' ? requisitos!.metaQuantidade! : null,
         });
 
         // A linha do entregável foi bloqueada nesta transação; duas gerações
@@ -356,8 +378,14 @@ export class OcorrenciasService implements OnModuleInit {
       if (!entregavel)
         throw new NotFoundException('Entregável não encontrado neste contrato');
       await this.exigirEntregavelAberto(m, entregavel);
-      if (entregavel.tipo === TipoEntregavel.UNICO) throw new BadRequestException('Entregável único não possui ocorrências');
-            if (entregavel.tipo === TipoEntregavel.RECORRENTE) {
+      if(entregavel.quantidadeDiretaIntegrada)throw new ConflictException('Este entregável já possui medição direta por atividades ou evidências. Não misture fontes.');
+      if(entregavel.tipo===TipoEntregavel.CONTINUO && entregavel.execucoesIntegradas){
+        const [diretas]=await m.query(`SELECT EXISTS(SELECT 1 FROM execucoes_entregavel WHERE contrato_id=$1 AND entregavel_id=$2 AND ocorrencia_id IS NULL AND centesimos>0) AS existe`,[contratoId,entregavelId]);
+        if(diretas?.existe)throw new ConflictException('Há medições diretas registradas. Preserve a modalidade atual até conciliar as fontes de execução.');
+      }
+      // RB-03: ocorrências descritivas são opcionais em entregáveis ÚNICOS.
+      // A regra quantitativa abaixo continua exclusiva de entregáveis QUANTITATIVOS.
+      if (entregavel.tipo === TipoEntregavel.RECORRENTE) {
         throw new BadRequestException('Em entregáveis recorrentes, use a geração da agenda; registre a descrição nas atividades vinculadas aos períodos');
       }
 
@@ -370,11 +398,18 @@ export class OcorrenciasService implements OnModuleInit {
       if (modoRegistro === 'DESCRITIVO' && entregavel.tipo === TipoEntregavel.QUANTITATIVO) throw new BadRequestException('Entregável quantitativo exige ocorrência com meta e unidade de medida; utilize as atividades para o relato do trabalho');
       if (modoRegistro === 'DESCRITIVO' && (dto.metaQuantidade != null || dto.quantidadeRealizada != null)) throw new BadRequestException('Ocorrência descritiva não recebe metas ou quantidades; descreva o trabalho nas atividades');
       if (modoRegistro === 'QUANTITATIVO' && (!entregavel.quantidadePrevista || !entregavel.unidadeMedida)) throw new BadRequestException('Informe a meta total e a unidade no Planejamento do entregável antes de cadastrar a medição');
-      if (modoRegistro === 'QUANTITATIVO' && dto.metaQuantidade == null && dto.quantidadeRealizada == null) throw new BadRequestException('Ocorrência por quantidade exige meta planejada');
+      if (modoRegistro === 'QUANTITATIVO' && dto.metaQuantidade == null) throw new BadRequestException('Ocorrência por quantidade exige meta planejada');
+      if (dto.quantidadeRealizada != null) throw new BadRequestException('Registre a quantidade realizada após criar a ocorrência, por lançamento autorizado.');
+      if (dto.pesoPeriodo != null) throw new BadRequestException('Peso de período é exclusivo da agenda recorrente.');
       if (dto.metaQuantidade != null && (!Number.isFinite(Number(dto.metaQuantidade)) || Number(dto.metaQuantidade) <= 0)) throw new BadRequestException('Meta quantitativa deve ser maior que zero');
+      if(modoRegistro==='QUANTITATIVO'&&dto.metaQuantidade!=null){
+        const [saldo]=await m.query(`SELECT (COALESCE(SUM(meta_quantidade),0)+$3::numeric <= $4::numeric) AS disponivel FROM ocorrencias WHERE contrato_id=$1 AND entregavel_id=$2 AND substituida_em IS NULL`,[contratoId,entregavelId,dto.metaQuantidade,entregavel.quantidadePrevista]);
+        if(saldo?.disponivel===false)throw new ConflictException('A meta desta ocorrência ultrapassa a quantidade disponível no entregável.');
+      }
       validarDadosOcorrencia(dto);
       const repo = m.getRepository(Ocorrencia);
-      validarRequisitosMinimos(dto.minimoEvidenciasVerificadas, dto.evidenciaExigida, dto);
+      const minimoEvidencias = minimoInicialEvidencias(dto);
+      validarRequisitosMinimos(minimoEvidencias, dto.evidenciaExigida ?? 'NENHUMA', dto);
       const nova = repo.create({
         entregavelId,
         contratoId,
@@ -392,7 +427,7 @@ export class OcorrenciasService implements OnModuleInit {
         exigeAtividade: (dto.minimoAtividadesVerificadas ?? (dto.exigeAtividade === false ? 0 : 1)) > 0,
         minimoAtividadesVerificadas: dto.minimoAtividadesVerificadas ?? (dto.exigeAtividade === false ? 0 : 1),
         evidenciaExigida: dto.evidenciaExigida ?? 'NENHUMA',
-        minimoEvidenciasVerificadas: dto.minimoEvidenciasVerificadas ?? (dto.evidenciaExigida === 'AMBOS' ? 2 : dto.evidenciaExigida && dto.evidenciaExigida !== 'NENHUMA' ? 1 : 0),
+        minimoEvidenciasVerificadas: minimoEvidencias,
         minimoFotos: dto.minimoFotos ?? null,
         minimoRelatorios: dto.minimoRelatorios ?? null,
         minimoEvidenciasLivres: dto.minimoEvidenciasLivres ?? null,
@@ -429,12 +464,19 @@ export class OcorrenciasService implements OnModuleInit {
   }
 
   /** Não aprova uma ocorrência; apenas a coloca em fila de decisão quando elegível. */
-  private async recalcularEstado(m: EntityManager, o: Ocorrencia, ator: UsuarioAutenticado): Promise<ResumoMedicao> {
+  private async recalcularEstado(m: EntityManager, o: Ocorrencia, ator: UsuarioAutenticado, solicitarAutomaticamente = true): Promise<ResumoMedicao> {
     const r = await resumoMedicao(m, o);
-    if ([StatusOcorrencia.CONCLUIDO,StatusOcorrencia.ENCERRADA,
-      StatusOcorrencia.PENDENTE_ENCERRAMENTO,StatusOcorrencia.PENDENTE_CONCLUSAO].includes(o.status)) return r;
+    if ([StatusOcorrencia.CONCLUIDO,StatusOcorrencia.CONCLUIDO_PARCIALMENTE,StatusOcorrencia.ENCERRADA,
+      StatusOcorrencia.PENDENTE_ENCERRAMENTO,StatusOcorrencia.PENDENTE_CONCLUSAO,StatusOcorrencia.PENDENTE_CONCLUSAO_PARCIAL].includes(o.status)) return r;
     const anterior = o.status;
-    const proximo = proximoStatusAutomatico(o,r) as StatusOcorrencia;
+    const entregavel = await m.findOneBy(Entregavel, { id: o.entregavelId, contratoId: o.contratoId });
+    if (!entregavel) throw new NotFoundException('Entregável da ocorrência indisponível');
+    const calculado = proximoStatusAutomatico(o,r,
+      conclusaoTemporalPermitida(entregavel.tipo, entregavel.terminoPrevisto)) as StatusOcorrencia;
+    // Edições de planejamento são independentes (meta, exigências, peso). Não
+    // congelar a ocorrência entre dois PATCHes do mesmo formulário.
+    const proximo = !solicitarAutomaticamente && calculado === StatusOcorrencia.PENDENTE_CONCLUSAO
+      ? StatusOcorrencia.EM_ANDAMENTO : calculado;
     if (anterior !== proximo) {
       o.status = proximo;
       await m.save(Ocorrencia,o);
@@ -447,28 +489,31 @@ export class OcorrenciasService implements OnModuleInit {
     return r;
   }
 
-  async solicitarConclusao(contratoId: string, id: string, ator: UsuarioAutenticado) {
+  async solicitarConclusao(contratoId: string, id: string, ator: UsuarioAutenticado, parcial = false) {
     return this.dataSource.transaction(async m => {
       await this.validarPermissaoContrato(m, contratoId, ator, 'editar');
-      await this.bloquearContratoAberto(m, contratoId);
+      const contrato = await this.bloquearContratoAberto(m, contratoId, !parcial);
       const o = await m.getRepository(Ocorrencia).findOne({ where: { id, contratoId }, lock: { mode: 'pessimistic_write' } });
       if (!o || o.substituidaEm) throw new NotFoundException('Ocorrência indisponível');
       const entregavel = await m.findOneBy(Entregavel, { id: o.entregavelId, contratoId });
       if (!entregavel) throw new NotFoundException('Entregável não encontrado');
-      await this.exigirEntregavelAberto(m, entregavel);
-      if (![StatusOcorrencia.NAO_INICIADO, StatusOcorrencia.EM_ANDAMENTO, StatusOcorrencia.EM_REVISAO].includes(o.status)) throw new ConflictException('Ocorrência já submetida à conclusão');
-      if (entregavel.tipo === TipoEntregavel.CONTINUO && entregavel.terminoPrevisto &&
-          new Date().toISOString().slice(0, 10) < entregavel.terminoPrevisto)
+      const regularizacao = !parcial && o.status === StatusOcorrencia.CONCLUIDO_PARCIALMENTE;
+      if (contrato.status === 'CONCLUIDO_PARCIALMENTE' && !regularizacao) throw new ConflictException('Somente regularização documental é permitida');
+      await this.exigirEntregavelAberto(m, entregavel, regularizacao);
+      if (o.regularizacaoDocumentalSolicitada || (!regularizacao && ![StatusOcorrencia.NAO_INICIADO, StatusOcorrencia.EM_ANDAMENTO, StatusOcorrencia.EM_REVISAO].includes(o.status))) throw new ConflictException('Ocorrência já submetida à conclusão');
+      if (!conclusaoTemporalPermitida(entregavel.tipo, entregavel.terminoPrevisto))
         throw new ConflictException('A conclusão de serviço contínuo somente pode ser solicitada após o término previsto');
       const r = await resumoMedicao(m,o);
       if (!r.metaAtingida) throw new ConflictException('Meta ou execução ainda não atingida. Confira as quantidades verificadas e os lançamentos.');
-      if (!r.requisitosAtendidos) throw new ConflictException('Existem atividades pendentes ou evidências obrigatórias ainda não vinculadas/verificadas.');
+      if (!r.criteriosOperacionaisAtendidos) throw new ConflictException('Existem atividades ou requisitos operacionais pendentes.');
+      if (parcial === r.documentacaoAtendida) throw new ConflictException(parcial ? 'Documentação completa: solicite conclusão integral.' : 'Documentação pendente: solicite conclusão parcial.');
       // A execução física não exige evidência por padrão. Só critérios configurados
       // explicitamente bloqueiam a solicitação, preservando RB-07/08 do PRD.
-      const antes = { status: o.status };
-      o.status = StatusOcorrencia.PENDENTE_CONCLUSAO;
+      const antes = { status: o.status, regularizacaoDocumentalSolicitada: Boolean(o.regularizacaoDocumentalSolicitada) };
+      if (regularizacao) o.regularizacaoDocumentalSolicitada = true;
+      else o.status = parcial ? StatusOcorrencia.PENDENTE_CONCLUSAO_PARCIAL : StatusOcorrencia.PENDENTE_CONCLUSAO;
       const salvo = await m.save(Ocorrencia, o);
-      await this.auditoria.registrarNaTransacao(m, ator, { acao: AcaoAuditoria.OCORRENCIA_STATUS_ALTERADO, entidadeTipo: 'OCORRENCIA', entidadeId: id, dadosAnteriores: antes, dadosPosteriores: { status: salvo.status } });
+      await this.auditoria.registrarNaTransacao(m, ator, { acao: AcaoAuditoria.OCORRENCIA_STATUS_ALTERADO, entidadeTipo: 'OCORRENCIA', entidadeId: id, dadosAnteriores: antes, dadosPosteriores: { status: salvo.status, regularizacaoDocumentalSolicitada: Boolean(salvo.regularizacaoDocumentalSolicitada) } });
       return salvo;
     });
   }
@@ -476,18 +521,28 @@ export class OcorrenciasService implements OnModuleInit {
   async concluir(contratoId: string, id: string, ator: UsuarioAutenticado) {
     return this.dataSource.transaction(async m => {
       await this.validarPermissaoContrato(m, contratoId, ator, 'concluir');
-      await this.bloquearContratoAberto(m, contratoId);
+      const contrato = await this.bloquearContratoAberto(m, contratoId, true);
       const o = await m.getRepository(Ocorrencia).findOne({ where: { id, contratoId }, lock: { mode: 'pessimistic_write' } });
       if (!o || o.substituidaEm) throw new NotFoundException('Ocorrência indisponível');
-      if (o.status !== StatusOcorrencia.PENDENTE_CONCLUSAO) throw new ConflictException('Somente ocorrências pendentes podem ser aprovadas');
+      const regularizacao = Boolean(o.regularizacaoDocumentalSolicitada && o.status === StatusOcorrencia.CONCLUIDO_PARCIALMENTE);
+      if (contrato.status === 'CONCLUIDO_PARCIALMENTE' && !regularizacao) throw new ConflictException('Somente regularização documental é permitida');
+      if (!regularizacao && ![StatusOcorrencia.PENDENTE_CONCLUSAO,StatusOcorrencia.PENDENTE_CONCLUSAO_PARCIAL].includes(o.status)) throw new ConflictException('Somente ocorrências pendentes podem ser aprovadas');
+      const entregavel = await m.findOneBy(Entregavel, { id: o.entregavelId, contratoId });
+      if (!entregavel) throw new NotFoundException('Entregável da ocorrência indisponível');
+      await this.exigirEntregavelAberto(m, entregavel, regularizacao);
+      if (!conclusaoTemporalPermitida(entregavel.tipo, entregavel.terminoPrevisto))
+        throw new ConflictException('A ocorrência contínua só pode ser aprovada após o término previsto.');
       const r = await resumoMedicao(m,o);
-      if (!r.metaAtingida || !r.requisitosAtendidos) throw new ConflictException('A execução ou as exigências da ocorrência mudaram; reabra e revise antes da aprovação.');
+      const parcial = o.status === StatusOcorrencia.PENDENTE_CONCLUSAO_PARCIAL;
+      if (!r.metaAtingida || !r.criteriosOperacionaisAtendidos || parcial === r.documentacaoAtendida) throw new ConflictException('A execução ou as exigências da ocorrência mudaram; reabra e revise antes da aprovação.');
       const quantidade = r.quantidadeExecutada;
-      const antes = { status: o.status, quantidadeAprovada: o.quantidadeAprovada };
-      o.status = StatusOcorrencia.CONCLUIDO;
+      const antes = { status: o.status, quantidadeAprovada: o.quantidadeAprovada, regularizacaoDocumentalSolicitada: regularizacao };
+      o.regularizacaoDocumentalSolicitada = false;
+      o.status = parcial ? StatusOcorrencia.CONCLUIDO_PARCIALMENTE : StatusOcorrencia.CONCLUIDO;
       o.quantidadeAprovada = o.modoRegistro === 'QUANTITATIVO' ? String(quantidade) : null;
       const salvo = await m.save(Ocorrencia, o);
-      await this.auditoria.registrarNaTransacao(m, ator, { acao: AcaoAuditoria.OCORRENCIA_STATUS_ALTERADO, entidadeTipo: 'OCORRENCIA', entidadeId: id, dadosAnteriores: antes, dadosPosteriores: { status: salvo.status, quantidadeAprovada: salvo.quantidadeAprovada } });
+      await this.auditoria.registrarNaTransacao(m, ator, { acao: AcaoAuditoria.OCORRENCIA_STATUS_ALTERADO, entidadeTipo: 'OCORRENCIA', entidadeId: id, dadosAnteriores: antes, dadosPosteriores: { status: salvo.status, quantidadeAprovada: salvo.quantidadeAprovada, regularizacaoDocumentalSolicitada: false } });
+      await iniciarHierarquiaOperacional(m,this.auditoria,ator,contratoId,o.entregavelId);
       return salvo;
     });
   }
@@ -516,9 +571,8 @@ export class OcorrenciasService implements OnModuleInit {
       // Não permitir contornar a conclusão integral pela chamada direta à API.
       const resumoAtual = await resumoMedicao(m, o);
       const prazoContinuoCumprido = e.tipo !== TipoEntregavel.CONTINUO ||
-        !e.terminoPrevisto || new Date().toISOString().slice(0, 10) >= e.terminoPrevisto;
-      if (resumoAtual.metaAtingida && resumoAtual.requisitosAtendidos && prazoContinuoCumprido)
-        throw new ConflictException('Todos os requisitos estão atendidos; solicite conclusão em vez de encerramento.');
+        !e.terminoPrevisto || hojeCivil() >= e.terminoPrevisto;
+      validarEncerramentoOcorrencia(o, resumoAtual, prazoContinuoCumprido);
       const anterior = { status: o.status, motivoEncerramento: o.motivoEncerramento };
       o.status = StatusOcorrencia.PENDENTE_ENCERRAMENTO;
       o.motivoEncerramento = justificativa;
@@ -540,16 +594,25 @@ export class OcorrenciasService implements OnModuleInit {
       if (!o || o.substituidaEm) throw new NotFoundException('Ocorrência indisponível');
       if (o.status !== StatusOcorrencia.PENDENTE_ENCERRAMENTO)
         throw new ConflictException('A ocorrência não está aguardando encerramento');
+      const e = await m.findOneBy(Entregavel, { id: o.entregavelId, contratoId });
+      if (!e) throw new NotFoundException('Entregável não encontrado');
+      await this.exigirEntregavelAberto(m, e);
+      const medicao = await resumoMedicao(m, o);
+      // A aprovação deve revalidar as mesmas condições da solicitação, dentro do lock.
+      validarEncerramentoOcorrencia(o, medicao, conclusaoTemporalPermitida(e.tipo, e.terminoPrevisto));
       const anterior = { status: o.status, quantidadeAprovada: o.quantidadeAprovada };
       o.status = StatusOcorrencia.ENCERRADA;
       o.encerradaEm = new Date(); o.encerradaPor = ator.id;
-      o.quantidadeAprovada = null;
+      // Preserve a medição já reconhecida, sem aprovar declarações pendentes.
+      if (o.modoRegistro === 'QUANTITATIVO' && o.metaQuantidade != null) {
+        o.quantidadeAprovada = String(medicao.quantidadeExecutada);
+      }
       const salvo = await m.save(Ocorrencia, o);
       await this.auditoria.registrarNaTransacao(m, ator, {
         acao: AcaoAuditoria.OCORRENCIA_STATUS_ALTERADO, entidadeTipo: 'OCORRENCIA', entidadeId: id,
         dadosAnteriores: anterior, dadosPosteriores: { status: salvo.status,
           justificativa: o.motivoEncerramento, aprovadoPor: ator.id,
-          quantidadeAprovada: null, encerradaEm: o.encerradaEm },
+          quantidadeAprovada: salvo.quantidadeAprovada, encerradaEm: o.encerradaEm },
       });
       return salvo;
     });
@@ -559,18 +622,23 @@ export class OcorrenciasService implements OnModuleInit {
     if (motivo.trim().length < 15 || motivo.trim().length > 200) throw new BadRequestException('Justificativa de reabertura: 15 a 200 caracteres');
     return this.dataSource.transaction(async m => {
       await this.validarPermissaoContrato(m, contratoId, ator, 'reabrir');
-      await this.bloquearContratoAberto(m, contratoId);
+      const contrato = await this.bloquearContratoAberto(m, contratoId, true);
       const o = await m.getRepository(Ocorrencia).findOne({ where: { id, contratoId }, lock: { mode: 'pessimistic_write' } });
       if (!o || o.substituidaEm) throw new NotFoundException('Ocorrência indisponível');
       const entregavel = await m.findOneBy(Entregavel, { id: o.entregavelId, contratoId });
       if (!entregavel) throw new NotFoundException('Entregável não encontrado');
-      await this.exigirEntregavelAberto(m, entregavel);
-      if (![StatusOcorrencia.PENDENTE_CONCLUSAO, StatusOcorrencia.CONCLUIDO, StatusOcorrencia.PENDENTE_ENCERRAMENTO, StatusOcorrencia.ENCERRADA].includes(o.status)) throw new ConflictException('Somente ocorrências pendentes ou concluídas podem ser reabertas');
-      const antes = { status: o.status, quantidadeAprovada: o.quantidadeAprovada };
-      o.status = StatusOcorrencia.EM_REVISAO;
-      o.quantidadeAprovada = null; o.motivoEncerramento = null; o.encerradaEm = null; o.encerradaPor = null;
+      const regularizacao = Boolean(o.regularizacaoDocumentalSolicitada && o.status === StatusOcorrencia.CONCLUIDO_PARCIALMENTE);
+      if (contrato.status === 'CONCLUIDO_PARCIALMENTE' && !regularizacao) throw new ConflictException('Somente cancelamento da regularização é permitido');
+      await this.exigirEntregavelAberto(m, entregavel, regularizacao);
+      if (![StatusOcorrencia.PENDENTE_CONCLUSAO, StatusOcorrencia.PENDENTE_CONCLUSAO_PARCIAL, StatusOcorrencia.CONCLUIDO, StatusOcorrencia.CONCLUIDO_PARCIALMENTE, StatusOcorrencia.PENDENTE_ENCERRAMENTO, StatusOcorrencia.ENCERRADA].includes(o.status)) throw new ConflictException('Somente ocorrências pendentes ou concluídas podem ser reabertas');
+      const antes = { status: o.status, quantidadeAprovada: o.quantidadeAprovada, regularizacaoDocumentalSolicitada: regularizacao };
+      if (regularizacao) o.regularizacaoDocumentalSolicitada = false;
+      else {
+        o.status = StatusOcorrencia.EM_REVISAO;
+        o.quantidadeAprovada = null; o.motivoEncerramento = null; o.encerradaEm = null; o.encerradaPor = null;
+      }
       const salvo = await m.save(Ocorrencia, o);
-      await this.auditoria.registrarNaTransacao(m, ator, { acao: AcaoAuditoria.OCORRENCIA_STATUS_ALTERADO, entidadeTipo: 'OCORRENCIA', entidadeId: id, dadosAnteriores: antes, dadosPosteriores: { status: salvo.status, quantidadeAprovada: null, justificativa: motivo.trim() } });
+      await this.auditoria.registrarNaTransacao(m, ator, { acao: AcaoAuditoria.OCORRENCIA_STATUS_ALTERADO, entidadeTipo: 'OCORRENCIA', entidadeId: id, dadosAnteriores: antes, dadosPosteriores: { status: salvo.status, quantidadeAprovada: salvo.quantidadeAprovada, regularizacaoDocumentalSolicitada: false, justificativa: motivo.trim() } });
       return salvo;
     });
   }
@@ -583,12 +651,17 @@ export class OcorrenciasService implements OnModuleInit {
       order: { dataPrevista: 'ASC', periodoInicio: 'ASC', id: 'ASC' },
     });
     if (!itens.length) return [];
-    return Promise.all(itens.map(async o => {
-      if (o.metaQuantidade == null) return { ...o, quantidadeExecutada: null };
-      const r = await resumoMedicao(this.ocorrenciasRepo.manager,o);
-      return { ...o, quantidadeExecutada: r.quantidadeExecutada.toFixed(3),
-        quantidadeRestante: r.quantidadeRestante, progressoPercentual: r.progressoPercentual };
-    }));
+    // A lista e o detalhe usam a mesma medição. Limite a concorrência de
+    // consultas para agendas extensas, sem descartar períodos históricos.
+    const resultado = [];
+    for (let inicio=0; inicio<itens.length; inicio+=16) {
+      resultado.push(...await Promise.all(itens.slice(inicio,inicio+16).map(async o => {
+        const prazo = indicadoresPrazo(o.dataPrevista ?? o.periodoFim, o.status, Boolean(o.substituidaEm), o.encerradaEm ? hojeCivil(o.encerradaEm) : o.dataRealizada);
+        const r = await resumoMedicao(this.ocorrenciasRepo.manager,o);
+        return Object.assign({}, o, r, prazo, { status:estadoOcorrenciaReconhecida(o,r), quantidadeExecutada: o.metaQuantidade == null ? null : r.quantidadeExecutada.toFixed(3) });
+      })));
+    }
+    return resultado;
   }
 
   async detalhar(contratoId: string, id: string) {
@@ -601,7 +674,7 @@ export class OcorrenciasService implements OnModuleInit {
         SELECT 1 FROM "atividade_ocorrencias" ao WHERE ao."atividadeId"=atividade.id AND ao."ocorrenciaId"=:id
       ))`, { id }).orderBy('atividade.dataHora', 'DESC').getMany();
     const resumo = await resumoMedicao(this.ocorrenciasRepo.manager,o);
-    return { ...o, ...resumo, atividades: atividades.filter(a => !a.excluidaEm) };
+    return Object.assign({}, o, resumo, indicadoresPrazo(o.dataPrevista ?? o.periodoFim, o.status, Boolean(o.substituidaEm), o.encerradaEm ? hojeCivil(o.encerradaEm) : o.dataRealizada), { status:estadoOcorrenciaReconhecida(o,resumo), quantidadeExecutada: o.metaQuantidade == null ? null : resumo.quantidadeExecutada.toFixed(3), atividades: atividades.filter(a => !a.excluidaEm) });
   }
 
   /** Início explícito: não envolve aprovação nem alteração quantitativa.
@@ -612,22 +685,51 @@ export class OcorrenciasService implements OnModuleInit {
     return this.dataSource.transaction(async m=>{
       await this.validarPermissaoContrato(m,contratoId,ator,'editar');
       await this.bloquearContratoAberto(m,contratoId);
-      const hoje=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-      const previstas=await m.getRepository(Ocorrencia).find({where:{contratoId,status:StatusOcorrencia.NAO_INICIADO,substituidaEm:IsNull()},order:{periodoInicio:'ASC'},take:500,lock:{mode:'pessimistic_write'}});
-      let iniciadas=0;
-      for (const o of previstas) {
-        const data=o.periodoInicio??o.dataPrevista;
-        if (!data || data>hoje) continue;
-        const e=await m.findOneBy(Entregavel,{id:o.entregavelId,contratoId});
-        if (!e || e.arquivadoEm || ['CONCLUIDO','FINALIZADO'].includes(e.statusExecucao??'')) continue;
-        o.status=StatusOcorrencia.EM_ANDAMENTO;
-        await m.save(Ocorrencia,o);
-        await this.auditoria.registrarNaTransacao(m,ator,{acao:AcaoAuditoria.OCORRENCIA_STATUS_ALTERADO,
-          entidadeTipo:'OCORRENCIA',entidadeId:o.id,dadosAnteriores:{status:StatusOcorrencia.NAO_INICIADO},
-          dadosPosteriores:{status:StatusOcorrencia.EM_ANDAMENTO,motivo:'INICIO_AUTOMATICO_POR_DATA',data}});
-        iniciadas++;
+      const hoje=hojeCivil();
+      const repo = m.getRepository(Ocorrencia);
+      let iniciadas = 0;
+      let deslocamento = 0;
+      const etapasAbertas = new Map<string, boolean>();
+      // Avançar sobre TODOS os candidatos. Os iniciados desaparecem do filtro
+      // NAO_INICIADO; por isso só os NÃO iniciados contam no próximo offset.
+      // Sem esse ajuste, a paginação pularia linhas após cada lote.
+      while (true) {
+        const previstas = await repo.find({
+          where: { contratoId, status: StatusOcorrencia.NAO_INICIADO, substituidaEm: IsNull() },
+          order: { periodoInicio: 'ASC', id: 'ASC' }, skip: deslocamento, take: 500,
+          lock: { mode: 'pessimistic_write' },
+        });
+        let iniciadasNoLote = 0;
+        for (const o of previstas) {
+          const data = o.periodoInicio ?? o.dataPrevista;
+          if (!data || data > hoje) continue;
+          const e = await m.findOneBy(Entregavel, { id: o.entregavelId, contratoId });
+          if (!e || e.arquivadoEm ||
+              ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? '')) continue;
+          let etapaAberta = etapasAbertas.get(e.etapaId);
+          if (etapaAberta === undefined) {
+            const etapa = await m.findOneBy(Etapa, { id: e.etapaId, contratoId });
+            etapaAberta = Boolean(etapa && !etapa.arquivadoEm && !etapa.conclusaoSolicitadaEm &&
+              !etapa.encerramentoSolicitadoEm &&
+              !['CONCLUIDA','CONCLUIDO_PARCIALMENTE','ENCERRADA','FINALIZADA'].includes(etapa.status));
+            etapasAbertas.set(e.etapaId, etapaAberta);
+          }
+          if (!etapaAberta) continue;
+          o.status = StatusOcorrencia.EM_ANDAMENTO;
+          await m.save(Ocorrencia, o);
+          await this.auditoria.registrarNaTransacao(m, ator, {
+            acao: AcaoAuditoria.OCORRENCIA_STATUS_ALTERADO, entidadeTipo: 'OCORRENCIA', entidadeId: o.id,
+            dadosAnteriores: { status: StatusOcorrencia.NAO_INICIADO },
+            dadosPosteriores: { status: StatusOcorrencia.EM_ANDAMENTO, motivo: 'INICIO_AUTOMATICO_POR_DATA', data },
+          });
+          await iniciarHierarquiaOperacional(m,this.auditoria,ator,contratoId,o.entregavelId);
+          iniciadas++;
+          iniciadasNoLote++;
+        }
+        deslocamento += previstas.length - iniciadasNoLote;
+        if (previstas.length < 500) break;
       }
-      return {iniciadas,dataReferencia:hoje};
+      return { iniciadas, dataReferencia: hoje };
     });
   }
   async iniciar(contratoId: string, id: string, ator: UsuarioAutenticado) {
@@ -640,7 +742,7 @@ export class OcorrenciasService implements OnModuleInit {
       const entregavel = await m.getRepository(Entregavel).findOneBy({ id: o.entregavelId, contratoId });
       if (!entregavel) throw new NotFoundException('Entregável não encontrado');
       await this.exigirEntregavelAberto(m, entregavel);
-      if (o.status === StatusOcorrencia.EM_ANDAMENTO) return o; // repetição não duplica auditoria
+      if (o.status === StatusOcorrencia.EM_ANDAMENTO) { await iniciarHierarquiaOperacional(m,this.auditoria,ator,contratoId,o.entregavelId); return o; } // sincroniza pai sem duplicar auditoria
       if (o.status !== StatusOcorrencia.NAO_INICIADO)
         throw new ConflictException('Somente uma ocorrência não iniciada pode ser colocada em andamento.');
       o.status = StatusOcorrencia.EM_ANDAMENTO;
@@ -649,6 +751,7 @@ export class OcorrenciasService implements OnModuleInit {
         acao: AcaoAuditoria.OCORRENCIA_STATUS_ALTERADO, entidadeTipo: 'OCORRENCIA', entidadeId: id,
         dadosAnteriores: { status: StatusOcorrencia.NAO_INICIADO }, dadosPosteriores: { status: StatusOcorrencia.EM_ANDAMENTO },
       });
+      await iniciarHierarquiaOperacional(m,this.auditoria,ator,contratoId,o.entregavelId);
       return o;
     });
   }
@@ -668,7 +771,7 @@ export class OcorrenciasService implements OnModuleInit {
           'exigeAtividade','minimoAtividadesVerificadas','minimoEvidenciasVerificadas',
           'minimoFotos','minimoRelatorios','minimoEvidenciasLivres','evidenciaExigida','permiteEncerramentoExcepcional',
         ];
-        if (Object.keys(dto).some(chave => !chavesPermitidas.includes(chave)))
+        if (chavesDefinidas(dto).some(chave => !chavesPermitidas.includes(chave)))
           throw new BadRequestException('Esta operação só pode alterar as propriedades autorizadas da ocorrência.');
         await this.exigirPermissaoEspecifica(m, contratoId, ator, escopo === 'PESO' ? 'editarPesoOcorrencia' : escopo === 'META' ? 'editarMetaOcorrencia' : 'editarExigenciasOcorrencia');
       }
@@ -680,21 +783,48 @@ export class OcorrenciasService implements OnModuleInit {
       });
       if (!o) throw new NotFoundException('Ocorrência não encontrada');
       if (o.substituidaEm) throw new ConflictException('Ocorrência histórica não pode ser editada');
-      if ([StatusOcorrencia.PENDENTE_CONCLUSAO, StatusOcorrencia.CONCLUIDO, StatusOcorrencia.PENDENTE_ENCERRAMENTO, StatusOcorrencia.ENCERRADA].includes(o.status)) throw new ConflictException('A ocorrência está pendente ou concluída; solicite reabertura autorizada antes de alterar');
+      if ([StatusOcorrencia.PENDENTE_CONCLUSAO, StatusOcorrencia.PENDENTE_CONCLUSAO_PARCIAL, StatusOcorrencia.CONCLUIDO, StatusOcorrencia.CONCLUIDO_PARCIALMENTE, StatusOcorrencia.PENDENTE_ENCERRAMENTO, StatusOcorrencia.ENCERRADA].includes(o.status)) throw new ConflictException('A ocorrência está pendente ou concluída; solicite reabertura autorizada antes de alterar');
       const entregavel = await m.getRepository(Entregavel).findOneBy({ id: o.entregavelId, contratoId });
       if (!entregavel) throw new NotFoundException('Entregável não encontrado neste contrato');
       await this.exigirEntregavelAberto(m, entregavel);
 
       validarDadosOcorrencia(dto);
+      // @IsOptional do class-validator aceita null; para mínimos, null não significa
+      // "manter" nem "desativar": use zero explicitamente. Isso impede persistir
+      // cotas nulas com um total calculado a partir do valor anterior.
+      const minimos = ['minimoAtividadesVerificadas', 'minimoEvidenciasVerificadas',
+        'minimoFotos', 'minimoRelatorios', 'minimoEvidenciasLivres'] as const;
+      if (minimos.some(chave => dto[chave] === null))
+        throw new BadRequestException('Mínimos não aceitam null; informe zero para retirar uma exigência.');
+      if (dto.exigeAtividade === null || dto.evidenciaExigida === null || dto.permiteEncerramentoExcepcional === null)
+        throw new BadRequestException('Exigências não aceitam null; informe um valor válido.');
       if (escopo !== 'META' && dto.metaQuantidade !== undefined)
         throw new BadRequestException('Para alterar a meta, utilize a operação específica de meta da ocorrência.');
-      if (['minimoAtividadesVerificadas','minimoEvidenciasVerificadas','minimoFotos','minimoRelatorios','minimoEvidenciasLivres','exigeAtividade','evidenciaExigida'].some(c => Object.prototype.hasOwnProperty.call(dto,c)))
+      if (['minimoAtividadesVerificadas','minimoEvidenciasVerificadas','minimoFotos','minimoRelatorios','minimoEvidenciasLivres','exigeAtividade','evidenciaExigida'].some(c => chavesDefinidas(dto).includes(c)))
         await this.exigirPermissaoEspecifica(m, contratoId, ator, 'editarExigenciasOcorrencia');
-      if (dto.pesoPeriodo !== undefined) await this.exigirPermissaoEspecifica(m, contratoId, ator, 'editarPesoOcorrencia');
-      validarRequisitosMinimos(dto.minimoEvidenciasVerificadas, dto.evidenciaExigida ?? o.evidenciaExigida, {
-        minimoFotos: dto.minimoFotos ?? o.minimoFotos, minimoRelatorios: dto.minimoRelatorios ?? o.minimoRelatorios,
+      if (dto.pesoPeriodo !== undefined) {
+        if (o.origem !== OrigemOcorrencia.RECORRENTE && dto.pesoPeriodo !== null) throw new BadRequestException('Peso de período é exclusivo da agenda recorrente.');
+        await this.exigirPermissaoEspecifica(m, contratoId, ator, 'editarPesoOcorrencia');
+      }
+      if (dto.permiteEncerramentoExcepcional !== undefined) await this.exigirPermissaoEspecifica(m, contratoId, ator, 'editarExigenciasOcorrencia');
+      const novasCotas = {
+        minimoFotos: dto.minimoFotos ?? o.minimoFotos,
+        minimoRelatorios: dto.minimoRelatorios ?? o.minimoRelatorios,
         minimoEvidenciasLivres: dto.minimoEvidenciasLivres ?? o.minimoEvidenciasLivres,
-      });
+      };
+      const cotasAtivas = Object.values(novasCotas).some(v => v != null);
+      const cotasAlteradas = ['minimoFotos','minimoRelatorios','minimoEvidenciasLivres'].some(
+        chave => chavesDefinidas(dto).includes(chave));
+      const totalDasCotas = (novasCotas.minimoFotos ?? 0) + (novasCotas.minimoRelatorios ?? 0) +
+        (novasCotas.minimoEvidenciasLivres ?? 0);
+      // O total não pode ficar desatualizado após um PATCH parcial de cota.
+      // Se não for informado, deriva da soma das cotas já persistidas + alterações.
+      const minimoEfetivo = dto.minimoEvidenciasVerificadas ??
+        (cotasAtivas && (cotasAlteradas || dto.evidenciaExigida !== undefined) ? totalDasCotas :
+         dto.evidenciaExigida !== undefined ?
+           (dto.evidenciaExigida === 'AMBOS' ? 2 : dto.evidenciaExigida === 'NENHUMA' ? 0 : 1) :
+           o.minimoEvidenciasVerificadas);
+      validarRequisitosMinimos(minimoEfetivo, dto.evidenciaExigida ?? o.evidenciaExigida, novasCotas);
       if (o.origem === OrigemOcorrencia.RECORRENTE && dto.quantidadeRealizada != null) throw new BadRequestException('Quantidade é exclusiva de ocorrências quantitativas');
       if (o.modoRegistro === 'DESCRITIVO' && (dto.quantidadeRealizada != null || dto.metaQuantidade != null)) throw new BadRequestException('Ocorrência descritiva não aceita quantidade nem meta');
       const antes = {
@@ -723,6 +853,10 @@ export class OcorrenciasService implements OnModuleInit {
         if (Number(dto.metaQuantidade) < resumo.quantidadeRegistrada &&
             (!justificativaMeta || justificativaMeta.trim().length < 15 || justificativaMeta.trim().length > 200))
           throw new ConflictException('A nova meta é inferior à execução registrada. Informe uma justificativa de 15 a 200 caracteres para preservar o excedente.');
+        if(o.origem===OrigemOcorrencia.MANUAL_QUANTITATIVA&&Number(dto.metaQuantidade)>Number(o.metaQuantidade)){
+          const [saldo]=await m.query(`SELECT (COALESCE(SUM(meta_quantidade),0)+$4::numeric <= $5::numeric) AS disponivel FROM ocorrencias WHERE contrato_id=$1 AND entregavel_id=$2 AND id<>$3 AND substituida_em IS NULL`,[contratoId,o.entregavelId,o.id,dto.metaQuantidade,entregavel.quantidadePrevista]);
+          if(saldo?.disponivel===false)throw new ConflictException('A meta desta ocorrência ultrapassa a quantidade disponível no entregável.');
+        }
         o.metaQuantidade = dto.metaQuantidade;
       }
       if (o.metaQuantidade != null && dto.quantidadeRealizada !== undefined) throw new ConflictException('Quantidade executada é calculada a partir das atividades; edite a atividade vinculada');
@@ -734,13 +868,21 @@ export class OcorrenciasService implements OnModuleInit {
       if (dto.evidenciaExigida !== undefined) {
         o.evidenciaExigida = dto.evidenciaExigida;
         if (dto.minimoEvidenciasVerificadas === undefined)
-          o.minimoEvidenciasVerificadas = dto.evidenciaExigida === 'AMBOS' ? 2 : dto.evidenciaExigida === 'NENHUMA' ? 0 : 1;
+          o.minimoEvidenciasVerificadas = cotasAtivas ? totalDasCotas :
+            dto.evidenciaExigida === 'AMBOS' ? 2 : dto.evidenciaExigida === 'NENHUMA' ? 0 : 1;
       }
-      if (dto.minimoEvidenciasVerificadas !== undefined) o.minimoEvidenciasVerificadas = dto.minimoEvidenciasVerificadas;
+      if (dto.minimoEvidenciasVerificadas !== undefined || (cotasAtivas && cotasAlteradas))
+        o.minimoEvidenciasVerificadas = minimoEfetivo;
       if (dto.minimoFotos !== undefined) o.minimoFotos = dto.minimoFotos;
       if (dto.minimoRelatorios !== undefined) o.minimoRelatorios = dto.minimoRelatorios;
       if (dto.minimoEvidenciasLivres !== undefined) o.minimoEvidenciasLivres = dto.minimoEvidenciasLivres;
-      if (dto.pesoPeriodo !== undefined) o.pesoPeriodo = dto.pesoPeriodo;
+      if (dto.pesoPeriodo !== undefined) {
+        if(o.origem===OrigemOcorrencia.RECORRENTE&&dto.pesoPeriodo!=null&&Number(dto.pesoPeriodo)>Number(o.pesoPeriodo??0)){
+          const [saldo]=await m.query(`SELECT (COALESCE(SUM(peso_periodo),0)+$4::numeric <= 100) AS disponivel FROM ocorrencias WHERE contrato_id=$1 AND entregavel_id=$2 AND id<>$3 AND substituida_em IS NULL`,[contratoId,o.entregavelId,o.id,dto.pesoPeriodo]);
+          if(saldo?.disponivel===false)throw new ConflictException('O peso ultrapassa o saldo disponível dos períodos.');
+        }
+        o.pesoPeriodo = dto.pesoPeriodo;
+      }
       if (dto.permiteEncerramentoExcepcional !== undefined) o.permiteEncerramentoExcepcional = dto.permiteEncerramentoExcepcional;
       if (dto.titulo !== undefined) o.titulo = dto.titulo.trim();
       if (dto.dataPrevista !== undefined) o.dataPrevista = dto.dataPrevista;
@@ -770,23 +912,44 @@ export class OcorrenciasService implements OnModuleInit {
         },
       });
 
-      await this.recalcularEstado(m,salva,ator);
+      await this.recalcularEstado(m,salva,ator,false);
+      if (antes.status === StatusOcorrencia.NAO_INICIADO && salva.status !== StatusOcorrencia.NAO_INICIADO)
+        await iniciarHierarquiaOperacional(m,this.auditoria,ator,contratoId,salva.entregavelId);
       return salva;
     });
+  }
+  private validarDataLancamento(data: string) {
+    const d = new Date(`${data}T00:00:00Z`);
+    if (!Number.isFinite(d.getTime()) || d.toISOString().slice(0,10)!==data || data>hojeCivil())
+      throw new BadRequestException('Informe uma data de execução válida e não futura.');
+  }
+  private async exigirContextoLancamento(m:EntityManager,o:Ocorrencia) {
+    const c=await m.findOneBy(Contrato,{id:o.contratoId});
+    if(!c||c.conclusaoSolicitadaEm)throw new ConflictException('O contrato aguarda decisão de conclusão.');
+    const e=await m.findOneBy(Entregavel,{id:o.entregavelId,contratoId:o.contratoId});
+    if(!e) throw new NotFoundException('Entregável não encontrado');
+    await this.exigirEntregavelAberto(m,e);
+  }
+  private async podeAprovarLancamento(m:EntityManager,c:string,ator:UsuarioAutenticado) {
+    if(ator.perfil===PerfilUsuario.ADMINISTRADOR)return true;
+    const v=await m.findOneBy(PermissaoContrato,{contratoId:c,usuarioId:ator.id});
+    return Boolean(v&&permissoesEfetivas(ator.perfil,Boolean(v.podeEditar),v.permissoesDetalhadas).aprovarExecucaoManual);
   }
   async listarLancamentos(contratoId: string, id: string) {
     const ocorrencia = await this.ocorrenciasRepo.findOneBy({ id, contratoId });
     if (!ocorrencia) throw new NotFoundException('Ocorrência não encontrada');
     return this.dataSource.query(`SELECT id,quantidade::text AS quantidade,justificativa,
       criado_em AS "criadoEm",criado_por AS "criadoPor",alterado_em AS "alteradoEm",alterado_por AS "alteradoPor",
-      bloqueado_em AS "bloqueadoEm", bloqueado_por AS "bloqueadoPor"
+      bloqueado_em AS "bloqueadoEm", bloqueado_por AS "bloqueadoPor",
+      status_execucao AS "situacao", data_execucao::text AS "dataExecucao", observacao, decidido_por AS "decididoPor", decidido_em AS "decididoEm"
       FROM ocorrencia_lancamentos WHERE contrato_id=$1 AND ocorrencia_id=$2 AND excluido_em IS NULL
       ORDER BY criado_em,id LIMIT 200`,[contratoId,id]);
   }
 
   /** Cada POST recebe um UUID de operação. Reenvio idêntico não soma novamente. */
   async registrarLancamento(contratoId: string, id: string, operacaoId: string, quantidade: string,
-    justificativa: string | undefined, ator: UsuarioAutenticado) {
+    justificativa: string | undefined, ator: UsuarioAutenticado, data=hojeCivil(), observacao?:string) {
+    this.validarDataLancamento(data);
     return this.dataSource.transaction(async m => {
       await this.validarPermissaoContrato(m,contratoId,ator,'visualizar');
       if (ator.perfil !== PerfilUsuario.ADMINISTRADOR) {
@@ -799,33 +962,40 @@ export class OcorrenciasService implements OnModuleInit {
       if (!o || o.substituidaEm) throw new NotFoundException('Ocorrência não encontrada');
       if (o.modoRegistro !== 'QUANTITATIVO' || o.metaQuantidade == null)
         throw new BadRequestException('Somente ocorrências com meta quantitativa aceitam lançamentos');
-      const existente: Array<{quantidade:string;justificativa:string|null;excluidoEm:string|null}> = await m.query(
-        `SELECT quantidade::text,justificativa,excluido_em AS "excluidoEm" FROM ocorrencia_lancamentos WHERE id=$1 AND ocorrencia_id=$2 AND contrato_id=$3`,
+      await this.exigirContextoLancamento(m,o);
+      const existente: Array<{quantidade:string;justificativa:string|null;excluidoEm:string|null;data:string;observacao:string|null;autor:string}> = await m.query(
+        `SELECT quantidade::text,justificativa,excluido_em AS "excluidoEm",data_execucao::text AS data,observacao,criado_por AS autor FROM ocorrencia_lancamentos WHERE id=$1 AND ocorrencia_id=$2 AND contrato_id=$3`,
         [operacaoId,id,contratoId]);
       if (existente.length) {
         if (existente[0].excluidoEm) throw new ConflictException('Este identificador pertence a um lançamento excluído; faça um novo lançamento');
-        if (Number(existente[0].quantidade)===Number(quantidade) && (existente[0].justificativa ?? '')===(justificativa??''))
+        if (Number(existente[0].quantidade)===Number(quantidade) && (existente[0].justificativa ?? '')===(justificativa?.trim()??'') && existente[0].data===data && (existente[0].observacao??'')===(observacao?.trim()??'') && existente[0].autor===ator.id)
           return {id:operacaoId,repetido:true};
         throw new ConflictException('O identificador deste lançamento já foi utilizado com outros dados');
       }
       if (![StatusOcorrencia.NAO_INICIADO,StatusOcorrencia.EM_ANDAMENTO,StatusOcorrencia.EM_REVISAO].includes(o.status))
         throw new ConflictException('Reabra a ocorrência para lançar quantidade');
       const antes=await resumoMedicao(m,o);
-      await m.query(`INSERT INTO ocorrencia_lancamentos(id,ocorrencia_id,contrato_id,quantidade,justificativa,criado_por)
-        VALUES ($1,$2,$3,$4,$5,$6)`,[operacaoId,id,contratoId,quantidade,justificativa?.trim()||null,ator.id]);
+      if (!Number.isFinite(Number(quantidade)) || Number(quantidade)<=0 || antes.quantidadeRegistrada+Number(quantidade)>Number(o.metaQuantidade)+1e-8) throw new ConflictException('A quantidade excede o saldo disponível da ocorrência, incluindo registros pendentes.');
+      const aprovado=await this.podeAprovarLancamento(m,contratoId,ator);
+      const situacao=aprovado?'APROVADO':'PENDENTE';
+      await m.query(`INSERT INTO ocorrencia_lancamentos(id,ocorrencia_id,contrato_id,quantidade,justificativa,criado_por,data_execucao,observacao,status_execucao,decidido_por,decidido_em)
+        VALUES ($1::uuid,$2::uuid,$3::uuid,$4::numeric,$5::varchar,$6::uuid,$7::date,$8::varchar,$9::varchar,CASE WHEN $9::varchar='APROVADO' THEN $6::uuid ELSE NULL END,CASE WHEN $9::varchar='APROVADO' THEN now() ELSE NULL END)`,
+        [operacaoId,id,contratoId,quantidade,justificativa?.trim()||null,ator.id,data,observacao?.trim()||null,situacao]);
       const depois=await this.recalcularEstado(m,o,ator);
       await this.auditoria.registrarNaTransacao(m,ator,{
         acao:AcaoAuditoria.OCORRENCIA_EXECUCAO_REGISTRADA,entidadeTipo:'OCORRENCIA',entidadeId:id,
         dadosAnteriores:{quantidadeExecutada:antes.quantidadeExecutada},
         dadosPosteriores:{lancamentoId:operacaoId,quantidadeAdicionada:quantidade,quantidadeExecutada:depois.quantidadeExecutada,
-          justificativa:justificativa?.trim()??null},
+          justificativa:justificativa?.trim()??null, situacao,data,observacao:observacao?.trim()??null},
       });
-      return {id:operacaoId,quantidadeExecutada:depois.quantidadeExecutada,restante:depois.quantidadeRestante};
+      if(situacao==='APROVADO')await iniciarHierarquiaOperacional(m,this.auditoria,ator,contratoId,o.entregavelId);
+      return {id:operacaoId,situacao,quantidadeExecutada:depois.quantidadeExecutada,restante:depois.quantidadeRestante};
     });
   }
 
   async corrigirLancamento(contratoId: string,id: string,lancamentoId: string,
-    quantidade:string,justificativa:string,ator:UsuarioAutenticado) {
+    quantidade:string,justificativa:string,ator:UsuarioAutenticado,data?:string,observacao?:string) {
+    if(data!==undefined)this.validarDataLancamento(data);
     if (justificativa.trim().length<15 || justificativa.trim().length>25)
       throw new BadRequestException('Explique a correção em 15 a 25 caracteres');
     return this.dataSource.transaction(async m => {
@@ -838,24 +1008,56 @@ export class OcorrenciasService implements OnModuleInit {
       await this.bloquearContratoAberto(m,contratoId);
       const o=await m.findOne(Ocorrencia,{where:{id,contratoId},lock:{mode:'pessimistic_write'}});
       if (!o || o.substituidaEm) throw new NotFoundException('Ocorrência não encontrada');
+      if (o.modoRegistro !== 'QUANTITATIVO' || o.metaQuantidade == null) throw new ConflictException('A ocorrência não possui meta quantitativa vigente.');
       if (![StatusOcorrencia.NAO_INICIADO,StatusOcorrencia.EM_ANDAMENTO,StatusOcorrencia.EM_REVISAO].includes(o.status))
         throw new ConflictException('Reabra a ocorrência para corrigir um lançamento');
-      const anteriores:Array<{quantidade:string;bloqueadoEm:string|null}> = await m.query(
-        `SELECT quantidade::text AS quantidade,bloqueado_em AS "bloqueadoEm" FROM ocorrencia_lancamentos WHERE id=$1 AND ocorrencia_id=$2 AND contrato_id=$3 AND excluido_em IS NULL FOR UPDATE`,
+      await this.exigirContextoLancamento(m,o);
+      const anteriores:Array<{quantidade:string;bloqueadoEm:string|null;situacao:string;data:string;observacao:string|null}> = await m.query(
+        `SELECT quantidade::text AS quantidade,bloqueado_em AS "bloqueadoEm",status_execucao AS situacao,data_execucao::text AS data,observacao FROM ocorrencia_lancamentos WHERE id=$1 AND ocorrencia_id=$2 AND contrato_id=$3 AND excluido_em IS NULL FOR UPDATE`,
         [lancamentoId,id,contratoId]);
       if (!anteriores.length) throw new NotFoundException('Lançamento não encontrado');
       if (anteriores[0].bloqueadoEm) throw new ConflictException('Desbloqueie o lançamento antes de editar');
+      if(anteriores[0].situacao==='APROVADO') await protegerReferenciaManual(m,contratoId,lancamentoId,'QUANTIDADE');
       const antiga=anteriores[0].quantidade;
-      await m.query(`UPDATE ocorrencia_lancamentos SET quantidade=$4,justificativa=$5,alterado_por=$6,alterado_em=now()
-        WHERE id=$1 AND ocorrencia_id=$2 AND contrato_id=$3`,[lancamentoId,id,contratoId,quantidade,justificativa.trim(),ator.id]);
+      const saldoAtual=await resumoMedicao(m,o);
+      const reservada=['APROVADO','PENDENTE'].includes(anteriores[0].situacao)?Number(antiga):0;
+      if(o.metaQuantidade==null||!Number.isFinite(Number(quantidade))||Number(quantidade)<0||saldoAtual.quantidadeRegistrada-reservada+Number(quantidade)>Number(o.metaQuantidade)+1e-8) throw new ConflictException('A correção excede o saldo disponível da ocorrência.');
+      await m.query(`UPDATE ocorrencia_lancamentos SET quantidade=$4,justificativa=$5,alterado_por=$6,alterado_em=now(),
+        data_execucao=COALESCE($7::date,data_execucao),observacao=CASE WHEN $8::boolean THEN $9 ELSE observacao END,
+        status_execucao='PENDENTE',decidido_por=NULL,decidido_em=NULL
+        WHERE id=$1 AND ocorrencia_id=$2 AND contrato_id=$3`,[lancamentoId,id,contratoId,quantidade,justificativa.trim(),ator.id,data??null,observacao!==undefined,observacao?.trim()||null]);
       const depois=await this.recalcularEstado(m,o,ator);
       await this.auditoria.registrarNaTransacao(m,ator,{
         acao:AcaoAuditoria.OCORRENCIA_EXECUCAO_REGISTRADA,entidadeTipo:'OCORRENCIA',entidadeId:id,
-        dadosAnteriores:{lancamentoId,quantidade:antiga},
+        dadosAnteriores:{lancamentoId,...anteriores[0]},
         dadosPosteriores:{lancamentoId,quantidade,justificativa:justificativa.trim(),quantidadeExecutada:depois.quantidadeExecutada,
-          tipo:'CORRECAO_LANCAMENTO'},
+          tipo:'CORRECAO_LANCAMENTO',situacao:'PENDENTE',data:data??anteriores[0].data,observacao:observacao??anteriores[0].observacao},
       });
       return {id:lancamentoId,quantidadeAnterior:antiga,quantidade,restante:depois.quantidadeRestante};
+    });
+  }
+
+  async decidirLancamento(c:string,id:string,lid:string,decisao:'APROVADO'|'REJEITADO',motivo:string|undefined,ator:UsuarioAutenticado) {
+    if(!['APROVADO','REJEITADO'].includes(decisao)||decisao==='REJEITADO'&&!motivo?.trim())throw new BadRequestException('Informe a decisão e a justificativa da rejeição.');
+    return this.dataSource.transaction(async m=>{
+      await this.validarPermissaoContrato(m,c,ator,'visualizar');
+      if(!await this.podeAprovarLancamento(m,c,ator))throw new ForbiddenException('Sem permissão para aprovar execução.');
+      await this.bloquearContratoAberto(m,c);
+      const o=await m.findOne(Ocorrencia,{where:{id,contratoId:c},lock:{mode:'pessimistic_write'}});
+      if(!o||o.substituidaEm)throw new NotFoundException('Ocorrência não encontrada');
+      await this.exigirContextoLancamento(m,o);
+      if(![StatusOcorrencia.NAO_INICIADO,StatusOcorrencia.EM_ANDAMENTO,StatusOcorrencia.EM_REVISAO].includes(o.status))throw new ConflictException('Reabra a ocorrência antes de decidir o lançamento.');
+      const [anterior]=await m.query(`SELECT * FROM ocorrencia_lancamentos WHERE id=$1 AND ocorrencia_id=$2 AND contrato_id=$3 AND excluido_em IS NULL FOR UPDATE`,[lid,id,c]);
+      if(!anterior)throw new NotFoundException('Lançamento não encontrado');
+      if((anterior.status_execucao!=='PENDENTE'&&!(anterior.status_execucao==='REJEITADO'&&decisao==='APROVADO'))||anterior.bloqueado_em)throw new ConflictException('Somente lançamento pendente e desbloqueado pode ser decidido.');
+      if (o.modoRegistro !== 'QUANTITATIVO' || o.metaQuantidade == null) throw new ConflictException('A ocorrência não possui meta quantitativa vigente.');
+      if(decisao==='APROVADO' && (await resumoMedicao(m,o)).quantidadeRegistrada + (anterior.status_execucao==='REJEITADO'?Number(anterior.quantidade):0)>Number(o.metaQuantidade)+1e-8) throw new ConflictException('A meta da ocorrência foi ultrapassada. Corrija os lançamentos antes de aprovar.');
+      await m.query(`UPDATE ocorrencia_lancamentos SET status_execucao=$4,decidido_por=$5,decidido_em=now() WHERE id=$1 AND ocorrencia_id=$2 AND contrato_id=$3`,[lid,id,c,decisao,ator.id]);
+      const depois=await this.recalcularEstado(m,o,ator);
+      if(decisao==='APROVADO' && o.metaQuantidade!=null && depois.quantidadeRegistrada>Number(o.metaQuantidade)+1e-8) throw new ConflictException('A aprovação excede a meta da ocorrência. Corrija o lançamento.');
+      await this.auditoria.registrarNaTransacao(m,ator,{acao:AcaoAuditoria.OCORRENCIA_EXECUCAO_REGISTRADA,entidadeTipo:'OCORRENCIA',entidadeId:id,dadosAnteriores:{lancamentoId:lid,situacao:anterior.status_execucao,quantidade:anterior.quantidade},dadosPosteriores:{lancamentoId:lid,situacao:decisao,motivo:motivo?.trim(),quantidadeExecutada:depois.quantidadeExecutada}});
+      if(decisao==='APROVADO')await iniciarHierarquiaOperacional(m,this.auditoria,ator,c,o.entregavelId);
+      return {id:lid,situacao:decisao,quantidadeExecutada:depois.quantidadeExecutada};
     });
   }
 
@@ -872,6 +1074,7 @@ export class OcorrenciasService implements OnModuleInit {
       await this.bloquearContratoAberto(m,contratoId);
       const o=await m.findOne(Ocorrencia,{where:{id,contratoId},lock:{mode:'pessimistic_write'}});
       if (!o || o.substituidaEm) throw new NotFoundException('Ocorrência não encontrada');
+      await this.exigirContextoLancamento(m,o);
       if (![StatusOcorrencia.NAO_INICIADO,StatusOcorrencia.EM_ANDAMENTO,StatusOcorrencia.EM_REVISAO].includes(o.status))
         throw new ConflictException('Reabra a ocorrência antes de alterar bloqueios');
       const registros:Array<{bloqueadoEm:string|null}>=await m.query(
@@ -910,12 +1113,14 @@ export class OcorrenciasService implements OnModuleInit {
       if (!o || o.substituidaEm) throw new NotFoundException('Ocorrência não encontrada');
       if (![StatusOcorrencia.NAO_INICIADO,StatusOcorrencia.EM_ANDAMENTO,StatusOcorrencia.EM_REVISAO].includes(o.status))
         throw new ConflictException('Reabra a ocorrência antes de excluir lançamentos');
+      await this.exigirContextoLancamento(m,o);
       const anteriores:Array<{quantidade:string;bloqueadoEm:string|null}>=await m.query(
         `SELECT quantidade::text AS quantidade,bloqueado_em AS "bloqueadoEm" FROM ocorrencia_lancamentos
          WHERE id=$1 AND contrato_id=$2 AND ocorrencia_id=$3 AND excluido_em IS NULL FOR UPDATE`,
         [lancamentoId,contratoId,id]);
       if (!anteriores.length) throw new NotFoundException('Lançamento não encontrado');
       if (anteriores[0].bloqueadoEm) throw new ConflictException('Desbloqueie o lançamento antes de excluir');
+      await protegerReferenciaManual(m,contratoId,lancamentoId,'QUANTIDADE');
       const antes=await resumoMedicao(m,o);
       await m.query(`UPDATE ocorrencia_lancamentos SET excluido_em=now(),excluido_por=$4,
         justificativa_exclusao=$5 WHERE id=$1 AND contrato_id=$2 AND ocorrencia_id=$3`,
@@ -934,13 +1139,14 @@ export class OcorrenciasService implements OnModuleInit {
   async listarComprovantes(contratoId:string,id:string) {
     const o=await this.ocorrenciasRepo.findOneBy({id,contratoId});
     if (!o) throw new NotFoundException('Ocorrência não encontrada');
-    const linhas:Array<{id:string;nomeOriginal:string;tipoEvidencia:string;vinculado:boolean;status:string}> =
-      await this.dataSource.query(`SELECT c.id,c.nome_original AS "nomeOriginal",ev.tipo_evidencia AS "tipoEvidencia",
+    const linhas:Array<{id:string;esperadaId:string;nomeOriginal:string;tipoEvidencia:string;vinculado:boolean;status:string;criadoEm:string}> =
+      await this.dataSource.query(`SELECT c.id,c.evidencia_esperada_id AS "esperadaId",c.nome_original AS "nomeOriginal",ev.tipo_evidencia AS "tipoEvidencia",c.criado_em AS "criadoEm",
         c.status,(oc.ocorrencia_id IS NOT NULL) AS vinculado
         FROM comprovantes_evidencia c JOIN evidencias_esperadas ev ON ev.id=c.evidencia_esperada_id
         LEFT JOIN ocorrencia_comprovantes oc ON oc.ocorrencia_id=$2 AND oc.comprovante_id=c.id AND oc.contrato_id=$1
         WHERE c.contrato_id=$1 AND c.entregavel_id=$3 AND
-          (oc.ocorrencia_id IS NOT NULL OR (c.status='VERIFICADA' AND ev.arquivado_em IS NULL
+          (oc.ocorrencia_id IS NOT NULL OR (c.status IN ('PENDENTE_VERIFICACAO','VERIFICADA')
+            AND ev.arquivado_em IS NULL
             AND NOT EXISTS (SELECT 1 FROM comprovantes_evidencia nova WHERE nova.evidencia_esperada_id=c.evidencia_esperada_id
               AND (nova.criado_em,nova.id) > (c.criado_em,c.id))))
         ORDER BY c.criado_em DESC LIMIT 100`,[contratoId,id,o.entregavelId]);
@@ -949,22 +1155,31 @@ export class OcorrenciasService implements OnModuleInit {
   async vincularComprovante(contratoId:string,id:string,comprovanteId:string,ator:UsuarioAutenticado) {
     return this.dataSource.transaction(async m=>{
       await this.validarPermissaoContrato(m,contratoId,ator,'vincularEvidencia');
-      await this.bloquearContratoAberto(m,contratoId);
+      const contrato = await this.bloquearContratoAberto(m,contratoId,true);
       const o=await m.findOne(Ocorrencia,{where:{id,contratoId},lock:{mode:'pessimistic_write'}});
       if (!o || o.substituidaEm) throw new NotFoundException('Ocorrência não encontrada');
-      if (![StatusOcorrencia.NAO_INICIADO,StatusOcorrencia.EM_ANDAMENTO,StatusOcorrencia.EM_REVISAO].includes(o.status))
+      if (![StatusOcorrencia.NAO_INICIADO,StatusOcorrencia.EM_ANDAMENTO,StatusOcorrencia.EM_REVISAO,StatusOcorrencia.CONCLUIDO_PARCIALMENTE].includes(o.status))
         throw new ConflictException('Reabra a ocorrência para alterar evidências vinculadas');
+      const regularizacao = o.status === StatusOcorrencia.CONCLUIDO_PARCIALMENTE;
+      if (o.regularizacaoDocumentalSolicitada || (contrato.status === 'CONCLUIDO_PARCIALMENTE' && !regularizacao))
+        throw new ConflictException('Resolva a regularização pendente antes de vincular evidências');
+      const entregavel = await m.findOneBy(Entregavel, { id: o.entregavelId, contratoId });
+      if (!entregavel) throw new NotFoundException('Entregável indisponível');
+      await this.exigirEntregavelAberto(m, entregavel, regularizacao);
       const validos:Array<{id:string}>=await m.query(`SELECT c.id FROM comprovantes_evidencia c
         JOIN evidencias_esperadas ev ON ev.id=c.evidencia_esperada_id AND ev.arquivado_em IS NULL
-        WHERE c.id=$1 AND c.contrato_id=$2 AND c.entregavel_id=$3 AND c.status='VERIFICADA'
+        WHERE c.id=$1 AND c.contrato_id=$2 AND c.entregavel_id=$3 AND c.status IN ('PENDENTE_VERIFICACAO','VERIFICADA')
+          AND ($4::boolean IS FALSE OR c.origem_quantidade IS DISTINCT FROM 'NOVA_EXECUCAO')
           AND NOT EXISTS (SELECT 1 FROM comprovantes_evidencia n WHERE n.evidencia_esperada_id=c.evidencia_esperada_id
-            AND (n.criado_em,n.id) > (c.criado_em,c.id))`,[comprovanteId,contratoId,o.entregavelId]);
-      if (!validos.length) throw new ConflictException('Somente comprovantes verificados e atuais do mesmo entregável podem ser vinculados');
+            AND (n.criado_em,n.id) > (c.criado_em,c.id))`,[comprovanteId,contratoId,o.entregavelId,o.status===StatusOcorrencia.CONCLUIDO_PARCIALMENTE]);
+      if (!validos.length) throw new ConflictException('Selecione um comprovante atual, pendente ou verificado, do mesmo entregável');
       const inseridos:Array<{comprovante_id:string}>=await m.query(`INSERT INTO ocorrencia_comprovantes
         (ocorrencia_id,comprovante_id,contrato_id,vinculado_por) VALUES ($1,$2,$3,$4)
         ON CONFLICT DO NOTHING RETURNING comprovante_id`,[id,comprovanteId,contratoId,ator.id]);
       if (!inseridos.length) throw new ConflictException('Comprovante já vinculado');
-      await this.recalcularEstado(m,o,ator);
+      const r = await this.recalcularEstado(m,o,ator);
+      if (r.evidenciasFoto + r.evidenciasRelatorio + r.evidenciasOutras > 0)
+        await iniciarHierarquiaOperacional(m,this.auditoria,ator,contratoId,o.entregavelId);
       await this.auditoria.registrarNaTransacao(m,ator,{
         acao:AcaoAuditoria.OCORRENCIA_EDITADA,entidadeTipo:'OCORRENCIA',entidadeId:id,
         dadosAnteriores:{comprovanteId:null},dadosPosteriores:{comprovanteId,operacao:'VINCULAR_EVIDENCIA'},
@@ -977,9 +1192,14 @@ export class OcorrenciasService implements OnModuleInit {
       await this.validarPermissaoContrato(m,contratoId,ator,'vincularEvidencia');
       await this.bloquearContratoAberto(m,contratoId);
       const o=await m.findOne(Ocorrencia,{where:{id,contratoId},lock:{mode:'pessimistic_write'}});
-      if (!o) throw new NotFoundException('Ocorrência não encontrada');
+      if (!o || o.substituidaEm) throw new NotFoundException('Ocorrência não encontrada');
+      const e = await m.findOneBy(Entregavel, { id: o.entregavelId, contratoId });
+      if (!e) throw new NotFoundException('Entregável não encontrado');
+      await this.exigirEntregavelAberto(m, e);
       if (![StatusOcorrencia.NAO_INICIADO,StatusOcorrencia.EM_ANDAMENTO,StatusOcorrencia.EM_REVISAO].includes(o.status))
         throw new ConflictException('Reabra a ocorrência para alterar evidências vinculadas');
+      const fisico=await m.query(`SELECT 1 FROM comprovantes_evidencia c WHERE c.id=$1 AND c.contrato_id=$2 AND (c.ocorrencia_quantidade_id=$3 AND c.origem_quantidade='NOVA_EXECUCAO' OR EXISTS(SELECT 1 FROM execucoes_entregavel p WHERE p.origem='EVIDENCIA' AND p.origem_id=c.id AND p.ocorrencia_id=$3 AND p.centesimos>0)) AND c.status<>'REJEITADA' LIMIT 1`,[comprovanteId,contratoId,id]);
+      if (fisico.length) throw new ConflictException('Este vínculo identifica a execução física. Corrija ou rejeite a contribuição antes de desvincular.');
       const removidos:Array<{comprovante_id:string}>=await m.query(`DELETE FROM ocorrencia_comprovantes
         WHERE ocorrencia_id=$1 AND comprovante_id=$2 AND contrato_id=$3 RETURNING comprovante_id`,[id,comprovanteId,contratoId]);
       if (!removidos.length) throw new NotFoundException('Vínculo não encontrado');
@@ -997,7 +1217,7 @@ export class OcorrenciasService implements OnModuleInit {
     if (!o) throw new NotFoundException('Ocorrência não encontrada');
     // Apenas eventos dessa ocorrência, já associados ao contrato persistido.
     return this.dataSource.query(`SELECT a.id, a.acao, a.registrado_em AS "registradoEm",
-      a.ator_supertokens_user_id AS "ator", COALESCE(NULLIF(u.nome, ''), u.email) AS "autorNome",
+      a.ator_supertokens_user_id AS "ator", u.email AS "autorNome",
       a.dados_anteriores AS "dadosAnteriores", a.dados_posteriores AS "dadosPosteriores"
       FROM eventos_auditoria a
       LEFT JOIN usuarios u ON u.supertokens_user_id = a.ator_supertokens_user_id
@@ -1022,4 +1242,17 @@ function validarRequisitosMinimos(minimo: number | undefined, formato: 'NENHUMA'
     throw new BadRequestException('Escolha o formato das evidências antes de exigir uma quantidade.');
   if (formato === 'AMBOS' && minimo === 1)
     throw new BadRequestException('Para fotografia e relatório, exija pelo menos dois comprovantes, um de cada formato.');
+}
+
+/** A quantidade de provas configurada deve ser idêntica na geração e no cadastro manual. */
+export function minimoInicialEvidencias(r?: {minimoEvidenciasVerificadas?:number|null; evidenciaExigida?:string|null; minimoFotos?:number|null; minimoRelatorios?:number|null; minimoEvidenciasLivres?:number|null}): number {
+  if (r?.minimoEvidenciasVerificadas != null) return r.minimoEvidenciasVerificadas;
+  if ([r?.minimoFotos,r?.minimoRelatorios,r?.minimoEvidenciasLivres].some(v=>v!=null)) return (r?.minimoFotos??0)+(r?.minimoRelatorios??0)+(r?.minimoEvidenciasLivres??0);
+  return r?.evidenciaExigida==='AMBOS'?2:r?.evidenciaExigida==='FOTO'||r?.evidenciaExigida==='RELATORIO'?1:0;
+}
+
+export function validarEncerramentoOcorrencia(o: Pick<Ocorrencia,'permiteEncerramentoExcepcional'>, r: ResumoMedicao, prazoLiberado:boolean) {
+  if (!o.permiteEncerramentoExcepcional) throw new ConflictException('Encerramento excepcional desabilitado nesta ocorrência');
+  if (r.registrosExecucaoPendentes || r.atividadesPendentes > 0) throw new ConflictException('Resolva as atividades e contribuições pendentes ou em revisão antes de encerrar.');
+  if (r.metaAtingida && r.criteriosOperacionaisAtendidos && prazoLiberado) throw new ConflictException('Todos os requisitos estão atendidos; solicite conclusão em vez de encerramento.');
 }

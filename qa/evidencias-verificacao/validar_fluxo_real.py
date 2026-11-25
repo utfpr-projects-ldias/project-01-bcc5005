@@ -99,6 +99,8 @@ def fluxo(contas,visivel):
                 nome_entregavel='QA verificacao '+nome[-6:]
                 entrega=base.api(admin,f'/contratos/{contrato}/entregaveis','POST',{
                     'etapaId':etapa_id, 'nome':nome_entregavel, 'tipo':'UNICO',
+                    'inicioPrevisto': '2026-11-10',
+                    'peso': '1.0000',
                     'evidenciasEsperadas':[
                         {'tipoEvidencia':'Relatório de QA','descricao':'Planejado','obrigatoria':True},
                         {'tipoEvidencia':'Fotografia de QA','descricao':'Item preservado','obrigatoria':False},
@@ -212,14 +214,15 @@ def fluxo(contas,visivel):
                 modal_evidencia.wait_for(state='visible', timeout=12000)
                 painel=modal_evidencia.get_by_test_id('painel-comprovacao-evidencia')
                 painel.get_by_test_id('status-verificacao').get_by_text('Pendente de verificação').wait_for(timeout=20000)
-                base.exigir(painel.get_by_role('button',name='Substituir comprovante').count()==0,
-                            'Detalhe de consulta expôs substituição')
+                painel.get_by_role('button',name='Substituir comprovante').wait_for(state='visible',timeout=15000)
+                base.exigir(modal_evidencia.get_by_role('button', name='Editar evidência Relatório de QA').count()==0, 'Edição geral redundante ainda presente')
                 modal_evidencia.get_by_role('button', name='Fechar evidência').click()
                 modal_evidencia.wait_for(state='hidden', timeout=15000)
-                modal.get_by_role('tablist',name='Consultar evidências').first.get_by_role('tab',name='Evidências',exact=True).click()
-                modal.get_by_role('button', name='Editar evidência Relatório de QA').click()
+                modal.get_by_role('tablist',name='Consultar evidências').first.get_by_role('tab',name='Ativas',exact=True).click()
+                modal.get_by_role('button', name='Ver detalhes da evidência esperada Relatório de QA').click()
                 modal_evidencia=gestor.get_by_role('dialog',name='Relatório de QA')
                 modal_evidencia.wait_for(state='visible',timeout=15000)
+                modal_evidencia.get_by_role('button', name='Substituir comprovante').wait_for(state='visible', timeout=15000)
                 painel=modal_evidencia.get_by_test_id('painel-comprovacao-evidencia')
                 # O lápis de um arquivo pendente abre SUBSTITUIÇÃO em janela própria.
                 # Ação oficial de Cancelar: não depender de history.back() durante uma
@@ -270,7 +273,7 @@ def fluxo(contas,visivel):
                       aberto: document.querySelectorAll('[data-tec08-modal]').length
                     })''')
                     raise AssertionError(f'Fechar evidência não desmontou o diálogo; histórico: {estado}') from falha
-                modal.get_by_role('tablist',name='Consultar evidências').first.get_by_role('tab',name='Evidências',exact=True).wait_for(timeout=12000)
+                modal.get_by_role('tablist',name='Consultar evidências').first.get_by_role('tab',name='Ativas',exact=True).wait_for(timeout=12000)
                 # A evidência usa history.back() e popstate assincronos. Esperar
                 # terminar a transição antes de fechar o nivel do entregável.
                 gestor.wait_for_function(
@@ -351,6 +354,8 @@ def fluxo(contas,visivel):
                     'etapaId':etapa_arquivo_id,
                     'nome':'Entregável de arquivamento QA '+nome[-6:],
                     'tipo':'UNICO',
+                    'inicioPrevisto': '2026-11-10',
+                    'peso': '1.0000',
                     'evidenciasEsperadas':[
                         {'tipoEvidencia':'Relatório obrigatório de QA','obrigatoria':True},
                         {'tipoEvidencia':'Anexo opcional de QA','obrigatoria':False},

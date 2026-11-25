@@ -8,10 +8,10 @@ const resumoIncompleto = { entregavel: { obrigatorias: 1, verificadas: 0 } } as 
 test('comprovação completa não promove etapa sem status operacional concluído', () => {
   expect(situacaoDocumentalEtapa(etapa, [entregavel], resumoCompleto)).toBe('EM_ANDAMENTO');
 });
-test('retirar comprovacao ou arquivar ultimo entregavel regride indicador documental', () => {
+test('retirar comprovação ou arquivar último entregável não muda status operacional persistido', () => {
   const concluida = { ...etapa, status: 'CONCLUIDA' as const };
-  expect(situacaoDocumentalEtapa(concluida, [entregavel], resumoIncompleto)).toBe('EM_ANDAMENTO');
-  expect(situacaoDocumentalEtapa(concluida, [], {})).toBe('EM_ANDAMENTO');
+  expect(situacaoDocumentalEtapa(concluida, [entregavel], resumoIncompleto)).toBe('CONCLUIDA');
+  expect(situacaoDocumentalEtapa(concluida, [], {})).toBe('CONCLUIDA');
   expect(situacaoDocumentalEtapa(concluida, [{ ...entregavel, statusExecucao: 'CONCLUIDO' } as Entregavel], resumoCompleto)).toBe('CONCLUIDA');
 });
 test('nao transforma ausencia de consulta em falta de comprovacao', () => {
@@ -89,7 +89,7 @@ test('etapa só exibe Concluída quando cada entregável ativo está concluído,
   const arquivada = { ...entregavel, id: 'outra', statusExecucao: 'NAO_INICIADO', arquivadoEm: '2026-11-08T01:00:00Z' } as Entregavel;
   const concluida = { ...etapa, status: 'CONCLUIDA' as const };
   expect(situacaoDocumentalEtapa(concluida, [ativa, arquivada], resumoCompleto)).toBe('CONCLUIDA');
-  expect(situacaoDocumentalEtapa(concluida, [{ ...ativa, statusExecucao: 'EM_ANDAMENTO' }], resumoCompleto)).toBe('EM_ANDAMENTO');
+  expect(situacaoDocumentalEtapa(concluida, [{ ...ativa, statusExecucao: 'EM_ANDAMENTO' }], resumoCompleto)).toBe('CONCLUIDA');
 });
 
 test('opcional sem comprovante não bloqueia obrigatória já verificada', () => {

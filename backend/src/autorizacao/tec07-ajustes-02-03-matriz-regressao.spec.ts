@@ -32,7 +32,7 @@ describe('TEC07-AJUSTES-02-03 — matriz completa de regressão RF-39/RF-40', ()
     for (const [acao, operacao] of casos) {
       const escopoOperacional = escopoPara(operacao);
       expect(await politica.permitido(usuario(PerfilUsuario.ADMINISTRADOR),
-        { acao, escopoOperacional }, CONTRATO)).toBe(true);
+        { acao, escopoOperacional }, CONTRATO)).toBe(operacao.classe === 'leitura' || Boolean(ACAO_PERMISSAO[acao]));
       expect(await politica.permitido(usuario(PerfilUsuario.ADMINISTRADOR),
         { acao, escopoOperacional }, 'outro-id')).toBe(false);
       expect(await politica.permitido(usuario(PerfilUsuario.ADMINISTRADOR), { acao }, CONTRATO)).toBe(false);
@@ -65,7 +65,7 @@ describe('TEC07-AJUSTES-02-03 — matriz completa de regressão RF-39/RF-40', ()
       for (const perfil of [PerfilUsuario.GESTOR, PerfilUsuario.COLABORADOR]) {
         const esperado = chave
           ? permissoesEfetivas(perfil, false, null)[chave]
-          : operacao.classe !== 'planejamento';
+          : operacao.classe === 'leitura';
         expect(await politica.permitido(usuario(perfil), politicaAlvo, CONTRATO)).toBe(esperado);
       }
     }
@@ -77,12 +77,12 @@ describe('TEC07-AJUSTES-02-03 — matriz completa de regressão RF-39/RF-40', ()
       const chave = ACAO_PERMISSAO[acao];
       const gestorEsperado = chave
         ? permissoesEfetivas(PerfilUsuario.GESTOR, true, null)[chave]
-        : true;
+        : operacao.classe === 'leitura';
       expect(await politica.permitido(usuario(PerfilUsuario.GESTOR), politicaAlvo, CONTRATO))
         .toBe(gestorEsperado);
       const colaboradorEsperado = chave
         ? permissoesEfetivas(PerfilUsuario.COLABORADOR, true, null)[chave]
-        : operacao.classe !== 'planejamento';
+        : operacao.classe === 'leitura';
       expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR), politicaAlvo, CONTRATO))
         .toBe(colaboradorEsperado);
     }

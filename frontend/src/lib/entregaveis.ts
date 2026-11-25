@@ -20,12 +20,14 @@ export type Entregavel = {
   nome: string; descricao: string | null; tipo: TipoEntregavel;
   responsavelId: string | null;
   responsavel?: { nome: string | null; email: string } | null;
-  inicioPrevisto: string | null; terminoPrevisto: string | null; agendaInicioFuturo?: string | null;
-  quantidadePrevista: string | null; quantidadeRealizada: string | null;
+  inicioPrevisto: string | null; terminoPrevisto: string | null; criadoEm?: string | null; agendaInicioFuturo?: string | null;
+  quantidadePrevista: string | null; quantidadeRealizada: string | null; quantidadeDiretaIntegrada?:boolean;
   unidadeMedida: string | null; periodicidade: PeriodicidadeEntregavel | null;
-  configuracaoPeriodicidade: { versao: 1 } | null;
+  configuracaoPeriodicidade: { versao: 1; modoRegistro?: 'DESCRITIVO' | 'QUANTITATIVO' } | null;
   peso: string | null; criterioConclusao: string | null;
-  statusExecucao: 'NAO_INICIADO' | 'EM_ANDAMENTO' | 'PENDENTE_CONCLUSAO' | 'PENDENTE_ENCERRAMENTO' | 'CONCLUIDO' | 'FINALIZADO' | null;
+  regularizacaoDocumentalSolicitada?: boolean;
+  atrasado?: boolean; finalizadoComAtraso?: boolean;
+  statusExecucao: 'NAO_INICIADO' | 'EM_ANDAMENTO' | 'PENDENTE_CONCLUSAO' | 'PENDENTE_CONCLUSAO_PARCIAL' | 'PENDENTE_ENCERRAMENTO' | 'CONCLUIDO' | 'CONCLUIDO_PARCIALMENTE' | 'FINALIZADO' | null;
   motivoFinalizacao?: string | null; percentualExecucao: string | null;
   situacaoComprovacao: 'SEM_EVIDENCIA' | 'EVIDENCIA_PARCIAL' | 'COMPROVADO' | null;
   observacoes: string | null; arquivadoEm?: string | null; reabertoEm?: string | null; evidenciasEsperadas: EvidenciaEsperada[];
@@ -64,8 +66,15 @@ export const listarEntregaveis = (contratoId: string, signal?: AbortSignal) =>
 export const detalharEntregavel = (contratoId: string, entregavelId: string, signal?: AbortSignal) =>
   consultar<Entregavel>(`${base(contratoId)}/${encodeURIComponent(entregavelId)}`, signal);
 
+export type ElegibilidadeConclusaoEntregavel = {
+  podeSolicitarConclusao: boolean; podeSolicitarParcial: boolean; podeAprovar: boolean; podeSolicitarEncerramento: boolean; podeAprovarEncerramento?: boolean;
+  impedimentos: string[]; pendencias: string[]; documentacaoCompleta: boolean; semExigencias: boolean; aptidaoFisica: boolean; situacaoComprovacao?: Entregavel['situacaoComprovacao'];
+};
+export const consultarElegibilidadeEntregavel = (contratoId: string, id: string, signal?: AbortSignal) =>
+  consultar<ElegibilidadeConclusaoEntregavel>(`${base(contratoId)}/${encodeURIComponent(id)}/elegibilidade-conclusao`, signal);
+
 /** Contador de evidências obrigatórias verificadas: NÃO é avanço físico. */
-export type ResumoDocumentalEntregavel = { obrigatorias: number; verificadas: number; total?: number; verificadasTotal?: number };
+export type ResumoDocumentalEntregavel = { obrigatorias: number; verificadas: number; total?: number; verificadasTotal?: number; ocorrenciasExigidas?: number; ocorrenciasAtendidas?: number; situacaoComprovacao?: string; ocorrenciasTotal?: number; ocorrenciasFinalizadas?: number; atividadesTotal?: number; atividadesVerificadas?: number; atividadesIds?: string[]; atividadesIdsVerificadas?: string[]; exigenciasDocumentaisTotal?: number; exigenciasDocumentaisAtendidas?: number };
 export const resumoDocumentalContrato = (contratoId: string, signal?: AbortSignal) =>
   consultar<Record<string, ResumoDocumentalEntregavel>>(`${base(contratoId)}/resumo-documental`, signal);
 
@@ -119,7 +128,8 @@ async function alterarEntregavel<T>(caminho: string, metodo: 'POST' | 'PATCH', d
     };
     let descricao = mensagens[resposta.status] ?? 'Falha ao salvar o planejamento. Tente novamente.';
     if (resposta.status === 400 || resposta.status === 409) {
-      const corpo: unknown = await resposta.json().catch(() => null);
+      let corpo: unknown = null;
+      try { if (typeof resposta.json === 'function') corpo = await resposta.json(); } catch { /* Respostas HTTP sem JSON não mascaram o status original. */ }
       const mensagem = corpo && typeof corpo === 'object' && 'message' in corpo
         ? (corpo as { message?: unknown }).message : null;
       const texto = typeof mensagem === 'string' ? mensagem
@@ -143,7 +153,7 @@ export const editarEntregavel = (contratoId: string, id: string, dados: Partial<
 /** Conclusão explícita de entregável, validada pelo backend e auditada na transação. */
 /** Solicitação e aprovação de encerramento administrativo não alteram o avanço físico. */
 export async function transicaoAdministrativaEntregavel(c: string, id: string,
-  acao: 'solicitar-conclusao' | 'solicitar-encerramento' | 'aprovar-encerramento' | 'devolver-solicitacao', motivo?: string): Promise<Entregavel> {
+  acao: 'solicitar-conclusao' | 'solicitar-conclusao-parcial' | 'solicitar-encerramento' | 'aprovar-encerramento' | 'devolver-solicitacao', motivo?: string): Promise<Entregavel> {
   let resposta: Response;
   try {
     resposta = await fetch(`${API}${base(c)}/${encodeURIComponent(id)}/${acao}`, {

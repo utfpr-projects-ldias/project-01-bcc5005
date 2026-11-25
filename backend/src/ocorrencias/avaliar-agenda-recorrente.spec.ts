@@ -1,4 +1,4 @@
-import { avaliarAgendaRecorrente } from './avaliar-agenda-recorrente.js';
+import { avaliarAgendaRecorrente, avaliarPesosAgenda } from './avaliar-agenda-recorrente.js';
 import type { Ocorrencia } from './ocorrencia.entity.js';
 const o = (inicio: string, fim: string, status: string) => ({periodoInicio:inicio,periodoFim:fim,status}) as Ocorrencia;
 
@@ -19,5 +19,17 @@ describe('HU09/TEC09 — grade replanejada com histórico preservado', () => {
       o('2026-12-01','2026-12-01','CONCLUIDO'),
       o('2026-12-02','2026-12-02','ENCERRADA'),
     ],dias,'2026-12-01')).toEqual({completa:true,total:3,concluidas:2});
+  });
+});
+
+ describe('pesos vigentes da agenda',()=>{
+  it('usa exatamente os mesmos pesos no painel e no aceite',()=>{
+    expect(avaliarPesosAgenda([{pesoPeriodo:'20.0000',status:'CONCLUIDO' as Ocorrencia['status']},{pesoPeriodo:'80.0000',status:'NAO_INICIADO' as Ocorrencia['status']}])).toEqual({configurados:true,validos:true,percentual:20});
+  });
+  it('não admite encerramento com distribuição incompleta',()=>{
+    expect(avaliarPesosAgenda([{pesoPeriodo:'20.0000',status:'CONCLUIDO' as Ocorrencia['status']}])).toEqual({configurados:true,validos:false,percentual:null});
+  });
+  it('mantém o modo simples se não há pesos',()=>{
+    expect(avaliarPesosAgenda([{pesoPeriodo:null,status:'CONCLUIDO' as Ocorrencia['status']}])).toEqual({configurados:false,validos:true,percentual:null});
   });
 });

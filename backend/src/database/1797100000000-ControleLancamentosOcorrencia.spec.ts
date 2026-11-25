@@ -1,10 +1,11 @@
+import { jest } from '@jest/globals';
 import { ControleLancamentosOcorrencia1797100000000 } from './migrations/1797100000000-ControleLancamentosOcorrencia.js';
 
 describe('migration aditiva dos lançamentos de ocorrências', () => {
   it('cria bloqueio, exclusão lógica e índice restrito aos lançamentos ativos', async () => {
-    const query = jest.fn().mockResolvedValue(undefined);
+    const query = jest.fn<(...comandos: string[]) => Promise<unknown>>(async () => undefined);
     await new ControleLancamentosOcorrencia1797100000000().up({ query } as never);
-    const sql = query.mock.calls.map(([comando]: [string]) => comando).join(' ');
+    const sql = query.mock.calls.map(([comando]) => comando).join(' ');
     expect(sql).toContain('bloqueado_em');
     expect(sql).toContain('excluido_em');
     expect(sql).toContain('justificativa_exclusao');

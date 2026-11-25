@@ -12,7 +12,7 @@ function ordemEmFonte(arquivo: string, marcadores: string[]) {
 
 test('entregável mantém identificação, rastreabilidade, evidências e atividades nesta ordem', () => {
   ordemEmFonte('src/app/contratos/components/conteudo-entregavel.tsx', [
-    'Quadro titulo="Identificação e planejamento"',
+    'Informações do entregável',
     'Rastreabilidade do entregável',
     'aria-label="Consultar evidências"',
     '<AtividadesVinculadas contratoId={item.contratoId}',
@@ -21,7 +21,7 @@ test('entregável mantém identificação, rastreabilidade, evidências e ativid
 
 test('etapa mantém identificação e rastreabilidade antes dos entregáveis', () => {
   ordemEmFonte('src/app/contratos/components/painel-etapas.tsx', [
-    '<dl data-tec08-secao-contextual', '<HistoricoEtapa', '<EntregaveisDaEtapa',
+    'aria-label="Informações da etapa"', '<HistoricoEtapa', '<EntregaveisDaEtapa',
   ]);
 });
 
@@ -31,8 +31,9 @@ test('evidência exibe rastreabilidade antes da comprovação documental', () =>
   ]);
 });
 
-test('contrato posiciona rastreabilidade após identificação e antes de observações', () => {
+test('contrato mantém identificação, vigência, agenda e histórico na visão geral sem abas redundantes', () => {
   ordemEmFonte('src/app/contratos/[id]/page.tsx', [
-    'aria-label="Informações do contrato"', '<HistoricoContrato', 'aria-label="Descrição e observações"',
+    'aria-label="Visão geral do contrato"', 'pi-faixa-vigencia',
+    'Informações do contrato', '<AgendaContrato', '<HistoricoContrato',
   ]);
 });

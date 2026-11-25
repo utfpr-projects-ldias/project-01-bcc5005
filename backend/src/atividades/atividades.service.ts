@@ -1,24 +1,29 @@
+import { iniciarHierarquiaOperacional } from '../execucao/inicio-operacional.js';
+import { snapshotParcela, snapshotMedicoesDiretas, snapshotDeclaracoesPercentuais } from '../execucao/snapshot-parcela.js';
+import { ExecucaoLancamento } from '../execucao/execucao-lancamento.entity.js';
+import { exigirSaldoQuantidadeDireta, exigirSaldoQuantidadeOcorrencia, listarContribuicoesQuantitativas, listarExecucoesQuantitativas } from '../entregaveis/quantidade-evidencias.js';
+import { criarParcela, parcelas, validarSaldoParcelas, exigirPermissaoParcela } from '../execucao/parcelas-execucao.js';
 import {
   BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, type EntityManager, type Repository } from 'typeorm';
+import { In, ILike, IsNull, type EntityManager, type Repository } from 'typeorm';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
 import { ResolverEscopoContratoService } from '../autorizacao/resolver-escopo-contrato.service.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
 import { uuidValido } from '../autorizacao/politicas-operacionais.js';
 import { Entregavel } from '../entregaveis/entregavel.entity.js';
-import { concluirEntregavelAposAtividade, concluirEtapaAposFilhos } from '../entregaveis/conclusao-documental.js';
 import { Contrato } from '../contratos/contrato.entity.js';
 import { Etapa } from '../etapas/etapa.entity.js';
 import { Ocorrencia } from '../ocorrencias/ocorrencia.entity.js';
 import { PermissaoContrato } from '../autorizacao/permissao-contrato.entity.js';
 import { permissoesEfetivas } from '../autorizacao/permissoes-granulares.js';
+import { Usuario } from '../usuarios/usuario.entity.js';
 import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
-import { OrigemOcorrencia } from '../ocorrencias/origem-ocorrencia.enum.js';
 import { StatusOcorrencia } from '../ocorrencias/status-ocorrencia.enum.js';
-import { resumoMedicao, proximoStatusAutomatico } from '../ocorrencias/medicao-ocorrencia.js';
+import { resumoMedicao, proximoStatusAutomatico, conclusaoTemporalPermitida } from '../ocorrencias/medicao-ocorrencia.js';
+import { inicioDiaCivilUtc, proximoDiaCivil, hojeCivil } from '../common/data-civil.js';
 import type { MedicaoAtividadeDto } from './dto/medicao-atividade.dto.js';
 import { AtividadeEntity } from './atividade.entity.js';
 import type { CreateAtividadeDto } from './dto/create-atividade.dto.js';
@@ -37,8 +42,9 @@ function instante(s: string): Date {
 }
 function resumo(a: AtividadeEntity) {
   return {
+    participantes: a.participantes ?? [], local: a.local ?? null, duracao: a.duracao ?? null, observacoes: a.observacoes ?? null,
     titulo: a.titulo, dataHora: a.dataHora.toISOString(), tipo: a.tipo,
-    descricao: a.descricao, responsavel: a.responsavel,
+    descricao: a.descricao, responsavel: a.responsavel, responsavelId: a.responsavelId,
     ocorrenciaId: a.ocorrenciaId ?? null, ocorrenciaIds: (a.ocorrencias ?? []).map(o => o.id).sort(), quantidadeExecucao: a.quantidadeExecucao ?? null,
     entregavelIds: a.entregaveis.map(e => e.id).sort(),
     status: a.status, verificadaEm: a.verificadaEm?.toISOString() ?? null, arquivadaEm: a.arquivadaEm?.toISOString() ?? null, excluidaEm: a.excluidaEm?.toISOString() ?? null,
@@ -91,18 +97,18 @@ export class AtividadesService implements OnModuleInit {
     const contrato = await manager.findOne(Contrato, {
       where: { id: contratoId }, lock: { mode: 'pessimistic_write' },
     });
-    if (!contrato || contrato.arquivadoEm ||
+    if (!contrato || contrato.arquivadoEm || contrato.conclusaoSolicitadaEm ||
       !['PLANEJAMENTO', 'EM_EXECUCAO'].includes(contrato.status)) {
       throw new ConflictException('Reabra ou retome o contrato antes de registrar atividades');
     }
     const encontrados = await manager.find(Entregavel, { where: { id: In(ids), contratoId } });
-    if (encontrados.length !== ids.length || encontrados.some(e => e.arquivadoEm !== null || ['CONCLUIDO','FINALIZADO','PENDENTE_ENCERRAMENTO','PENDENTE_CONCLUSAO'].includes(e.statusExecucao ?? ''))) {
+    if (encontrados.length !== ids.length || encontrados.some(e => e.arquivadoEm !== null || ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','PENDENTE_ENCERRAMENTO','PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL'].includes(e.statusExecucao ?? ''))) {
       throw new ConflictException('É necessário vincular apenas entregáveis abertos do mesmo contrato');
     }
     const idsEtapas = [...new Set(encontrados.map(e => e.etapaId))];
     const etapas = await manager.find(Etapa, { where: { id: In(idsEtapas), contratoId } });
     if (etapas.length !== idsEtapas.length || etapas.some(e =>
-      e.arquivadoEm || e.conclusaoSolicitadaEm || e.encerramentoSolicitadoEm || e.status === 'CONCLUIDA' || e.status === 'ENCERRADA')) {
+      e.arquivadoEm || e.conclusaoSolicitadaEm || e.encerramentoSolicitadoEm || ['CONCLUIDA','CONCLUIDO_PARCIALMENTE','ENCERRADA','FINALIZADA'].includes(e.status))) {
       throw new ConflictException('Reabra a etapa antes de vincular uma nova atividade');
     }
     return encontrados;
@@ -117,8 +123,8 @@ export class AtividadesService implements OnModuleInit {
     if (!o || o.substituidaEm || !entregaveis.some(e => e.id === o.entregavelId)) {
       throw new ConflictException('A ocorrência precisa pertencer a um dos entregáveis vinculados do mesmo contrato e estar ativa');
     }
-    if ([StatusOcorrencia.PENDENTE_CONCLUSAO, StatusOcorrencia.CONCLUIDO, StatusOcorrencia.PENDENTE_ENCERRAMENTO, StatusOcorrencia.ENCERRADA].includes(o.status)) {
-      throw new ConflictException('Ocorrência pendente ou concluída: somente após reabertura autorizada é permitido alterar atividades vinculadas');
+    if ([StatusOcorrencia.PENDENTE_CONCLUSAO, StatusOcorrencia.PENDENTE_CONCLUSAO_PARCIAL, StatusOcorrencia.CONCLUIDO, StatusOcorrencia.CONCLUIDO_PARCIALMENTE, StatusOcorrencia.PENDENTE_ENCERRAMENTO, StatusOcorrencia.ENCERRADA].includes(o.status)) {
+      throw new ConflictException(`A ocorrência “${(o.titulo??o.id).slice(0,80)}” está em ${o.status.toLocaleLowerCase('pt-BR').replaceAll('_',' ')}. ${o.status.startsWith('PENDENTE_')?'Cancele a solicitação vigente':'Reabra a ocorrência'} antes de alterar ou reabrir a atividade. Esta proteção também se aplica ao administrador.`);
     }
     if (quantidade != null && (o.modoRegistro !== 'QUANTITATIVO' || o.metaQuantidade == null)) {
       throw new BadRequestException('Quantidade só pode ser informada para ocorrência com meta quantitativa');
@@ -129,7 +135,10 @@ export class AtividadesService implements OnModuleInit {
    * A quantidade física só pertence à ocorrência primária, nunca é duplicada nas demais. */
   private async verificarOcorrencias(manager: EntityManager, contratoId: string, ids: string[],
     entregaveis: Entregavel[], primaria: string | null | undefined, quantidade: string | null | undefined): Promise<Ocorrencia[]> {
-    if (new Set(ids.map(id => id.toLowerCase())).size !== ids.length || ids.some(id => !uuidValido(id)))
+    // Valide ANTES de normalizar: mocks, legados e chamadas internas podem
+    // fornecer valores inesperados e devem receber HTTP 400, nunca TypeError/500.
+    if (ids.some(id => typeof id !== 'string' || !uuidValido(id)) ||
+        new Set(ids.map(id => id.toLowerCase())).size !== ids.length)
       throw new BadRequestException('Informe ocorrências distintas e válidas.');
     if (primaria && !ids.includes(primaria)) throw new BadRequestException('A ocorrência de medição deve estar entre as ocorrências vinculadas.');
     if (quantidade != null && !primaria) throw new BadRequestException('Selecione uma ocorrência principal para informar quantidade.');
@@ -141,6 +150,58 @@ export class AtividadesService implements OnModuleInit {
       vinculadas.push(registro);
     }
     return vinculadas;
+  }
+
+  private async exigirExecucaoSemDuplicidade(m: EntityManager, contratoId: string, atividadeId: string) {
+    const [conflito] = await m.query(`SELECT EXISTS(SELECT 1 FROM atividade_comprovantes ac
+      JOIN comprovantes_evidencia c ON c.id=ac.comprovante_id AND c.contrato_id=ac.contrato_id
+      JOIN evidencias_esperadas ev ON ev.id=c.evidencia_esperada_id AND ev.arquivado_em IS NULL
+      JOIN atividades a ON a.id=ac.atividade_id AND a."contratoId"=ac.contrato_id
+      LEFT JOIN atividade_ocorrencia_medicoes am ON am.atividade_id=a.id AND am.ocorrencia_id=c.ocorrencia_quantidade_id
+      WHERE ac.contrato_id=$1 AND ac.atividade_id=$2 AND c.status IN ('PENDENTE_VERIFICACAO','VERIFICADA')
+        AND NOT EXISTS(SELECT 1 FROM comprovantes_evidencia n WHERE n.evidencia_esperada_id=c.evidencia_esperada_id AND (n.criado_em,n.id)>(c.criado_em,c.id)) AND (
+          (c.origem_quantidade='NOVA_EXECUCAO' AND c.quantidade_declarada>0 AND COALESCE(am.quantidade,CASE WHEN a."ocorrenciaId"=c.ocorrencia_quantidade_id THEN a.quantidade_execucao ELSE 0 END)>0)
+          OR (c.origem_quantidade='NOVA_EXECUCAO' AND c.ocorrencia_quantidade_id IS NULL AND c.quantidade_declarada>0 AND EXISTS(SELECT 1 FROM atividade_entregavel_medicoes dm WHERE dm.atividade_id=a.id AND dm.entregavel_id=c.entregavel_id AND dm.contrato_id=c.contrato_id AND dm.quantidade>0))
+          OR EXISTS(SELECT 1 FROM execucoes_entregavel p JOIN execucoes_entregavel ep ON ep.contrato_id=p.contrato_id AND ep.entregavel_id=p.entregavel_id AND ep.ocorrencia_id IS NOT DISTINCT FROM p.ocorrencia_id WHERE p.origem='ATIVIDADE' AND p.origem_id=a.id AND p.centesimos>0 AND ep.origem='EVIDENCIA' AND ep.origem_id=c.id AND ep.centesimos>0))) AS duplicada`,[contratoId,atividadeId]);
+    if (conflito?.duplicada) throw new ConflictException('A evidência vinculada já representa esta execução. Corrija o vínculo de contribuição antes de continuar.');
+  }
+
+  /** Referências de comprovação não somam execução e devem continuar válidas na decisão. */
+  private async validarReferenciasNaDecisao(m: EntityManager, registro: AtividadeEntity) {
+    if (!registro.entregaveis.length) return;
+    const refs = await m.query(`SELECT ocorrencia_id AS "ocorrenciaId", referencia_execucao AS referencia
+      FROM atividade_ocorrencia_medicoes WHERE contrato_id=$1 AND atividade_id=$2 AND referencia_execucao IS NOT NULL`,
+      [registro.contratoId, registro.id]) as {ocorrenciaId:string;referencia:string}[];
+    if (refs.length) {
+      const fontes = await listarExecucoesQuantitativas(m, registro.contratoId, [...new Set(refs.map(r=>r.ocorrenciaId))]);
+      if (refs.some(r=>!fontes.some(f=>f.ocorrenciaId===r.ocorrenciaId && f.referencia===r.referencia && Number(f.quantidade)>0)))
+        throw new ConflictException('Uma execução quantitativa referenciada não está mais reconhecida. Regularize a referência antes de verificar.');
+    }
+    for (const e of registro.entregaveis.filter(e=>e.execucoesIntegradas)) {
+      const linhas = await parcelas(m,e);
+      if (linhas.some(l=>l.origem==='ATIVIDADE' && l.origemId===registro.id && l.referenciaId &&
+        !linhas.some(f=>f.id===l.referenciaId && f.reconhecido>0 && f.ocorrenciaId===l.ocorrenciaId)))
+        throw new ConflictException('Uma execução percentual referenciada não está mais reconhecida. Regularize a referência antes de verificar.');
+    }
+  }
+
+  /** Não invalida uma fonte reconhecida com comprovações vigentes silenciosamente. */
+  private async protegerReferenciasDependentes(m: EntityManager, registro: AtividadeEntity) {
+    if (!registro.entregaveis.length) return;
+    const [r] = await m.query(`SELECT EXISTS(
+      SELECT 1 FROM atividade_ocorrencia_medicoes am JOIN atividades a ON a.id=am.atividade_id AND a."contratoId"=am.contrato_id
+      WHERE am.contrato_id=$1 AND am.referencia_execucao=$3 AND a."excluidaEm" IS NULL AND a.status='VERIFICADA'
+      UNION ALL
+      SELECT 1 FROM comprovantes_evidencia c JOIN evidencias_esperadas ev ON ev.id=c.evidencia_esperada_id
+      WHERE c.contrato_id=$1 AND c.origem_quantidade='COMPROVACAO' AND c.referencia_execucao=$3 AND ev.arquivado_em IS NULL
+        AND c.status='VERIFICADA' AND ev.reaberto_em IS NULL AND NOT EXISTS(SELECT 1 FROM comprovantes_evidencia n WHERE n.evidencia_esperada_id=c.evidencia_esperada_id AND (n.criado_em,n.id)>(c.criado_em,c.id))
+      UNION ALL
+      SELECT 1 FROM execucoes_entregavel fonte JOIN execucoes_entregavel ref ON ref.referencia_id=fonte.id AND ref.contrato_id=fonte.contrato_id
+      WHERE fonte.contrato_id=$1 AND fonte.origem='ATIVIDADE' AND fonte.origem_id=$2
+        AND ((ref.origem='ATIVIDADE' AND EXISTS(SELECT 1 FROM atividades a WHERE a.id=ref.origem_id AND a."contratoId"=$1 AND a."excluidaEm" IS NULL AND a.status='VERIFICADA'))
+          OR (ref.origem='EVIDENCIA' AND EXISTS(SELECT 1 FROM comprovantes_evidencia c JOIN evidencias_esperadas ev ON ev.id=c.evidencia_esperada_id WHERE c.id=ref.origem_id AND ev.arquivado_em IS NULL AND c.status='VERIFICADA' AND ev.reaberto_em IS NULL AND NOT EXISTS(SELECT 1 FROM comprovantes_evidencia n WHERE n.evidencia_esperada_id=c.evidencia_esperada_id AND (n.criado_em,n.id)>(c.criado_em,c.id)))))
+      ) AS dependente`, [registro.contratoId,registro.id,`atividade:${registro.id}`]) as {dependente:boolean}[];
+    if (r?.dependente) throw new ConflictException('Esta execução possui comprovações referenciadas. Reabra primeiro as comprovações verificadas que dependem desta execução.');
   }
 
   private async salvarMedicoes(manager: EntityManager, contratoId:string, atividadeId:string,
@@ -157,21 +218,27 @@ export class AtividadesService implements OnModuleInit {
       if (!oc || oc.modoRegistro !== 'QUANTITATIVO' || oc.metaQuantidade == null)
         throw new BadRequestException('Medição exige uma ocorrência quantitativa com meta');
     }
+    const referencias: {ocorrenciaId:string;referencia:string}[]=await manager.query(`SELECT ocorrencia_id AS "ocorrenciaId", referencia_execucao AS referencia FROM atividade_ocorrencia_medicoes WHERE atividade_id=$1 AND contrato_id=$2 AND referencia_execucao IS NOT NULL`,[atividadeId,contratoId]);
+    if(referencias.some(ref=>!ids.has(ref.ocorrenciaId)||medicoes.some(item=>item.ocorrenciaId===ref.ocorrenciaId&&Number(item.quantidade)!==0)))throw new ConflictException('Uma atividade comprobatória não pode registrar novamente a execução referenciada.');
     await manager.query(`DELETE FROM atividade_ocorrencia_medicoes WHERE atividade_id=$1 AND contrato_id=$2`,
       [atividadeId,contratoId]);
     for (const item of medicoes) await manager.query(`INSERT INTO atividade_ocorrencia_medicoes
       (atividade_id,ocorrencia_id,contrato_id,quantidade) VALUES ($1,$2,$3,$4)`,
       [atividadeId,item.ocorrenciaId,contratoId,item.quantidade]);
+    for(const ref of referencias)await manager.query(`INSERT INTO atividade_ocorrencia_medicoes(atividade_id,ocorrencia_id,contrato_id,quantidade,referencia_execucao) VALUES ($1,$2,$3,0,$4) ON CONFLICT (atividade_id,ocorrencia_id) DO UPDATE SET referencia_execucao=EXCLUDED.referencia_execucao`,[atividadeId,ref.ocorrenciaId,contratoId,ref.referencia]);
   }
 
   private async recalcularOcorrencia(manager: EntityManager,id: string | null | undefined,ator:UsuarioAutenticado) {
     if (!id) return;
     const o = await manager.findOne(Ocorrencia,{where:{id},lock:{mode:'pessimistic_write'}});
     if (!o || o.substituidaEm) return;
-    if ([StatusOcorrencia.PENDENTE_CONCLUSAO,StatusOcorrencia.CONCLUIDO,StatusOcorrencia.PENDENTE_ENCERRAMENTO,
+    if ([StatusOcorrencia.PENDENTE_CONCLUSAO,StatusOcorrencia.PENDENTE_CONCLUSAO_PARCIAL,StatusOcorrencia.CONCLUIDO,StatusOcorrencia.CONCLUIDO_PARCIALMENTE,StatusOcorrencia.PENDENTE_ENCERRAMENTO,
       StatusOcorrencia.ENCERRADA].includes(o.status)) throw new ConflictException('Ocorrência bloqueada até reabertura');
     const r = await resumoMedicao(manager,o);
-    const novo = proximoStatusAutomatico(o,r) as StatusOcorrencia;
+    const entregavel = await manager.findOneBy(Entregavel, { id: o.entregavelId, contratoId: o.contratoId });
+    if (!entregavel) throw new NotFoundException('Entregável da ocorrência indisponível');
+    const novo = proximoStatusAutomatico(o,r,
+      conclusaoTemporalPermitida(entregavel.tipo, entregavel.terminoPrevisto)) as StatusOcorrencia;
     if (o.status === novo) return;
     const anterior=o.status;o.status=novo;
     await manager.save(Ocorrencia,o);
@@ -181,6 +248,23 @@ export class AtividadesService implements OnModuleInit {
         quantidadeRegistrada:r.quantidadeRegistrada, situacaoComprovacao:r.situacaoComprovacao,
         motivo:novo===StatusOcorrencia.PENDENTE_CONCLUSAO?'PRONTA_AGUARDANDO_APROVACAO':'ATIVIDADES_RECALCULADAS'},
     });
+  }
+
+  private async idsResponsaveis(manager: EntityManager, contratoId: string, ator: UsuarioAutenticado): Promise<string[] | null> {
+    if (ator.perfil === PerfilUsuario.ADMINISTRADOR) return null;
+    const vinculos = await manager.find(PermissaoContrato, { where: { contratoId }, select: { usuarioId: true } });
+    return [...new Set([ator.id, ...vinculos.map(v => v.usuarioId)])];
+  }
+
+  async consultarResponsaveis(contratoId: string, busca: string | undefined, ator: UsuarioAutenticado) {
+    if (busca !== undefined && (typeof busca !== 'string' || busca.length > 100)) throw new BadRequestException('Busca inválida');
+    const ids = await this.idsResponsaveis(this.repo.manager, contratoId, ator);
+    const termo = (busca ?? '').trim().replace(/[%_\\]/g, c => '\\'+c);
+    const [itens, total] = await this.repo.manager.getRepository(Usuario).findAndCount({
+      where: { ativo:true, ...(ids ? { id: In(ids) } : {}), ...(termo ? { email: ILike(`%${termo}%`) } : {}) },
+      select: { id:true, email:true }, order:{ email:'ASC' }, take:30,
+    });
+    return { itens, total };
   }
 
   /** Mesma validação e vínculo local para criação simples ou criação atômica multicontrato. */
@@ -200,55 +284,94 @@ export class AtividadesService implements OnModuleInit {
         await this.validarOcorrencia(manager, contratoId, item.ocorrenciaId, entregaveis, item.quantidade);
       if (dto.medicoes && dto.quantidadeExecucao != null)
         throw new BadRequestException('Não misture a medição única legada com quantidades por ocorrência');
+      let responsavelSelecionado: Usuario | null = null;
+      if (dto.responsavelId) {
+        const ids = await this.idsResponsaveis(manager, contratoId, ator);
+        if (ids && !ids.includes(dto.responsavelId)) throw new ForbiddenException('Responsável não pertence ao contexto autorizado do contrato');
+        responsavelSelecionado = await manager.findOneBy(Usuario, { id:dto.responsavelId, ativo:true });
+        if (!responsavelSelecionado) throw new BadRequestException('Responsável indisponível');
+      }
       const registro = manager.create(AtividadeEntity, {
         contratoId, atividadeCompartilhadaId: grupoId, titulo: dto.titulo.trim(), dataHora, descricao: dto.descricao.trim(), tipo: dto.tipo.trim(),
-        responsavelId: ator.id, responsavel: dto.responsavel?.trim() || ator.nome || ator.email,
+        responsavelId: responsavelSelecionado?.id ?? ator.id, responsavel: responsavelSelecionado?.email ?? (dto.responsavel?.trim() || ator.nome || ator.email),
         participantes: dto.participantes ?? [], local: dto.local?.trim() || null,
         duracao: dto.duracao?.trim() || null, observacoes: dto.observacoes?.trim() || null, entregaveis, ocorrencias, ocorrenciaId: dto.ocorrenciaId ?? null,
         quantidadeExecucao: dto.quantidadeExecucao ?? null,
       });
       const salvo = await manager.save(AtividadeEntity, registro);
       await this.salvarMedicoes(manager, contratoId, salvo.id, dto.medicoes, ocorrencias);
+      if(dto.referenciaQuantitativa||dto.ocorrenciaReferenciaId){
+        const o=ocorrencias.find(oc=>oc.id===dto.ocorrenciaReferenciaId);
+        if(!o||!dto.referenciaQuantitativa||grupoId||dto.quantidadeExecucao!=null||dto.percentualExecucao||dto.comprovaExecucaoId||dto.medicoes?.some(item=>item.ocorrenciaId===o.id&&Number(item.quantidade)>0))throw new BadRequestException('Selecione uma execução quantitativa existente, sem acrescentar unidades.');
+        const fontes=await listarExecucoesQuantitativas(manager,contratoId,[o.id]);
+        if(!fontes.some(f=>f.referencia===dto.referenciaQuantitativa&&f.ocorrenciaId===o.id))throw new ConflictException('A execução referenciada não está reconhecida nesta ocorrência.');
+        await manager.query(`INSERT INTO atividade_ocorrencia_medicoes(atividade_id,ocorrencia_id,contrato_id,quantidade,referencia_execucao) VALUES ($1,$2,$3,0,$4) ON CONFLICT (atividade_id,ocorrencia_id) DO UPDATE SET referencia_execucao=EXCLUDED.referencia_execucao`,[salvo.id,o.id,contratoId,dto.referenciaQuantitativa]);
+      }
+      if(dto.medicoesDiretas?.length){
+        await exigirPermissaoParcela(manager,contratoId,ator);
+        if(new Set(dto.medicoesDiretas.map(d=>d.entregavelId)).size!==dto.medicoesDiretas.length)throw new BadRequestException('Informe cada destino quantitativo uma vez.');
+        for(const d of dto.medicoesDiretas){
+          const e=entregaveis.find(e=>e.id===d.entregavelId);
+          if(!e||e.tipo!=='QUANTITATIVO'||!e.unidadeMedida||!(Number(e.quantidadePrevista)>0)||Number(e.quantidadeRealizada??0)!==0||!/^\d{1,15}(?:\.\d{1,3})?$/.test(d.quantidade)||!(Number(d.quantidade)>0))throw new BadRequestException('Informe uma quantidade positiva em entregável quantitativo vinculado, sem medição legada.');
+          const existentes=await manager.query(`SELECT 1 FROM ocorrencias WHERE contrato_id=$1 AND entregavel_id=$2 AND substituida_em IS NULL LIMIT 1`,[contratoId,e.id]);
+          if(existentes.length)throw new ConflictException('Registre a quantidade nas ocorrências existentes.');
+          await manager.query(`INSERT INTO atividade_entregavel_medicoes(atividade_id,entregavel_id,contrato_id,quantidade) VALUES($1,$2,$3,$4)`,[salvo.id,e.id,contratoId,d.quantidade]);
+          if(!e.quantidadeDiretaIntegrada){await manager.update(Entregavel,{id:e.id,contratoId},{quantidadeDiretaIntegrada:true});e.quantidadeDiretaIntegrada=true;}
+        }
+      }
+      for(const d of dto.medicoesDiretas??[]){const e=entregaveis.find(e=>e.id===d.entregavelId);if(e)await exigirSaldoQuantidadeDireta(manager,e);}
+      for(const o of ocorrencias)if(dto.medicoes?.some(d=>d.ocorrenciaId===o.id)||salvo.ocorrenciaId===o.id&&dto.quantidadeExecucao!=null)await exigirSaldoQuantidadeOcorrencia(manager,o);
+      const parcelasNovas=[];
+      if(dto.parcelasPercentuais?.length){
+        if(dto.percentualExecucao!==undefined||dto.entregavelExecucaoId||dto.comprovaExecucaoId||dto.referenciaQuantitativa||dto.quantidadeExecucao!=null)throw new BadRequestException('Não misture modalidades de declaração.');
+        if(new Set(dto.parcelasPercentuais.map(p=>p.entregavelId)).size!==dto.parcelasPercentuais.length)throw new BadRequestException('Informe cada destino percentual uma vez.');
+        for(const p of dto.parcelasPercentuais){
+          const alvo=entregaveis.find(e=>e.id===p.entregavelId);
+          if(!alvo||(p.ocorrenciaId&&!ocorrencias.some(o=>o.id===p.ocorrenciaId))||dto.medicoes?.some(m=>m.ocorrenciaId===p.ocorrenciaId&&Number(m.quantidade)>0))throw new BadRequestException('Vincule o entregável e a ocorrência antes de declarar sua parcela.');
+          parcelasNovas.push(await criarParcela(manager,alvo,ator,{origem:'ATIVIDADE',origemId:salvo.id,ocorrenciaId:p.ocorrenciaId,valor:p.percentual,data:hojeCivil(dataHora),observacao:dto.observacoes}));
+        }
+      }
+      let parcela = null;
+      if(dto.percentualExecucao!==undefined||dto.comprovaExecucaoId||dto.entregavelExecucaoId){
+        const alvo=entregaveis.find(e=>e.id===dto.entregavelExecucaoId);
+        if(!alvo||(grupoId&&dto.comprovaExecucaoId)||dto.quantidadeExecucao!=null||dto.medicoes?.some(m=>m.ocorrenciaId===dto.ocorrenciaExecucaoId&&Number(m.quantidade)>0)||(dto.ocorrenciaExecucaoId&&!ocorrencias.some(o=>o.id===dto.ocorrenciaExecucaoId)&&salvo.ocorrenciaId!==dto.ocorrenciaExecucaoId))throw new BadRequestException('Selecione uma única fonte percentual e o entregável correspondente.');
+        parcela=await criarParcela(manager,alvo,ator,{origem:'ATIVIDADE',origemId:salvo.id,ocorrenciaId:dto.ocorrenciaExecucaoId,valor:dto.percentualExecucao,referenciaId:dto.comprovaExecucaoId,data:hojeCivil(dataHora),observacao:dto.observacoes});
+      }
       for (const id of new Set([salvo.ocorrenciaId, ...ocorrencias.map(o => o.id)])) await this.recalcularOcorrencia(manager, id, ator);
       return { resultado: salvo, evento: {
         acao: AcaoAuditoria.ATIVIDADE_CRIADA, entidadeTipo: 'ATIVIDADE' as const, entidadeId: salvo.id,
-        dadosPosteriores: resumo(salvo),
+        dadosPosteriores: { ...resumo(salvo), ...(dto.medicoes!==undefined?{medicoes:dto.medicoes.map(m=>({ocorrenciaId:m.ocorrenciaId,quantidade:m.quantidade}))}:{}), ...(parcela?{parcelaExecucao:snapshotParcela(parcela)}:{}), ...(parcelasNovas.length?{parcelasPercentuais:parcelasNovas.map(snapshotParcela)}:{}), ...(dto.medicoesDiretas?.length?{medicoesDiretas:snapshotMedicoesDiretas(dto.medicoesDiretas)}:{}), ...(dto.referenciaQuantitativa?{referenciaQuantitativa:dto.referenciaQuantitativa,ocorrenciaReferenciaId:dto.ocorrenciaReferenciaId}:{}) },
       } };
   }
 
   async create(contratoId: string, dto: CreateAtividadeDto, ator: UsuarioAutenticado) {
+    if (dto.contratoId !== contratoId) throw new BadRequestException('Contrato da atividade divergente da URL');
     return this.auditoria.executarComAuditoria(ator,
       manager => this.criarNaTransacao(manager, contratoId, dto, ator));
   }
 
   async findAllPaginated(contratoId: string, filtros: Record<string, string>) {
+    if (Object.values(filtros).some(v=>typeof v!=='string')) throw new BadRequestException('Filtro inválido');
     const [pagina, limite] = erroQuery(filtros.page, filtros.limit);
     const query = this.repo.createQueryBuilder('atividade')
       .leftJoinAndSelect('atividade.entregaveis', 'entregaveis')
       .leftJoinAndSelect('atividade.ocorrencias', 'ocorrencias')
       .where('atividade.contratoId = :contratoId', { contratoId })
       .andWhere('atividade.excluidaEm IS NULL');
-    if (filtros.status) {
-      // Ativas reúne apenas atividades ainda em execução. Solicitações pendentes
-      // possuem aba própria e não são atividades verificadas.
-      if (filtros.status === 'ATIVAS') {
-        query.andWhere('atividade.status = :statusAtivo', { statusAtivo: 'REGISTRADA' });
-      } else {
-        if (!['REGISTRADA', 'PENDENTE_CONCLUSAO', 'VERIFICADA', 'ARQUIVADA'].includes(filtros.status)) {
-          throw new BadRequestException('Status inválido');
-        }
-        query.andWhere('atividade.status = :status', { status: filtros.status });
-      }
+    const busca = filtros.busca?.trim();
+    if (busca) {
+      if (busca.length > 120) throw new BadRequestException('Pesquisa limitada a 120 caracteres');
+      // Busca literal, parametrizada e anterior à paginação. Não interpretar % ou _ como curingas.
+      query.andWhere(`(strpos(lower(atividade.titulo), lower(:busca)) > 0 OR strpos(lower(atividade.descricao), lower(:busca)) > 0 OR strpos(lower(COALESCE(atividade.responsavel,'')), lower(:busca)) > 0)`, { busca });
     }
+    if (filtros.tipo) query.andWhere('atividade.tipo = :tipo', { tipo: filtros.tipo });
     if (filtros.dataInicio) {
       if (!validoDia(filtros.dataInicio)) throw new BadRequestException('Data inicial inválida');
-      query.andWhere('atividade.dataHora >= :inicio', { inicio: `${filtros.dataInicio}T00:00:00Z` });
+      query.andWhere('atividade.dataHora >= :inicio', { inicio: inicioDiaCivilUtc(filtros.dataInicio).toISOString() });
     }
     if (filtros.dataFim) {
       if (!validoDia(filtros.dataFim)) throw new BadRequestException('Data final inválida');
-      const amanha = new Date(`${filtros.dataFim}T00:00:00Z`);
-      amanha.setUTCDate(amanha.getUTCDate() + 1);
-      query.andWhere('atividade.dataHora < :fimExclusivo', { fimExclusivo: amanha.toISOString() });
+      query.andWhere('atividade.dataHora < :fimExclusivo', { fimExclusivo: inicioDiaCivilUtc(proximoDiaCivil(filtros.dataFim)).toISOString() });
     }
     if (filtros.dataInicio && filtros.dataFim && filtros.dataInicio > filtros.dataFim) {
       throw new BadRequestException('Intervalo invertido');
@@ -281,9 +404,88 @@ export class AtividadesService implements OnModuleInit {
         WHERE vinculo."atividadeId" = atividade.id AND vinculo."entregavelId" = :entregavelId)`,
       { entregavelId: filtros.entregavelId });
     }
-    const [data, total] = await query.orderBy('atividade.dataHora', 'DESC').addOrderBy('atividade.id', 'DESC')
-      .skip((pagina - 1) * limite).take(limite).getManyAndCount();
-    return { data, meta: { total, page: pagina, limit: limite, lastPage: Math.ceil(total / limite) || 1 } };
+    const responsavel = filtros.responsavel?.trim();
+    if (responsavel) {
+      if (responsavel.length > 120) throw new BadRequestException('Responsável limitado a 120 caracteres');
+      query.andWhere(`strpos(lower(COALESCE(atividade.responsavel,'')),lower(:responsavel)) > 0`, { responsavel });
+    }
+    // Existência de vínculos/contribuições, não estado de reconhecimento físico.
+    // Consultar antes de paginar e não multiplicar atividades com joins 1:N.
+    const evidencias = `EXISTS (SELECT 1 FROM atividade_comprovantes ac
+      WHERE ac.atividade_id=atividade.id AND ac.contrato_id=:contratoId)`;
+    const execucao = `(EXISTS (SELECT 1 FROM execucoes_entregavel ex
+      WHERE ex.origem='ATIVIDADE' AND ex.origem_id=atividade.id AND ex.contrato_id=:contratoId
+        AND ex.referencia_id IS NULL AND ex.centesimos>0)
+      OR EXISTS (SELECT 1 FROM atividade_entregavel_medicoes dm WHERE dm.atividade_id=atividade.id AND dm.contrato_id=:contratoId)
+      OR EXISTS (SELECT 1 FROM atividade_ocorrencia_medicoes am
+        WHERE am.atividade_id=atividade.id AND am.contrato_id=:contratoId
+          AND am.referencia_execucao IS NULL AND am.quantidade>0)
+      OR (atividade.quantidadeExecucao>0 AND atividade.ocorrenciaId IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM atividade_ocorrencia_medicoes am
+          WHERE am.atividade_id=atividade.id AND am.contrato_id=:contratoId
+            AND am.ocorrencia_id=atividade.ocorrenciaId)))`;
+    for (const [valor, expressao] of [[filtros.comEvidencias,evidencias],[filtros.comExecucao,execucao]]) {
+      if (!valor) continue;
+      if (valor !== 'sim' && valor !== 'nao') throw new BadRequestException('Filtro de presença inválido');
+      query.andWhere(valor === 'sim' ? expressao : `NOT (${expressao})`);
+    }
+    const consultaContagens = filtros.diario === '1' ? query.clone() : null;
+    if (filtros.status === 'TODAS_ATUAIS') query.andWhere('atividade.status != :arquivada', { arquivada: 'ARQUIVADA' });
+    else if (filtros.status) {
+      // Ativas reúne apenas atividades ainda em execução. Solicitações pendentes
+      // possuem aba própria e não são atividades verificadas.
+      if (filtros.status === 'ATIVAS') {
+        query.andWhere('atividade.status = :statusAtivo', { statusAtivo: 'REGISTRADA' });
+      } else {
+        if (!['REGISTRADA', 'PENDENTE_CONCLUSAO', 'VERIFICADA', 'ARQUIVADA'].includes(filtros.status)) {
+          throw new BadRequestException('Status inválido');
+        }
+        query.andWhere('atividade.status = :status', { status: filtros.status });
+      }
+    }
+    const ordem = filtros.ordem || 'recentes';
+    if (!['recentes','antigas','duracao-desc','duracao-asc'].includes(ordem)) throw new BadRequestException('Ordenação inválida');
+    if (ordem.startsWith('duracao-')) {
+      // A duração legada é texto livre. Somente formatos inequívocos em horas/minutos entram na ordenação;
+      // valores ausentes ou não interpretáveis ficam por último, sem converter o dado armazenado.
+      const duracao = `lower(trim(COALESCE(atividade.duracao,'')))`;
+      const horas = `[0-9]{1,8}[[:space:]]*(h|hora|horas)`;
+      const minutos = `[0-9]{1,8}[[:space:]]*(m|min|minuto|minutos)`;
+      const expressao = `CASE WHEN ${duracao} ~ '^(${horas})([[:space:]]*${minutos})?$|^${minutos}$' THEN COALESCE(substring(${duracao} from '([0-9]{1,8})[[:space:]]*h')::numeric,0)*60 + COALESCE(substring(${duracao} from '([0-9]{1,8})[[:space:]]*m')::numeric,0) END`;
+      query.addSelect(expressao, 'duracao_minutos').orderBy('duracao_minutos', ordem === 'duracao-desc' ? 'DESC' : 'ASC', 'NULLS LAST').addOrderBy('atividade.dataHora', 'DESC');
+    } else query.orderBy('atividade.dataHora', ordem === 'antigas' ? 'ASC' : 'DESC');
+    const [data, total] = await query.addOrderBy('atividade.id', 'DESC').skip((pagina - 1) * limite).take(limite).getManyAndCount();
+    const meta = { total, page: pagina, limit: limite, lastPage: Math.ceil(total / limite) || 1 };
+    if (filtros.diario !== '1') return { data, meta };
+    // O diário usa a mesma fonte de reconhecimento dos lançamentos, sem somar unidades de destinos diferentes.
+    const ids = data.map(a => a.id);
+    const contagens: {status:string; total:number}[] = consultaContagens ? await consultaContagens
+      .select('atividade.status','status').addSelect('COUNT(DISTINCT atividade.id)::int','total')
+      .groupBy('atividade.status').getRawMany() : [];
+    const comprovantes: {atividadeId:string;total:number}[] = ids.length ? await this.repo.manager.query(`SELECT atividade_id AS "atividadeId",count(DISTINCT comprovante_id)::int AS total FROM atividade_comprovantes WHERE contrato_id=$1 AND atividade_id=ANY($2::uuid[]) GROUP BY atividade_id`, [contratoId, ids]) : [];
+    const entregaveis = [...new Map(data.flatMap(a => a.entregaveis).map(e => [e.id,e])).values()];
+    const ocorrencias = [...new Map(data.flatMap(a => a.ocorrencias ?? []).map(o => [o.id,o])).values()];
+    const faltantes = [...new Set(data.flatMap(a=>a.ocorrenciaId&&!ocorrencias.some(o=>o.id===a.ocorrenciaId)?[a.ocorrenciaId]:[]))];
+    if(faltantes.length) ocorrencias.push(...await this.repo.manager.findBy(Ocorrencia,{contratoId,id:In(faltantes)}));
+    // Também preservar o vínculo quantitativo legado anterior à tabela N:N.
+    const idsOcorrencias = [...new Set([...ocorrencias.map(o=>o.id), ...data.flatMap(a=>a.ocorrenciaId?[a.ocorrenciaId]:[])])];
+    const [medicoes, reconhecidas, percentuais] = await Promise.all([
+      listarContribuicoesQuantitativas(this.repo.manager,contratoId,idsOcorrencias),
+      listarExecucoesQuantitativas(this.repo.manager,contratoId,idsOcorrencias),
+      Promise.all(entregaveis.filter(e=>e.execucoesIntegradas).map(async e=>({e,linhas:await parcelas(this.repo.manager,e,ids)}))),
+    ]);
+    const diretas: {atividadeId:string;entregavelId:string;quantidade:string}[]=entregaveis.some(e=>e.quantidadeDiretaIntegrada)&&ids.length?await this.repo.manager.query(`SELECT atividade_id AS "atividadeId",entregavel_id AS "entregavelId",quantidade::text FROM atividade_entregavel_medicoes WHERE contrato_id=$1 AND atividade_id=ANY($2::uuid[])`,[contratoId,ids]):[];
+    const oPorId = new Map(ocorrencias.map(o=>[o.id,o]));
+    const ePorId = new Map(entregaveis.map(e=>[e.id,e]));
+    type MedicaoDiario = {id:string;origem:string;ocorrenciaId:string;quantidade:string|null;referenciaExecucao:string|null;situacao:string};
+    return { data: data.map(a=>({ ...a,
+      ocorrencias:[...new Map([...(a.ocorrencias??[]),...ocorrencias.filter(o=>o.id===a.ocorrenciaId)].map(o=>[o.id,o])).values()],
+      comprovantesVinculados:comprovantes.find(c=>c.atividadeId===a.id)?.total??0,
+      contribuicoesDiario:[
+        ...diretas.filter(d=>d.atividadeId===a.id).map(d=>({destino:ePorId.get(d.entregavelId)?.nome??'Entregável',entregavelId:d.entregavelId,ocorrenciaId:null,valor:Number(d.quantidade),unidade:ePorId.get(d.entregavelId)?.unidadeMedida??'unidades',situacao:a.status==='VERIFICADA'?'APROVADO':a.status==='ARQUIVADA'?'INATIVO':'PENDENTE',reconhecida:a.status==='VERIFICADA'})),
+        ...percentuais.flatMap(({e,linhas})=>linhas.filter(l=>l.origem==='ATIVIDADE'&&l.origemId===a.id&&!l.referenciaId&&l.centesimos>0).map(l=>({destino:e.nome,entregavelId:e.id,ocorrenciaId:l.ocorrenciaId,valor:l.centesimos/100,unidade:'%',situacao:l.situacao,reconhecida:l.reconhecido>0}))),
+        ...(medicoes as MedicaoDiario[]).filter(l=>l.origem==='ATIVIDADE'&&l.id===a.id&&!l.referenciaExecucao&&Number(l.quantidade)>0).map(l=>{const o=oPorId.get(l.ocorrenciaId);const e=ePorId.get(o?.entregavelId??'');return {destino:e?.nome??'Ocorrência vinculada',entregavelId:e?.id??null,ocorrenciaId:l.ocorrenciaId,valor:Number(l.quantidade),unidade:e?.unidadeMedida??'unidades',situacao:o?.substituidaEm?'INATIVO':l.situacao,reconhecida:Boolean(o&&!o.substituidaEm)&&reconhecidas.some(r=>r.ocorrenciaId===l.ocorrenciaId&&r.referencia===`atividade:${a.id}`)};})
+      ]})), meta: {...meta, contagens} };
   }
 
   async findOne(contratoId: string, id: string) {
@@ -295,11 +497,14 @@ export class AtividadesService implements OnModuleInit {
     const legado = registro.ocorrenciaId && registro.quantidadeExecucao != null &&
       !medidas.some(m=>m.ocorrenciaId===registro.ocorrenciaId)
       ? [{ocorrenciaId:registro.ocorrenciaId,quantidade:String(registro.quantidadeExecucao)}] : [];
-    return { ...registro, medicoes:[...medidas,...legado] };
+    const medicoesDiretas=registro.entregaveis.some(e=>e.quantidadeDiretaIntegrada)?await this.repo.manager.query(`SELECT entregavel_id AS "entregavelId",quantidade::text FROM atividade_entregavel_medicoes WHERE contrato_id=$1 AND atividade_id=$2`,[contratoId,id]):[];
+    const parcelasPercentuais=registro.entregaveis.some(e=>e.execucoesIntegradas)?(await this.repo.manager.findBy(ExecucaoLancamento,{contratoId,origem:'ATIVIDADE',origemId:id})).filter(p=>!p.referenciaId).map(p=>({entregavelId:p.entregavelId,ocorrenciaId:p.ocorrenciaId??undefined,percentual:(p.centesimos/100).toFixed(2)})):[];
+    return Object.assign({}, registro, { medicoes:[...medidas,...legado],medicoesDiretas,parcelasPercentuais });
   }
 
   async update(contratoId: string, id: string, dto: UpdateAtividadeDto, ator: UsuarioAutenticado) {
     return this.auditoria.executarComAuditoria(ator, async manager => {
+      await manager.findOne(Contrato,{where:{id:contratoId},lock:{mode:'pessimistic_write'}});
       // PostgreSQL não permite FOR UPDATE sobre o lado opcional de LEFT JOIN.
       // Bloqueamos APENAS a atividade e lemos os vínculos na mesma transação.
       const bloqueada = await manager.findOne(AtividadeEntity, {
@@ -316,24 +521,62 @@ export class AtividadesService implements OnModuleInit {
       if (registro.status !== 'REGISTRADA') {
         throw new ConflictException('Atividade verificada ou arquivada não pode ser editada; reabra antes.');
       }
+      await this.verificarEntregaveis(manager, contratoId, registro.entregaveis.map(e => e.id));
       const antes = resumo(registro);
       const anteriores = registro.entregaveis.map(e => e.id).sort();
+      if(dto.entregavelIds && registro.entregaveis.some(e=>e.quantidadeDiretaIntegrada)){
+        const diretas=await manager.query(`SELECT entregavel_id AS "entregavelId" FROM atividade_entregavel_medicoes WHERE atividade_id=$1 AND contrato_id=$2`,[id,contratoId]) as {entregavelId:string}[];
+        if(diretas.some(d=>!dto.entregavelIds!.includes(d.entregavelId)))throw new ConflictException('Preserve os vínculos das medições diretas desta atividade.');
+      }
+      if(registro.entregaveis.some(e=>e.execucoesIntegradas)) {
+        const parcelasAtividade=await manager.findBy(ExecucaoLancamento,{contratoId,origem:'ATIVIDADE',origemId:id});
+        if(parcelasAtividade.some(parcela=>((parcela.ocorrenciaId && dto.ocorrenciaIds && !dto.ocorrenciaIds.includes(parcela.ocorrenciaId)) || (dto.entregavelIds && !dto.entregavelIds.includes(parcela.entregavelId)) || dto.quantidadeExecucao!=null || dto.medicoes?.some(m=>m.ocorrenciaId===parcela.ocorrenciaId&&Number(m.quantidade)>0)))) throw new ConflictException('Preserve o vínculo e a modalidade da execução integrada desta atividade.');
+      }
       const ocorrenciasAnteriores = (registro.ocorrencias ?? []).map(o => o.id);
+      const primariaAnterior = registro.ocorrenciaId;
+      // A coluna legada pode existir sem linha N:N em dados criados antes da associação múltipla.
+      // Alterar só a primária substitui a primária, mas PRESERVA as secundárias.
+      const idsAnteriores = [...new Set([...ocorrenciasAnteriores, ...(primariaAnterior ? [primariaAnterior] : [])])];
+      const idsSolicitados = dto.ocorrenciaIds ?? (dto.ocorrenciaId !== undefined
+        ? [...new Set([...idsAnteriores.filter(id => id !== primariaAnterior),
+          ...(dto.ocorrenciaId ? [dto.ocorrenciaId] : [])])]
+        : idsAnteriores);
       if (dto.ocorrenciaIds !== undefined || dto.ocorrenciaId !== undefined)
         await this.exigirPermissaoDeVinculo(manager, contratoId, ator, 'vincularAtividadesOcorrencia');
       if (dto.medicoes !== undefined || dto.quantidadeExecucao !== undefined)
         await this.exigirPermissaoDeVinculo(manager, contratoId, ator, 'registrarExecucaoOcorrencia');
-      const idsSolicitados = dto.ocorrenciaIds ?? (dto.ocorrenciaId !== undefined
-        ? dto.ocorrenciaId ? [dto.ocorrenciaId] : [] : ocorrenciasAnteriores);
+      const alteraMedicaoOuVinculo = dto.ocorrenciaIds !== undefined || dto.ocorrenciaId !== undefined ||
+        dto.medicoes !== undefined || dto.quantidadeExecucao !== undefined;
+      // Bloqueio das linhas dentro da mesma transação: nenhuma medição pode ficar órfã
+      // depois de retirar uma associação N:N. O cliente pode substituir explicitamente
+      // o conjunto de medições, mas nunca removê-lo de forma implícita.
+      const medicoesAnteriores: Array<{ ocorrenciaId: string; quantidade: string }> = alteraMedicaoOuVinculo
+        ? await manager.query(`SELECT ocorrencia_id AS "ocorrenciaId", quantidade::text AS quantidade
+            FROM atividade_ocorrencia_medicoes WHERE atividade_id=$1 AND contrato_id=$2
+            ORDER BY ocorrencia_id FOR UPDATE`, [id, contratoId]) : [];
+      const idsNovos = new Set(idsSolicitados);
+      if (dto.medicoes === undefined && medicoesAnteriores.some(m => !idsNovos.has(m.ocorrenciaId)))
+        throw new ConflictException('Há medições em ocorrências removidas. Atualize explicitamente as medições antes de desvincular.');
+      if (dto.ocorrenciaId !== undefined && dto.ocorrenciaId !== primariaAnterior &&
+          registro.quantidadeExecucao != null && dto.quantidadeExecucao === undefined && dto.medicoes === undefined)
+        throw new ConflictException('Alterar a ocorrência principal transferiria quantidade sem autorização explícita. Informe quantidadeExecucao ou medicoes.');
 
+      // Se há substituição explícita por medições individuais, a quantidade legada
+      // será limpa na mesma transação; valide o estado FINAL, não o antigo.
+      if(dto.quantidadeExecucao!=null&&Number(dto.quantidadeExecucao)>0){
+        const refs=await manager.query(`SELECT 1 FROM atividade_ocorrencia_medicoes WHERE atividade_id=$1 AND contrato_id=$2 AND referencia_execucao IS NOT NULL`,[id,contratoId]);
+        if(refs.length)throw new ConflictException('Uma atividade comprobatória não pode receber quantidade legada.');
+      }
+      const quantidadeFinal = dto.medicoes !== undefined ? null :
+        (dto.quantidadeExecucao === undefined ? registro.quantidadeExecucao : dto.quantidadeExecucao);
       if (dto.entregavelIds !== undefined || dto.ocorrenciaId !== undefined || dto.ocorrenciaIds !== undefined) {
         registro.entregaveis = await this.verificarEntregaveis(manager, contratoId, dto.entregavelIds ?? anteriores);
         const ocorrenciaId = dto.ocorrenciaId === undefined ? registro.ocorrenciaId : dto.ocorrenciaId;
-        await this.validarOcorrencia(manager, contratoId, ocorrenciaId, registro.entregaveis, dto.quantidadeExecucao === undefined ? registro.quantidadeExecucao : dto.quantidadeExecucao);
+        await this.validarOcorrencia(manager, contratoId, ocorrenciaId, registro.entregaveis, quantidadeFinal);
         if (dto.ocorrenciaId !== undefined) registro.ocorrenciaId = dto.ocorrenciaId;
       }
       registro.ocorrencias = await this.verificarOcorrencias(manager, contratoId, idsSolicitados,
-        registro.entregaveis, registro.ocorrenciaId, dto.quantidadeExecucao === undefined ? registro.quantidadeExecucao : dto.quantidadeExecucao);
+        registro.entregaveis, registro.ocorrenciaId, quantidadeFinal);
       if (dto.medicoes && dto.quantidadeExecucao != null)
         throw new BadRequestException('Não misture a medição legada com quantidades por ocorrência');
       if (dto.quantidadeExecucao !== undefined) registro.quantidadeExecucao = dto.quantidadeExecucao;
@@ -350,20 +593,72 @@ export class AtividadesService implements OnModuleInit {
       if (dto.dataHora !== undefined) registro.dataHora = instante(dto.dataHora);
       if (dto.descricao !== undefined) registro.descricao = dto.descricao.trim();
       if (dto.tipo !== undefined) registro.tipo = dto.tipo.trim();
-      if (dto.responsavel !== undefined) registro.responsavel = dto.responsavel.trim() || null;
+      if (dto.responsavel !== undefined && dto.responsavel.trim() !== (registro.responsavel ?? '')) {
+        // Texto livre não identifica uma conta; não conservar o ID de outro responsável.
+        registro.responsavel = dto.responsavel.trim() || null;
+        registro.responsavelId = null;
+      }
       if (dto.participantes !== undefined) registro.participantes = dto.participantes;
       if (dto.local !== undefined) registro.local = dto.local.trim() || null;
       if (dto.duracao !== undefined) registro.duracao = dto.duracao.trim() || null;
       if (dto.observacoes !== undefined) registro.observacoes = dto.observacoes.trim() || null;
       const salvo = await manager.save(AtividadeEntity, registro);
+      let parcelasAnteriores:ExecucaoLancamento[]|undefined;
+      let diretasAnteriores:{entregavelId:string;quantidade:string}[]|undefined;
+      if(dto.parcelasPercentuais!==undefined||dto.medicoesDiretas!==undefined){
+        await exigirPermissaoParcela(manager,contratoId,ator);
+        await this.verificarEntregaveis(manager,contratoId,registro.entregaveis.map(e=>e.id));
+      }
+      if(dto.parcelasPercentuais!==undefined){
+        parcelasAnteriores=await manager.findBy(ExecucaoLancamento,{contratoId,origem:'ATIVIDADE',origemId:id});
+        if(parcelasAnteriores.some(p=>p.referenciaId))throw new ConflictException('Preserve a referência de comprovação existente.');
+        if(new Set(dto.parcelasPercentuais.map(p=>p.entregavelId)).size!==dto.parcelasPercentuais.length)throw new BadRequestException('Informe cada destino percentual uma vez.');
+        for(const antiga of parcelasAnteriores){
+          const nova=dto.parcelasPercentuais.find(p=>p.entregavelId===antiga.entregavelId);
+          if(nova&&Math.round(Number(nova.percentual)*100)===antiga.centesimos&&(nova.ocorrenciaId??null)===antiga.ocorrenciaId)continue;
+          if(await manager.count(ExecucaoLancamento,{where:{referenciaId:antiga.id}}))throw new ConflictException('Esta execução possui comprovantes referenciados. Regularize os vínculos antes de corrigir.');
+          await manager.delete(ExecucaoLancamento,{id:antiga.id,contratoId});
+        }
+        for(const nova of dto.parcelasPercentuais){
+          if(parcelasAnteriores.some(p=>p.entregavelId===nova.entregavelId&&Math.round(Number(nova.percentual)*100)===p.centesimos&&(nova.ocorrenciaId??null)===p.ocorrenciaId))continue;
+          const alvo=registro.entregaveis.find(e=>e.id===nova.entregavelId);
+          if(!alvo||(nova.ocorrenciaId&&!registro.ocorrencias?.some(o=>o.id===nova.ocorrenciaId)))throw new BadRequestException('Vincule o destino da contribuição.');
+          await criarParcela(manager,alvo,ator,{origem:'ATIVIDADE',origemId:id,ocorrenciaId:nova.ocorrenciaId,valor:nova.percentual,data:hojeCivil(registro.dataHora),observacao:registro.observacoes});
+        }
+      }
+      if(dto.medicoesDiretas!==undefined){
+        diretasAnteriores=await manager.query(`SELECT entregavel_id AS "entregavelId",quantidade::text FROM atividade_entregavel_medicoes WHERE contrato_id=$1 AND atividade_id=$2`,[contratoId,id]);
+        if(new Set(dto.medicoesDiretas.map(p=>p.entregavelId)).size!==dto.medicoesDiretas.length)throw new BadRequestException('Informe cada destino quantitativo uma vez.');
+        for(const d of dto.medicoesDiretas){
+          const e=registro.entregaveis.find(e=>e.id===d.entregavelId);
+          if(!e||e.tipo!=='QUANTITATIVO'||!e.unidadeMedida||!(Number(e.quantidadePrevista)>0)||Number(e.quantidadeRealizada??0)!==0||!(Number(d.quantidade)>0))throw new BadRequestException('Informe quantidade válida em entregável quantitativo vinculado.');
+          if(await manager.count(Ocorrencia,{where:{contratoId,entregavelId:e.id,substituidaEm:IsNull()}}))throw new ConflictException('Registre a quantidade nas ocorrências existentes.');
+          if(!e.quantidadeDiretaIntegrada){await manager.update(Entregavel,{id:e.id,contratoId},{quantidadeDiretaIntegrada:true});e.quantidadeDiretaIntegrada=true;}
+        }
+        await manager.query(`DELETE FROM atividade_entregavel_medicoes WHERE contrato_id=$1 AND atividade_id=$2`,[contratoId,id]);
+        for(const d of dto.medicoesDiretas)await manager.query(`INSERT INTO atividade_entregavel_medicoes(atividade_id,entregavel_id,contrato_id,quantidade) VALUES($1,$2,$3,$4)`,[id,d.entregavelId,contratoId,d.quantidade]);
+      }
+      if(dto.dataHora!==undefined && registro.entregaveis.some(e=>e.execucoesIntegradas)) {
+        await manager.update(ExecucaoLancamento,{contratoId,origem:'ATIVIDADE',origemId:id},{dataExecucao:hojeCivil(registro.dataHora)});
+      }
+      for(const ent of registro.entregaveis) await validarSaldoParcelas(manager,ent);
       await this.salvarMedicoes(manager, contratoId, salvo.id, dto.medicoes, registro.ocorrencias ?? []);
-      for (const ocorrenciaId of new Set([...ocorrenciasAnteriores, ...idsSolicitados, antes.ocorrenciaId, salvo.ocorrenciaId]))
+      for(const d of dto.medicoesDiretas??[]){const e=registro.entregaveis.find(e=>e.id===d.entregavelId);if(e)await exigirSaldoQuantidadeDireta(manager,e);}
+      for(const o of registro.ocorrencias??[])if(dto.medicoes?.some(d=>d.ocorrenciaId===o.id)||salvo.ocorrenciaId===o.id&&dto.quantidadeExecucao!=null)await exigirSaldoQuantidadeOcorrencia(manager,o);
+      if (alteraMedicaoOuVinculo||dto.parcelasPercentuais!==undefined||dto.medicoesDiretas!==undefined) await this.exigirExecucaoSemDuplicidade(manager,contratoId,salvo.id);
+      for (const ocorrenciaId of new Set([...idsAnteriores, ...idsSolicitados, antes.ocorrenciaId, salvo.ocorrenciaId,
+        ...medicoesAnteriores.map(m => m.ocorrenciaId)]))
         await this.recalcularOcorrencia(manager, ocorrenciaId, ator);
-      const mudouVinculos = JSON.stringify(ocorrenciasAnteriores.slice().sort()) !== JSON.stringify(idsSolicitados.slice().sort()) || antes.ocorrenciaId !== (salvo.ocorrenciaId ?? null) || JSON.stringify(anteriores) !== JSON.stringify(salvo.entregaveis.map(e => e.id).sort());
+      const mudouVinculos = JSON.stringify(idsAnteriores.slice().sort()) !== JSON.stringify(idsSolicitados.slice().sort()) || antes.ocorrenciaId !== (salvo.ocorrenciaId ?? null) || JSON.stringify(anteriores) !== JSON.stringify(salvo.entregaveis.map(e => e.id).sort());
+      const medicoesPosteriores: Array<{ ocorrenciaId: string; quantidade: string }> = alteraMedicaoOuVinculo
+        ? await manager.query(`SELECT ocorrencia_id AS "ocorrenciaId", quantidade::text AS quantidade
+            FROM atividade_ocorrencia_medicoes WHERE atividade_id=$1 AND contrato_id=$2 ORDER BY ocorrencia_id`,
+            [id, contratoId]) : [];
       return { resultado: salvo, evento: {
         acao: mudouVinculos ? AcaoAuditoria.ATIVIDADE_VINCULOS_ALTERADOS : AcaoAuditoria.ATIVIDADE_EDITADA,
         entidadeTipo: 'ATIVIDADE' as const, entidadeId: salvo.id,
-        dadosAnteriores: antes, dadosPosteriores: resumo(salvo),
+        dadosAnteriores: { ...antes, ...(alteraMedicaoOuVinculo ? { medicoes: medicoesAnteriores } : {}), ...(parcelasAnteriores?{parcelasPercentuais:parcelasAnteriores.map(snapshotParcela)}:{}), ...(diretasAnteriores?{medicoesDiretas:diretasAnteriores}:{}) },
+        dadosPosteriores: { ...resumo(salvo), ...(alteraMedicaoOuVinculo ? { medicoes: medicoesPosteriores } : {}), ...(dto.parcelasPercentuais!==undefined?{parcelasPercentuais:snapshotDeclaracoesPercentuais(dto.parcelasPercentuais)}:{}), ...(dto.medicoesDiretas!==undefined?{medicoesDiretas:snapshotMedicoesDiretas(dto.medicoesDiretas)}:{}) },
       } };
     });
   }
@@ -375,6 +670,7 @@ export class AtividadesService implements OnModuleInit {
     acao: AcaoAuditoria, justificativa: string) {
     const motivo = justificativa.trim();
     if ((![AcaoAuditoria.ATIVIDADE_VERIFICADA, AcaoAuditoria.ATIVIDADE_CONCLUSAO_SOLICITADA].includes(acao) && motivo.length < 15) || motivo.length > 200 || (motivo && motivo.length < 15)) throw new BadRequestException('Justificativa deve ter entre 15 e 200 caracteres; verificação dispensa motivo');
+      await manager.findOne(Contrato,{where:{id:contratoId},lock:{mode:'pessimistic_write'}});
       // PostgreSQL não permite FOR UPDATE sobre o lado opcional de LEFT JOIN.
       // Bloqueamos APENAS a atividade e lemos os vínculos na mesma transação.
       const bloqueada = await manager.findOne(AtividadeEntity, {
@@ -391,15 +687,22 @@ export class AtividadesService implements OnModuleInit {
       if (registro.status !== origem) throw new ConflictException(`Transição não permitida a partir de ${registro.status}`);
       // Reabrir uma atividade após concluir seus pais criaria uma pendência
       // invisível em objeto fechado. Exige reabertura prévia do contexto.
-      if (acao === AcaoAuditoria.ATIVIDADE_REABERTA && registro.entregaveis.length > 0) {
+      if (registro.entregaveis.length > 0) {
         await this.verificarEntregaveis(manager, contratoId, registro.entregaveis.map(e => e.id));
+        if (destino === 'VERIFICADA' || destino === 'PENDENTE_CONCLUSAO') await this.validarReferenciasNaDecisao(manager,registro);
+        if (origem === 'VERIFICADA' && destino !== 'VERIFICADA') await this.protegerReferenciasDependentes(manager,registro);
       }
+      if (destino==='VERIFICADA' && registro.entregaveis.length) await this.exigirExecucaoSemDuplicidade(manager,contratoId,id);
       const antes = resumo(registro);
       registro.status = destino;
       if (destino === 'REGISTRADA') registro.verificadaEm = null;
       if (destino === 'VERIFICADA' && origem === 'PENDENTE_CONCLUSAO') registro.verificadaEm = new Date();
       registro.arquivadaEm = destino === 'ARQUIVADA' ? new Date() : null;
       const salvo = await manager.save(AtividadeEntity, registro);
+      for(const ent of registro.entregaveis) await validarSaldoParcelas(manager,ent);
+      if(destino==='VERIFICADA' && registro.entregaveis.length){const medidas=await manager.query('SELECT ocorrencia_id AS id FROM atividade_ocorrencia_medicoes WHERE atividade_id=$1 AND contrato_id=$2 AND quantidade>0',[salvo.id,contratoId]) as {id:string}[];const diretas=await manager.query('SELECT entregavel_id AS id FROM atividade_entregavel_medicoes WHERE atividade_id=$1 AND contrato_id=$2 AND quantidade>0',[salvo.id,contratoId]) as {id:string}[];for(const ent of registro.entregaveis)if(diretas.some(d=>d.id===ent.id))await exigirSaldoQuantidadeDireta(manager,ent);for(const o of registro.ocorrencias??[])if(medidas.some(d=>d.id===o.id)||salvo.ocorrenciaId===o.id&&Number(salvo.quantidadeExecucao)>0)await exigirSaldoQuantidadeOcorrencia(manager,o);
+        if(salvo.ocorrenciaId&&Number(salvo.quantidadeExecucao)>0&&!(registro.ocorrencias??[]).some(o=>o.id===salvo.ocorrenciaId)){const o=await manager.findOneBy(Ocorrencia,{id:salvo.ocorrenciaId,contratoId});if(o)await exigirSaldoQuantidadeOcorrencia(manager,o);}
+      }
       if (acao !== AcaoAuditoria.ATIVIDADE_VERIFICADA) for (const id of new Set([salvo.ocorrenciaId, ...(salvo.ocorrencias ?? []).map(o => o.id)]))
         await this.recalcularOcorrencia(manager, id, ator);
       return { resultado: salvo, evento: {
@@ -414,28 +717,10 @@ export class AtividadesService implements OnModuleInit {
           // Mesmo contrato/transação, sem janela de duplicação entre aprovações.
           for (const ocorrenciaId of new Set([salvo.ocorrenciaId, ...(salvo.ocorrencias ?? []).map(o => o.id)]))
             await this.recalcularOcorrencia(m, ocorrenciaId, ator);
-          const etapas = new Set<string>();
-          for (const entregavelId of [...new Set(registro.entregaveis.map(e => e.id))].sort()) {
-            const concluido = await concluirEntregavelAposAtividade(m, contratoId, entregavelId, async (e, anterior) => {
-              await this.auditoria.registrarNaTransacao(m, ator, {
-                acao: AcaoAuditoria.ENTREGAVEL_STATUS_ALTERADO,
-                entidadeTipo: 'ENTREGAVEL', entidadeId: e.id,
-                dadosAnteriores: anterior,
-                dadosPosteriores: { statusExecucao: e.statusExecucao, reabertoEm: null, motivo: 'ULTIMA_ATIVIDADE_VERIFICADA' },
-              });
-            });
-            if (concluido) etapas.add(concluido.etapaId);
-          }
-          for (const etapaId of etapas) {
-            await concluirEtapaAposFilhos(m, contratoId, etapaId, async (antesEtapa, depoisEtapa) => {
-              await this.auditoria.registrarNaTransacao(m, ator, {
-                acao: AcaoAuditoria.ETAPA_STATUS_ALTERADO,
-                entidadeTipo: 'ETAPA', entidadeId: etapaId,
-                dadosAnteriores: antesEtapa,
-                dadosPosteriores: { ...depoisEtapa, motivo: 'ULTIMA_ATIVIDADE_VERIFICADA' },
-              });
-            }, ator.id);
-          }
+          for(const entrega of salvo.entregaveis)await iniciarHierarquiaOperacional(m,this.auditoria,ator,contratoId,entrega.id);
+          // Verificação da atividade inicia o contexto, mas a decisão de
+          // conclusão do entregável e da etapa exige solicitação e aprovação.
+
         },
       } : {}),
       };
@@ -493,6 +778,7 @@ export class AtividadesService implements OnModuleInit {
     const motivo = justificativa.trim();
     if (motivo.length < 15 || motivo.length > 200) throw new BadRequestException('Informe o motivo da exclusão (15 a 200 caracteres)');
     return this.auditoria.executarComAuditoria(ator, async manager => {
+      await manager.findOne(Contrato,{where:{id:contratoId},lock:{mode:'pessimistic_write'}});
       // PostgreSQL não permite FOR UPDATE sobre o lado opcional de LEFT JOIN.
       // Bloqueamos APENAS a atividade e lemos os vínculos na mesma transação.
       const bloqueada = await manager.findOne(AtividadeEntity, {

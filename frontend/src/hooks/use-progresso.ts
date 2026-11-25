@@ -5,8 +5,9 @@ import { useConsulta, useRepositorioConsultasOpcional } from '@/app/components/p
 export type ProgressoEntregavel = {
   entregavelId: string; nome: string; tipo: 'QUANTITATIVO' | 'RECORRENTE' | 'MARCO' | 'UNICO' | 'CONTINUO';
   realizado: string | null; previsto: string | null; percentualExecucao: number | null;
-  pesoOperacional: string | null; dataEfetivaMarco: string | null;
-  fonte: string; statusFisico: string; statusEntregavel?: 'NAO_INICIADO' | 'EM_ANDAMENTO' | 'PENDENTE_CONCLUSAO' | 'PENDENTE_ENCERRAMENTO' | 'CONCLUIDO' | 'FINALIZADO' | null; editavel: boolean; inicioPrevisto: string | null; terminoPrevisto: string | null;
+  pesoOperacional: string | null; participacaoOperacional?: number | null; dataEfetivaMarco: string | null;
+  atrasado?: boolean; finalizadoComAtraso?: boolean;
+  fonte: string; regularizacaoDocumentalSolicitada?: boolean; statusFisico: string; reabertoEm?: string | null; statusEntregavel?: 'NAO_INICIADO' | 'EM_ANDAMENTO' | 'PENDENTE_CONCLUSAO' | 'PENDENTE_CONCLUSAO_PARCIAL' | 'PENDENTE_ENCERRAMENTO' | 'CONCLUIDO' | 'CONCLUIDO_PARCIALMENTE' | 'FINALIZADO' | null; editavel: boolean; inicioPrevisto: string | null; terminoPrevisto: string | null;
 };
 export type ProgressoContrato = {
   contratoId: string; statusContrato?: string; situacaoAdministrativa?: string; avancoSimples: number | null; avancoPonderado: number | null;
@@ -29,6 +30,9 @@ export function useProgresso(contratoId: string) {
       : `Não foi possível consultar o avanço físico (HTTP ${resposta.status}). Confira as migrations e os logs do backend.`);
     return await resposta.json() as ProgressoContrato;
   }, { habilitada: Boolean(contratoId) });
+  const avisarEstrutura = () => {
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('pi:estrutura-operacional-atualizada', { detail: { contratoId } }));
+  };
   return {
     progresso: consulta.dados ?? null, loading: consulta.carregando,
     erro: consulta.erro ? String(consulta.erro) : null, atualizar: consulta.atualizar,
@@ -43,7 +47,8 @@ export function useProgresso(contratoId: string) {
         : 'Você não tem permissão ou não foi possível salvar o modo de cálculo.');
       cache?.invalidar(['contratos']);
       cache?.invalidar(['entregaveis', 'contrato', contratoId]);
-      await consulta.atualizar();
+      await consulta.atualizar().catch(() => {});
+      avisarEstrutura();
     },
     atualizarPesoIndividual: async (entregavelId: string, versao: string, peso: string) => {
       const resposta = await fetch(`${base}/entregaveis/${encodeURIComponent(entregavelId)}/peso`, {
@@ -58,14 +63,16 @@ export function useProgresso(contratoId: string) {
       }
       cache?.invalidar(['entregaveis', 'contrato', contratoId]);
       cache?.invalidar(['contratos']);
-      await consulta.atualizar();
+      await consulta.atualizar().catch(() => {});
+      avisarEstrutura();
     },
     atualizarPesos: async (versao: string, pesos: { entregavelId: string; peso: string }[]) => {
       const resposta = await fetch(`${base}/pesos`, { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ versao, pesos }) });
-      if (!resposta.ok) throw new Error(resposta.status === 409 ? 'Planejamento alterado ou bloqueado. Atualize a consulta.' : 'Não foi possível salvar os pesos. Confira permissões e soma de 100%.');
+      if (!resposta.ok) throw new Error(resposta.status === 409 ? 'Planejamento alterado ou bloqueado. Atualize a consulta.' : 'Não foi possível salvar os pesos. Confira permissões e se a soma não ultrapassa 100%.');
       cache?.invalidar(['entregaveis', 'contrato', contratoId]);
       cache?.invalidar(['contratos']);
-      await consulta.atualizar();
+      await consulta.atualizar().catch(() => {});
+      avisarEstrutura();
     },
     usarOcorrencias: async (entregavelId: string) => {
       const resposta = await fetch(`${base}/entregaveis/${encodeURIComponent(entregavelId)}/execucao/usar-ocorrencias`, {
@@ -77,7 +84,8 @@ export function useProgresso(contratoId: string) {
         : 'Não foi possível alterar a fonte de execução.');
       cache?.invalidar(['entregaveis', 'contrato', contratoId]);
       cache?.invalidar(['contratos']);
-      await consulta.atualizar();
+      await consulta.atualizar().catch(() => {});
+      avisarEstrutura();
     },
     atualizarExecucao: async (entregavelId: string, dados: AtualizacaoExecucao) => {
       const resposta = await fetch(`${base}/entregaveis/${encodeURIComponent(entregavelId)}/execucao`, {
@@ -88,7 +96,10 @@ export function useProgresso(contratoId: string) {
         : resposta.status === 409 ? 'Conflito de atualização; confira os dados.'
         : 'Não foi possível atualizar a execução.');
       cache?.invalidar(['entregaveis', 'contrato', contratoId]);
-      await consulta.atualizar();
+      cache?.invalidar(['contratos', 'elegibilidade-conclusao', contratoId]);
+      cache?.invalidar(['execucao', contratoId]);
+      await consulta.atualizar().catch(() => {});
+      avisarEstrutura();
     },
   };
 }

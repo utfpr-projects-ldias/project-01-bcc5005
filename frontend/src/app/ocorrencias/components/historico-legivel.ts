@@ -6,7 +6,7 @@ const NOMES: Record<string,string> = {
   metaQuantidade:'Meta quantitativa',quantidadeRealizada:'Quantidade realizada',quantidadeAprovada:'Quantidade aprovada',
   evidenciaExigida:'Formato da evidência',permiteEncerramentoExcepcional:'Encerramento excepcional permitido',
   comprovanteId:'Comprovante',atividadeId:'Atividade',motivo:'Justificativa',justificativa:'Justificativa',
-  quantidade:'Quantidade',operacao:'Operação',solicitadoPor:'Solicitado por',aprovadoPor:'Aprovado por',
+  quantidade:'Quantidade',data:'Data da execução',dataExecucao:'Data da execução',observacao:'Observação',operacao:'Operação',solicitadoPor:'Solicitado por',aprovadoPor:'Aprovado por',
 };
 const SITUACOES:Record<string,string> = {NAO_INICIADO:'Não iniciada',EM_ANDAMENTO:'Em andamento',
   EM_REVISAO:'Em revisão',PENDENTE_CONCLUSAO:'Pendente de conclusão',PENDENTE_ENCERRAMENTO:'Pendente de encerramento',
@@ -17,7 +17,7 @@ export function valorLegivel(valor:unknown):string {
   if(valor===null||valor===undefined||valor==='')return 'Não informado';
   if(typeof valor==='boolean')return valor?'Sim':'Não';
   if(typeof valor==='number')return String(valor);
-  if(typeof valor==='string')return SITUACOES[valor]??valor;
+  if(typeof valor==='string')return /^\d{4}-\d{2}-\d{2}$/.test(valor)?valor.split('-').reverse().join('/'):SITUACOES[valor]??valor;
   if(Array.isArray(valor))return valor.map(valorLegivel).join(', ');
   return 'Dados estruturados (veja detalhes técnicos)';
 }

@@ -38,3 +38,8 @@ test('revisão preserva a fase operacional sem criar novos filtros ou status', (
   expect(situacaoVisivelContrato(contrato({ status: 'PLANEJAMENTO', reabertoEm: '2026-11-08' }), false)).toBe('revisao');
   expect(situacaoVisivelContrato(contrato({ status: 'EM_EXECUCAO', reabertoEm: '2026-11-08' }), false)).toBe('revisao');
 });
+
+test.each(['CONCLUIDO_PARCIALMENTE','FINALIZADO','ENCERRADO'] as const)('R44: %s fica na aba Finalizados', status => {
+  expect(situacaoVisivelContrato(contrato({status}), false)).toBe('concluidos');
+  expect(situacaoVisivelContrato(contrato({status,reabertoEm:'2026-11-23'}), false)).toBe('revisao');
+});

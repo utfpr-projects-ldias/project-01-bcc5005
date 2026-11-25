@@ -1,7 +1,10 @@
 jest.mock('@/app/contratos/components/painel-comprovacao-evidencia', () => ({
   PainelComprovacaoEvidencia: ({ esperadaId }: { esperadaId: string }) => <p data-testid="comprovacao-da-evidencia">Enviar comprovante · Aguardando envio · {esperadaId}</p>,
 }));
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render as renderSemProvider, screen, waitFor, within } from '@testing-library/react';
+import type { ReactElement } from 'react';
+import { ProvedorConsultas } from '@/app/components/provedor-consultas';
+const render = (elemento: ReactElement) => renderSemProvider(elemento, { wrapper: ProvedorConsultas });
 import { EntregaveisDaEtapa } from './entregaveis-da-etapa';
 // Teste da lista de entregáveis: a agenda HU09 tem suíte própria e depende de ProviderConsultas.
 jest.mock('@/app/ocorrencias/components/painel-ocorrencias', () => ({ PainelOcorrencias: () => <section aria-label="Ocorrências do entregável" /> }));
@@ -9,13 +12,19 @@ jest.mock('@/app/ocorrencias/components/painel-ocorrencias', () => ({ PainelOcor
 jest.mock('@/hooks/use-atividades', () => ({ useAtividades: () => ({
   atividades: [], total: 0, loading: false, atualizando: false, erro: null, atualizar: jest.fn(),
 }) }));
+// A consulta de progresso possui testes próprios; esta suíte testa o modal/listagem.
+// Evita deixar uma requisição do provider viva depois de fechar o modal.
+jest.mock('@/hooks/use-progresso', () => ({ useProgresso: () => ({
+  progresso: null, loading: false, erro: null, atualizar: async () => undefined,
+}) }));
 import { alterarArquivoEntregavel, excluirEntregavelArquivado, consultarHistoricoEntregavel, listarEntregaveisArquivados, ErroEntregavel, type Entregavel } from '@/lib/entregaveis';
 jest.mock('@/lib/entregaveis', () => ({
   ...jest.requireActual('@/lib/entregaveis'),
   alterarArquivoEntregavel: jest.fn(), excluirEntregavelArquivado: jest.fn(), consultarHistoricoEntregavel: jest.fn(), listarEntregaveisArquivados: jest.fn(),
 }));
 import { useDetalheEntregavel } from '@/hooks/use-entregaveis';
-jest.mock('@/hooks/use-entregaveis', () => ({ useDetalheEntregavel: jest.fn() }));
+jest.mock('@/hooks/use-entregaveis', () => ({ useDetalheEntregavel: jest.fn(), useResumoDocumentalContrato: () => ({dados:undefined,atualizar:async()=>undefined}) }));
+jest.mock('@/hooks/use-elegibilidade-entregavel',()=>({useElegibilidadeEntregavel:()=>({dados:undefined,carregando:false,atualizar:async()=>undefined})}));
 const consultarDetalhe = useDetalheEntregavel as jest.Mock;
 const arquivarEntregavel = alterarArquivoEntregavel as jest.Mock;
 const excluirEntregavel = excluirEntregavelArquivado as jest.Mock;
@@ -31,7 +40,8 @@ const e: Entregavel = {
   evidenciasEsperadas: [],
 };
 const atualizar = jest.fn().mockResolvedValue([]);
-const props = { contratoId: c, etapaId: etapa, dados: [e], carregando: false, atualizar };
+const props = { contratoId: c, etapaId: etapa, dados: [e], carregando: false, atualizar,
+  permissoes: { editarEntregaveis: true, arquivarEntregaveis: true } as never };
 beforeEach(() => {
   historico.mockResolvedValue([]);
   atualizar.mockClear();
@@ -41,6 +51,20 @@ beforeEach(() => {
   arquivarEntregavel.mockResolvedValue({ id: 'item-a', arquivadoEm: '2026-11-04T05:30:00.000Z' });
   consultarDetalhe.mockReturnValue({ dados: e, carregando: false, erro: undefined, atualizar: jest.fn().mockResolvedValue(e) });
 });
+async function abrirDetalheAtivo() {
+  await act(async () => { fireEvent.click(screen.getByRole('link', { name: e.nome })); });
+  return screen.getByRole('dialog', { name: e.nome });
+}
+async function abrirArquivarAtivo() {
+  await abrirDetalheAtivo();
+  fireEvent.click(screen.getByRole('button', { name: 'Fechar: escolher ação' }));
+  fireEvent.click(within(screen.getByRole('menu', { name: 'Fechar' })).getByRole('button', { name: 'Arquivar' }));
+}
+async function abrirDetalheArquivado() {
+  await screen.findByText(e.nome);
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: new RegExp(e.nome) })); });
+  return screen.getByRole('dialog', { name: e.nome });
+}
 test('lista contrato/etapa reais, tipo, prazo, link acessivel e nenhum status ficticio', () => {
   render(<EntregaveisDaEtapa {...props} />);
   const lista = screen.getByRole('list', { name: 'Entregáveis planejados da etapa' });
@@ -55,14 +79,14 @@ test('lista contrato/etapa reais, tipo, prazo, link acessivel e nenhum status fi
 });
 test('isola etapa e contrato mesmo que API retorne item trocado', () => {
   render(<EntregaveisDaEtapa {...props} dados={[{ ...e, etapaId: 'outra-etapa' }, { ...e, id: 'b', contratoId: 'outro' }]} />);
-  expect(screen.getByText('Nenhum entregável pendente de comprovação.')).toBeInTheDocument();
+  expect(screen.getByText('Nenhum entregável nesta situação.')).toBeInTheDocument();
   expect(screen.queryByRole('link')).not.toBeInTheDocument();
 });
 test('carregando, vazio e erro de autorizacao nunca exibem registros antigos', () => {
   const view = render(<EntregaveisDaEtapa {...props} dados={undefined} carregando />);
   expect(screen.getByRole('status')).toHaveTextContent('Carregando entregáveis');
   view.rerender(<EntregaveisDaEtapa {...props} dados={[]} />);
-  expect(screen.getByText('Nenhum entregável pendente de comprovação.')).toBeInTheDocument();
+  expect(screen.getByText('Nenhum entregável nesta situação.')).toBeInTheDocument();
   view.rerender(<EntregaveisDaEtapa {...props} erro={new ErroEntregavel(403, 'Acesso negado')} />);
   expect(screen.getByRole('alert')).toHaveTextContent('Acesso negado');
   expect(screen.queryByRole('link')).not.toBeInTheDocument();
@@ -90,7 +114,7 @@ test('exibe nome e e-mail do responsável retornados pela API, sem UUID técnico
 
 test('lista usa atualização de dados após mutação, sem botão redundante de atualizar', () => {
   render(<EntregaveisDaEtapa {...props} dados={[]} />);
-  expect(screen.getByText('Nenhum entregável pendente de comprovação.')).toBeInTheDocument();
+  expect(screen.getByText('Nenhum entregável nesta situação.')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Atualizar entregáveis' })).not.toBeInTheDocument();
 });
 
@@ -103,13 +127,13 @@ test('cadastro acontece em modal sem inserir formulário na listagem', () => {
   expect(screen.queryByRole('form', { name: 'Cadastrar entregável' })).not.toBeInTheDocument();
 });
 
-test('clique no título abre detalhe real em modal; Escape preserva contrato e scroll', () => {
+test('clique no título abre detalhe real em modal; Escape preserva contrato e scroll', async () => {
   const view = render(<EntregaveisDaEtapa {...props} podeCriar podeEditar />);
   const botao = screen.getByRole('link', { name: 'Relatório de instalação' });
   const enderecoAntes = window.location.pathname;
-  fireEvent.click(botao);
+  await act(async () => { fireEvent.click(botao); });
   expect(screen.getByRole('dialog', { name: 'Relatório de instalação' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: `Editar entregável ${e.nome}` })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Editar entregável' })).toBeInTheDocument();
   expect(screen.queryByRole('link', { name: 'Abrir página completa' })).not.toBeInTheDocument();
   expect(within(screen.getByRole('dialog', { name: 'Relatório de instalação' }))
     .getByRole('tab', { name: 'Evidências' })).toBeInTheDocument();
@@ -123,18 +147,18 @@ test('clique no título abre detalhe real em modal; Escape preserva contrato e s
 test('modal de entregável: evidência planejada abre detalhe sem simular arquivo entregue', async () => {
   const itemComChecklist = { ...e, evidenciasEsperadas: [{ id: 'ee-1', tipoEvidencia: 'Relatório', descricao: 'Relatório mensal', obrigatoria: true }] };
   consultarDetalhe.mockReturnValue({ dados: itemComChecklist, carregando: false, erro: undefined, atualizar: jest.fn() });
-  render(<EntregaveisDaEtapa {...props} dados={[itemComChecklist]} />);
+  await act(async () => { render(<EntregaveisDaEtapa {...props} dados={[itemComChecklist]} />); });
   await act(async () => { fireEvent.click(screen.getByRole('link', { name: 'Relatório de instalação' })); });
   const modal = screen.getByRole('dialog', { name: 'Relatório de instalação' });
   // Ocorrências é a aba inicial; abrir Evidências antes de procurar o checklist.
-  fireEvent.click(within(modal).getByRole('tab', { name: 'Evidências' }));
+  await act(async () => { fireEvent.click(within(modal).getByRole('tab', { name: 'Evidências' })); });
   const areaRolagem = modal.querySelector<HTMLElement>('.overflow-y-auto');
   expect(areaRolagem).not.toBeNull();
   // Simula o usuário tendo rolado o painel até as evidências antes do clique.
   areaRolagem!.scrollTop = 280;
   expect(await screen.findByRole('list', { name: 'Evidências obrigatórias' })).toBeInTheDocument();
   const gatilhoEvidencia = screen.getByRole('button', { name: 'Ver detalhes da evidência esperada Relatório' });
-  fireEvent.click(gatilhoEvidencia);
+  await act(async () => { fireEvent.click(gatilhoEvidencia); });
   const modalEvidencia = screen.getByRole('dialog', { name: 'Relatório' });
   expect(modalEvidencia).toBeInTheDocument();
   expect(modalEvidencia.parentElement).toHaveClass('items-center', 'justify-center');
@@ -142,7 +166,7 @@ test('modal de entregável: evidência planejada abre detalhe sem simular arquiv
   expect(within(modal).getByRole('button', { name: 'Voltar ao nível anterior', hidden: true })).toBeInTheDocument();
   // A janela de consulta do entregável permanece em max-w-3xl; a evidência é menor.
   // A largura não deve ser confundida com o limite vertical do formulário de edição.
-  expect(modal).toHaveClass('max-w-3xl');
+  expect(modal).toHaveClass('max-w-5xl');
   expect(modalEvidencia).toHaveClass('max-w-xl');
   expect(within(modalEvidencia).getByRole('button', { name: 'Fechar evidência' })).toBeInTheDocument();
   expect(modal).toHaveAttribute('aria-hidden', 'true');
@@ -152,7 +176,7 @@ test('modal de entregável: evidência planejada abre detalhe sem simular arquiv
   expect(screen.getByText(/Enviar comprovante · Aguardando envio/)).toBeInTheDocument();
   // Ao abrir um detalhe curto, o browser pode reduzir o scrollTop para zero.
   areaRolagem!.scrollTop = 0;
-  fireEvent.click(screen.getByRole('button', { name: 'Fechar evidência' }));
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Fechar evidência' })); });
   expect(screen.getByRole('tab', { name: 'Evidências' })).toBeInTheDocument();
   expect(areaRolagem!.scrollTop).toBe(280);
   // O botão anterior foi desmontado pelo React: a restauração precisa focar
@@ -164,60 +188,51 @@ test('modal de entregável: evidência planejada abre detalhe sem simular arquiv
   expect(areaRolagem!.scrollTop).toBe(280);
 });
 
-test('isolamento: detalhe de outro contrato é negado mesmo que o cache da lista esteja disponível', () => {
+test('isolamento: detalhe de outro contrato é negado mesmo que o cache da lista esteja disponível', async () => {
   consultarDetalhe.mockReturnValue({ dados: { ...e, contratoId: 'outro' }, carregando: false, erro: undefined, atualizar: jest.fn() });
   render(<EntregaveisDaEtapa {...props} />);
-  fireEvent.click(screen.getByRole('link', { name: 'Relatório de instalação' }));
+  await act(async () => { fireEvent.click(screen.getByRole('link', { name: 'Relatório de instalação' })); });
   expect(screen.getByRole('alert')).toHaveTextContent('não encontrado');
   expect(screen.queryByRole('heading', { name: 'Relatório de instalação' })).not.toBeInTheDocument();
 });
 
 
-test('resposta de detalhe vazia após carga não reutiliza o item de listagem', () => {
+test('resposta de detalhe vazia após carga não reutiliza o item de listagem', async () => {
   consultarDetalhe.mockReturnValue({ dados: undefined, carregando: false, erro: undefined, atualizar: jest.fn() });
   render(<EntregaveisDaEtapa {...props} />);
-  fireEvent.click(screen.getByRole('link', { name: 'Relatório de instalação' }));
+  await act(async () => { fireEvent.click(screen.getByRole('link', { name: 'Relatório de instalação' })); });
   expect(screen.getByRole('alert')).toHaveTextContent('não encontrado');
   expect(screen.queryByRole('heading', { name: 'Relatório de instalação' })).not.toBeInTheDocument();
 });
 
-test('cache legítimo da lista aparece somente enquanto a consulta autoritativa está pendente', () => {
+test('cache legítimo da lista aparece somente enquanto a consulta autoritativa está pendente', async () => {
   consultarDetalhe.mockReturnValue({ dados: undefined, carregando: true, erro: undefined, atualizar: jest.fn() });
   render(<EntregaveisDaEtapa {...props} />);
-  fireEvent.click(screen.getByRole('link', { name: 'Relatório de instalação' }));
-  expect(screen.getByRole('dialog', { name: 'Relatório de instalação' })).toBeInTheDocument();
+  await act(async () => { fireEvent.click(screen.getByRole('link', { name: 'Relatório de instalação' })); });
+  expect(screen.getByRole('dialog', { name: 'Detalhes do entregável' })).toHaveTextContent('Carregando dados do entregável');
+  expect(screen.queryByRole('button', { name: 'Editar entregável' })).not.toBeInTheDocument();
 });
 
-test('ações de arquivar e editar ficam no cartão; modal de leitura não as duplica', () => {
+test('ações de editar e arquivar ficam no detalhe autenticado, não duplicadas no cartão', async () => {
   render(<EntregaveisDaEtapa {...props} podeEditar podeArquivar />);
   const lista = screen.getByRole('list', { name: 'Entregáveis planejados da etapa' });
-  const card = within(lista).getByRole('link', { name: e.nome });
-  expect(card).toHaveAttribute('aria-haspopup', 'dialog');
-  expect(within(lista).getByRole('button', { name: `Editar entregável ${e.nome}` })).toBeInTheDocument();
-  expect(within(lista).getByRole('button', { name: `Arquivar entregável ${e.nome}` })).toBeInTheDocument();
-  fireEvent.click(card);
-  const detalhe = screen.getByRole('dialog', { name: e.nome });
-  expect(within(detalhe).queryByRole('button', { name: /Arquivar entregável/ })).not.toBeInTheDocument();
-  expect(within(detalhe).queryByRole('button', { name: /Editar entregável/ })).not.toBeInTheDocument();
-  fireEvent.keyDown(detalhe, { key: 'Escape' });
-  expect(screen.queryByRole('dialog', { name: e.nome })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: `Editar entregável ${e.nome}` }));
+  expect(within(lista).queryByRole('button', { name: 'Editar entregável' })).not.toBeInTheDocument();
+  const detalhe = await abrirDetalheAtivo();
+  expect(within(detalhe).getByRole('button', { name: 'Editar entregável' })).toBeInTheDocument();
+  expect(within(detalhe).getByRole('button', { name: 'Fechar: escolher ação' })).toBeInTheDocument();
+  fireEvent.click(within(detalhe).getByRole('button', { name: 'Editar entregável' }));
   const formulario = screen.getByRole('form', { name: `Editar entregável ${e.nome}` });
   expect(formulario).toBeInTheDocument();
-  const janelaDeEdicao = formulario.closest('[role="dialog"]');
-  expect(janelaDeEdicao).toHaveStyle({ maxHeight: 'calc(100dvh - 24px)', height: 'min(88dvh, 850px)' });
-  expect(janelaDeEdicao?.querySelector('[data-tec08-corpo-modal]')).toHaveClass('overflow-y-auto');
-  expect(within(formulario).queryByRole('button', { name: /Arquivar entregável/ })).not.toBeInTheDocument();
+  expect(formulario.closest('[role="dialog"]')).toHaveStyle({ maxHeight: 'calc(100dvh - 24px)', height: 'min(88dvh, 850px)' });
+  expect(within(formulario).queryByRole('button', { name: /Arquivar/ })).not.toBeInTheDocument();
   fireEvent.click(within(formulario).getByRole('button', { name: 'Cancelar' }));
   expect(screen.queryByRole('form', { name: `Editar entregável ${e.nome}` })).not.toBeInTheDocument();
-  // Cancelar a edição iniciada diretamente pelo lápis do cartão volta à etapa,
-  // sem exigir outra volta no modal de detalhe.
-  expect(screen.queryByRole('dialog', { name: e.nome })).not.toBeInTheDocument();
+  expect(screen.getByRole('dialog', { name: e.nome })).toBeInTheDocument();
 });
 
-test('arquivar pelo cartão exige confirmação; cancelar não chama API', () => {
+test('arquivar pelo detalhe exige confirmação; cancelar não chama API', async () => {
   render(<EntregaveisDaEtapa {...props} podeEditar podeArquivar />);
-  fireEvent.click(screen.getByRole('button', { name: `Arquivar entregável ${e.nome}` }));
+  await abrirArquivarAtivo();
   const confirmar = screen.getByRole('dialog', { name: 'Arquivar entregável?' });
   expect(confirmar).toHaveTextContent('mantendo arquivos e histórico');
   fireEvent.click(within(confirmar).getByRole('button', { name: 'Cancelar' }));
@@ -227,26 +242,26 @@ test('arquivar pelo cartão exige confirmação; cancelar não chama API', () =>
 
 test('confirmação de arquivamento usa id e atualiza a consulta após API', async () => {
   render(<EntregaveisDaEtapa {...props} podeEditar podeArquivar />);
-  fireEvent.click(screen.getByRole('button', { name: `Arquivar entregável ${e.nome}` }));
+  await abrirArquivarAtivo();
   fireEvent.click(within(screen.getByRole('dialog', { name: 'Arquivar entregável?' }))
     .getByRole('button', { name: 'Confirmar arquivamento' }));
   await waitFor(() => expect(arquivarEntregavel).toHaveBeenCalledWith(c, e.id, 'arquivar', undefined));
   await waitFor(() => expect(atualizar).toHaveBeenCalled());
-  expect(screen.queryByRole('dialog', { name: e.nome })).not.toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: e.nome })).not.toBeInTheDocument());
 });
 
-test('leitura não oferece ações de edição nem arquivamento', () => {
+test('leitura não oferece ações de edição nem arquivamento', async () => {
   render(<EntregaveisDaEtapa {...props} podeEditar={false} podeArquivar={false} />);
   expect(screen.queryByRole('button', { name: `Arquivar entregável ${e.nome}` })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: `Editar entregável ${e.nome}` })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('link', { name: e.nome }));
+  await act(async () => { fireEvent.click(screen.getByRole('link', { name: e.nome })); });
   expect(screen.getByRole('dialog', { name: e.nome })).toBeInTheDocument();
 });
 
-test('permissão de arquivamento sem edição só exibe arquivar no cartão', () => {
+test('permissão de arquivamento sem edição permite ação somente no detalhe', async () => {
   render(<EntregaveisDaEtapa {...props} podeEditar={false} podeArquivar />);
-  expect(screen.queryByRole('button', { name: `Editar entregável ${e.nome}` })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: `Arquivar entregável ${e.nome}` }));
+  await abrirArquivarAtivo();
+  expect(screen.queryByRole('button', { name: 'Editar entregável' })).not.toBeInTheDocument();
   expect(screen.getByRole('dialog', { name: 'Arquivar entregável?' })).toBeInTheDocument();
 });
 
@@ -260,15 +275,18 @@ test('permissão granular cria entregável, mas não permite anexar evidências 
 test('comprovação completa sem conclusão operacional não coloca entregável na aba Concluídos', () => {
   const comObrigatoria = { ...e, evidenciasEsperadas: [{ id: 'e-qa', tipoEvidencia: 'Foto', descricao: null, obrigatoria: true }] };
   render(<EntregaveisDaEtapa {...props} dados={[comObrigatoria]}
-    documental={{ [e.id]: { obrigatorias: 1, verificadas: 1 } }} />);
+    documental={{ [e.id]: { obrigatorias: 1, verificadas: 1,total:1,verificadasTotal:1,ocorrenciasTotal:0,ocorrenciasFinalizadas:0,atividadesTotal:0,atividadesVerificadas:0 } }} progressoFisico={[{entregavelId:e.id,percentualExecucao:0}]} />);
   const cartao = screen.getByRole('link', { name: e.nome });
-  expect(cartao).toHaveClass('border-brand-green/40');
+  expect(cartao.closest('li')).toHaveAttribute('data-entregavel-estado','nao-iniciado');
+  expect(screen.getByRole('img',{name:`Progresso físico de ${e.nome}: 0%`})).toBeInTheDocument();
   expect(cartao).not.toHaveClass('opacity-85');
   fireEvent.click(screen.getByRole('tab', { name: 'Entregáveis finalizados' }));
   expect(screen.queryByRole('link', { name: e.nome })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('tab', { name: /^Ativas$/ }));
-  expect(within(cartao).getByLabelText('Entregável com comprovação documental completa')).toHaveClass('h-8');
-  expect(cartao).toHaveTextContent('Comprovação documental completa');
+  fireEvent.click(screen.getByRole('tab', { name: /^Ativos$/ }));
+  const atual = screen.getByRole('link',{name:e.nome});
+  expect(within(atual).getByRole('img',{name:'Evidências: 1/1'})).toBeInTheDocument();
+  expect(within(atual).getByRole('img',{name:'Ocorrências: 0/0'})).toBeInTheDocument();
+  expect(within(atual).getByRole('img',{name:'Atividades: 0/0'})).toBeInTheDocument();
   // O marcador já foi localizado acima. Uma nova consulta após o filtro pode
   // disputar a atualização assíncrona da consulta documental e gerar falso negativo.
 });
@@ -285,16 +303,16 @@ test('abas de entregáveis não movem a geometria quando arquivados estiver vazi
   await waitFor(() => expect(screen.getByText('Nenhum entregável arquivado nesta etapa.')).toBeInTheDocument());
   expect(caixa).toHaveClass('min-h-[min(42dvh,400px)]');
   expect(screen.queryByRole('button', { name: 'Novo entregável' })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('tab', { name: /^Ativas$/ }));
+  fireEvent.click(screen.getByRole('tab', { name: /^Ativos$/ }));
   expect(screen.getByRole('list', { name: 'Entregáveis planejados da etapa' })).toBeInTheDocument();
   consultaArquivo.mockReset();
 });
 
 
-test('card usa checklist esperado imediatamente, mesmo antes de carregar o resumo documental', () => {
+test('card não inventa valores antes de carregar o resumo documental', () => {
   const checklist = [{ id: 'qa-prevista', tipoEvidencia: 'Relatório', descricao: 'Checklist', obrigatoria: true }];
   render(<EntregaveisDaEtapa {...props} dados={[{ ...e, evidenciasEsperadas: checklist }]} />);
-  expect(screen.getByRole('link', { name: 'Relatório de instalação' })).toHaveTextContent('0/1 evidência obrigatória');
+  expect(within(screen.getByRole('link', { name: 'Relatório de instalação' })).getByRole('img',{name:'Evidências: —'})).toBeInTheDocument();
   expect(screen.queryByText('Consultando comprovação...')).not.toBeInTheDocument();
 });
 
@@ -304,10 +322,12 @@ test('exclusão de entregável arquivado exige permissão e confirmação e remo
   listaArquivados.mockReset()
     .mockResolvedValueOnce([{ ...e, arquivadoEm: '2026-11-05T00:00:00.000Z' }])
     .mockResolvedValue([]);
+  consultarDetalhe.mockReturnValue({ dados: { ...e, arquivadoEm: '2026-11-05T00:00:00.000Z' }, carregando: false, erro: undefined, atualizar: jest.fn() });
   render(<EntregaveisDaEtapa {...props} podeArquivar
     permissoes={{ excluirEntregaveisArquivados: true } as never} />);
   fireEvent.click(screen.getByRole('tab', { name: 'Entregáveis arquivados' }));
-  const lixeira = await screen.findByRole('button', { name: `Excluir entregável arquivado ${e.nome}` });
+  await abrirDetalheArquivado();
+  const lixeira = screen.getByRole('button', { name: 'Excluir entregável arquivado' });
   fireEvent.click(lixeira);
   const confirmacao = screen.getByRole('dialog', { name: 'Excluir entregável arquivado?' });
   expect(excluirEntregavel).not.toHaveBeenCalled();
@@ -331,15 +351,17 @@ test('sem permissão explícita a aba arquivados não exibe lixeira', async () =
 test('reativar entregável arquivado exige confirmação e não troca de aba automaticamente', async () => {
   const arquivado = { ...e, arquivadoEm: '2026-11-05T00:00:00.000Z' };
   (listarEntregaveisArquivados as jest.Mock).mockReset().mockResolvedValueOnce([arquivado]).mockResolvedValue([]);
+  consultarDetalhe.mockReturnValue({ dados: arquivado, carregando: false, erro: undefined, atualizar: jest.fn() });
   render(<EntregaveisDaEtapa {...props} podeArquivar permissoes={{ reativarEntregaveis: true } as never} />);
   fireEvent.click(screen.getByRole('tab', { name: 'Entregáveis arquivados' }));
-  const reativar = await screen.findByRole('button', { name: 'Reativar' });
+  await abrirDetalheArquivado();
+  const reativar = screen.getByRole('button', { name: 'Reabrir' });
   fireEvent.click(reativar);
   expect(arquivarEntregavel).not.toHaveBeenCalled();
   const confirmar = screen.getByRole('dialog', { name: 'Reativar entregável?' });
   fireEvent.click(within(confirmar).getByRole('button', { name: 'Cancelar' }));
   expect(arquivarEntregavel).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: 'Reativar' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Reabrir' }));
   const dialogo = screen.getByRole('dialog', { name: 'Reativar entregável?' });
   fireEvent.change(within(dialogo).getByRole('textbox', { name: /Justificativa obrigatória/ }), { target: { value: 'Reativação auditável para retomada do planejamento.' } });
   fireEvent.click(within(dialogo).getByRole('button', { name: 'Confirmar reativação' }));
@@ -355,31 +377,30 @@ test('documentação verificada não faz entregável não concluído assumir sta
   const link = screen.getByRole('link', { name: e.nome });
   expect(link).toHaveTextContent('Relatório de instalação');
   expect(link).toHaveTextContent('#00006');
-  expect(link).toHaveTextContent('Comprovação documental completa');
+  expect(within(link).getByRole('img',{name:'Evidências: 1/1'})).toBeInTheDocument();
+  expect(link).toHaveTextContent('Não iniciado');
   expect(link).not.toHaveTextContent('Pronto para concluir');
   expect(link).not.toHaveClass('border-violet-500/65');
 });
 
-test('etapa arquivada impede arquivar o filho, mantém acesso de leitura', () => {
+test('etapa arquivada impede arquivar o filho, mantém acesso de leitura', async () => {
   render(<EntregaveisDaEtapa {...props} paiArquivado podeArquivar podeEditar podeCriar />);
   expect(screen.getByRole('link', { name: e.nome })).toBeInTheDocument();
-  const botao = screen.getByRole('button', { name: `Arquivar entregável ${e.nome}` });
-  expect(botao).toBeDisabled();
-  expect(botao).toHaveClass('disabled:cursor-not-allowed');
-  expect(screen.getByRole('button', { name: `Editar entregável ${e.nome}` })).toBeDisabled();
+  const detalhe = await abrirDetalheAtivo();
+  expect(within(detalhe).queryByRole('button', { name: 'Editar entregável' })).not.toBeInTheDocument();
+  expect(within(detalhe).queryByRole('button', { name: 'Fechar: escolher ação' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Novo entregável' })).not.toBeInTheDocument();
   expect(arquivarEntregavel).not.toHaveBeenCalled();
 });
 
-test('cartão usa título com largura responsiva e mantém ações no rodapé em telas estreitas', () => {
+test('cartão preserva largura responsiva e ações ficam no modal acessível', async () => {
   render(<EntregaveisDaEtapa {...props} podeArquivar podeEditar />);
-  const link = screen.getByRole('link', { name: 'Relatório de instalação' });
-  expect(link).toHaveClass('pb-14');
-  expect(link).not.toHaveClass('sm:pb-3.5');
-  const botoes = link.parentElement?.querySelector<HTMLDivElement>('.absolute');
-  expect(botoes).toHaveClass('bottom-2');
-  expect(botoes).not.toHaveClass('sm:top-3');
-  expect(within(link).getByText('Relatório de instalação')).toHaveClass('break-words');
+  const link = screen.getByRole('link', { name: e.nome });
+  expect(link).toHaveClass('min-w-0');
+  expect(within(link).getByText(e.nome)).toHaveClass('break-words');
+  expect(screen.queryByRole('button', { name: 'Editar entregável' })).not.toBeInTheDocument();
+  const detalhe = await abrirDetalheAtivo();
+  expect(within(detalhe).getByRole('button', { name: 'Editar entregável' })).toBeInTheDocument();
 });
 
 test('evidência opcional verificada não promove status operacional nem modal a concluído', () => {
@@ -401,7 +422,7 @@ test('aba Concluídos exige status operacional persistido, independente do check
 });
 
 
-test('arquivamento da etapa bloqueia ações, mas não recolore entregável concluído', () => {
+test('arquivamento da etapa bloqueia ações, mas não recolore entregável concluído', async () => {
   render(<EntregaveisDaEtapa {...props} dados={[{ ...e, statusExecucao: 'CONCLUIDO' }]}
     paiArquivado estadoProprioEtapa="arquivado" podeEditar />);
   fireEvent.click(screen.getByRole('tab', { name: 'Entregáveis finalizados' }));
@@ -409,24 +430,25 @@ test('arquivamento da etapa bloqueia ações, mas não recolore entregável conc
   expect(card.closest('[data-entregavel-estado]')).toHaveAttribute('data-entregavel-estado', 'concluido');
   expect(card).toHaveClass('border-violet-500/65');
   expect(card).not.toHaveClass('border-amber-500/60');
-  expect(screen.getByRole('button', { name: `Editar entregável ${e.nome}` })).toBeDisabled();
+  await abrirDetalheAtivo();
+  expect(screen.queryByRole('button', { name: 'Editar entregável' })).not.toBeInTheDocument();
 });
 
 
-test('Ativas mostra pendentes e revisões, sem duplicar concluídos e arquivados', () => {
+test('Ativos mostra pendentes e revisões, sem duplicar concluídos e arquivados', () => {
   render(<EntregaveisDaEtapa {...props} dados={[
     { ...e, id: 'reaberto', nome: 'Entrega reaberta', reabertoEm: '2026-11-09T10:00:00Z', statusExecucao: 'EM_ANDAMENTO' },
     { ...e, id: 'concluido', nome: 'Entrega concluída', statusExecucao: 'CONCLUIDO' },
     { ...e, id: 'arquivado', nome: 'Entrega arquivada', arquivadoEm: '2026-11-09T11:00:00Z' },
   ]} />);
-  expect(screen.getByRole('tab', { name: 'Ativas' })).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByRole('tab', { name: 'Ativos' })).toHaveAttribute('aria-selected', 'true');
   expect(screen.getByRole('link', { name: 'Entrega reaberta' })).toBeInTheDocument();
   expect(screen.queryByRole('link', { name: 'Entrega concluída' })).not.toBeInTheDocument();
   expect(screen.queryByRole('link', { name: 'Entrega arquivada' })).not.toBeInTheDocument();
 });
 
 
-test('Finalizados reúne Concluído e Encerrado com cores próprias; Ativas não duplica nenhum dos dois', () => {
+test('Finalizados reúne Concluído e Encerrado com cores próprias; Ativos não duplica nenhum dos dois', () => {
   render(<EntregaveisDaEtapa {...props} dados={[
     { ...e, id: 'completo', nome: 'Entrega concluída', statusExecucao: 'CONCLUIDO' },
     { ...e, id: 'encerrado', nome: 'Entrega encerrada', statusExecucao: 'FINALIZADO', percentualExecucao: '83.33' },
@@ -449,10 +471,32 @@ test('Finalizados reúne Concluído e Encerrado com cores próprias; Ativas não
 test('limite de 100% dos pesos informa sem abrir cadastro e inclui outras etapas do contrato', () => {
   const outraEtapa = { ...e, id: 'outro-item', etapaId: 'etapa-b', peso: '80' };
   const atual = { ...e, peso: '20' };
-  render(<EntregaveisDaEtapa {...props} dados={[atual, outraEtapa]} podeCriar />);
+  render(<EntregaveisDaEtapa {...props} dados={[atual, outraEtapa]} modoCalculo="PONDERADO" podeCriar />);
   fireEvent.click(screen.getByRole('button', { name: 'Novo entregável' }));
   expect(screen.getByRole('dialog', { name: 'Limite do peso operacional' })).toBeInTheDocument();
   expect(screen.queryByRole('form', { name: 'Cadastrar entregável' })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Entendi' }));
   expect(screen.queryByRole('dialog', { name: 'Limite do peso operacional' })).not.toBeInTheDocument();
+});
+
+
+test('modo SIMPLES permite abrir cadastro com pesos acumulados acima de 100%, como no HU07-06', () => {
+  // Após cinco edições do ADMIN (5 x 12,50) e quatro cadastros do GESTOR
+  // (4 x 10), a soma é 102,50%. O Nest ignora esse teto no modo SIMPLES.
+  const admin = { ...e, id: 'item-admin', peso: '62.50' };
+  const gestor = { ...e, id: 'item-gestor', etapaId: 'etapa-b', peso: '40.00' };
+  render(<EntregaveisDaEtapa {...props} dados={[admin, gestor]} modoCalculo="SIMPLES" podeCriar />);
+  fireEvent.click(screen.getByRole('button', { name: 'Novo entregável' }));
+  expect(screen.getByRole('dialog', { name: 'Novo entregável' })).toBeInTheDocument();
+  expect(screen.getByRole('form', { name: 'Cadastrar entregável' })).toBeInTheDocument();
+  expect(screen.queryByRole('dialog', { name: 'Limite do peso operacional' })).not.toBeInTheDocument();
+});
+
+test('modo PONDERADO bloqueia cadastro se a soma já excede 100%, mesmo entre etapas', () => {
+  const admin = { ...e, id: 'item-admin', peso: '62.50' };
+  const gestor = { ...e, id: 'item-gestor', etapaId: 'etapa-b', peso: '40.00' };
+  render(<EntregaveisDaEtapa {...props} dados={[admin, gestor]} modoCalculo="PONDERADO" podeCriar />);
+  fireEvent.click(screen.getByRole('button', { name: 'Novo entregável' }));
+  expect(screen.getByRole('dialog', { name: 'Limite do peso operacional' })).toBeInTheDocument();
+  expect(screen.queryByRole('form', { name: 'Cadastrar entregável' })).not.toBeInTheDocument();
 });

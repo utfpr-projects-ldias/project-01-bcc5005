@@ -1,3 +1,4 @@
+import 'reflect-metadata';
 import { validate } from 'class-validator';
 import { CreateAtividadeDto } from './dto/create-atividade.dto.js';
 import { UpdateAtividadeDto } from './dto/update-atividade.dto.js';

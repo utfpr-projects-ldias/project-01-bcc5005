@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { PainelOcorrencias } from './painel-ocorrencias';
 import { useAcessoContrato } from '@/hooks/use-contratos';
@@ -13,7 +13,12 @@ jest.mock('@/hooks/use-contratos', () => ({ useAcessoContrato: jest.fn() }));
 jest.mock('@/hooks/use-entregaveis', () => ({ useEntregaveis: jest.fn() }));
 jest.mock('@/hooks/use-etapas', () => ({ useEtapas: jest.fn() }));
 jest.mock('@/hooks/use-meu-perfil', () => ({ useMeuPerfil: jest.fn() }));
-jest.mock('@/hooks/use-ocorrencias', () => ({ useOcorrencias: jest.fn() }));
+jest.mock('@/hooks/use-ocorrencias', () => ({
+  useOcorrencias: jest.fn(),
+  consultarConfiguracaoOcorrencias: jest.fn().mockResolvedValue({ modoVisualizacao: 'CALENDARIO', tipoOperacional: 'RECORRENTE' }),
+  listarLancamentosOcorrencia: jest.fn().mockResolvedValue([]),
+  listarComprovantesOcorrencia: jest.fn().mockResolvedValue({vinculadas:[],disponiveis:[]}),
+}));
 jest.mock('@/hooks/use-progresso', () => ({ useProgresso: jest.fn() }));
 jest.mock('@/hooks/use-atividades', () => ({ consultarAtividade: jest.fn(), listarAtividadesVinculaveis: jest.fn(), editarAtividadeApi: jest.fn() }));
 jest.mock('@/app/contratos/components/modal-detalhe-entregavel', () => ({ ModalDetalheEntregavel: ({ entregavelId }: { entregavelId: string }) => <section role="dialog" aria-label="Planejamento do entregável">{entregavelId}</section> }));
@@ -34,14 +39,14 @@ beforeEach(() => {
   ocorrencias.mockReturnValue({ ocorrencias: [ocorrencia], loading: false, erro: null, criarOcorrenciaManual: jest.fn(), editarOcorrencia: jest.fn() });
 });
 
-test('agenda vinculada usa cores do status real e abre detalhes pelo cartão', () => {
+test('agenda vinculada usa cores do status real e abre detalhes pelo cartão', async () => {
   render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" embutido />);
   expect(screen.getByRole('heading', { name: 'Ocorrências' })).toBeInTheDocument();
   const card = screen.getByRole('button', { name: /Ver detalhes da ocorrência Medição de outubro/ });
-  expect(card).toHaveClass('border-[#65813b]/65');
+  expect(card).toHaveClass('border-brand-green/55');
   expect(card.className).not.toContain('teal');
   expect(card.className).not.toContain('violet');
-  fireEvent.click(card);
+  await act(async () => { fireEvent.click(card); });
   expect(screen.getByRole('dialog', { name: 'Medição de outubro' })).toHaveAttribute('data-estado', 'andamento');
 });
 
@@ -65,11 +70,11 @@ test('somente a ocorrência realmente concluída recebe o estilo violeta', () =>
   expect(screen.getByText('Concluída')).toBeInTheDocument();
 });
 
-test('painel somente leitura preserva consulta e não permite cadastro nem edição', () => {
+test('painel somente leitura preserva consulta e não permite cadastro nem edição', async () => {
   render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" somenteLeitura />);
   expect(screen.getByRole('button', { name: /Ver detalhes da ocorrência/ })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /Nova ocorrência/ })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência/ }));
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência/ })); });
   expect(screen.queryByRole('button', { name: 'Editar ocorrência' })).not.toBeInTheDocument();
 });
 
@@ -93,27 +98,27 @@ test('contrato em revisão colore painel e cadastro; filho não iniciado tem est
   expect(screen.getByRole('dialog', { name: 'Nova ocorrência' })).toHaveAttribute('data-estado', 'nao-iniciado');
 });
 
-test('ocorrência concluída mantém contexto violeta, impede edição direta e permite reabertura autorizada', () => {
+test('ocorrência concluída mantém contexto violeta, impede edição direta e permite reabertura autorizada', async () => {
   ocorrencias.mockReturnValue({ ocorrencias: [{ ...ocorrencia, status: 'CONCLUIDO' }], loading: false, erro: null });
   render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" estadoContextual="revisao" embutido />);
   fireEvent.click(screen.getByRole('tab', { name: 'Finalizadas' }));
-  fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência/ }));
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência/ })); });
   expect(screen.getByRole('dialog', { name: ocorrencia.titulo })).toHaveAttribute('data-estado', 'concluido');
   expect(screen.queryByRole('button', { name: 'Editar ocorrência' })).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /Reabrir ocorrência/ })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Reabrir' })).toBeInTheDocument();
 });
 
 test('entregável de etapa concluída não permite gerar ou cadastrar; explica o impedimento', () => {
   (useEtapas as jest.Mock).mockReturnValue({ dados: [{ id: 'etapa-1', status: 'CONCLUIDA', arquivadoEm: null }] });
   render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" />);
-  expect(screen.queryByRole('button', { name: /Nova ocorrência/ })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /Nova ocorrência/ })).toBeDisabled(); // CTA visível com justificativa, sem permissão de criar.
 });
 
-test('gestor com edição genérica mas sem permissão efetiva de criar/editar não recebe ações', () => {
+test('gestor com edição genérica mas sem permissão efetiva de criar/editar não recebe ações', async () => {
   (useAcessoContrato as jest.Mock).mockReturnValue({ dados: { podeEditar: true, permissoes: { criarOcorrencias: false, editarOcorrencias: false, concluirOcorrencias: false, reabrirOcorrencias: false } }, erro: null });
   render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" />);
   expect(screen.queryByRole('button', { name: /Nova ocorrência/ })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência/ }));
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência/ })); });
   expect(screen.queryByRole('button', { name: 'Editar ocorrência' })).not.toBeInTheDocument();
 });
 
@@ -132,12 +137,14 @@ test('quantidade declarada exige conciliação explícita antes de registrar oco
 });
 
 
-test('recorrente diária usa calendário automaticamente, sem escolha lista/calendário', () => {
+test('recorrente diária usa calendário automaticamente, sem escolha lista/calendário', async () => {
   (useEntregaveis as jest.Mock).mockReturnValue({ dados: [{ id: 'e-1', etapaId: 'etapa-1', tipo: 'RECORRENTE', periodicidade: 'DIARIA', nome: 'Rotina diária', arquivadoEm: null }] });
   ocorrencias.mockReturnValue({ ocorrencias: [{ ...ocorrencia, origem: 'RECORRENTE', periodoInicio: '2026-12-01', periodoFim: '2026-12-01', dataPrevista: '2026-12-01', status: 'CONCLUIDO' }], loading: false, erro: null });
   render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" />);
-  expect(screen.getByLabelText(/Calendário diaria de ocorrências/)).toHaveAttribute('data-periodicidade', 'DIARIA');
-  expect(screen.getByRole('button', { name: /Abrir ocorrência Medição de outubro/ })).toBeInTheDocument();
+  // Uma ocorrência CONCLUIDA pertence à aba de finalizadas, não à de ativas.
+  await act(async () => { fireEvent.click(screen.getByRole('tab', { name: 'Finalizadas' })); });
+  expect(screen.getByLabelText(/Calendário diário de ocorrências/)).toHaveAttribute('data-periodicidade', 'DIARIA');
+  expect(await screen.findByRole('button', { name: /Abrir ocorrência Medição de outubro/ })).toBeInTheDocument();
   expect(screen.queryByRole('radio', { name: /Lista/ })).not.toBeInTheDocument();
   expect(screen.getByText(/Concluído/)).toBeInTheDocument();
 });
@@ -154,14 +161,15 @@ test('recorrente sem agenda oferece geração manual com confirmação explícit
   expect(screen.getByRole('dialog', { name: 'Gerar ocorrências recorrentes' })).toBeInTheDocument();
   expect(gerarOcorrenciasRecorrentes).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: /Confirmar geração/i }));
-  await waitFor(() => expect(gerarOcorrenciasRecorrentes).toHaveBeenCalledWith('e-1'));
+  await waitFor(() => expect(gerarOcorrenciasRecorrentes).toHaveBeenCalledWith('e-1', expect.objectContaining({ modoRegistro: 'DESCRITIVO', minimoAtividadesVerificadas: 0 })));
 });
 test('atividade vinculada abre detalhe contextual por API sem navegar para outra página', async () => {
   ocorrencias.mockReturnValue({ ocorrencias: [ocorrencia], loading: false, erro: null,
     consultarDetalhe: jest.fn().mockResolvedValue({ ...ocorrencia, atividades: [{ id: 'a-1', titulo: 'Conferência', status: 'REGISTRADA' }] }) });
   (consultarAtividade as jest.Mock).mockResolvedValue({ id: 'a-1', contratoId: 'c-1', titulo: 'Conferência', descricao: 'Descrição da atividade', status: 'REGISTRADA', dataHora: '2026-11-11T10:00:00Z', tipo: 'INSPECAO', responsavel: 'Equipe', entregaveis: [], observacoes: null });
   render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" />);
-  fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência Medição de outubro/ }));
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência Medição de outubro/ })); });
+  fireEvent.click(screen.getByRole('tab', { name: 'Atividades' }));
   const botao = await screen.findByRole('button', { name: /Conferência/ });
   fireEvent.click(botao);
   await waitFor(() => expect(screen.getByText('Descrição da atividade')).toBeInTheDocument());
@@ -182,17 +190,18 @@ test('na página global, lista as ocorrências antes de selecionar o filtro de e
 });
 
 
-test('meta quantitativa exibe o executado sem confundi-lo com a quantidade aprovada', () => {
-  ocorrencias.mockReturnValue({ ocorrencias: [{ ...ocorrencia, metaQuantidade: '20.000', quantidadeExecutada: '10.000', quantidadeAprovada: null, status: 'EM_ANDAMENTO' }], loading: false, erro: null });
+test('meta quantitativa exibe o executado sem confundi-lo com a quantidade aprovada', async () => {
+  ocorrencias.mockReturnValue({ ocorrencias: [{ ...ocorrencia, modoRegistro: 'QUANTITATIVO', metaQuantidade: '20.000', quantidadeExecutada: '10.000', quantidadeAprovada: null, status: 'EM_ANDAMENTO' }], loading: false, erro: null });
   render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" />);
-  expect(screen.getByText(/Executado: 10.000 \/ 20.000 unidades/)).toBeInTheDocument();
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência Medição de outubro/ })); });
+  expect(within(screen.getByLabelText('Resumo físico da ocorrência')).getByText('10 / 20')).toBeInTheDocument();
 });
 
-test('ocorrência pendente não admite edição e exige a permissão de concluir', () => {
+test('ocorrência pendente não admite edição e exige a permissão de concluir', async () => {
   ocorrencias.mockReturnValue({ ocorrencias: [{ ...ocorrencia, metaQuantidade: '20.000', quantidadeExecutada: '20.000', status: 'PENDENTE_CONCLUSAO' }], loading: false, erro: null });
   render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" />);
   fireEvent.click(screen.getByRole('tab', { name: 'Pendentes de conclusão' }));
-  fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência/ }));
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência/ })); });
   expect(screen.getByRole('button', { name: /Aprovar/ })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Editar ocorrência' })).not.toBeInTheDocument();
 });
@@ -202,9 +211,8 @@ test('contexto do entregável não repete filtros globais e apresenta busca por 
   render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" embutido />);
   expect(screen.queryByRole('combobox', { name: 'Filtrar etapa das ocorrências' })).not.toBeInTheDocument();
   expect(screen.queryByRole('combobox', { name: 'Filtrar entregável das ocorrências' })).not.toBeInTheDocument();
-  expect(screen.getByRole('combobox', { name: 'Campo da pesquisa de ocorrências' })).toHaveValue('titulo');
-  fireEvent.change(screen.getByRole('combobox', { name: 'Campo da pesquisa de ocorrências' }), { target: { value: 'observacoes' } });
-  fireEvent.change(screen.getByRole('searchbox', { name: 'Pesquisar ocorrências' }), { target: { value: 'sem correspondência' } });
+  expect(screen.getByRole('combobox', { name: 'Pesquisar ocorrências pelo título' })).toBeInTheDocument();
+  fireEvent.change(screen.getByRole('combobox', { name: 'Pesquisar ocorrências pelo título' }), { target: { value: 'sem correspondência' } });
   expect(screen.queryByRole('button', { name: /Ver detalhes da ocorrência Medição de outubro/ })).not.toBeInTheDocument();
 });
 
@@ -219,7 +227,7 @@ test('cadastro dentro do entregável não repete a seleção e usa meta textual 
   render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" embutido />);
   fireEvent.click(screen.getByRole('button', { name: /Nova ocorrência/ }));
   expect(screen.queryByRole('combobox', { name: /^Entregável/ })).not.toBeInTheDocument();
-  expect(screen.getByRole('textbox', { name: /Meta a executar/ })).toHaveAttribute('inputmode', 'decimal');
+  expect(screen.getByRole('textbox', { name: /Meta prevista/ })).toHaveAttribute('inputmode', 'decimal');
   expect(screen.getByText('Período da ocorrência (opcional)')).toBeInTheDocument();
 });
 
@@ -237,22 +245,22 @@ test('ocorrência pendente apresenta cartão violeta com etiqueta amarela e apro
   expect(modal.querySelector('header')).toContainElement(screen.getByRole('button', { name: /Aprovar/ }));
 });
 
-test('editar ocorrência fica somente no cabeçalho do detalhe', () => {
+test('editar ocorrência fica somente no cabeçalho do detalhe', async () => {
   render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" />);
   expect(screen.queryByRole('button', { name: 'Editar ocorrência Medição de outubro' })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência Medição de outubro/ }));
-  fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência Medição de outubro/ })); });
+  fireEvent.click(screen.getByRole('button', { name: 'Editar ocorrência' }));
   expect(screen.getByRole('dialog', { name: 'Medição de outubro' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Salvar alterações' })).toBeInTheDocument();
 });
 
-test('reabertura exige justificativa em diálogo separado e não coloca textarea no detalhe', () => {
+test('reabertura exige justificativa em diálogo separado e não coloca textarea no detalhe', async () => {
   ocorrencias.mockReturnValue({ ocorrencias: [{ ...ocorrencia, status: 'CONCLUIDO' }], loading: false, erro: null });
   render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" />);
   fireEvent.click(screen.getByRole('tab', { name: 'Finalizadas' }));
-  fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência/ }));
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência/ })); });
   expect(screen.queryByRole('textbox', { name: /Justificativa/ })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: /Reabrir ocorrência/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Reabrir' }));
   const modal = screen.getByRole('dialog', { name: 'Reabrir ocorrência' });
   expect(modal).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Confirmar reabertura' })).toBeDisabled();
@@ -287,24 +295,24 @@ test('Finalizadas reúne ocorrência concluída e encerrada sem apagar a distin�
 });
 
 
-test('solicitação de encerramento pendente permite Aprovar e Cancelar no cabeçalho conforme permissão', () => {
+test('solicitação de encerramento pendente permite Aprovar e Cancelar no cabeçalho conforme permissão', async () => {
   ocorrencias.mockReturnValue({ ocorrencias: [{ ...ocorrencia, status: 'PENDENTE_ENCERRAMENTO' }], loading: false, erro: null });
   render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" />);
   fireEvent.click(screen.getByRole('tab', { name: 'Pendentes de conclusão' }));
-  fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência/ }));
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência/ })); });
   const modal = screen.getByRole('dialog', { name: ocorrencia.titulo });
   expect(within(modal.querySelector('header') as HTMLElement).getByRole('button', { name: /Aprovar/ })).toBeEnabled();
   expect(within(modal.querySelector('header') as HTMLElement).getByRole('button', { name: /Cancelar/ })).toBeEnabled();
 });
 
-test('sem permissão de reabrir não oferece cancelar solicitação', () => {
+test('sem permissão de reabrir não oferece cancelar solicitação', async () => {
   (useAcessoContrato as jest.Mock).mockReturnValue({ dados: { podeEditar: true, permissoes: {
     editarOcorrencias: false, concluirOcorrencias: true, reabrirOcorrencias: false,
   } }, erro: null });
   ocorrencias.mockReturnValue({ ocorrencias: [{ ...ocorrencia, status: 'PENDENTE_ENCERRAMENTO' }], loading: false, erro: null });
   render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" />);
   fireEvent.click(screen.getByRole('tab', { name: 'Pendentes de conclusão' }));
-  fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência/ }));
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência/ })); });
   expect(screen.queryByRole('button', { name: 'Cancelar' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: /Aprovar/ })).toBeEnabled();
 });
@@ -313,14 +321,15 @@ test('vínculo de atividade é bloqueado para conta sem permissão de editar ati
   ocorrencias.mockReturnValue({ ocorrencias: [ocorrencia], loading: false, erro: null,
     consultarDetalhe: jest.fn().mockResolvedValue({ ...ocorrencia, atividades: [] }) });
   render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" />);
-  fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência/ }));
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência/ })); });
+  fireEvent.click(screen.getByRole('tab', { name: 'Atividades' }));
   const botao = await screen.findByRole('button', { name: 'Vincular atividade à ocorrência' });
   expect(botao).toBeDisabled();
 });
 
 test('conta autorizada abre seleção pesquisável sem conferir acesso a outro contrato', async () => {
   (useAcessoContrato as jest.Mock).mockReturnValue({ dados: { permissoes: {
-    criarOcorrencias: true, editarOcorrencias: true, editarAtividades: true,
+    criarOcorrencias: true, editarOcorrencias: true, editarAtividades: true, vincularAtividadesOcorrencia: true,
     concluirOcorrencias: true, reabrirOcorrencias: true, configurarAgendaOcorrencias: true,
   }}, erro: null });
   ocorrencias.mockReturnValue({ ocorrencias: [ocorrencia], loading: false, erro: null,
@@ -330,7 +339,8 @@ test('conta autorizada abre seleção pesquisável sem conferir acesso a outro c
     ocorrenciaIds: [],
   }], meta: { total: 1, page: 1, lastPage: 1 } });
   render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" />);
-  fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência/ }));
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência/ })); });
+  fireEvent.click(screen.getByRole('tab', { name: 'Atividades' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Vincular atividade à ocorrência' }));
   expect(screen.getByRole('dialog', { name: 'Vincular atividade' })).toBeInTheDocument();
   await waitFor(() => expect(listarAtividadesVinculaveis).toHaveBeenCalledWith('c-1','e-1',expect.any(AbortSignal)));
@@ -356,20 +366,30 @@ test('cadastro manual oferece mínimos verificáveis por quantidade com valores 
   render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" />);
   fireEvent.click(screen.getByRole('button', { name: /Nova ocorrência/ }));
   const dialogo = screen.getByRole('dialog', { name: 'Nova ocorrência' });
-  expect(within(dialogo).getByRole('spinbutton', { name: 'Atividades verificadas exigidas' })).toHaveAttribute('placeholder','0');
-  expect(within(dialogo).getByRole('spinbutton', { name: 'Evidências verificadas exigidas' })).toHaveAttribute('placeholder','0');
-  fireEvent.click(within(dialogo).getByRole('button', { name: 'Aumentar atividades verificadas exigidas' }));
-  expect(within(dialogo).getByRole('spinbutton', { name: 'Atividades verificadas exigidas' })).toHaveValue(1);
+  expect(within(dialogo).getByRole('textbox', { name: 'Atividades' })).toHaveAttribute('placeholder','0');
+  expect(within(dialogo).getByRole('textbox', { name: 'Fotografias' })).toHaveAttribute('placeholder','0');
+  expect(within(dialogo).getByRole('textbox', { name: 'Relatórios' })).toHaveAttribute('placeholder','0');
+  fireEvent.change(within(dialogo).getByRole('textbox', { name: 'Atividades' }), {target:{value:'1'}});
+  expect(within(dialogo).getByRole('textbox', { name: 'Atividades' })).toHaveValue('1');
 });
 
-test('detalhes da ocorrência exibem status de requisitos verificáveis sem aprovar automaticamente', () => {
+test('detalhes da ocorrência exibem status de requisitos verificáveis sem aprovar automaticamente', async () => {
   ocorrencias.mockReturnValue({ ocorrencias: [{ ...ocorrencia, minimoAtividadesVerificadas:2,
       minimoEvidenciasVerificadas:1,evidenciaExigida:'RELATORIO',atividadesVerificadas:1,evidenciasRelatorio:0 }],
     loading:false,erro:null, consultarDetalhe: jest.fn().mockResolvedValue({ ...ocorrencia,
       minimoAtividadesVerificadas:2,minimoEvidenciasVerificadas:1,evidenciaExigida:'RELATORIO',
       atividadesVerificadas:1,evidenciasRelatorio:0 }) });
   render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" />);
-  fireEvent.click(screen.getByRole('button',{name:/Ver detalhes da ocorrência/}));
-  expect(screen.getByText('1 / 2 exigidas')).toBeInTheDocument();
-  expect(screen.getByText('0 / 1 exigidas')).toBeInTheDocument();
+  await act(async () => { fireEvent.click(screen.getByRole('button',{name:/Ver detalhes da ocorrência/})); });
+  expect(screen.getByRole('progressbar', { name: /Atividades: 1 de 2/ })).toBeInTheDocument();
+  expect(screen.getByRole('progressbar', { name: /Evidências: 0 de 1/ })).toBeInTheDocument();
+});
+
+test('Visão Geral abre diretamente o detalhe pelo ID mesmo com lista ainda carregando', async () => {
+  const consultarDetalhe=jest.fn().mockResolvedValue(ocorrencia);
+  ocorrencias.mockReturnValue({ocorrencias:[],loading:true,erro:null,consultarDetalhe});
+  render(<PainelOcorrencias contratoId="c-1" abrirOcorrenciaId="oc-1" somenteDetalhe />);
+  expect(await screen.findByRole('dialog',{name:ocorrencia.titulo})).toBeVisible();
+  expect(consultarDetalhe).toHaveBeenCalledWith('oc-1');
+  expect(screen.queryByRole('heading',{name:'Ocorrências'})).not.toBeInTheDocument();
 });

@@ -4,6 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { PoliticaAcessoService } from '../autorizacao/politica-acesso.service.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
 import { uuidValido } from '../autorizacao/politicas-operacionais.js';
+import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
+import { Contrato } from '../contratos/contrato.entity.js';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import { AtividadeEntity } from './atividade.entity.js';
 import { AtividadeCompartilhada } from './atividade-compartilhada.entity.js';
@@ -48,10 +50,10 @@ export class AtividadeCompartilhadaService {
       for (const vinculo of vinculos) {
         const dados: CreateAtividadeDto = {
           contratoId: vinculo.contratoId, titulo: dto.titulo, dataHora: dto.dataHora,
-          descricao: dto.descricao, tipo: dto.tipo, responsavel: dto.responsavel,
+          descricao: dto.descricao, tipo: dto.tipo, responsavel: dto.responsavel, responsavelId:dto.responsavelId, participantes:dto.participantes,
           observacoes: dto.observacoes, local: dto.local, duracao: dto.duracao,
           entregavelIds: vinculo.entregavelIds, ocorrenciaIds: vinculo.ocorrenciaIds ?? [],
-          medicoes: vinculo.medicoes ?? [],
+          medicoes: vinculo.medicoes ?? [], medicoesDiretas:vinculo.medicoesDiretas ?? [], parcelasPercentuais:vinculo.parcelasPercentuais, percentualExecucao:vinculo.percentualExecucao, entregavelExecucaoId:vinculo.entregavelExecucaoId, ocorrenciaExecucaoId:vinculo.ocorrenciaExecucaoId,
         };
         const criado = await this.atividades.criarNaTransacao(manager, vinculo.contratoId, dados, ator, grupoId);
         await this.auditoria.registrarNaTransacao(manager, ator, criado.evento);
@@ -82,6 +84,28 @@ export class AtividadeCompartilhadaService {
         await this.pode(ator, 'atividades:verificar', registro.contratoId),
     });
     return { id, ...contarAprovacoes(registros.map(r => r.status)), atividades: linhas };
+  }
+
+  /** Retira apenas a associação ao grupo. O diário local, as medições e os comprovantes permanecem intactos. */
+  async desvincularContrato(id:string,contratoId:string,ator:UsuarioAutenticado) {
+    if(!uuidValido(id)||!uuidValido(contratoId))throw new NotFoundException('Vínculo não encontrado');
+    if(!await this.pode(ator,'atividades:visualizar',contratoId)||!await this.pode(ator,'atividades:editar',contratoId))throw new ForbiddenException('Sem autorização para alterar vínculos neste contrato');
+    return this.database.transaction(async manager=>{
+      const grupo=await manager.findOne(AtividadeCompartilhada,{where:{id},lock:{mode:'pessimistic_write'}});
+      if(!grupo)throw new NotFoundException('Vínculo não encontrado');
+      const contrato=await manager.findOne(Contrato,{where:{id:contratoId},lock:{mode:'pessimistic_write'}});
+      if(!contrato||contrato.arquivadoEm||contrato.conclusaoSolicitadaEm||!['PLANEJAMENTO','EM_EXECUCAO'].includes(contrato.status))throw new ConflictException('Reabra o contrato antes de desvincular');
+      const registros=await manager.find(AtividadeEntity,{where:{atividadeCompartilhadaId:id,excluidaEm:IsNull()}});
+      if(registros.length<2)throw new ConflictException('A atividade não possui outro contrato compartilhado');
+      const alvo=registros.find(r=>r.contratoId===contratoId);
+      if(!alvo)throw new NotFoundException('Vínculo não encontrado');
+      const registro=await manager.findOne(AtividadeEntity,{where:{id:alvo.id,contratoId},lock:{mode:'pessimistic_write'}});
+      if(!registro||registro.excluidaEm||registro.atividadeCompartilhadaId!==id||registro.status!=='REGISTRADA')throw new ConflictException('Reabra a atividade antes de desvincular o contrato');
+      registro.atividadeCompartilhadaId=null;
+      await manager.save(AtividadeEntity,registro);
+      await this.auditoria.registrarNaTransacao(manager,ator,{acao:AcaoAuditoria.ATIVIDADE_VINCULOS_ALTERADOS,entidadeTipo:'ATIVIDADE',entidadeId:registro.id,dadosAnteriores:{atividadeCompartilhadaId:id,contratoId},dadosPosteriores:{atividadeCompartilhadaId:null,contratoId,operacao:'DESVINCULAR_CONTRATO'}});
+      return {vinculado:false};
+    });
   }
 
   /** Solicitação em lote, atômica, limitada às permissões de edição por contrato. */

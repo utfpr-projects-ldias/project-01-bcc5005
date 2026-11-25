@@ -24,7 +24,7 @@ import { AtualizarOcorrenciaDto } from './dto/atualizar-ocorrencia.dto.js';
 import { EditarMetaOcorrenciaDto } from './dto/editar-meta-ocorrencia.dto.js';
 import { JustificativaDecisaoDto } from '../contratos/dto/justificativa-decisao.dto.js';
 import { ReabrirOcorrenciaDto } from './dto/reabrir-ocorrencia.dto.js';
-import { CriarLancamentoOcorrenciaDto, CorrigirLancamentoOcorrenciaDto, BloquearLancamentoOcorrenciaDto, ExcluirLancamentoOcorrenciaDto, VincularComprovanteOcorrenciaDto } from './dto/lancamento-ocorrencia.dto.js';
+import { CriarLancamentoOcorrenciaDto, CorrigirLancamentoOcorrenciaDto, DecidirLancamentoOcorrenciaDto, BloquearLancamentoOcorrenciaDto, ExcluirLancamentoOcorrenciaDto, VincularComprovanteOcorrenciaDto } from './dto/lancamento-ocorrencia.dto.js';
 
 @Controller('contratos/:contratoId')
 @UsePipes(
@@ -85,7 +85,7 @@ export class OcorrenciasController {
   }
 
   @Post('ocorrencias/iniciar-previstas')
-  @ExigirPoliticaOperacional('ocorrencias:editar',{tipo:'contrato',parametro:'contratoId'})
+  @ExigirPoliticaOperacional('ocorrencias:iniciar-previstas',{tipo:'contrato',parametro:'contratoId'})
   iniciarPrevistas(@Param('contratoId') contratoId:string,@Req() req:RequisicaoAutorizada) {
     return this.ocorrenciasService.iniciarPrevistas(contratoId,req.usuarioDominio!);
   }
@@ -126,13 +126,18 @@ export class OcorrenciasController {
   @ExigirPoliticaOperacional('ocorrencias:visualizar',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})
   registrarLancamento(@Param('contratoId') contratoId:string,@Param('ocorrenciaId') id:string,
     @Body() dto:CriarLancamentoOcorrenciaDto,@Req() req:RequisicaoAutorizada) {
-    return this.ocorrenciasService.registrarLancamento(contratoId,id,dto.id,dto.quantidade,dto.justificativa,req.usuarioDominio!);
+    return this.ocorrenciasService.registrarLancamento(contratoId,id,dto.id,dto.quantidade,dto.justificativa,req.usuarioDominio!,dto.data,dto.observacao);
   }
   @Patch('ocorrencias/:ocorrenciaId/lancamentos/:lancamentoId')
   @ExigirPoliticaOperacional('ocorrencias:visualizar',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})
   corrigirLancamento(@Param('contratoId') contratoId:string,@Param('ocorrenciaId') id:string,
     @Param('lancamentoId') lancamentoId:string,@Body() dto:CorrigirLancamentoOcorrenciaDto,@Req() req:RequisicaoAutorizada) {
-    return this.ocorrenciasService.corrigirLancamento(contratoId,id,lancamentoId,dto.quantidade,dto.justificativa,req.usuarioDominio!);
+    return this.ocorrenciasService.corrigirLancamento(contratoId,id,lancamentoId,dto.quantidade,dto.justificativa,req.usuarioDominio!,dto.data,dto.observacao);
+  }
+  @Post('ocorrencias/:ocorrenciaId/lancamentos/:lancamentoId/decidir')
+  @ExigirPoliticaOperacional('ocorrencias:decidir-lancamento',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})
+  decidirLancamento(@Param('contratoId') c:string,@Param('ocorrenciaId') o:string,@Param('lancamentoId') id:string,@Body() dto:DecidirLancamentoOcorrenciaDto,@Req() req:RequisicaoAutorizada) {
+    return this.ocorrenciasService.decidirLancamento(c,o,id,dto.decisao,dto.motivo,req.usuarioDominio!);
   }
   @Patch('ocorrencias/:ocorrenciaId/lancamentos/:lancamentoId/bloqueio')
   @ExigirPoliticaOperacional('ocorrencias:visualizar',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})
@@ -199,9 +204,15 @@ export class OcorrenciasController {
   }
 
   @Post('ocorrencias/:ocorrenciaId/solicitar-conclusao')
-  @ExigirPoliticaOperacional('ocorrencias:editar', { tipo: 'recurso', recurso: 'ocorrencia', parametro: 'ocorrenciaId', parametroContratoPai: 'contratoId' })
+  @ExigirPoliticaOperacional('ocorrencias:solicitar-conclusao', { tipo: 'recurso', recurso: 'ocorrencia', parametro: 'ocorrenciaId', parametroContratoPai: 'contratoId' })
   solicitarConclusao(@Param('contratoId') contratoId: string, @Param('ocorrenciaId') id: string, @Req() req: RequisicaoAutorizada) {
     return this.ocorrenciasService.solicitarConclusao(contratoId, id, req.usuarioDominio!);
+  }
+
+  @Post('ocorrencias/:ocorrenciaId/solicitar-conclusao-parcial')
+  @ExigirPoliticaOperacional('ocorrencias:editar', { tipo: 'recurso', recurso: 'ocorrencia', parametro: 'ocorrenciaId', parametroContratoPai: 'contratoId' })
+  solicitarConclusaoParcial(@Param('contratoId') contratoId: string, @Param('ocorrenciaId') id: string, @Req() req: RequisicaoAutorizada) {
+    return this.ocorrenciasService.solicitarConclusao(contratoId, id, req.usuarioDominio!, true);
   }
 
   @Post('ocorrencias/:ocorrenciaId/concluir')

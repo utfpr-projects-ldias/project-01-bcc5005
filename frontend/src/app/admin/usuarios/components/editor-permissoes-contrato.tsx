@@ -39,7 +39,8 @@ const ESCOPOS_PERMISSOES: readonly GrupoPermissoes[] = [
     { icone: '▣', nome: 'Agenda e medições', chaves: ['configurarAgendaOcorrencias', 'registrarExecucaoOcorrencia', 'corrigirExecucaoOcorrencia', 'bloquearExecucaoOcorrencia', 'excluirExecucaoOcorrencia'] },
   ] },
   { titulo: 'Execução', secoes: [
-    { icone: '✎', nome: 'Valores físicos', chaves: ['editarExecucaoFisica'] },
+    { icone: '✎', nome: 'Registrar e editar valores físicos (manual, atividades e evidências)', chaves: ['editarExecucaoFisica'] },
+    { icone: '✓', nome: 'Aprovação de registros manuais', chaves: ['aprovarExecucaoManual'] },
     { icone: '▤', nome: 'Pesos operacionais', chaves: ['configurarPesos'] },
   ] },
   { titulo: 'Atividades', secoes: [

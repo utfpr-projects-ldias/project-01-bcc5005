@@ -1,5 +1,5 @@
+import { migrationsCompletas } from './migrations-completas.fixture.js';
 import 'reflect-metadata';
-import { ArquivamentoLogicoContratos1794000000000 } from '../src/database/migrations/1794000000000-ArquivamentoLogicoContratos.js';
 
 import { randomUUID } from 'node:crypto';
 import {
@@ -11,15 +11,6 @@ import { Reflector } from '@nestjs/core';
 import { DataSource } from 'typeorm';
 import request from 'supertest';
 
-import { CriarUsuarios1792540000000 } from '../src/database/migrations/1792540000000-CriarUsuarios.js';
-import { CriarPermissoesContrato1793000000000 } from '../src/database/migrations/1793000000000-CriarPermissoesContrato.js';
-import { CriarEventosAuditoria1793100000000 } from '../src/database/migrations/1793100000000-CriarEventosAuditoria.js';
-import { CriarContratos1793200000000 } from '../src/database/migrations/1793200000000-CriarContratos.js';
-import { AdicionarNomeUsuarios1793300000000 } from '../src/database/migrations/1793300000000-AdicionarNomeUsuarios.js';
-import { FkPermissaoContrato1793400000000 } from '../src/database/migrations/1793400000000-FkPermissaoContrato.js';
-import { CriarEtapas1793500000000 } from '../src/database/migrations/1793500000000-CriarEtapas.js';
-import { ContextoAuditoriaOperacional1793600000000 } from '../src/database/migrations/1793600000000-ContextoAuditoriaOperacional.js';
-import { CodigoPublicoContratos1793800000000 } from '../src/database/migrations/1793800000000-CodigoPublicoContratos.js';
 import { codigoPublicoLivreParaTeste } from './codigo-publico-fixture.js';
 import { Contrato } from '../src/contratos/contrato.entity.js';
 import { Usuario } from '../src/usuarios/usuario.entity.js';
@@ -34,6 +25,7 @@ import type { SessaoSuperTokensService } from '../src/autorizacao/sessao-superto
 import type { UsuariosService } from '../src/usuarios/usuarios.service.js';
 import type { RequisicaoAutorizada } from '../src/autorizacao/usuario-autenticado.js';
 import { ContratosService } from '../src/contratos/contratos.service.js';
+import { ExecucaoService } from '../src/execucao/execucao.service.js';
 import { AuditoriaService } from '../src/auditoria/auditoria.service.js';
 import { AcaoAuditoria } from '../src/auditoria/acao-auditoria.js';
 import { PerfilUsuario } from '../src/usuarios/perfil-usuario.enum.js';
@@ -136,14 +128,7 @@ suite('TEC07-AJUSTES-02-03 — HTTP + PostgreSQL isolado, sessão simulada', () 
     db = await new DataSource({
       type: 'postgres', url, synchronize: false,
       entities: [Contrato, Usuario, Etapa, PermissaoContrato, EventoAuditoria],
-      migrations: [
-        CriarUsuarios1792540000000, CriarPermissoesContrato1793000000000,
-        CriarEventosAuditoria1793100000000, CriarContratos1793200000000,
-        AdicionarNomeUsuarios1793300000000, FkPermissaoContrato1793400000000,
-        CriarEtapas1793500000000, ContextoAuditoriaOperacional1793600000000,
-        CodigoPublicoContratos1793800000000,
-        ArquivamentoLogicoContratos1794000000000,
-      ],
+      migrations: migrationsCompletas,
     }).initialize();
     await db.runMigrations();
     contrato1 = await criarContrato(`TEC07/QA/1/${idExecucao}`);
@@ -172,7 +157,7 @@ suite('TEC07-AJUSTES-02-03 — HTTP + PostgreSQL isolado, sessão simulada', () 
     const auditoria = new AuditoriaService(db);
     const politica = new PoliticaAcessoService(db.getRepository(PermissaoContrato), db.getRepository(Contrato));
     const escopos = new ResolverEscopoContratoService(db.getRepository(Contrato), db.getRepository(Etapa));
-    const contratosService = new ContratosService(db.getRepository(Contrato), auditoria);
+    const contratosService = new ContratosService(db.getRepository(Contrato), auditoria, new ExecucaoService(db, auditoria));
     const sessaoSimulada = {
       identificar: async (req: RequisicaoAutorizada) => {
         const st = req.headers['x-qa-session'];
@@ -262,15 +247,27 @@ suite('TEC07-AJUSTES-02-03 — HTTP + PostgreSQL isolado, sessão simulada', () 
     }
   });
 
-  it('planejamento é restrito, mas atividade operacional é permitida ao Colaborador vinculado', async () => {
+  it('planejamento é restrito e atividade exige delegação granular do Colaborador', async () => {
     await request(app.getHttpServer()).patch(`/qa-seguranca/contratos/${contrato1}/etapas/${etapa1}`)
       .set(chamar('gestor')).expect(200);
     await request(app.getHttpServer()).patch(`/qa-seguranca/contratos/${contrato1}/etapas/${etapa1}`)
       .set({ ...chamar('colaborador'), 'x-role': 'ADMINISTRADOR' }).expect(404);
+    // Vínculo apenas de leitura nunca autoriza criar atividade.
     await request(app.getHttpServer()).post(`/qa-seguranca/contratos/${contrato1}/atividades`)
-      .set(chamar('colaborador')).expect(201);
-    await request(app.getHttpServer()).post(`/qa-seguranca/contratos/${contrato2}/atividades`)
       .set(chamar('colaborador')).expect(404);
+    // Delegação precisa ser explícita e limitada ao contrato correto.
+    await db.query(`UPDATE permissoes_contrato SET permissoes_detalhadas = $1::jsonb WHERE id = $2`,
+      [JSON.stringify({ registrarAtividades: true }), idPermissaoColaborador]);
+    try {
+      await request(app.getHttpServer()).post(`/qa-seguranca/contratos/${contrato1}/atividades`)
+        .set(chamar('colaborador')).expect(201);
+      await request(app.getHttpServer()).patch(`/qa-seguranca/contratos/${contrato1}/etapas/${etapa1}`)
+        .set(chamar('colaborador')).expect(404);
+      await request(app.getHttpServer()).post(`/qa-seguranca/contratos/${contrato2}/atividades`)
+        .set(chamar('colaborador')).expect(404);
+    } finally {
+      await db.query(`UPDATE permissoes_contrato SET permissoes_detalhadas = NULL WHERE id = $1`, [idPermissaoColaborador]);
+    }
   });
 
   it('Gestor perde edição quando pode_editar=false, mantendo apenas leitura', async () => {

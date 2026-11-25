@@ -1,5 +1,5 @@
 import {
-  Body, Controller, Get, Param, Patch, Post, Query, Req, UsePipes, ValidationPipe,
+  Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UsePipes, ValidationPipe,
 } from '@nestjs/common';
 import { ExigirPoliticaOperacional } from '../autorizacao/politica.decorator.js';
 import type { RequisicaoAutorizada } from '../autorizacao/usuario-autenticado.js';
@@ -30,6 +30,12 @@ export class AtividadesController {
     return this.atividades.findAllPaginated(contratoId, query);
   }
 
+  @Get('responsaveis')
+  @ExigirPoliticaOperacional('atividades:registrar', { tipo: 'contrato', parametro: 'contratoId' })
+  responsaveis(@Param('contratoId') contratoId: string, @Query('busca') busca: string | undefined, @Req() req: RequisicaoAutorizada) {
+    return this.atividades.consultarResponsaveis(contratoId, busca, req.usuarioDominio!);
+  }
+
   @Get(':id')
   @ExigirPoliticaOperacional('atividades:visualizar', {
     tipo: 'recurso', recurso: 'atividade', parametro: 'id', parametroContratoPai: 'contratoId',
@@ -51,6 +57,11 @@ export class AtividadesController {
     return this.comprovantes.vincular(contratoId, id, dto.comprovanteId, req.usuarioDominio!);
   }
 
+  @Delete(':id/evidencias/:comprovanteId')
+  @ExigirPoliticaOperacional('atividades:editar', {tipo:'recurso',recurso:'atividade',parametro:'id',parametroContratoPai:'contratoId'})
+  desvincularComprovante(@Param('contratoId') contratoId:string,@Param('id') id:string,@Param('comprovanteId') comprovanteId:string,@Req() req:RequisicaoAutorizada){
+    return this.comprovantes.desvincular(contratoId,id,comprovanteId,req.usuarioDominio!);
+  }
   @Patch(':id')
   @ExigirPoliticaOperacional('atividades:editar', {
     tipo: 'recurso', recurso: 'atividade', parametro: 'id', parametroContratoPai: 'contratoId',

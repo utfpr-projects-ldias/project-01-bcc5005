@@ -10,7 +10,9 @@ export async function impactoVigencia(m: EntityManager, c: Contrato, inicio: str
   // Textos ISO de colunas DATE, sem conversão local do driver pg.
   const agenda = await m.query(`SELECT o.id, o.entregavel_id, o.periodo_inicio::text, o.periodo_fim::text, o.status::text,
       o.data_realizada::text, o.quantidade_realizada::text, o.observacoes,
-      EXISTS(SELECT 1 FROM atividades a WHERE a."ocorrenciaId" = o.id) AS vinculada
+      (EXISTS(SELECT 1 FROM atividades a WHERE a."ocorrenciaId" = o.id AND a."contratoId" = o.contrato_id)
+       OR EXISTS(SELECT 1 FROM atividade_ocorrencias ao
+            WHERE ao."ocorrenciaId" = o.id AND ao."contratoId" = o.contrato_id)) AS vinculada
     FROM ocorrencias o JOIN entregaveis e ON e.id=o.entregavel_id AND e.contrato_id=o.contrato_id
     JOIN etapas et ON et.id=e.etapa_id AND et.contrato_id=e.contrato_id
     WHERE o.contrato_id=$1 AND o.origem='RECORRENTE' AND o.substituida_em IS NULL

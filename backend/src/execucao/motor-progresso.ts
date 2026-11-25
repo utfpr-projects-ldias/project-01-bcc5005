@@ -22,9 +22,10 @@ export function calcularFisico(e: EntradaFisica): number | null {
 export function agregarFisico(itens: { percentual: number | null; peso: string | null }[]) {
   const pesos = itens.map(i => i.peso != null && /^\d{1,3}(?:\.\d{1,4})?$/.test(i.peso) ? Math.round(Number(i.peso) * 10000) : null);
   const soma = pesos.reduce<number>((s, p) => s + (p ?? 0), 0);
-  const pesosValidos = itens.length > 0 && pesos.every(p => p !== null && p >= 0 && p <= 1000000) && soma === 1000000;
+  const pesosParciaisValidos = pesos.every((p, i) => itens[i].peso == null || (p !== null && p >= 0 && p <= 1000000)) && soma <= 1000000;
+  const pesosValidos = itens.length > 0 && pesosParciaisValidos && pesos.every(p => p !== null) && soma === 1000000;
   const calculavel = itens.length > 0 && itens.every(i => valido(i.percentual) && i.percentual <= 100);
   return { pesosValidos, somaPesos: itens.length ? soma / 10000 : null,
     avancoSimples: calculavel ? arredondar(itens.reduce((s, i) => s + i.percentual!, 0) / itens.length) : null,
-    avancoPonderado: calculavel && pesosValidos ? arredondar(itens.reduce((s, i, n) => s + i.percentual! * pesos[n]! / 1000000, 0)) : null };
+    avancoPonderado: itens.length > 0 && pesosParciaisValidos && itens.every((i,n) => !pesos[n] || (valido(i.percentual) && i.percentual <= 100)) ? arredondar(itens.reduce((s, i, n) => s + (i.percentual ?? 0) * (pesos[n] ?? 0) / 1000000, 0)) : null };
 }

@@ -9,7 +9,7 @@ import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
 import { PerfilUsuario } from './perfil-usuario.enum.js';
 import { Usuario } from './usuario.entity.js';
 import { AdministracaoUsuariosService } from './administracao-usuarios.service.js';
-import type { IdentidadesFuncionariosService } from './identidades-funcionarios.service.js';
+import { RevogacaoSessoesPendenteError, type IdentidadesFuncionariosService } from './identidades-funcionarios.service.js';
 
 const ator = { id: 'uuid-admin', supertokensUserId: 'st-admin', perfil: PerfilUsuario.ADMINISTRADOR, email: 'admin@example.com' };
 const pedido = { nome: 'Pessoa de Teste', email: 'func@example.com', senhaInicial: 'SenhaForte!1234', perfil: PerfilUsuario.GESTOR };
@@ -176,5 +176,61 @@ describe('listagens de funcionários sem a conta Administrador', () => {
       expect.objectContaining({ sql: 'u.ativo = :ativo', params: { ativo: true } }),
       expect.objectContaining({ sql: expect.stringContaining('u.email ILIKE') }),
     ]));
+  });
+});
+
+describe('B02 — resultados incertos entre SuperTokens e PostgreSQL', () => {
+  it('não apaga conta do Core quando o banco confirma criação após erro de COMMIT', async () => {
+    buscarEmail.mockResolvedValueOnce(null).mockResolvedValueOnce(usuario);
+    transacao.mockImplementationOnce(async (callback) => {
+      await callback(manager);
+      throw new Error('resposta do COMMIT perdida');
+    });
+    const resultado = await svc.criar(pedido, ator);
+    expect(resultado).toMatchObject({ email: pedido.email });
+    expect(excluirIdentidade).not.toHaveBeenCalled();
+  });
+  it('não apaga identidade quando a leitura de reconciliação falha', async () => {
+    buscarEmail.mockResolvedValueOnce(null).mockRejectedValueOnce(new Error('database indisponível'));
+    transacao.mockImplementationOnce(async (callback) => { await callback(manager); throw new Error('COMMIT incerto'); });
+    await expect(svc.criar(pedido, ator)).rejects.toThrow('confirmação indeterminada');
+    expect(excluirIdentidade).not.toHaveBeenCalled();
+  });
+  it('não compensa e-mail cujo COMMIT foi confirmado na consulta posterior', async () => {
+    buscarEmail.mockImplementation(async (consulta) => {
+      const where = consulta as { id?: string; email?: string };
+      if (where.id === ator.id) return admin;
+      if (where.id === usuario.id) return Object.assign(new Usuario(), usuario, { email: 'novo@example.com' });
+      return null;
+    });
+    findOne.mockImplementation(async (consulta) => (consulta as {where: {id: string}}).where.id === ator.id ? admin : Object.assign(new Usuario(), usuario));
+    transacao.mockImplementationOnce(async (callback) => { await callback(manager); throw new Error('COMMIT incerto'); });
+    const resultado = await svc.alterarEmail(usuario.id, 'novo@example.com', ator);
+    expect(resultado.email).toBe('novo@example.com');
+    expect(alterarEmail).toHaveBeenCalledTimes(1);
+  });
+  it('não compensa e-mail quando não consegue consultar situação persistida', async () => {
+    buscarEmail.mockImplementation(async (consulta) => {
+      const where = consulta as {id?: string; email?: string};
+      if (where.id === ator.id) return admin;
+      if (where.id === usuario.id) { if (alterarEmail.mock.calls.length) throw new Error('reconciliação indisponível'); return usuario; }
+      return null;
+    });
+    findOne.mockImplementation(async (consulta) => (consulta as {where: {id: string}}).where.id === ator.id ? admin : Object.assign(new Usuario(), usuario));
+    transacao.mockImplementationOnce(async (callback) => { await callback(manager); throw new Error('COMMIT incerto'); });
+    await expect(svc.alterarEmail(usuario.id, 'novo@example.com', ator)).rejects.toThrow('confirmação indeterminada');
+    expect(alterarEmail).toHaveBeenCalledTimes(1);
+  });
+  it('registra senha alterada com revogação pendente, sem registrar a senha', async () => {
+    buscarEmail.mockImplementation(async (where) => (where as {id: string}).id === ator.id ? admin : usuario);
+    definirSenha.mockRejectedValueOnce(new RevogacaoSessoesPendenteError());
+    await expect(svc.redefinirSenha(usuario.id, 'NovaSenha!1234', ator))
+      .rejects.toThrow('sessões anteriores podem continuar ativas');
+    expect(auditarExecucao).toHaveBeenCalledTimes(2);
+    const callback = auditarExecucao.mock.calls[1][1] as () => Promise<{ evento: { acao: string; dadosPosteriores: unknown } }>;
+    const evento = (await callback()).evento;
+    expect(evento.acao).toBe(AcaoAuditoria.USUARIO_SENHA_REVOGACAO_PENDENTE);
+    expect(evento.dadosPosteriores).toEqual({ situacao: 'SENHA_ALTERADA_SESSOES_PENDENTES' });
+    expect(JSON.stringify(evento)).not.toContain('NovaSenha!1234');
   });
 });

@@ -8,7 +8,7 @@ export function estadoVisualEvidencia(
   arquivada = false,
 ): EstadoVisualEvidencia {
   if (arquivada) return 'arquivado';
-  if (reabertoEm) return 'revisao';
+  if (reabertoEm || status === 'REJEITADA') return 'revisao';
   if (status === 'VERIFICADA') return 'concluido';
   if (status === 'PENDENTE_VERIFICACAO') return 'pendente';
   return 'normal';

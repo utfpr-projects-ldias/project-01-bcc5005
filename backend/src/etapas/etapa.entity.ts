@@ -101,6 +101,8 @@ export class Etapa {
   conclusaoSolicitadaEm!: Date | null;
   @Column({ name: 'conclusao_solicitada_por', type: 'uuid', nullable: true })
   conclusaoSolicitadaPor!: string | null;
+  @Column({ name: 'conclusao_parcial_solicitada', type: 'boolean', default: false })
+  conclusaoParcialSolicitada?: boolean;
   @Column({ name: 'encerramento_solicitado_em', type: 'timestamptz', nullable: true })
   encerramentoSolicitadoEm!: Date | null;
   @Column({ name: 'encerramento_solicitado_por', type: 'uuid', nullable: true })

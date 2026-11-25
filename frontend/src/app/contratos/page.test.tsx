@@ -4,6 +4,7 @@ import ContratosListPage from './page';
 import { consultarMeuPerfil } from '@/lib/admin-usuarios';
 import { listarContratos, consultarPendentesConclusao, arquivarContrato, reativarContrato, excluirContratoArquivado } from '@/lib/contratos';
 
+jest.mock('./components/progresso-circular-contrato', () => ({ ProgressoCircularContrato: ({ nome }: { nome: string }) => <span aria-label={`Progresso físico de ${nome}`} /> }));
 jest.mock('@/hooks/use-etapas', () => ({ useEtapas: jest.fn(() => ({ dados: [], carregando: false })) }));
 jest.mock('@/hooks/use-entregaveis', () => ({
   useEntregaveis: jest.fn(() => ({ dados: [], carregando: false })),
@@ -11,7 +12,7 @@ jest.mock('@/hooks/use-entregaveis', () => ({
 }));
 jest.mock('@/lib/admin-usuarios', () => ({ consultarMeuPerfil: jest.fn() }));
 jest.mock('@/lib/contratos', () => ({
-  listarContratos: jest.fn(), consultarPendentesConclusao: jest.fn(), arquivarContrato: jest.fn(), reativarContrato: jest.fn(), excluirContratoArquivado: jest.fn(), STATUS: { PLANEJAMENTO: 'Planejamento', EM_EXECUCAO: 'Em execução', CONCLUIDO: 'Concluído', ENCERRADO: 'Encerrado', EM_ENCERRAMENTO: 'Em encerramento', SUSPENSO: 'Suspenso', CANCELADO: 'Cancelado' }, ORDEM_STATUS: ['PLANEJAMENTO','EM_EXECUCAO','CONCLUIDO','ENCERRADO','EM_ENCERRAMENTO','SUSPENSO','CANCELADO'], MODOS: { SIMPLES: 'Simples' }, dataCivil: (x: string) => x, rotuloCodigoPublico: (c: string) => `#${c}`,
+  listarContratos: jest.fn(), consultarPendentesConclusao: jest.fn(), arquivarContrato: jest.fn(), reativarContrato: jest.fn(), excluirContratoArquivado: jest.fn(), STATUS: { PLANEJAMENTO: 'Planejamento', EM_EXECUCAO: 'Em execução', CONCLUIDO: 'Concluído', CONCLUIDO_PARCIALMENTE: 'Concluído parcialmente', ENCERRADO: 'Encerrado', EM_ENCERRAMENTO: 'Em encerramento', FINALIZADO: 'Finalizado', SUSPENSO: 'Suspenso', CANCELADO: 'Cancelado' }, ORDEM_STATUS: ['PLANEJAMENTO','EM_EXECUCAO','CONCLUIDO','ENCERRADO','EM_ENCERRAMENTO','SUSPENSO','CANCELADO'], MODOS: { SIMPLES: 'Simples' }, dataCivil: (x: string) => x, rotuloCodigoPublico: (c: string) => `#${c}`,
 }));
 jest.mock('./components/area-contratos', () => ({
   AreaContratos: ({ children }: { children: React.ReactNode }) => <main>{children}</main>,
@@ -95,7 +96,7 @@ test('cartão mostra o planejamento real sem inventar progresso ou evidências e
   expect(resumo).toHaveTextContent('0/0');
   expect(resumo.getElementsByTagName('progress')).toHaveLength(0);
   expect(within(resumo).getAllByRole('img')).toHaveLength(3);
-  expect(within(resumo).getByRole('img', { name: /0 de 0 entregáveis documentalmente comprovados/ })).toBeInTheDocument();
+  expect(within(resumo).getByRole('img', { name: /0 de 0 entregáveis finalizados/ })).toBeInTheDocument();
   expect(resumo).not.toHaveTextContent('0%');
 });
 
@@ -160,7 +161,7 @@ test('carteira alterna a situação por abas e mantém busca longa independente 
   expect(screen.getByLabelText('Buscar por')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('tab', { name: 'Contratos arquivados' }));
   expect(screen.getByRole('tab', { name: 'Contratos arquivados' })).toHaveAttribute('aria-selected', 'true');
-  expect(screen.queryByLabelText('Pesquisar contrato')).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Pesquisar contrato')).toBeInTheDocument();
 });
 
 test('filtros compactos: selects com mesma largura e abas junto ao título Contratos', async () => {
@@ -172,7 +173,7 @@ test('filtros compactos: selects com mesma largura e abas junto ao título Contr
   expect(screen.getByLabelText('Filtrar por situação').parentElement).toHaveClass('order-2', 'min-[500px]:order-2');
   expect(screen.getByLabelText('Pesquisar contrato').closest('.order-1')).toHaveClass('lg:order-4');
   expect(screen.getByRole('button', { name: 'Cadastrar contrato' })).toBeEnabled();
-  expect(screen.getByRole('button', { name: 'Ordenar contratos' })).toHaveTextContent('Início mais recente');
+  expect(screen.getByRole('button', { name: 'Ordenar contratos' })).toHaveTextContent('Mais recente');
 });
 
 
@@ -316,7 +317,7 @@ test('contrato reaberto sem alterações fica somente em revisão', async () => 
 });
 
 
-test('TEC08: Todos é primeira aba, Ativos é segunda; pesquisa só aparece em Todos', async () => {
+test('TEC08: Todos é primeira aba, Ativos é segunda; pesquisa permanece ao alternar abas', async () => {
   listar.mockResolvedValue([]);
   await act(async () => { renderComConsultas(<ContratosListPage />); });
   const abas = within(screen.getByRole('tablist', { name: 'Situação dos contratos' })).getAllByRole('tab');
@@ -325,11 +326,11 @@ test('TEC08: Todos é primeira aba, Ativos é segunda; pesquisa só aparece em T
   expect(abas[0]).toHaveAttribute('aria-selected', 'true');
   expect(screen.getByLabelText('Pesquisar contrato')).toBeInTheDocument();
   fireEvent.click(abas[1]);
-  expect(screen.queryByLabelText('Pesquisar contrato')).not.toBeInTheDocument();
-  expect(screen.queryByLabelText('Filtrar por situação')).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Pesquisar contrato')).toBeInTheDocument();
+  expect(screen.getByLabelText('Filtrar por situação')).toBeInTheDocument();
 });
 
-test('TEC08: o filtro de conclusão fica apenas em Todos e não contradiz Ativos', async () => {
+test('R45: filtros por aba e Finalizados reúne conclusão e encerramento', async () => {
   const base = { id: '1', codigoPublico: '00001', numeroContrato: 'ATIVO',
     orgaoContratante: 'UTFPR', objeto: 'Teste', status: 'PLANEJAMENTO' as const,
     modoCalculo: 'SIMPLES' as const, inicioVigencia: '2026-01-01',
@@ -337,16 +338,28 @@ test('TEC08: o filtro de conclusão fica apenas em Todos e não contradiz Ativos
   listar.mockResolvedValue([
     base, { ...base, id: '2', numeroContrato: 'CONCLUIDO', status: 'CONCLUIDO' },
     { ...base, id: '3', numeroContrato: 'CONCLUIDO-ARQUIVADO', status: 'CONCLUIDO', arquivadoEm: '2026-11-07T00:00:00Z' },
+    { ...base, id: '4', numeroContrato: 'ENCERRADO', status: 'FINALIZADO' },
+    { ...base, id: '5', numeroContrato: 'PARCIAL', status: 'CONCLUIDO_PARCIALMENTE' },
+    { ...base, id: '6', numeroContrato: 'REVISAO-PLANEJAMENTO', reabertoEm: '2026-11-24T00:00:00Z' },
   ] as Awaited<ReturnType<typeof listarContratos>>);
   await act(async () => { renderComConsultas(<ContratosListPage />); });
-  fireEvent.change(screen.getByLabelText('Filtrar por situação'), { target: { value: 'CONCLUIDO' } });
-  expect(screen.getByRole('button', { name: 'Abrir detalhes do contrato CONCLUIDO' })).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'Abrir detalhes do contrato CONCLUIDO-ARQUIVADO' })).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'Abrir detalhes do contrato ATIVO' })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('tab', { name: 'Contratos ativos' }));
-  expect(screen.queryByLabelText('Filtrar por situação')).not.toBeInTheDocument();
+  const filtro = screen.getByLabelText('Filtrar por situação');
+  expect(within(filtro).getAllByRole('option').map(o => (o as HTMLOptionElement).value)).toEqual(['', 'PLANEJAMENTO', 'EM_EXECUCAO', 'PENDENTE_ENCERRAMENTO', 'SUSPENSO', 'CANCELADO']);
+  fireEvent.change(filtro, { target: { value: 'PLANEJAMENTO' } });
   expect(screen.getByRole('button', { name: 'Abrir detalhes do contrato ATIVO' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Abrir detalhes do contrato CONCLUIDO' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Abrir detalhes do contrato REVISAO-PLANEJAMENTO' })).toBeInTheDocument();
+  const abas = screen.getAllByRole('tab');
+  expect(abas.indexOf(screen.getByRole('tab', { name: 'Contratos em revisão' }))).toBe(abas.indexOf(screen.getByRole('tab', { name: 'Contratos ativos' })) + 1);
+  fireEvent.click(screen.getByRole('tab', { name: 'Contratos em revisão' }));
+  expect(screen.queryByRole('button', { name: 'Abrir detalhes do contrato ATIVO' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Abrir detalhes do contrato REVISAO-PLANEJAMENTO' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab', { name: 'Contratos finalizados' }));
+  for (const nome of ['CONCLUIDO','ENCERRADO','PARCIAL']) expect(screen.getByRole('button', { name: `Abrir detalhes do contrato ${nome}` })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Abrir detalhes do contrato CONCLUIDO-ARQUIVADO' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab', { name: 'Contratos ativos' }));
+  expect(screen.getByLabelText('Filtrar por situação')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Abrir detalhes do contrato ATIVO' })).toBeInTheDocument();
 });
 
 
@@ -407,4 +420,11 @@ test.each([
   await act(async () => { renderComConsultas(<ContratosListPage />); });
   expect(screen.getByRole('button', { name: /Abrir detalhes do contrato CONTRATO-ESTADO-2026/ }))
     .toHaveAttribute('data-tec08-estado', estado);
+});
+
+
+test('filtro não repete a opção Encerrado', async () => {
+  listar.mockResolvedValue([]);
+  await act(async () => { renderComConsultas(<ContratosListPage />); });
+  expect(screen.getAllByRole('option', { name: 'Encerrado' }).length).toBeLessThanOrEqual(1);
 });

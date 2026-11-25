@@ -1,54 +1,88 @@
-"use client";
-import { useEffect, useState } from "react";
-import { consultarHistoricoContrato, type EventoHistoricoContrato } from "@/lib/contratos";
+'use client';
 
-/** Trilha em consulta sob demanda; a API devolve projeção sanitizada, sem JSONB de auditoria. */
-export function HistoricoContrato({ contratoId, versao, estado = 'normal' }: { contratoId: string; versao: string; estado?: 'normal' | 'revisao' | 'concluido' | 'arquivado' | 'encerrado' | 'suspenso' | 'cancelado' }) {
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { consultarHistoricoContrato, type EventoHistoricoContrato } from '@/lib/contratos';
+import { ModalEtapa } from './modal-etapa';
+
+const formatoData = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric' });
+const formatoHora = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+function dataHora(valor: string) {
+  const data = new Date(valor);
+  return Number.isFinite(data.getTime()) ? `${formatoData.format(data)} · ${formatoHora.format(data)}` : 'Data não informada';
+}
+function tomEvento(acao: string) {
+  if (/REJEIT|CANCEL|EXCLUID|INVALID|SUSPENS/.test(acao)) return 'alerta';
+  if (/VERIFICAD|APROVAD|CONCLUID/.test(acao)) return 'reconhecido';
+  if (/SOLICIT|PENDENTE/.test(acao)) return 'pendente';
+  return 'registro';
+}
+function Evento({ evento, completo = false }: { evento: EventoHistoricoContrato; completo?: boolean }) {
+  return <li className="pi-historico-linha" data-completo={completo}>
+    <span className="pi-historico-marcador" data-tom={tomEvento(evento.acao)} aria-hidden="true"/>
+    <div className="min-w-0">
+      <p className={completo ? 'text-sm font-semibold break-words' : 'text-xs truncate'} title={[evento.descricao,evento.contexto].filter(Boolean).join(' — ')}>{completo ? evento.descricao : evento.descricao.split(" · Campos alterados:")[0]}{!completo && evento.contexto ? ` — ${evento.contexto}` : ''}</p>
+      {completo && <div className="mt-1 space-y-1 text-xs text-foreground/65 break-words">
+        {evento.contexto && <p>{evento.contexto}</p>}
+        {evento.nomeArquivo && <p>Arquivo: {evento.nomeArquivo}</p>}
+        {evento.situacaoAnterior && evento.situacaoAtual && <p>{evento.situacaoAnterior} → {evento.situacaoAtual}</p>}
+        {evento.justificativa && <p className="whitespace-pre-wrap">Justificativa: {evento.justificativa}</p>}
+        {evento.ator && <p>{evento.ator.email}</p>}
+      </div>}
+    </div>
+    <time className="pi-historico-data text-xs text-foreground/60 tabular-nums" dateTime={evento.ocorridoEm}>{dataHora(evento.ocorridoEm)}</time>
+  </li>;
+}
+
+/** Paginação por cursor, sem perder eventos quando chegam novos registros. */
+function HistoricoCompleto({ contratoId, numeroContrato, eventosIniciais, fechar, origem }: { contratoId: string; numeroContrato?: string; eventosIniciais: EventoHistoricoContrato[]; fechar: () => void; origem: HTMLElement | null }) {
+  const [eventos, setEventos] = useState(eventosIniciais);
+  const [mais, setMais] = useState(eventosIniciais.length === 100);
+  const [ocupado, setOcupado] = useState(false);
+  const [erro, setErro] = useState('');
+  const requisicao = useRef<AbortController | null>(null);
+  useEffect(() => () => requisicao.current?.abort(), []);
+  async function carregarMais() {
+    if (requisicao.current || !mais || !eventos.length) return;
+    const abortador = new AbortController();
+    requisicao.current = abortador; setOcupado(true); setErro('');
+    try {
+      const pagina = await consultarHistoricoContrato(contratoId, abortador.signal, eventos.at(-1)!.id);
+      if (!abortador.signal.aborted) {
+        setEventos(anteriores => [...new Map([...anteriores, ...pagina].map(e => [e.id, e])).values()]);
+        setMais(pagina.length === 100 && pagina.at(-1)?.id !== eventos.at(-1)?.id);
+      }
+    } catch { if (!abortador.signal.aborted) setErro('Não foi possível consultar os eventos anteriores.'); }
+    finally { if (!abortador.signal.aborted) { requisicao.current = null; setOcupado(false); } }
+  }
+  return createPortal(<ModalEtapa titulo="Histórico do contrato" contexto={numeroContrato ? `Contrato ${numeroContrato}` : 'Contrato'} rotuloFechar="Fechar histórico" larguraAmpla ocupado={false} focoRetorno={origem} onFechar={fechar}>
+    <div className="pi-historico-completo">
+      {eventos.length ? <ol className="pi-historico-lista">{eventos.map(evento => <Evento key={evento.id} evento={evento} completo/>)}</ol> : <p className="py-6 text-sm text-foreground/65">Nenhuma alteração registrada.</p>}
+      {erro && <p role="alert" className="py-2 text-sm text-error-text">{erro}</p>}
+      {mais && <div className="flex justify-center py-3"><button type="button" className="rounded-lg border border-current/20 px-4 py-2 text-xs font-semibold hover:bg-current/5 disabled:opacity-50" disabled={ocupado} onClick={carregarMais}>{ocupado ? 'Carregando…' : 'Carregar eventos anteriores'}</button></div>}
+    </div>
+  </ModalEtapa>, document.body);
+}
+
+export function HistoricoContrato({ contratoId, numeroContrato, versao }: { contratoId: string; numeroContrato?: string; versao: string }) {
   const [consulta, setConsulta] = useState<{ chave: string; eventos: EventoHistoricoContrato[]; erro?: string } | null>(null);
-  const [todos, setTodos] = useState(false);
+  const [selecionados, setSelecionados] = useState<EventoHistoricoContrato[] | null>(null);
+  const gatilho = useRef<HTMLButtonElement>(null);
   const chave = `${contratoId}:${versao}`;
   useEffect(() => {
     const abortador = new AbortController();
     void consultarHistoricoContrato(contratoId, abortador.signal)
       .then(eventos => { if (!abortador.signal.aborted) setConsulta({ chave, eventos }); })
-      .catch(() => { if (!abortador.signal.aborted) setConsulta({ chave, eventos: [], erro: 'Rastreabilidade indisponível ou sem permissão de consulta.' }); });
+      .catch(() => { if (!abortador.signal.aborted) setConsulta({ chave, eventos: [], erro: 'Histórico indisponível ou sem permissão de consulta.' }); });
     return () => abortador.abort();
   }, [contratoId, chave]);
   const atual = consulta?.chave === chave ? consulta : null;
-  const eventos = atual?.eventos ?? [];
-  const reaberturas = eventos.filter(e => /_REABERT[OA]$/.test(e.acao)).length;
-  const cores = estado === 'encerrado'
-    ? { caixa: 'border-slate-500/45 bg-background', texto: 'text-slate-800 dark:text-slate-200', foco: 'focus-visible:outline-slate-400', linha: 'border-slate-500/35' }
-    : estado === 'cancelado' ? { caixa: 'border-red-500/40 bg-red-500/[0.04]', texto: 'text-red-700 dark:text-red-200', foco: 'focus-visible:outline-red-400', linha: 'border-red-400/30' }
-    : estado === 'suspenso' ? { caixa: 'border-yellow-500/40 bg-yellow-500/[0.04]', texto: 'text-yellow-800 dark:text-yellow-200', foco: 'focus-visible:outline-yellow-400', linha: 'border-yellow-400/30' }
-    : estado === 'arquivado'
-    ? { caixa: 'border-amber-500/40 bg-amber-500/[0.04]', texto: 'text-amber-200', foco: 'focus-visible:outline-amber-400', linha: 'border-amber-400/30' }
-    : estado === 'concluido'
-      ? { caixa: 'border-violet-500/30 bg-violet-500/[0.04]', texto: 'text-violet-200', foco: 'focus-visible:outline-violet-400', linha: 'border-violet-400/30' }
-      : estado === 'revisao'
-        ? { caixa: 'border-teal-500/35 bg-teal-500/[0.04]', texto: 'text-teal-700 dark:text-teal-200', foco: 'focus-visible:outline-teal-400', linha: 'border-teal-400/35' }
-        : { caixa: 'border-brand-green/30 bg-brand-green/[0.04]', texto: 'text-brand-neon', foco: 'focus-visible:outline-brand-neon', linha: 'border-brand-green/30' };
-  return <section aria-label="Rastreabilidade do contrato" className={`rounded-xl border p-3 text-sm ${cores.caixa}`}>
-
-    <div className="space-y-3">
-      {!atual ? <p role="status" className="text-foreground/70">Consultando histórico…</p> :
-        atual.erro ? <p role="status" className="text-foreground/70">{atual.erro}</p> : <>
-          <p className="text-xs text-foreground/75">{reaberturas} {reaberturas === 1 ? 'reabertura de registro' : 'reaberturas de registros'} nos {eventos.length} eventos recentes (contrato, etapas, entregáveis, evidências e atividades).</p>
-          {eventos.length === 0 ? <p className="text-foreground/70">Nenhuma alteração disponível.</p> :
-            <ol className={`space-y-2 border-l pl-4 ${cores.linha}`}>
-              {(todos ? eventos : eventos.slice(0, 5)).map(e => <li key={e.id} className="space-y-0.5 text-xs">
-                <p className="font-semibold text-foreground">{e.descricao}</p>
-                {e.contexto && <p className="break-words text-foreground/75">{e.contexto}</p>}
-                {e.nomeArquivo && <p className="break-all text-foreground/75">Arquivo: {e.nomeArquivo}</p>}
-                {e.justificativa && <p className="whitespace-pre-wrap break-words text-foreground/80"><strong>Justificativa:</strong> {e.justificativa}</p>}
-                {e.situacaoAnterior && e.situacaoAtual && <p className="text-foreground/70">{e.situacaoAnterior} → {e.situacaoAtual}</p>}
-                <p className="break-words text-foreground/70">Responsável: {e.ator ? `${e.ator.nome} (${e.ator.email})` : 'autor não disponível'}</p>
-                <time dateTime={e.ocorridoEm} className="text-foreground/60">{new Date(e.ocorridoEm).toLocaleString('pt-BR')}</time>
-              </li>)}
-            </ol>}
-          {eventos.length > 5 && <button type="button" onClick={() => setTodos(v => !v)} className={`rounded-lg border px-3 py-1 text-xs ${cores.linha} ${cores.texto}`}>{todos ? 'Mostrar recentes' : 'Ver todos os eventos consultados'}</button>}
-          {eventos.length === 100 && <p className="text-xs text-foreground/60">Exibidos apenas os 100 eventos mais recentes do contrato.</p>}
-        </>}
-    </div>
+  return <section aria-label="Histórico recente" className="pi-historico-recente">
+    <header className="flex flex-wrap items-center justify-between gap-2">
+      <h3 className="text-sm font-semibold">Histórico recente</h3>
+      <button ref={gatilho} type="button" aria-haspopup="dialog" disabled={!atual || !!atual.erro} className="pi-link-contextual text-xs font-medium disabled:opacity-40" onClick={() => atual && setSelecionados(atual.eventos)}>Consultar histórico completo</button>
+    </header>
+    {!atual ? <p role="status" className="py-2 text-xs text-foreground/65">Consultando histórico…</p> : atual.erro ? <p role="status" className="py-2 text-xs text-foreground/65">{atual.erro}</p> : atual.eventos.length ? <ol className="pi-historico-lista">{atual.eventos.slice(0, 4).map(evento => <Evento key={evento.id} evento={evento}/>)}</ol> : <p className="py-2 text-xs text-foreground/65">Nenhuma alteração registrada.</p>}
+    {selecionados && <HistoricoCompleto key={contratoId} contratoId={contratoId} numeroContrato={numeroContrato} eventosIniciais={selecionados} fechar={() => setSelecionados(null)} origem={gatilho.current}/>}
   </section>;
 }

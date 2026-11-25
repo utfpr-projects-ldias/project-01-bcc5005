@@ -12,6 +12,22 @@ Sistema web interno para acompanhar **contratos de prestação de serviços**, s
 | Testes e qualidade | Jest, React Testing Library, Supertest, ESLint (frontend), Oxlint (backend) |
 | Ambiente | Node.js 24 (containers Alpine), Docker Engine e Docker Compose |
 
+## Testes centralizados
+
+A execução de **todos os testes** agora tem uma única referência:
+[Central de QA e testes](qa/README.md).
+
+```bash
+./configurar-testes  # só na primeira configuração (ou para verificar o ambiente)
+./back              # todos os testes backend, inclusive E2E PostgreSQL
+./front             # todos os testes frontend e QA real do navegador
+./testes-all        # tudo em um único ZIP em ~/Downloads
+```
+
+Não é mais necessário procurar comandos espalhados pelos READMEs das issues.
+Os roteiros antigos continuam versionados como histórico e são chamados pelo
+executor central. A configuração reutiliza contas DEV e não cria backups.
+
 ## Uso diário
 
 **Iniciar:**
@@ -114,3 +130,9 @@ docker compose exec backend npm run test:e2e -- --runInBand
 docker compose exec frontend npm run lint
 docker compose exec frontend npm test
 ```
+
+### Reinicialização explícita da carteira de teste (desenvolvimento local)
+
+Após aplicar as migrations pendentes pelo procedimento normal, execute `./reset-dev --consultar` para diagnosticar as contagens e possíveis valores legados de execução, sem modificar dados. Confira as inconsistências antes da limpeza.
+
+Para remover permanentemente os dados operacionais **de teste**, execute `./reset-dev --executar` e digite a confirmação solicitada no terminal. O script verifica a branch, o Compose de desenvolvimento, o daemon e os volumes locais, além de exigir um administrador ativo. Mantém os usuários, a autenticação, a estrutura e as migrations; limpa vínculos, aprovações, permissões por contrato, auditoria operacional de teste e o volume exclusivo de arquivos. Não usa `down -v`, não faz backup automático e não é executado na inicialização nem na instalação de patches. Use apenas na carteira descartável. Se houver falha, confira a mensagem antes de religar as aplicações.

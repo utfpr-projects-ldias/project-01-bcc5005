@@ -182,131 +182,219 @@ def conferir_db_por_api(pg: dict, registros: list[dict], etapa_id: str) -> None:
                    and e['unidade_medida'], 'Quantitativo inválido para TEC09')
 
 
-def preencher_checklist(form, marca: str, tipo: str) -> None:
-    for i in range(2):
-        form.get_by_role('button', name=re.compile('Adicionar evidência esperada')).click()
-        form.locator('fieldset input[id*="-ev-"][id$="-tipo"]').nth(i).fill(f'HU706 {tipo} {marca} {"Relatório" if i == 0 else "Foto"}')
-        form.locator('fieldset textarea[id*="-ev-"][id$="-descricao"]').nth(i).fill(f'Item QA {i + 1} do tipo {tipo}')
-        if i == 0:
-            form.locator('fieldset input[type="checkbox"]').nth(0).check()
+def validar_checklist_api(evidencias: list[dict], *, pode_alterar_obrigatoriedade: bool = True) -> None:
+    """Checklist documental atual: 2 registros separados do POST do entregável.
+
+    Em ADMIN, Relatório obrigatório e Foto opcional; em GESTOR com edição
+    sem delegação específica, ambos obrigatórios. IDs sempre distintos.
+    Não confundir edição geral de entregável com poder de alterar requisitos.
+    """
+    exigir(isinstance(evidencias, list) and len(evidencias) == 2,
+           'Checklist deve conter exatamente duas evidências após os POSTs próprios')
+    ids = [e.get('id') for e in evidencias]
+    exigir(len(set(ids)) == 2 and all(UUID.fullmatch(x or '') for x in ids),
+           'Checklist contém ID repetido ou inválido')
+    esperado = {('Relatório', True), ('Foto', not pode_alterar_obrigatoriedade)}
+    exigir({(e.get('tipoEvidencia'), e.get('obrigatoria')) for e in evidencias} == esperado,
+           f'Checklist inconsistente com permissão alterarObrigatoriedade={pode_alterar_obrigatoriedade}: esperado {esperado}')
+
+
+def validar_acesso_obrigatoriedade(acesso: dict, perfil: str) -> bool:
+    """Confere o perfil efetivo da API; nunca promove um gestor por teste.
+
+    O QA integrado concede apenas vínculo de edição ao gestor, sem a delegação
+    granular alterarObrigatoriedade; ADMIN deve ter autorização completa.
+    """
+    esperado = perfil == 'administrador'
+    permissoes = acesso.get('permissoes')
+    exigir(isinstance(permissoes, dict) and isinstance(permissoes.get('alterarObrigatoriedade'), bool),
+           'GET acesso não retornou permissão granular alterarObrigatoriedade')
+    atual = permissoes['alterarObrigatoriedade']
+    exigir(atual is esperado,
+           f'Permissão alterarObrigatoriedade inesperada no cenário {perfil}: {atual}; '
+           f'esperado {esperado}. Verifique os vínculos do QA.')
+    return atual
 
 
 def verificar_modal_etapa(page, painel, etapa_nome: str, saida: dict) -> None:
-    """Testa edição em modal com Esc e Voltar, sem alteração de rota nem persistência."""
-    etapa = painel.locator('ol[aria-label="Etapas em ordem de execução"] > li').filter(
-        has=page.get_by_role('heading', name=etapa_nome, exact=True))
-    etapa.wait_for(timeout=25000)
-    botao = etapa.get_by_role('button', name=f'Editar etapa {etapa_nome}')
+    """Confere modal atual: detalhe primeiro, edição por botão interno e retorno seguro."""
+    botao = painel.get_by_role('button', name=re.compile(
+        r'Abrir detalhes da etapa \d+: ' + re.escape(etapa_nome)))
+    botao.wait_for(state='visible', timeout=25000)
     url_original = page.url
-    botao.scroll_into_view_if_needed()
-    posicao_anterior = page.evaluate('window.scrollY')
     botao.click()
-    dialogo = page.get_by_role('dialog', name=re.compile('Editar etapa'))
-    dialogo.wait_for(timeout=10000)
-    exigir(dialogo.get_attribute('aria-modal') == 'true', 'Edição de etapa não abriu modal acessível')
-    exigir(botao.locator('svg').count() == 0, 'Botão Editar etapa ainda tem seta de expansão')
-    exigir(dialogo.get_by_role('form', name=f'Editar etapa {etapa_nome}').count() == 1,
-           'Modal não contém o formulário correto de edição')
-    page.keyboard.press('Escape')
-    dialogo.wait_for(state='detached', timeout=10000)
-    exigir(page.url == url_original, 'Esc navegou para fora do contrato')
-    exigir(botao.evaluate('(el) => document.activeElement === el'), 'Foco não retornou ao botão Editar')
-    # Voltar pelo botão lateral do mouse/atalho do navegador: deve consumir a
-    # entrada temporária do histórico, não navegar para o dashboard/URL anterior.
-    botao.click()
-    dialogo = page.get_by_role('dialog', name=re.compile('Editar etapa'))
-    exigir(page.evaluate("Boolean(window.history.state?.__modalEtapa)"),
-           'Modal não registrou entrada reversível no histórico')
-    page.evaluate('window.history.back()')
-    dialogo.wait_for(state='detached', timeout=10000)
-    exigir(page.url == url_original, 'Voltar do mouse saiu da página do contrato')
-    exigir(abs(page.evaluate('window.scrollY') - posicao_anterior) <= 3,
-           'Voltar do mouse pulou a rolagem para o topo')
-    exigir(botao.evaluate('(el) => document.activeElement === el'),
-           'Voltar do mouse não devolveu o foco ao botão Editar')
-    botao.click()
-    dialogo = page.get_by_role('dialog', name=re.compile('Editar etapa'))
-    dialogo.get_by_role('button', name='Voltar sem salvar').click()
-    dialogo.wait_for(state='detached', timeout=10000)
-    exigir(page.url == url_original, 'Voltar no modal navegou indevidamente')
-    exigir(abs(page.evaluate('window.scrollY') - posicao_anterior) <= 3,
-           'Voltar causou salto de scroll na página do contrato')
-    exigir(botao.evaluate('(el) => document.activeElement === el'), 'Voltar não restaurou foco do botão Editar')
-    botao.click()
-    dialogo = page.get_by_role('dialog', name=re.compile('Editar etapa'))
-    dialogo.get_by_role('button', name='Fechar edição da etapa').click()
-    dialogo.wait_for(state='detached', timeout=10000)
-    exigir(botao.evaluate('(el) => document.activeElement === el'), 'Botão Fechar não restaurou foco')
-    botao.click()
-    dialogo = page.get_by_role('dialog', name=re.compile('Editar etapa'))
-    dialogo.locator('xpath=..').click(position={'x': 2, 'y': 2})
-    dialogo.wait_for(state='detached', timeout=10000)
-    exigir(page.url == url_original and abs(page.evaluate('window.scrollY') - posicao_anterior) <= 3,
-           'Clicar fora do modal alterou a rota ou rolou para o topo')
-    saida['provas'].append('Etapa: modal acessível, Esc, Voltar do mouse/navegador, Voltar sem salvar, X, clique fora, foco e scroll preservados')
+    detalhe = page.get_by_role('dialog', name=re.compile(r'^\d+\s*·\s*' + re.escape(etapa_nome) + r'$'))
+    detalhe.wait_for(state='visible', timeout=15000)
+    exigir(detalhe.get_attribute('aria-modal') == 'true', 'Detalhe da etapa não é modal acessível')
+    detalhe.get_by_role('button', name='Editar etapa').click()
+    form = page.get_by_role('form', name=f'Editar etapa {etapa_nome}')
+    form.wait_for(state='visible', timeout=15000)
+    form.get_by_role('button', name='Voltar sem salvar').click()
+    detalhe = page.get_by_role('dialog', name=re.compile(r'^\d+\s*·\s*' + re.escape(etapa_nome) + r'$'))
+    detalhe.wait_for(state='visible', timeout=15000)
+    detalhe.get_by_role('button', name='Voltar às etapas').click()
+    detalhe.wait_for(state='detached', timeout=15000)
+    exigir(page.url == url_original, 'Fechar detalhe/edição mudou a rota do contrato')
+    botao.wait_for(state='visible', timeout=15000)
+    saida['provas'].append('Etapa: detalhe acessível, edição no modal e retorno sem salvar, mantendo a rota')
 
 
-def validar_transicoes_refresh(eventos: list[dict]) -> float:
-    """Prova transição REAL do DOM (MutationObserver), sem esperar locator transitório."""
-    inicio = next((e for e in eventos if e['ocupado'] and e['desabilitado']), None)
-    exigir(inicio is not None, f'Não houve botão ocupado/desabilitado: {eventos!r}')
-    fim = next((e for e in eventos if e['t'] > inicio['t'] and not e['ocupado'] and not e['desabilitado']), None)
-    exigir(fim is not None, f'Atualização não concluiu/habilitou novamente: {eventos!r}')
-    duracao = fim['t'] - inicio['t']
-    exigir(duracao >= 550, f'Loading menor que o mínimo observável: {duracao:.0f} ms')
-    return duracao
+def localizar_entregavel_cadastrado(bloco, nome: str, contrato: str, identificador: str):
+    """Acha âncora por ID do POST/GET, independentemente do texto aninhado.
+
+    A acessibilidade continua obrigatória: aria-label exato, âncora visível,
+    href do recurso correto e ausência de aria-hidden em ancestrais.
+    """
+    esperado = rota(contrato, identificador)
+    titulo = bloco.locator(f'li[data-tec08-item-clicavel] a[href="{esperado}"]')
+    titulo.wait_for(state='visible', timeout=25000)
+    exigir(titulo.count() == 1, f'Cartão ausente ou duplicado para {nome!r}')
+    exigir(titulo.get_attribute('aria-label') == nome,
+           f'Nome acessível do entregável não corresponde ao banco: {nome!r}')
+    exigir(titulo.evaluate("a => a.tagName === 'A' && a.hasAttribute('href') && !a.closest('[aria-hidden=true]') && a.tabIndex >= 0"),
+           f'Cartão {nome!r} não é link acessível pelo teclado')
+    return titulo
 
 
-def verificar_atualizacao_entregaveis(page, bloco, saida: dict) -> None:
-    """Observa atributos reais antes de clicar; não procura texto de apenas 650ms depois do clique."""
-    botao = bloco.get_by_role('button', name='Atualizar entregáveis')
-    botao.wait_for(timeout=10000)
-    botao.evaluate("""(el) => {
-      const dados = { eventos: [] };
-      const registrar = () => {
-        const atual = { t: performance.now(), ocupado: el.getAttribute('aria-busy') === 'true',
-          desabilitado: el.disabled, texto: (el.textContent || '').trim() };
-        const anterior = dados.eventos[dados.eventos.length - 1];
-        if (!anterior || anterior.ocupado !== atual.ocupado || anterior.desabilitado !== atual.desabilitado) {
-          dados.eventos.push(atual);
-        }
-      };
-      const observer = new MutationObserver(registrar);
-      observer.observe(el, { attributes: true, childList: true, subtree: true, characterData: true });
-      registrar();
-      window.__qaRefreshHU07 = { dados, observer };
-    }""")
-    botao.click()
-    bloco.get_by_text('Lista de entregáveis atualizada.').wait_for(timeout=10000)
-    limite = time.monotonic() + 10
-    while time.monotonic() < limite:
-        terminado = botao.evaluate('(el) => !el.disabled && el.getAttribute("aria-busy") !== "true"')
-        if terminado: break
-        page.wait_for_timeout(40)
-    eventos = page.evaluate("""() => {
-      const ref = window.__qaRefreshHU07;
-      if (!ref) return [];
-      ref.observer.disconnect();
-      delete window.__qaRefreshHU07;
-      return ref.dados.eventos;
-    }""")
-    duracao = validar_transicoes_refresh(eventos)
-    exigir(botao.is_enabled(), 'Botão de atualização permaneceu bloqueado')
-    saida['provas'].append(f'Atualizar entregáveis: transição real aria-busy/disabled e retorno em {duracao:.0f} ms, feedback visível')
+def verificar_atualizacao_entregaveis(bloco, nome: str, contrato: str, identificador: str, saida: dict):
+    """Exige inserção automática visível após o POST, sem refresh manual."""
+    titulo = localizar_entregavel_cadastrado(bloco, nome, contrato, identificador)
+    exigir(bloco.get_by_role('button', name='Atualizar entregáveis', exact=True).count() == 0,
+           'A listagem voltou a depender de atualização manual')
+    saida['provas'].append(f'Autoatualização: entregável {nome} único, visível, acessível, UUID/URL confirmados na API')
+    return titulo
 
 
-def verificar_checklist_maximo(form, saida: dict) -> None:
-    """Exercita o teto de dez itens na UI sem enviar estes rascunhos ao backend."""
-    adicionar = form.get_by_role('button', name=re.compile('Adicionar evidência esperada'))
-    for _ in range(10):
-        adicionar.click()
-    exigir(adicionar.is_disabled(), 'Checklist permitiu mais de 10 itens na UI')
-    exigir(form.get_by_role('button', name=re.compile('Remover evidência esperada')).count() == 10,
-           'Dez itens não foram renderizados')
-    for _ in range(10):
-        form.get_by_role('button', name='Remover evidência esperada 1', exact=True).click()
-    exigir(adicionar.is_enabled(), 'Checklist não liberou adição após remoção')
-    saida['provas'].append('Checklist: limite de 10 validado na UI, removido sem persistir rascunhos')
+def cadastrar_checklist_no_detalhe(page, api: str, contrato: str, identificador: str,
+                                  nome: str, bloco, saida: dict,
+                                  *, pode_alterar_obrigatoriedade: bool) -> list[dict]:
+    """Exercita o fluxo real: planejamento (POST) -> detalhe -> evidência (POST x2).
+
+    Não aceita evidência inventada pelo QA via API: ambos os POSTs de checklist
+    devem ser acionados nos formulários Next, observados no Chromium e lidos
+    novamente da API para conferir UUID, tipo e obrigatoriedade.
+    """
+    link = localizar_entregavel_cadastrado(bloco, nome, contrato, identificador)
+    link.click()
+    modal = page.get_by_role('dialog', name=nome, exact=True)
+    modal.wait_for(state='visible', timeout=25000)
+    aba = modal.get_by_role('tab', name='Evidências', exact=True)
+    aba.click()
+    url = rota(contrato, identificador) + '/evidencias-esperadas'
+    criados = []
+    for tipo, obrigatoria in (('Relatório', True), ('Foto', False)):
+        modal.get_by_role('button', name='Nova evidência', exact=True).click()
+        novo = page.get_by_role('dialog', name='Nova evidência esperada')
+        novo.wait_for(state='visible', timeout=15000)
+        formulario = novo.get_by_role('form', name='Cadastrar evidência esperada')
+        formulario.get_by_label('Tipo de evidência').select_option(tipo)
+        formulario.get_by_label('Orientações (opcional)').fill(f'Exigência HU07-06: {tipo}')
+        campo = formulario.get_by_role('checkbox', name='Obrigatória')
+        if pode_alterar_obrigatoriedade:
+            campo.wait_for(state='visible', timeout=10000)
+            if obrigatoria:
+                campo.check()
+            else:
+                campo.uncheck()
+        else:
+            exigir(campo.count() == 0,
+                   'Gestor sem delegação visualizou controle de obrigatoriedade no cadastro')
+            exigir(formulario.get_by_text('Obrigatória por padrão.', exact=False).count() == 1,
+                   'Formulário do gestor não informou a obrigatoriedade padrão')
+        with page.expect_response(lambda r: r.request.method == 'POST' and urlsplit(r.url).path == url,
+                                  timeout=25000) as resposta_observada:
+            formulario.get_by_role('button', name='Cadastrar evidência', exact=True).click()
+        resposta = resposta_observada.value
+        exigir(resposta.status == 201, f'Cadastro da evidência {tipo}: HTTP {resposta.status}; {resposta.text()[:180]}')
+        corpo = resposta.json()
+        exigir(isinstance(corpo, dict) and UUID.fullmatch(corpo.get('id') or ''),
+               'POST da evidência não retornou identificador válido')
+        criados.append(corpo['id'])
+        novo.wait_for(state='detached', timeout=25000)
+        modal.get_by_role('button', name=f'Ver detalhes da evidência esperada {tipo}', exact=True).wait_for(
+            state='visible', timeout=25000)
+    detalhado = detalhe_api(page, api, contrato, identificador)
+    evidencias = detalhado['evidenciasEsperadas']
+    validar_checklist_api(evidencias, pode_alterar_obrigatoriedade=pode_alterar_obrigatoriedade)
+    if not pode_alterar_obrigatoriedade:
+        # Exercitar o backend real: UI oculta o checkbox E a API rejeita POST opcional.
+        tentativa = requisitar(page, api, url, 'POST', {
+            'tipoEvidencia': 'QA tentativa não autorizada', 'obrigatoria': False,
+        })
+        exigir(tentativa['status'] == 403,
+               f'Gestor sem delegação conseguiu cadastrar evidência opcional (HTTP {tentativa["status"]})')
+        mantidos = detalhe_api(page, api, contrato, identificador)['evidenciasEsperadas']
+        exigir({e['id'] for e in mantidos} == set(criados),
+               'POST opcional negado modificou o checklist')
+        saida['provas'].append('Gestor: controle opcional ausente e POST opcional bloqueado pela API (403), sem efeitos no banco')
+    exigir({e['id'] for e in evidencias} == set(criados),
+           'IDs das duas evidências criadas pela UI não correspondem ao GET da API')
+    modal.get_by_role('button', name='Voltar à etapa').click()
+    modal.wait_for(state='detached', timeout=15000)
+    saida['provas'].append('Checklist: dois POSTs reais via modal, IDs e obrigatoriedade compatíveis com ACL; persistência conferida')
+    return evidencias
+
+
+
+
+def validar_acl_planejamento_leitor(acesso: dict, perfil: str) -> None:
+    """Um vínculo com podeEditar=false pode conter exceções granulares antigas.
+
+    O QA não revoga essas exceções: reprova a fixture e explica a divergência,
+    sem confundir um privilégio realmente delegado com erro de renderização.
+    """
+    chaves = ('criarEtapas', 'editarEtapas', 'reordenarEtapas',
+              'criarEntregaveis', 'editarEntregaveis', 'criarEvidencias', 'editarEvidencias')
+    permissoes = acesso.get('permissoes')
+    exigir(isinstance(permissoes, dict), 'GET acesso do leitor sem permissões granulares')
+    inesperadas = [chave for chave in chaves if permissoes.get(chave) is not False]
+    exigir(not inesperadas,
+           f'Fixture {perfil} não é somente leitura no planejamento: {inesperadas}; '
+           'verifique o vínculo e as delegações existentes, sem alterar a política de produção')
+
+
+def verificar_navegacao_leitor(page, painel, etapa: dict, entregavel: dict,
+                              contrato: str, saida: dict) -> None:
+    """Comprova leitura na hierarquia real: aba Etapas -> modal etapa -> lista -> detalhe.
+
+    Um botão não encontrado no painel fechado NÃO comprova que a ACL o ocultou.
+    As ações proibidas são verificadas somente depois de cada nível estar montado.
+    A etapa é obtida pelo ID persistido do entregável, nunca por uma posição fixa.
+    """
+    nome_etapa = etapa['nome']
+    nome_entregavel = entregavel['nome']
+    abrir = painel.get_by_role('button', name=re.compile(
+        r'^Abrir detalhes da etapa \d+: ' + re.escape(nome_etapa) + r'$'))
+    abrir.wait_for(state='visible', timeout=25000)
+    exigir(abrir.count() == 1, f'Etapa {nome_etapa!r} ausente ou duplicada na aba Etapas')
+    abrir.click()
+    modal_etapa = page.get_by_role('dialog', name=re.compile(
+        r'^\d+\s*·\s*' + re.escape(nome_etapa) + r'$'))
+    modal_etapa.wait_for(state='visible', timeout=20000)
+    exigir(modal_etapa.get_attribute('aria-modal') == 'true',
+           'Detalhe da etapa não foi aberto como diálogo acessível')
+    exigir(modal_etapa.get_by_role('button', name='Editar etapa', exact=True).count() == 0,
+           'Etapa em modo de leitura disponibilizou edição no modal real')
+    bloco = modal_etapa.get_by_role('region', name='Entregáveis da etapa')
+    bloco.wait_for(state='visible', timeout=20000)
+    lista = bloco.get_by_role('list', name='Entregáveis planejados da etapa', exact=True)
+    lista.wait_for(state='visible', timeout=25000)
+    # A lista possui aria-label, não texto visível "Entregáveis planejados".
+    link = localizar_entregavel_cadastrado(lista, nome_entregavel, contrato, entregavel['id'])
+    exigir(bloco.get_by_role('button', name='Novo entregável', exact=True).count() == 0,
+           'Gestor/Colaborador leitor recebeu ação Novo entregável dentro do modal')
+    link.click()
+    modal_entregavel = page.get_by_role('dialog', name=nome_entregavel, exact=True)
+    modal_entregavel.wait_for(state='visible', timeout=25000)
+    exigir(modal_entregavel.get_attribute('aria-modal') == 'true',
+           'Detalhe aninhado do entregável não está acessível como diálogo')
+    exigir(modal_entregavel.get_by_role('button', name='Editar entregável', exact=True).count() == 0,
+           'Entregável leitor recebeu ação de edição no detalhe aninhado')
+    modal_entregavel.get_by_role('button', name='Voltar à etapa', exact=True).click()
+    modal_entregavel.wait_for(state='detached', timeout=15000)
+    modal_etapa.get_by_role('button', name='Voltar às etapas', exact=True).click()
+    modal_etapa.wait_for(state='detached', timeout=15000)
+    saida['provas'].append('Leitor: navegação contextual Etapas → modal da etapa → lista acessível → entregável, sem criação/edição')
 
 
 def selecionar_responsavel_real(page, form, api: str, contrato: str, saida: dict) -> dict:
@@ -342,18 +430,31 @@ def selecionar_responsavel_real(page, form, api: str, contrato: str, saida: dict
     return pessoa
 
 
-def criar_cinco_na_ui(page, api: str, web: str, contrato: str, saida: dict, retomar: dict | None = None) -> tuple[str, list[dict]]:
+def criar_cinco_na_ui(page, api: str, web: str, contrato: str, saida: dict,
+                    retomar: dict | None = None, *, pode_alterar_obrigatoriedade: bool = True) -> tuple[str, list[dict]]:
     """TODOS os POSTs partem dos botões da interface Next — não do validador."""
     page.goto(f'{web}/contratos/{quote(contrato)}', wait_until='domcontentloaded')
+    page.get_by_role('tab', name='Etapas', exact=True).click()
     painel = page.locator('section[aria-labelledby="titulo-etapas"]')
-    painel.wait_for(timeout=25000)
+    painel.wait_for(state='visible', timeout=25000)
     caminho_etapas = f'/contratos/{quote(contrato)}/etapas'
+    info_contrato = requisitar(page, api, f'/contratos/{quote(contrato)}')
+    exigir(info_contrato['status'] == 200 and isinstance(info_contrato['body'], dict),
+           'Não foi possível obter o modo de cálculo do contrato de QA')
+    modo_calculo = info_contrato['body'].get('modoCalculo')
+    # Este roteiro integrado foi preparado com 5 cadastros e 5 edições por perfil:
+    # ao final soma mais de 100%. É válido apenas para contratos SIMPLES, como
+    # aqueles gerados pelo bootstrap oficial. PONDERADO requer outra fixture.
+    exigir(modo_calculo == 'SIMPLES',
+           f'HU07-06 integrado exige contrato em modo SIMPLES; recebido {modo_calculo!r}')
+    saida['modoCalculo'] = modo_calculo
+    saida['provas'].append('Contrato SIMPLES confirmado na API; soma de pesos não deve bloquear cadastros adicionais')
     if retomar is None:
         marca = secrets.token_hex(4).upper()
         etapa_nome = f'QA HU07-06 Etapa {marca}'
         etapa_codigo = f'QA706-{marca}'
         painel.get_by_role('button', name='Nova etapa').click()
-        form = painel.get_by_role('form', name='Criar etapa')
+        form = page.get_by_role('form', name='Criar etapa')
         form.locator('#etapa-nome').fill(etapa_nome)
         form.locator('#etapa-codigo').fill(etapa_codigo)
         with page.expect_response(lambda r: r.request.method == 'POST' and urlsplit(r.url).path == caminho_etapas
@@ -383,24 +484,40 @@ def criar_cinco_na_ui(page, api: str, web: str, contrato: str, saida: dict, reto
     registros = []
     for n, tipo in enumerate(TIPOS, 1):
         # A UI pode mudar o tamanho da listagem após cada inserção.
-        pagina_etapa = page.locator('ol[aria-label="Etapas em ordem de execução"] > li').filter(
-            has=page.get_by_role('heading', name=etapa_nome, exact=True))
-        pagina_etapa.wait_for(timeout=25000)
-        bloco = pagina_etapa.locator('section[aria-label="Entregáveis da etapa"]')
-        if n == 1:
-            verificar_atualizacao_entregaveis(page, bloco, saida)
+        # A listagem de etapas abre detalhes; os entregáveis ficam no portal do modal.
+        pagina_etapa = painel.get_by_role('button', name=re.compile(r'Abrir detalhes da etapa \d+: ' + re.escape(etapa_nome)))
+        pagina_etapa.wait_for(state='visible', timeout=25000)
+        pagina_etapa.click()
+        detalhe_etapa = page.get_by_role('dialog', name=re.compile(r'^\d+\s*·\s*' + re.escape(etapa_nome) + r'$'))
+        detalhe_etapa.wait_for(state='visible', timeout=15000)
+        bloco = detalhe_etapa.get_by_role('region', name='Entregáveis da etapa')
         bloco.get_by_role('button', name='Novo entregável').click()
-        form = bloco.get_by_role('form', name='Cadastrar entregável')
+        form = page.get_by_role('form', name='Cadastrar entregável')
+        try:
+            form.wait_for(state='visible', timeout=12000)
+        except Exception as erro:
+            limite = page.get_by_role('dialog', name='Limite do peso operacional')
+            if limite.count() and limite.is_visible():
+                soma = sum(float(item.get('peso') or 0) for item in itens_api(page, api, contrato))
+                raise AssertionError(
+                    f'BUG FRONTEND: cadastro bloqueado pelo teto de pesos no modo SIMPLES; '
+                    f'tipo={tipo}, soma={soma:.2f}%, contrato={contrato}'
+                ) from erro
+            raise
         if n == 1:
-            verificar_checklist_maximo(form, saida)
             responsavel = selecionar_responsavel_real(page, form, api, contrato, saida)
         else:
             responsavel = None
-        codigo = f'QA706-{marca}-{n}'
+        codigo = f'Q706-{marca}-{n}'
         nome = f'QA HU07-06 {tipo} {marca}'
         form.locator('input[id$="-codigo"]').fill(codigo)
         form.locator('input[id$="-nome"]').fill(nome)
         form.locator('select[id$="-tipo"]').select_option(tipo)
+        # A API exige data de início para TODOS os cinco tipos; para contínuo
+        # e recorrente também é necessário explicitar o término.
+        form.locator('input[id$="-inicioPrevisto"]').fill('2026-11-10')
+        if tipo in ('CONTINUO', 'RECORRENTE'):
+            form.locator('input[id$="-terminoPrevisto"]').fill('2026-12-10')
         form.locator('input[id$="-peso"]').fill('10.0000')
         if tipo == 'QUANTITATIVO':
             form.locator('input[id$="-quantidadePrevista"]').fill('2.500')
@@ -409,68 +526,156 @@ def criar_cinco_na_ui(page, api: str, web: str, contrato: str, saida: dict, reto
             form.locator('select[id$="-periodicidade"]').select_option('MENSAL')
         if tipo in ('CONTINUO', 'MARCO'):
             form.locator('textarea[id$="-criterioConclusao"]').fill('Conclusão por comprovação de marco operacional')
-        preencher_checklist(form, marca, tipo)
         with page.expect_response(lambda r: r.request.method == 'POST' and urlsplit(r.url).path == rota(contrato)
                                   and r.status == 201, timeout=25000):
             form.get_by_role('button', name='Cadastrar entregável').click()
         # Exigir estado real da UI atualizado por hook de leitura.
-        bloco.get_by_role('link', name=nome, exact=True).wait_for(timeout=25000)
         encontrados = [x for x in itens_api(page, api, contrato) if x.get('codigo') == codigo]
         exigir(len(encontrados) == 1, f'{tipo} não persistiu uma única vez')
         x = encontrados[0]
+        verificar_atualizacao_entregaveis(bloco, nome, contrato, x['id'], saida)
+        cadastrar_checklist_no_detalhe(page, api, contrato, x['id'], nome, bloco, saida,
+                                      pode_alterar_obrigatoriedade=pode_alterar_obrigatoriedade)
+        x = detalhe_api(page, api, contrato, x['id'])
         exigir(x['etapaId'] == etapa_id and x['tipo'] == tipo and len(x['evidenciasEsperadas']) == 2,
                f'Campos/checklist do tipo {tipo} não persistiram')
         if responsavel is not None:
             exigir(x.get('responsavelId') == responsavel['id'] and
                    (x.get('responsavel') or {}).get('email') == responsavel['email'],
                    'Responsável escolhido na UI não persistiu com nome/e-mail na API')
-        exigir(sorted(i['obrigatoria'] for i in x['evidenciasEsperadas']) == [False, True],
-               'Checklist obrigatório/opcional incorreto')
-        exigir(all(x[k] is None for k in ('statusExecucao', 'percentualExecucao', 'situacaoComprovacao', 'quantidadeRealizada')),
-               'Planejamento não pode criar status de execução/comprovação')
+        esperado_flags = [False, True] if pode_alterar_obrigatoriedade else [True, True]
+        exigir(sorted(i['obrigatoria'] for i in x['evidenciasEsperadas']) == esperado_flags,
+               'Checklist persistido divergiu da permissão granular de obrigatoriedade')
+        exigir(x['statusExecucao'] == 'NAO_INICIADO' and all(x[k] is None for k in ('percentualExecucao', 'situacaoComprovacao', 'quantidadeRealizada')),
+               'Novo entregável deve iniciar sem progresso nem comprovação artificial')
         if tipo == 'RECORRENTE':
             exigir(x['periodicidade'] == 'MENSAL' and x['configuracaoPeriodicidade'] == {'versao': 1},
                    'Contrato de periodicidade incompatível com HU09')
         registros.append(x)
         saida['entregaveisCriados'].append({'id': x['id'], 'tipo': tipo, 'codigo': codigo})
         print('[OK] Cadastro UI → API Nest:', tipo, x['id'])
-    saida['provas'].append('Cinco POST reais pelo Next (todos os tipos, checklist 2 itens, persistência)')
+        detalhe_etapa.get_by_role('button', name='Voltar às etapas').click()
+        detalhe_etapa.wait_for(state='detached', timeout=15000)
+    saida['provas'].append('Cinco POSTs de entregáveis + dez POSTs de evidências esperadas via UI, com persistência')
 
     # Edição é exercida na tela de detalhe de cada tipo, e verificada após reload.
     for x in registros:
         id = x['id']
         page.goto(f'{web}/contratos/{quote(contrato)}/entregaveis/{quote(id)}', wait_until='domcontentloaded')
         page.get_by_role('heading', name=x['nome'], exact=True).wait_for(timeout=25000)
-        page.get_by_role('heading', name='Evidências esperadas').wait_for()
+        page.get_by_role('tab', name='Evidências', exact=True).wait_for(timeout=20000)
         page.get_by_role('button', name='Editar entregável').click()
         form = page.get_by_role('form', name=f'Editar entregável {x["nome"]}')
         nome_novo = x['nome'] + ' validado'
         form.locator('input[id$="-nome"]').fill(nome_novo)
-        form.locator('input[id$="-peso"]').fill('12.5000')
+        # O campo da UI aceita no maximo 6 caracteres e 2 decimais em pt-BR.
+        # Preencher 12.5000 (7 caracteres) violava o contrato do proprio input.
+        entrada_peso = form.locator('input[id$="-peso"]')
+        entrada_peso.fill('12,50')
+        entrada_peso.blur()
+        exigir(entrada_peso.input_value() == '12,50',
+               f'Formulario nao conservou o peso 12,50: {entrada_peso.input_value()!r}')
         if x['tipo'] == 'QUANTITATIVO':
             form.locator('input[id$="-quantidadePrevista"]').fill('3.125')
-        # Toggle da obrigatoriedade de item EXISTENTE, sem perda do respectivo UUID.
-        form.locator('fieldset input[type="checkbox"]:checked').first.uncheck()
+        # A obrigatoriedade pertence à evidência, não ao PATCH de planejamento.
         caminho_detalhe = rota(contrato, id)
-        with page.expect_response(lambda r: r.request.method == 'PATCH' and urlsplit(r.url).path == caminho_detalhe
-                                  and r.status == 200, timeout=25000):
+        # Capturar QUALQUER status. O servidor ja devolveu HTTP 400 aqui;
+        # exigir somente 200 no predicado escondia a causa sob 25s de timeout.
+        with page.expect_response(lambda r: r.request.method == 'PATCH' and urlsplit(r.url).path == caminho_detalhe,
+                                  timeout=25000) as evento_planejamento:
             form.get_by_role('button', name='Salvar alterações').click()
+        conferir_resposta_planejamento(evento_planejamento.value, id)
         page.get_by_role('heading', name=nome_novo, exact=True).wait_for(timeout=25000)
+        # Segundo fluxo: editar o checklist documental individualmente.
+        page.get_by_role('tab', name='Evidências', exact=True).click()
+        evid_id = next(e['id'] for e in x['evidenciasEsperadas'] if e['tipoEvidencia'] == 'Relatório')
+        page.get_by_role('button', name='Ver detalhes da evidência esperada Relatório', exact=True).click()
+        modal_evidencia = page.get_by_role('dialog', name='Relatório', exact=True)
+        modal_evidencia.wait_for(state='visible', timeout=15000)
+        modal_evidencia.get_by_role('button', name='Editar orientações').wait_for(state='visible', timeout=15000)
+        exigir(modal_evidencia.get_by_role('button', name='Editar evidência Relatório').count() == 0, 'Edição geral redundante ainda presente')
+        check = modal_evidencia.get_by_role('checkbox', name='Evidência obrigatória')
+        url_evidencia = rota(contrato, id) + '/evidencias-esperadas/' + evid_id
+        if pode_alterar_obrigatoriedade:
+            check.wait_for(state='visible', timeout=15000)
+            with page.expect_response(lambda r: r.request.method == 'PATCH' and urlsplit(r.url).path == url_evidencia,
+                                      timeout=25000) as edicao_obrigatoria:
+                check.uncheck()
+            exigir(edicao_obrigatoria.value.status == 200,
+                   f'Obrigatoriedade não foi alterada pela API: HTTP {edicao_obrigatoria.value.status}')
+            exigir(any(e['id'] == evid_id and e['obrigatoria'] is False
+                       for e in detalhe_api(page, api, contrato, id)['evidenciasEsperadas']),
+                   'Administrador: edição da obrigatoriedade não persistiu')
+        else:
+            exigir(check.count() == 0,
+                   'Gestor sem delegação visualizou controle de obrigatoriedade ao editar evidência')
+            # O gestor ainda deve poder EDITAR os campos para os quais foi autorizado.
+            texto_editado = f'Exigência HU07-06: Relatório editado {x["codigo"]}'
+            modal_evidencia.get_by_role('button', name='Editar orientações').click()
+            modal_evidencia.get_by_label('Orientações da evidência').fill(texto_editado)
+            with page.expect_response(lambda r: r.request.method == 'PATCH' and urlsplit(r.url).path == url_evidencia,
+                                      timeout=25000) as edicao_orientacoes:
+                modal_evidencia.get_by_role('button', name='Salvar orientações').click()
+            exigir(edicao_orientacoes.value.status == 200,
+                   f'Gestor não conseguiu editar orientações permitidas (HTTP {edicao_orientacoes.value.status})')
+            atualizadas = detalhe_api(page, api, contrato, id)['evidenciasEsperadas']
+            exigir(any(e['id'] == evid_id and e['descricao'] == texto_editado and e['obrigatoria'] is True
+                       for e in atualizadas),
+                   'Gestor não persistiu orientações ou modificou obrigatoriedade indevidamente')
+            # Não confiar apenas na UI: o PATCH direto também deve falhar fechado.
+            negada = requisitar(page, api, url_evidencia, 'PATCH', {'obrigatoria': False})
+            exigir(negada['status'] == 403,
+                   f'Gestor sem delegação conseguiu alterar obrigatoriedade via API (HTTP {negada["status"]})')
+            preservada = detalhe_api(page, api, contrato, id)['evidenciasEsperadas']
+            exigir(any(e['id'] == evid_id and e['obrigatoria'] is True for e in preservada),
+                   'PATCH de obrigatoriedade negado alterou dados no PostgreSQL')
+            saida['provas'].append('Gestor: PATCH de orientações permitido (200), PATCH de obrigatoriedade negado (403), sem mutação indevida')
         page.reload(wait_until='domcontentloaded')
         page.get_by_role('heading', name=nome_novo, exact=True).wait_for(timeout=25000)
         novo = detalhe_api(page, api, contrato, id)
         exigir(novo['nome'] == nome_novo and float(novo['peso']) == 12.5, 'PATCH de nome/peso não persistiu')
         exigir(novo['tipo'] == x['tipo'] and novo['etapaId'] == etapa_id, 'PATCH corrompeu tipo/vínculos')
+        exigir(novo['codigo'] == x['codigo'], 'PATCH parcial apagou o código persistido do entregável')
         originais = {i['id']: i for i in x['evidenciasEsperadas']}
         posteriores = {i['id']: i for i in novo['evidenciasEsperadas']}
         exigir(set(originais) == set(posteriores), 'PATCH regenerou IDs de checklist esperado')
-        exigir(sum(i['obrigatoria'] for i in posteriores.values()) == 0, 'PATCH não atualizou obrigatoriedade')
+        esperado_total = 0 if pode_alterar_obrigatoriedade else 2
+        exigir(sum(i['obrigatoria'] for i in posteriores.values()) == esperado_total,
+               'Obrigatoriedade final divergiu das permissões e mutações permitidas')
         if x['tipo'] == 'QUANTITATIVO':
             exigir(float(novo['quantidadePrevista']) == 3.125, 'Quantidade editada não persistiu')
         registros[registros.index(x)] = novo
         print('[OK] Edição UI → PATCH → reload → GET:', x['tipo'])
-    saida['provas'].append('Cinco PATCH reais na UI, reload, IDs de checklist estáveis e peso operacional')
+    saida['provas'].append('Cinco PATCHs de planejamento e cinco PATCHs de evidência autorizados; reload, ACL, IDs estáveis e peso validados')
     return etapa_id, registros
+
+
+def conferir_resposta_planejamento(resposta, entregavel_id: str) -> None:
+    """Nao mascarar HTTP 400/403 como timeout ou sucesso de um PATCH real.
+
+    Nunca registra cookies, cabecalhos, tokens nem objetos do usuario; apenas
+    campos de planejamento sinteticos e mensagem de dominio da API.
+    """
+    if resposta.status == 200:
+        return
+    try:
+        corpo = resposta.json()
+        mensagem = corpo.get('message', corpo.get('error', 'sem mensagem')) if isinstance(corpo, dict) else 'sem mensagem JSON'
+    except Exception:
+        mensagem = 'sem resposta JSON'
+    try:
+        pedido = resposta.request.post_data_json
+        campos = {k: pedido[k] for k in ('nome', 'peso', 'quantidadePrevista', 'inicioPrevisto',
+                 'terminoPrevisto') if isinstance(pedido, dict) and k in pedido}
+        chaves = sorted(k for k in pedido if k in ('nome', 'peso', 'quantidadePrevista', 'inicioPrevisto', 'terminoPrevisto', 'etapaId', 'tipo', 'codigo', 'descricao', 'responsavelId', 'periodicidade', 'configuracaoPeriodicidade', 'criterioConclusao', 'observacoes', 'unidadeMedida', 'evidenciasEsperadas')) if isinstance(pedido, dict) else []
+    except Exception:
+        campos, chaves = {}, []
+    raise AssertionError(
+        f'PATCH de planejamento rejeitado para entregavel {entregavel_id}: '
+        f'HTTP {resposta.status}; API={str(mensagem)[:350]!r}; '
+        f'campos_enviados={chaves}; valores_planejamento={campos}. '
+        'Nao alterar backend ou expectativa de teste sem validar esta causa.'
+    )
 
 
 def validar_relatorio_retomada(arquivo: Path, contrato: str, perfil: str) -> dict:
@@ -577,6 +782,12 @@ def main() -> int:
                        f'Vínculo divergente para {args.perfil}: HTTP {acesso["status"]}, '
                        f'podeEditar={acesso.get("body", {}).get("podeEditar") if isinstance(acesso.get("body"), dict) else "indisponível"}; '
                        'configure o funcionário pelo e-mail antes de executar este cenário')
+                pode_alterar_obrigatoriedade = validar_acesso_obrigatoriedade(acesso['body'], args.perfil)
+                if pode_escrever:
+                    saida['provas'].append(f'ACL consultada pela API: alterarObrigatoriedade={pode_alterar_obrigatoriedade} para {args.perfil}')
+                else:
+                    validar_acl_planejamento_leitor(acesso['body'], args.perfil)
+                    saida['provas'].append('ACL de leitura confirmada sem delegações de criação/edição de etapas, entregáveis ou checklist')
             else:
                 exigir(acesso['status'] in (403, 404), 'Perfil sem vínculo obteve permissão de contrato')
             caminho_lista = rota(contrato)
@@ -587,19 +798,32 @@ def main() -> int:
                 exigir(r['status'] in (403, 404), 'Usuário sem vínculo consultou detalhe!')
                 saida['provas'].append('Sem vínculo: listagem e detalhe negados pela API real')
             elif not pode_escrever:
+                # Primeiro obter o registro real, inclusive o ID da etapa, para
+                # não confundir um contrato com várias etapas ou nomes iguais.
+                detalhe = detalhe_api(page, api, contrato, args.entregavel_id)
+                resposta_etapas = requisitar(page, api, f'/contratos/{quote(contrato)}/etapas')
+                exigir(resposta_etapas['status'] == 200 and isinstance(resposta_etapas['body'], list),
+                       f'Leitor não consultou etapas do contrato: HTTP {resposta_etapas["status"]}')
+                correspondentes = [e for e in resposta_etapas['body'] if
+                                  e.get('id') == detalhe['etapaId'] and e.get('contratoId') == contrato]
+                exigir(len(correspondentes) == 1, 'Etapa do entregável ausente ou fora do contrato raiz')
+                etapa = correspondentes[0]
+                exigir(not etapa.get('arquivadoEm'), 'Entregável QA de leitura está em etapa arquivada')
                 page.goto(f'{web}/contratos/{quote(contrato)}', wait_until='domcontentloaded')
+                aba = page.get_by_role('tab', name='Etapas', exact=True)
+                aba.wait_for(state='visible', timeout=25000)
+                aba.click()
+                exigir(aba.get_attribute('aria-selected') == 'true', 'Aba Etapas não selecionada no leitor')
                 painel = page.locator('section[aria-labelledby="titulo-etapas"]')
-                painel.wait_for(timeout=25000)
-                page.get_by_text('Entregáveis planejados').first.wait_for(timeout=25000)
-                exigir(painel.get_by_role('button', name='Novo entregável').count() == 0,
-                       'UI mostrou cadastro para perfil somente leitura')
+                painel.wait_for(state='visible', timeout=25000)
+                painel.get_by_role('tab', name='Ativas', exact=True).click()
+                verificar_navegacao_leitor(page, painel, etapa, detalhe, contrato, saida)
+                # Exercitar também a URL direta, sem confundi-la com o modal.
                 page.goto(f'{web}/contratos/{quote(contrato)}/entregaveis/{quote(args.entregavel_id)}',
                           wait_until='domcontentloaded')
-                detalhe = detalhe_api(page, api, contrato, args.entregavel_id)
                 page.get_by_role('heading', name=detalhe['nome'], exact=True).wait_for(timeout=25000)
-                exigir(page.get_by_role('button', name='Editar entregável').count() == 0,
-                       'UI mostrou edição para perfil somente leitura')
-                etapa = detalhe['etapaId']
+                exigir(page.get_by_role('button', name='Editar entregável', exact=True).count() == 0,
+                       'Rota direta do entregável expôs edição para perfil leitor')
                 corpo_invalido = {'__qaTestePermissaoSemEscrita': True}
                 post = requisitar(page, api, caminho_lista, 'POST', corpo_invalido)
                 patch = requisitar(page, api, rota(contrato, args.entregavel_id), 'PATCH', corpo_invalido)
@@ -608,16 +832,18 @@ def main() -> int:
                 # 404 é a política deliberada do guard operacional para não revelar o recurso.
                 saida['negacoesEscrita'] = {'POST': post['status'], 'PATCH': patch['status']}
                 if args.validar_banco:
-                    # Para papel de leitura, apenas consulta livre de efeitos colaterais; auditoria não é exigida.
                     psql = consultar_pg_leitor(raiz, contrato, args.entregavel_id)
-                    exigir(psql['id'] == args.entregavel_id and psql['etapa_id'] == etapa,
-                           'SQL/rota não correspondem ao entregável solicitado')
+                    exigir(str(psql['id']) == args.entregavel_id and
+                           str(psql['contrato_id']) == contrato and str(psql['etapa_id']) == detalhe['etapaId'],
+                           'SQL/rota não correspondem a entregável, contrato e etapa solicitados')
                     saida['sqlValidado'] = True
                     saida['provas'].append('PostgreSQL direto: leitor comparou identificador, contrato e etapa')
                 saida['provas'].append(f'Leitor: detalhe Next real, nenhuma ação de edição e POST/PATCH negados HTTP {post["status"]}/{patch["status"]}')
             else:
                 if args.escrita:
-                    etapa, registros = criar_cinco_na_ui(page, api, web, contrato, saida, retomar)
+                    etapa, registros = criar_cinco_na_ui(
+                        page, api, web, contrato, saida, retomar,
+                        pode_alterar_obrigatoriedade=pode_alterar_obrigatoriedade)
                     saida['idsEntregaveis'] = [x['id'] for x in registros]
                     if args.reiniciar_backend:
                         subprocess.run(['docker', 'compose', 'restart', 'backend'], cwd=raiz, check=True)
@@ -662,6 +888,9 @@ def main() -> int:
                        'Não foram observados cinco POST e cinco PATCH reais no tráfego do Chromium')
                 saida['provas'].append('Network Chromium: POST×5 e PATCH×5 sem interceptação ou mock')
             page.get_by_role('button', name='Sair', exact=True).click()
+            confirmacao_saida = page.get_by_role('dialog', name='Sair da conta?')
+            confirmacao_saida.wait_for(state='visible', timeout=15000)
+            confirmacao_saida.get_by_role('button', name='Sair da conta', exact=True).click()
             page.get_by_role('heading', name='Acesse sua conta').wait_for(timeout=20000)
             r = requisitar(page, api, caminho_lista)
             exigir(r['status'] == 401, f'Após logout real a API deveria responder 401; veio {r["status"]}')

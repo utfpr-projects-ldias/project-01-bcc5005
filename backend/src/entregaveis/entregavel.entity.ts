@@ -42,7 +42,7 @@ import { TipoEntregavel } from './tipo-entregavel.enum.js';
 @Check('ck_entregaveis_recorrencia', `
   (
     "tipo" = 'RECORRENTE' AND (("periodicidade" IS NULL AND "configuracao_periodicidade" IS NULL) OR
-    ("periodicidade" IS NOT NULL AND "configuracao_periodicidade" = '{"versao":1}'::jsonb))
+    ("periodicidade" IS NOT NULL AND "configuracao_periodicidade" IN ('{"versao":1}'::jsonb, '{"versao":1,"modoRegistro":"DESCRITIVO"}'::jsonb, '{"versao":1,"modoRegistro":"QUANTITATIVO"}'::jsonb)))
   ) OR (
     "tipo" <> 'RECORRENTE' AND "periodicidade" IS NULL
     AND "configuracao_periodicidade" IS NULL
@@ -106,6 +106,8 @@ export class Entregavel {
 
   @Column({ name: 'quantidade_realizada', type: 'numeric', precision: 18, scale: 3, nullable: true })
   quantidadeRealizada!: string | null;
+  @Column({ name:'quantidade_direta_integrada', type:'boolean', default:false })
+  quantidadeDiretaIntegrada?: boolean;
 
   @Column({ name: 'unidade_medida', type: 'varchar', length: 80, nullable: true })
   unidadeMedida!: string | null;
@@ -127,6 +129,10 @@ export class Entregavel {
   @Column({ name: 'status_execucao', type: 'enum', enum: StatusExecucaoEntregavel, enumName: 'entregaveis_status_execucao_enum', nullable: true })
   statusExecucao!: StatusExecucaoEntregavel | null;
 
+  /** Pedido de regularização documental não revoga a aprovação física anterior. */
+  @Column({ name: 'regularizacao_documental_solicitada', type: 'boolean', default: false })
+  regularizacaoDocumentalSolicitada!: boolean;
+
   /** Justificativa da finalização administrativa com progresso parcial. */
   @Column({ name: 'motivo_finalizacao', type: 'text', nullable: true })
   motivoFinalizacao!: string | null;
@@ -136,6 +142,9 @@ export class Entregavel {
 
   @Column({ name: 'percentual_execucao' , type: 'numeric', precision: 5, scale: 2, nullable: true })
   percentualExecucao!: string | null;
+
+  @Column({ name: 'execucoes_integradas', type: 'boolean', default: false })
+  execucoesIntegradas?: boolean;
 
   @Column({ name: 'situacao_comprovacao', type: 'enum', enum: SituacaoComprovacaoEntregavel, enumName: 'entregaveis_situacao_comprovacao_enum', nullable: true })
   situacaoComprovacao!: SituacaoComprovacaoEntregavel | null;
