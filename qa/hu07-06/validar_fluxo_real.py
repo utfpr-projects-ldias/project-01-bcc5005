@@ -15,6 +15,9 @@ import re
 import secrets
 import subprocess
 import sys
+from pathlib import Path as _CaminhoQA
+sys.path.insert(0, str(_CaminhoQA(__file__).resolve().parents[1]))
+from navegacao_contrato import localizar_pagina, abrir_pagina
 import time
 from urllib.parse import quote, urlsplit
 
@@ -223,14 +226,14 @@ def verificar_modal_etapa(page, painel, etapa_nome: str, saida: dict) -> None:
     botao.wait_for(state='visible', timeout=25000)
     url_original = page.url
     botao.click()
-    detalhe = page.get_by_role('dialog', name=re.compile(r'^\d+\s*·\s*' + re.escape(etapa_nome) + r'$'))
+    detalhe = page.get_by_role('region', name=re.compile(r'^\d+\s*·\s*' + re.escape(etapa_nome) + r'$'))
     detalhe.wait_for(state='visible', timeout=15000)
-    exigir(detalhe.get_attribute('aria-modal') == 'true', 'Detalhe da etapa não é modal acessível')
+    exigir(detalhe.get_attribute('data-pi-detalhe-interno') is not None, 'Detalhe da etapa não é modal acessível')
     detalhe.get_by_role('button', name='Editar etapa').click()
     form = page.get_by_role('form', name=f'Editar etapa {etapa_nome}')
     form.wait_for(state='visible', timeout=15000)
     form.get_by_role('button', name='Voltar sem salvar').click()
-    detalhe = page.get_by_role('dialog', name=re.compile(r'^\d+\s*·\s*' + re.escape(etapa_nome) + r'$'))
+    detalhe = page.get_by_role('region', name=re.compile(r'^\d+\s*·\s*' + re.escape(etapa_nome) + r'$'))
     detalhe.wait_for(state='visible', timeout=15000)
     detalhe.get_by_role('button', name='Voltar às etapas').click()
     detalhe.wait_for(state='detached', timeout=15000)
@@ -246,7 +249,7 @@ def localizar_entregavel_cadastrado(bloco, nome: str, contrato: str, identificad
     href do recurso correto e ausência de aria-hidden em ancestrais.
     """
     esperado = rota(contrato, identificador)
-    titulo = bloco.locator(f'li[data-tec08-item-clicavel] a[href="{esperado}"]')
+    titulo = bloco.locator(f'tr[data-entregavel-estado] a[href="{esperado}"]')
     titulo.wait_for(state='visible', timeout=25000)
     exigir(titulo.count() == 1, f'Cartão ausente ou duplicado para {nome!r}')
     exigir(titulo.get_attribute('aria-label') == nome,
@@ -276,7 +279,7 @@ def cadastrar_checklist_no_detalhe(page, api: str, contrato: str, identificador:
     """
     link = localizar_entregavel_cadastrado(bloco, nome, contrato, identificador)
     link.click()
-    modal = page.get_by_role('dialog', name=nome, exact=True)
+    modal = page.get_by_role('region', name=nome, exact=True)
     modal.wait_for(state='visible', timeout=25000)
     aba = modal.get_by_role('tab', name='Evidências', exact=True)
     aba.click()
@@ -368,25 +371,25 @@ def verificar_navegacao_leitor(page, painel, etapa: dict, entregavel: dict,
     abrir.wait_for(state='visible', timeout=25000)
     exigir(abrir.count() == 1, f'Etapa {nome_etapa!r} ausente ou duplicada na aba Etapas')
     abrir.click()
-    modal_etapa = page.get_by_role('dialog', name=re.compile(
+    modal_etapa = page.get_by_role('region', name=re.compile(
         r'^\d+\s*·\s*' + re.escape(nome_etapa) + r'$'))
     modal_etapa.wait_for(state='visible', timeout=20000)
-    exigir(modal_etapa.get_attribute('aria-modal') == 'true',
+    exigir(modal_etapa.get_attribute('data-pi-detalhe-interno') is not None,
            'Detalhe da etapa não foi aberto como diálogo acessível')
     exigir(modal_etapa.get_by_role('button', name='Editar etapa', exact=True).count() == 0,
            'Etapa em modo de leitura disponibilizou edição no modal real')
     bloco = modal_etapa.get_by_role('region', name='Entregáveis da etapa')
     bloco.wait_for(state='visible', timeout=20000)
-    lista = bloco.get_by_role('list', name='Entregáveis planejados da etapa', exact=True)
+    lista = bloco.get_by_role('table', name='Entregáveis planejados da etapa', exact=True)
     lista.wait_for(state='visible', timeout=25000)
     # A lista possui aria-label, não texto visível "Entregáveis planejados".
     link = localizar_entregavel_cadastrado(lista, nome_entregavel, contrato, entregavel['id'])
     exigir(bloco.get_by_role('button', name='Novo entregável', exact=True).count() == 0,
            'Gestor/Colaborador leitor recebeu ação Novo entregável dentro do modal')
     link.click()
-    modal_entregavel = page.get_by_role('dialog', name=nome_entregavel, exact=True)
+    modal_entregavel = page.get_by_role('region', name=nome_entregavel, exact=True)
     modal_entregavel.wait_for(state='visible', timeout=25000)
-    exigir(modal_entregavel.get_attribute('aria-modal') == 'true',
+    exigir(modal_entregavel.get_attribute('data-pi-detalhe-interno') is not None,
            'Detalhe aninhado do entregável não está acessível como diálogo')
     exigir(modal_entregavel.get_by_role('button', name='Editar entregável', exact=True).count() == 0,
            'Entregável leitor recebeu ação de edição no detalhe aninhado')
@@ -411,13 +414,13 @@ def selecionar_responsavel_real(page, form, api: str, contrato: str, saida: dict
     # O dropdown deve aceitar seleção pelo mouse e limitar a quantidade exibida.
     abrir = form.get_by_role('button', name='Abrir lista de responsáveis')
     abrir.click()
-    lista = form.get_by_role('listbox', name='E-mails encontrados')
+    lista = form.get_by_role('listbox', name='Responsáveis encontrados')
     lista.get_by_role('option').first.wait_for(timeout=15000)
     exigir(1 <= lista.get_by_role('option').count() <= 20,
            'Dropdown deveria limitar os resultados a 20 opções de funcionário')
     form.get_by_role('button', name='Fechar lista de responsáveis').click()
     saida['provas'].append('Responsável: menu por seta com até 20 e-mails e nomes, selecionável com mouse')
-    campo = form.get_by_role('combobox', name='Buscar responsável por e-mail')
+    campo = form.get_by_role('combobox', name='Responsável pelo entregável (opcional)')
     campo.fill(pessoa['email'])
     opcao = form.get_by_role('option', name=re.compile(re.escape(pessoa['email'])))
     opcao.wait_for(timeout=15000)
@@ -434,7 +437,7 @@ def criar_cinco_na_ui(page, api: str, web: str, contrato: str, saida: dict,
                     retomar: dict | None = None, *, pode_alterar_obrigatoriedade: bool = True) -> tuple[str, list[dict]]:
     """TODOS os POSTs partem dos botões da interface Next — não do validador."""
     page.goto(f'{web}/contratos/{quote(contrato)}', wait_until='domcontentloaded')
-    page.get_by_role('tab', name='Etapas', exact=True).click()
+    localizar_pagina(page, 'Etapas').click()
     painel = page.locator('section[aria-labelledby="titulo-etapas"]')
     painel.wait_for(state='visible', timeout=25000)
     caminho_etapas = f'/contratos/{quote(contrato)}/etapas'
@@ -488,7 +491,7 @@ def criar_cinco_na_ui(page, api: str, web: str, contrato: str, saida: dict,
         pagina_etapa = painel.get_by_role('button', name=re.compile(r'Abrir detalhes da etapa \d+: ' + re.escape(etapa_nome)))
         pagina_etapa.wait_for(state='visible', timeout=25000)
         pagina_etapa.click()
-        detalhe_etapa = page.get_by_role('dialog', name=re.compile(r'^\d+\s*·\s*' + re.escape(etapa_nome) + r'$'))
+        detalhe_etapa = page.get_by_role('region', name=re.compile(r'^\d+\s*·\s*' + re.escape(etapa_nome) + r'$'))
         detalhe_etapa.wait_for(state='visible', timeout=15000)
         bloco = detalhe_etapa.get_by_role('region', name='Entregáveis da etapa')
         bloco.get_by_role('button', name='Novo entregável').click()
@@ -810,10 +813,11 @@ def main() -> int:
                 etapa = correspondentes[0]
                 exigir(not etapa.get('arquivadoEm'), 'Entregável QA de leitura está em etapa arquivada')
                 page.goto(f'{web}/contratos/{quote(contrato)}', wait_until='domcontentloaded')
-                aba = page.get_by_role('tab', name='Etapas', exact=True)
+                aba = localizar_pagina(page, 'Etapas')
                 aba.wait_for(state='visible', timeout=25000)
                 aba.click()
-                exigir(aba.get_attribute('aria-selected') == 'true', 'Aba Etapas não selecionada no leitor')
+                page.locator('#painel-etapas').wait_for(state='visible', timeout=25000)
+                exigir(page.locator('#painel-etapas').is_visible(), 'Aba Etapas não selecionada no leitor')
                 painel = page.locator('section[aria-labelledby="titulo-etapas"]')
                 painel.wait_for(state='visible', timeout=25000)
                 painel.get_by_role('tab', name='Ativas', exact=True).click()

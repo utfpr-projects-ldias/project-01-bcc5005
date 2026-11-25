@@ -67,7 +67,7 @@ function HistoricoCompleto({ contratoId, numeroContrato, eventosIniciais, fechar
 export function HistoricoContrato({ contratoId, numeroContrato, versao }: { contratoId: string; numeroContrato?: string; versao: string }) {
   const [consulta, setConsulta] = useState<{ chave: string; eventos: EventoHistoricoContrato[]; erro?: string } | null>(null);
   const [selecionados, setSelecionados] = useState<EventoHistoricoContrato[] | null>(null);
-  const gatilho = useRef<HTMLButtonElement>(null);
+  const [gatilho,setGatilho] = useState<HTMLButtonElement|null>(null);
   const chave = `${contratoId}:${versao}`;
   useEffect(() => {
     const abortador = new AbortController();
@@ -80,9 +80,9 @@ export function HistoricoContrato({ contratoId, numeroContrato, versao }: { cont
   return <section aria-label="Histórico recente" className="pi-historico-recente">
     <header className="flex flex-wrap items-center justify-between gap-2">
       <h3 className="text-sm font-semibold">Histórico recente</h3>
-      <button ref={gatilho} type="button" aria-haspopup="dialog" disabled={!atual || !!atual.erro} className="pi-link-contextual text-xs font-medium disabled:opacity-40" onClick={() => atual && setSelecionados(atual.eventos)}>Consultar histórico completo</button>
+      <button type="button" aria-haspopup="dialog" disabled={!atual || !!atual.erro} className="pi-link-contextual text-xs font-medium disabled:opacity-40" onClick={e => { if(atual){setGatilho(e.currentTarget);setSelecionados(atual.eventos);} }}>Consultar histórico completo</button>
     </header>
     {!atual ? <p role="status" className="py-2 text-xs text-foreground/65">Consultando histórico…</p> : atual.erro ? <p role="status" className="py-2 text-xs text-foreground/65">{atual.erro}</p> : atual.eventos.length ? <ol className="pi-historico-lista">{atual.eventos.slice(0, 4).map(evento => <Evento key={evento.id} evento={evento}/>)}</ol> : <p className="py-2 text-xs text-foreground/65">Nenhuma alteração registrada.</p>}
-    {selecionados && <HistoricoCompleto key={contratoId} contratoId={contratoId} numeroContrato={numeroContrato} eventosIniciais={selecionados} fechar={() => setSelecionados(null)} origem={gatilho.current}/>}
+    {selecionados && <HistoricoCompleto key={contratoId} contratoId={contratoId} numeroContrato={numeroContrato} eventosIniciais={selecionados} fechar={() => setSelecionados(null)} origem={gatilho}/>}
   </section>;
 }

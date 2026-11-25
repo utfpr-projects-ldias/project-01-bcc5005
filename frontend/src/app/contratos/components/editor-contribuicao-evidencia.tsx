@@ -11,9 +11,9 @@ export function EditorContribuicaoEvidencia({dados,fechar,atualizar}:{dados:Deta
  const atual=dados.versoes[0];
  const declaracao=atual??dados.declaracaoPreliminar;
  const [destino,setDestino]=useState(dados),[modo,setModo]=useState<Modalidade>(declaracao?.quantidadeDeclarada?'QUANTITATIVA':declaracao?.percentualDeclarado?'PERCENTUAL':'SEM_CONTRIBUICAO'),[valor,setValor]=useState(declaracao?.quantidadeDeclarada??declaracao?.percentualDeclarado??''),[ocorrencia,setOcorrencia]=useState(declaracao?.ocorrenciaQuantidadeId??declaracao?.ocorrenciaPercentualId??''),[erro,setErro]=useState(''),[ocupado,setOcupado]=useState(false);
- const versao=destino.versoes[0],versaoId=versao?.id??'rascunho',q=!!destino.quantidadeMensuravel,p=destino.tipoEntregavel==='UNICO'||!!destino.ocorrenciasDescritivas?.length;
+ const versao=destino.versoes[0],versaoId=versao?.id??'rascunho',q=!!destino.quantidadeMensuravel,p=destino.tipoEntregavel==='UNICO'||destino.percentualDiretoPermitido===true||!!destino.ocorrenciasDescritivas?.length;
  const opcoes=modo==='QUANTITATIVA'?destino.ocorrenciasQuantitativas??[]:destino.ocorrenciasDescritivas??[];
- const precisaOcorrencia=modo==='QUANTITATIVA'?!destino.quantidadeDiretaPermitida:modo==='PERCENTUAL'&&destino.tipoEntregavel!=='UNICO';
+ const precisaOcorrencia=modo==='QUANTITATIVA'?!destino.quantidadeDiretaPermitida:modo==='PERCENTUAL'&&destino.tipoEntregavel!=='UNICO'&&!destino.percentualDiretoPermitido;
  const editavel=destino.podeEditarContribuicao===true&&destino.contextoPermiteAlterar!==false&&(!versao||['PENDENTE_VERIFICACAO','REJEITADA'].includes(versao.status))&&(versao??destino.declaracaoPreliminar)?.origemQuantidade!=='COMPROVACAO'&&!(versao??destino.declaracaoPreliminar)?.referenciaPercentualId;
  const numero=Number(valor.replace(',','.'));
  const valido=modo==='SEM_CONTRIBUICAO'||(!!valor&&Number.isFinite(numero)&&numero>0&&(modo==='PERCENTUAL'?numero<=100&&/^\d{1,3}(?:[.,]\d{1,2})?$/.test(valor):/^\d{1,15}(?:[.,]\d{1,3})?$/.test(valor))&&(!precisaOcorrencia||!!ocorrencia));

@@ -130,7 +130,7 @@ suite('TEC07-AJUSTES-02-03 — HTTP + PostgreSQL isolado, sessão simulada', () 
       entities: [Contrato, Usuario, Etapa, PermissaoContrato, EventoAuditoria],
       migrations: migrationsCompletas,
     }).initialize();
-    await db.runMigrations();
+    await db.runMigrations({ transaction: 'each' });
     contrato1 = await criarContrato(`TEC07/QA/1/${idExecucao}`);
     contrato2 = await criarContrato(`TEC07/QA/2/${idExecucao}`);
     etapa1 = await criarEtapa(contrato1);

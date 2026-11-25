@@ -4,9 +4,9 @@ import path from 'node:path';
 const ler = (nome: string) => readFileSync(path.resolve(process.cwd(), nome), 'utf8');
 test('detalhe não mostra Fechar novamente enquanto houver atividade Registrada', () => {
   const fonte = ler('src/app/contratos/components/modal-detalhe-entregavel.tsx');
-  expect(fonte).toContain("status: 'REGISTRADA'");
-  expect(fonte).toContain('pendenciasAtividades.total === 0');
-  expect(fonte).toContain('pendenciasAtividades.loading');
+  expect(fonte).toContain("useElegibilidadeEntregavel(contratoId, entregavelId)");
+  expect(fonte).toContain('elegibilidade?.podeAprovar && !bloqueioDocumental');
+  expect(fonte).toContain('elegibilidadeQuery.erro || elegibilidadeQuery.carregando || elegibilidadeQuery.atualizando');
 });
 test('criação invalida todas as consultas de atividades, inclusive a contagem de pendências', () => {
   const fonte = ler('src/hooks/use-atividades.ts');
@@ -21,5 +21,5 @@ test('verificação invalida os dados do entregável e da etapa, por causa da co
 test('pendências bloqueiam conclusão sem uma caixa explicativa redundante', () => {
   const fonte = ler('src/app/contratos/components/modal-detalhe-entregavel.tsx');
   expect(fonte).not.toContain('O botão de conclusão reaparece somente se ainda for necessário');
-  expect(fonte).toContain('pendenciasAtividades.total === 0');
+  expect(fonte).toContain('elegibilidade?.podeAprovar && !bloqueioDocumental');
 });

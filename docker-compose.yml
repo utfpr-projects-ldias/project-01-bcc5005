@@ -1,5 +1,6 @@
 services:
   frontend:
+    init: true
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
@@ -10,16 +11,17 @@ services:
       - /app/node_modules
       - /app/.next
     environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:${PORT:-3001}}
     depends_on:
       - backend
 
   backend:
+    init: true
     build:
       context: ./backend
       dockerfile: Dockerfile.dev
     ports:
-      - "3001:3001"
+      - "${PORT:-3001}:${PORT:-3001}"
     volumes:
       - ./backend:/app
       - /app/node_modules
@@ -29,8 +31,18 @@ services:
       ARQUIVOS_MAX_ARQUIVO_BYTES: ${ARQUIVOS_MAX_ARQUIVO_BYTES:-16777216}
       ARQUIVOS_MAX_TOTAL_BYTES: ${ARQUIVOS_MAX_TOTAL_BYTES:-1073741824}
       PORT: ${PORT:-3001}
+      API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:${PORT:-3001}}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
-      DATABASE_URL: postgresql://${POSTGRES_USER:?Defina POSTGRES_USER no .env}:${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no .env}@database:5432/${POSTGRES_DB:?Defina POSTGRES_DB no .env}
+      DATABASE_URL: ${POSTGRES_CONNECTION_URI:-postgresql://${POSTGRES_USER:?Defina POSTGRES_USER no .env}:${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no .env}@database:5432/${POSTGRES_DB:?Defina POSTGRES_DB no .env}}
+      POSTGRES_USER: ${POSTGRES_USER:?Defina POSTGRES_USER no .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no .env}
+      POSTGRES_DB: ${POSTGRES_DB:?Defina POSTGRES_DB no .env}
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
+      DB_CONNECT_TIMEOUT_MS: ${DB_CONNECT_TIMEOUT_MS:-5000}
+      DB_LOCK_TIMEOUT_MS: ${DB_LOCK_TIMEOUT_MS:-10000}
+      DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-60000}
+      DB_MIGRATION_LOCK_TIMEOUT_MS: ${DB_MIGRATION_LOCK_TIMEOUT_MS:-30000}
+      DB_MIGRATION_STATEMENT_TIMEOUT_MS: ${DB_MIGRATION_STATEMENT_TIMEOUT_MS:-0}
       SUPERTOKENS_CONNECTION_URI: http://supertokens:3567
       SUPERTOKENS_API_KEY: ${SUPERTOKENS_API_KEY:?Defina SUPERTOKENS_API_KEY no .env}
     depends_on:
@@ -38,6 +50,15 @@ services:
         condition: service_healthy
       supertokens:
         condition: service_started
+    # A API responde 503 até a prontidão do schema e SuperTokens. Não condicionar
+    # o início do frontend ao healthcheck: migration:run é uma etapa explícita.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||3001)+'/',{signal:AbortSignal.timeout(4000)}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    stop_grace_period: 30s
 
   database:
     image: postgres:17-alpine
@@ -65,7 +86,7 @@ services:
     ports:
       - "127.0.0.1:3567:3567"
     environment:
-      POSTGRESQL_CONNECTION_URI: postgresql://${POSTGRES_USER:?Defina POSTGRES_USER no .env}:${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no .env}@database:5432/${POSTGRES_DB:?Defina POSTGRES_DB no .env}
+      POSTGRESQL_CONNECTION_URI: ${POSTGRES_CONNECTION_URI:-postgresql://${POSTGRES_USER:?Defina POSTGRES_USER no .env}:${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no .env}@database:5432/${POSTGRES_DB:?Defina POSTGRES_DB no .env}}
       POSTGRESQL_TABLE_NAMES_PREFIX: st_
       API_KEYS: ${SUPERTOKENS_API_KEY:?Defina SUPERTOKENS_API_KEY no .env}
     depends_on:

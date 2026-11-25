@@ -21,7 +21,7 @@ Na raiz do repositório:
 
 O comando configura automaticamente a `.env` *se ainda não existir*, gera
 segredos locais, faz o build dos containers, cria o schema por migrations
-**somente em um banco DEV novo**, prepara Python, Playwright e Chromium,
+**no banco DEV, aplicando apenas as migrations pendentes**, prepara Python, Playwright e Chromium,
 carrega as contas sintéticas de QA da fixture versionada e cria o primeiro
 Administrador por CLI offline *apenas se não houver um*. Não solicita e-mail,
 senha ou `Enter` para login. Quando o projeto já está configurado, reutiliza
@@ -43,7 +43,7 @@ Execute na raiz, com Docker ligado:
 | Comando | O que executa |
 | --- | --- |
 | `./back` | Todos os Jest de `backend/src`, os sete E2E HTTP, as **nove suítes E2E com bancos PostgreSQL separados**, Oxlint normal e com tipos, TypeScript, build, migrations em modo consulta e Git |
-| `./front` | Todos os Jest de frontend, ESLint, TypeScript, build, todos `teste_*.py` do QA e **os fluxos reais de Chromium/API** (incluindo login, criação de funcionários/contratos, HU06/HU07, evidências, documentos, arquivamento e persistência) |
+| `./front` | Todos os Jest de frontend, ESLint, TypeScript, build, todos `teste_*.py` e `test_*.py` do QA e **os fluxos reais de Chromium/API** (incluindo login, criação de funcionários/contratos, HU06/HU07, evidências, documentos, arquivamento e persistência) |
 | `./testes-all` | Tudo que `./back` e `./front` fazem, em uma bateria e em um único ZIP de resultados |
 
 Os três usam `qa/central/executar.sh` e preservam logs completos de cada
@@ -94,7 +94,7 @@ verde:** confronte o cenário com o código e a regra aprovada.
 Novos arquivos Jest (`*.spec.ts`, `*.test.tsx`) são descobertos pelos próprios
 comandos npm. Novas suítes E2E HTTP ou com banco dedicado exigem atualização
 da matriz em `qa/central/executar.sh` (a lista de nove E2E com banco contém
-nomes e variáveis de ambiente próprios). Novos `teste_*.py` são descobertos
+nomes e variáveis de ambiente próprios). Novos `teste_*.py` e `test_*.py` são descobertos
 automaticamente. Para novos fluxos Chromium reais, acrescente a chamada na
 seção `QA-REAL-*` do mesmo executor central.
 

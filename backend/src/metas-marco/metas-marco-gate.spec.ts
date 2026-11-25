@@ -11,15 +11,15 @@ const meta = Object.assign(new MetaMarco(), {id:'dddddddd-dddd-4ddd-8ddd-ddddddd
 const vinculo = Object.assign(new VinculoMetaMarco(), {id:'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
   contratoId, metaId:meta.id, ocorrenciaId, atividadeId:null, comprovanteId:null, status:'APROVADO' as const});
 
-function manager(ocorrenciaStatus: string | null, comMetas = true) {
+function manager(ocorrenciaStatus: string | null, comMetas = true, extras: Partial<Ocorrencia> = {}) {
   const find = jest.fn(async (entidade: unknown) => entidade === MetaMarco ? (comMetas ? [meta] : []) : entidade === VinculoMetaMarco ? [vinculo] : []);
   const findOne = jest.fn(async (entidade: unknown, options: unknown) => {
     if (entidade !== Ocorrencia || !ocorrenciaStatus) return null;
     const where = (options as {where: {contratoId: string; id:string}}).where;
     if (where.contratoId !== contratoId || where.id !== ocorrenciaId) return null;
-    return Object.assign(new Ocorrencia(), {id:ocorrenciaId,contratoId,status:ocorrenciaStatus,substituidaEm:null});
+    return Object.assign(new Ocorrencia(), {id:ocorrenciaId,contratoId,status:ocorrenciaStatus,substituidaEm:null,modoRegistro:'DESCRITIVO',minimoAtividadesVerificadas:0,...extras});
   });
-  return {find,findOne};
+  return {find,findOne,query:jest.fn(async()=>[{total:'0',registrada:'0',verificada:'0',verificadas:'0',pendentes:'0',fotos:'0',relatorios:'0'}])};
 }
 
 describe('Meta do Marco — vínculos verificados não alteram registros reais', () => {
@@ -37,4 +37,12 @@ describe('Meta do Marco — vínculos verificados não alteram registros reais',
   it('ocorrência ausente não deve liberar meta', async () => {
     expect((await avaliarMetasMarco(manager(null) as never,contratoId,entregavelId)).apto).toBe(false);
   });
+});
+
+it('B10: conclusão parcial documental pode sustentar meta fisicamente válida', async () => {
+  expect((await avaliarMetasMarco(manager('CONCLUIDO_PARCIALMENTE') as never,contratoId,entregavelId)).apto).toBe(true);
+});
+it('B10: status concluído não basta se a medição de origem foi invalidada', async () => {
+  const m=manager('CONCLUIDO',true,{modoRegistro:'QUANTITATIVO',metaQuantidade:'10.000',quantidadeAprovada:'10.000'});
+  expect((await avaliarMetasMarco(m as never,contratoId,entregavelId)).apto).toBe(false);
 });

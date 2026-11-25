@@ -78,7 +78,7 @@ test('upload preserva arquivo/descrição e permite retry quando a API falha', a
   await act(async () => { fireEvent.submit(form); });
   expect(await screen.findByText('Falha temporária')).toBeInTheDocument();
   expect(within(form).getByLabelText('Descrição (opcional)')).toHaveValue('QA descrição');
-  expect(screen.getByText(/Selecionado: teste.txt/)).toBeInTheDocument();
+  expect(document.getElementById('arquivo-documento-nome')).toHaveTextContent('teste.txt');
   await act(async () => { fireEvent.submit(form); });
   expect(await screen.findByText(/Documento anexado/)).toBeInTheDocument();
   expect(upload).toHaveBeenCalledTimes(2);
@@ -167,7 +167,7 @@ test('selecionar categoria ou arquivo não desmonta o modal e não chama scrollI
     const arquivo = new File(['exemplo'], 'exemplo.txt', { type: 'text/plain' });
     fireEvent.change(within(form).getByLabelText('Arquivo *'), { target: { files: [arquivo] } });
     expect(screen.getByRole('dialog')).toBe(dialogo);
-    expect(screen.getByText(/Selecionado: exemplo.txt/)).toBeInTheDocument();
+    expect(document.getElementById('arquivo-documento-nome')).toHaveTextContent('exemplo.txt');
     expect(scrollSpy).not.toHaveBeenCalled();
   } finally { restaurar(); }
 });
@@ -204,8 +204,9 @@ test('PDF válido substitui seleção recusada, sem bloquear o segundo envio', a
   fireEvent.click(screen.getByRole('button', { name: 'Anexar documento' }));
   expect(screen.getByRole('dialog', { name: 'Anexar documento contratual' })).toBeInTheDocument();
   const form = screen.getByRole('form', { name: 'Anexar documento contratual' });
+  fireEvent.change(within(form).getByLabelText('Categoria *'), {target:{value:'CONTRATO_PRINCIPAL'}});
   const campo = within(form).getByLabelText('Arquivo *');
-  fireEvent.change(campo, { target: { files: [new File(['falso'], 'qa-falso.pdf', { type: 'application/pdf' })] } });
+  fireEvent.change(campo, { target: { files: [new File(['%PDF-1.4\n%%EOF\n'], 'qa-falso.pdf', { type: 'application/pdf' })] } });
   await act(async () => { fireEvent.submit(form); });
   expect(await screen.findByText('Arquivo ou dados inválidos')).toBeInTheDocument();
   const valido = new File(['%PDF-1.4\n%%EOF\n'], 'qa-principal.pdf', { type: 'application/pdf' });
@@ -222,14 +223,14 @@ test('o seletor do documento usa botão em português sem expor Browse, mantendo
   render(<PainelDocumentos contratoId="contrato-qa" habilitado podeAnexar />);
   fireEvent.click(screen.getByRole('button', { name: 'Anexar documento' }));
   const dialogo = screen.getByRole('dialog', { name: 'Anexar documento contratual' });
-  expect(within(dialogo).getByRole('button', { name: 'Escolher arquivo' })).toBeInTheDocument();
-  expect(within(dialogo).getByText('Nenhum arquivo selecionado')).toBeInTheDocument();
+  expect(within(dialogo).getByRole('button', { name: 'Selecionar arquivo' })).toBeInTheDocument();
+  expect(within(dialogo).getByText('Nenhum arquivo')).toBeInTheDocument();
   const input = within(dialogo).getByLabelText('Arquivo *');
   expect(input).toHaveClass('sr-only');
   expect(input).toHaveAttribute('type', 'file');
   const arq = new File(['conteudo'], 'relatorio-teste.txt', { type: 'text/plain' });
   fireEvent.change(input, { target: { files: [arq] } });
-  expect(within(dialogo).getByText('relatorio-teste.txt')).toBeInTheDocument();
+  expect(document.getElementById('arquivo-documento-nome')).toHaveTextContent('relatorio-teste.txt');
 });
 
 test('filtro em carregamento preserva a altura da região e não mostra itens de outra categoria', async () => {
@@ -285,16 +286,16 @@ test('arquivamento preserva consulta histórica e diferencia documentos ativos e
   expect(within(detalhe).getByText(/04\/11\/2026/)).toBeInTheDocument();
 });
 
-test('limite total considera documentos ativos e arquivados sem apagar histórico', async () => {
+test('limite conta somente documentos ativos, preservando histórico', async () => {
   usar.mockImplementation((_id, categoria, _pagina, _habilitado, arquivados) => {
     if (categoria === 'CONTRATO_PRINCIPAL') return retorno(vazio);
-    if (categoria === '') return retorno({ ...lista, total: arquivados ? 9 : 11 });
+    if (categoria === '') return retorno({ ...lista, total: arquivados ? 9 : 20 });
     return retorno(lista);
   });
   render(<PainelDocumentos contratoId="contrato-qa" habilitado podeAnexar />);
   await act(async () => {});
   expect(screen.getByText(/0 arquivo\(s\) disponíveis/)).toBeInTheDocument();
-  expect(screen.getByRole('alert')).toHaveTextContent('Arquivar não libera vagas');
+  expect(screen.getByRole('alert')).toHaveTextContent('Arquivar libera vaga');
   expect(screen.getByRole('button', { name: 'Anexar documento' })).toBeDisabled();
 });
 
@@ -314,7 +315,7 @@ test('arquivo contratual permanece imutável: operações administrativas ficam 
   fireEvent.click(within(detalhe).getByRole('button', { name: 'Fechar: escolher ação' }));
   fireEvent.click(screen.getByRole('button', { name: 'Arquivar' }));
   const confirmacao = screen.getByRole('dialog', { name: 'Arquivar documento?' });
-  expect(confirmacao).toHaveTextContent('Arquivar não libera vaga');
+  expect(confirmacao).toHaveTextContent('Arquivar libera vaga');
   fireEvent.click(within(confirmacao).getByRole('button', { name: 'Cancelar' }));
   expect(screen.getByRole('dialog', { name: 'arquivo.txt' })).toBeInTheDocument();
 });

@@ -19,9 +19,9 @@ class RunnerHU06(unittest.TestCase):
         # A rota /contratos/[id] abre na Visão geral. Playwright só pode
         # operar formulários, listas e botões da aba Etapas depois de selecioná-la.
         fonte = ARQ.with_name('validar_fluxo_real.py').read_text(encoding='utf-8')
-        self.assertEqual(3, fonte.count('get_by_role("tab", name="Etapas", exact=True)'))
+        self.assertEqual(3, fonte.count('localizar_pagina(page, "Etapas")'))
         self.assertIn('aba_etapas.click()', fonte)
-        self.assertIn('garantir(aba_etapas.get_attribute("aria-selected") == "true"', fonte)
+        self.assertIn('garantir(page.locator("#painel-etapas").is_visible()', fonte)
         self.assertEqual(2, fonte.count('page.reload(wait_until="domcontentloaded")'))
 
     def test_detalhe_do_leitor_so_e_validado_apos_abrir_modal(self):
@@ -73,7 +73,7 @@ class RunnerHU06(unittest.TestCase):
         modulo.confirmar_retorno_edicao_no_detalhe(page, painel, 'Etapa Editada')
         self.assertEqual(eventos, ['detalhe-visible', 'fechar', 'detalhe-detached', 'lista-visible'])
         page.get_by_role.assert_called_once()
-        self.assertEqual(page.get_by_role.call_args.args[0], 'dialog')
+        self.assertEqual(page.get_by_role.call_args.args[0], 'region')
         self.assertTrue(page.get_by_role.call_args.kwargs['name'].search('3 · Etapa Editada'))
         self.assertFalse(page.get_by_role.call_args.kwargs['name'].search('3 · Etapa Antiga'))
         detalhe.get_by_role.assert_called_once_with('button', name='Voltar às etapas', exact=True)

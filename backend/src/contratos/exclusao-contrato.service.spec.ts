@@ -18,7 +18,7 @@ function preparar(dependentes = false) {
     return [];
   });
   const registrar = jest.fn<(...args: unknown[]) => Promise<void>>().mockImplementation(async () => { ordem.push('auditoria'); });
-  const transacao = jest.fn<(fn: (m: EntityManager) => Promise<unknown>) => Promise<unknown>>().mockImplementation(fn => fn({ query } as unknown as EntityManager));
+  const transacao = jest.fn<(fn: (m: EntityManager) => Promise<unknown>) => Promise<unknown>>().mockImplementation(fn => fn({ query, getRepository: () => ({ findOne: async () => ({ ...admin, ativo: true }) }) } as unknown as EntityManager));
   const service = new ExclusaoContratoService(
     { transaction: transacao } as unknown as DataSource,
     { registrarNaTransacao: registrar } as unknown as AuditoriaService,
@@ -60,7 +60,18 @@ describe('Exclusão definitiva de contrato arquivado', () => {
     const x = preparar(true);
     await expect(x.service.excluir(ID, admin)).rejects.toBeInstanceOf(ConflictException);
     const sql = x.query.mock.calls.find(([q]) => q.includes('possui_dependencias'))?.[0] ?? '';
-    for (const fonte of ['documentos_contratuais','comprovantes_evidencia','execucoes_entregavel','execucoes_quantitativas_diretas','rascunho_envio'])
+    for (const fonte of ['documentos_contratuais','comprovantes_evidencia','execucoes_entregavel','execucoes_quantitativas_diretas','rascunho_envio','CONTRATO_REABERTO','CANCELADO','SUSPENSO'])
       expect(sql).toContain(fonte);
   });
+});
+
+
+test('B03: prévia de exclusão usa o mesmo gate e não escreve', async () => {
+  for(const possui of [false,true]) {
+    const x=preparar(possui);
+    const r=await x.service.elegibilidade(ID,admin);
+    expect(r.apto).toBe(!possui);
+    expect(x.registrar).not.toHaveBeenCalled();
+    expect(x.ordem.some(s=>s.startsWith('DELETE'))).toBe(false);
+  }
 });

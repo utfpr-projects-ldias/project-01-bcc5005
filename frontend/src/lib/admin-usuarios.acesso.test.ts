@@ -1,4 +1,4 @@
-import { OPERACOES_CONTRATO, permissoesPadraoVinculo, resumirAcessoVinculo, vinculoTemEdicao } from './admin-usuarios';
+import { obterPermissoesIniciais, OPERACOES_CONTRATO, permissoesPadraoVinculo, resumirAcessoVinculo, vinculoTemEdicao } from './admin-usuarios';
 
 test('somente leitura nega explicitamente todas as operações para Gestor e Colaborador', () => {
   for (const perfil of ['GESTOR', 'COLABORADOR'] as const) {
@@ -55,4 +55,18 @@ test('resumo diferencia leitura, edição e permissões personalizadas sem escon
     expect(resumirAcessoVinculo(perfil, { contratoId: 'a', podeEditar: true }))
       .toBe('Vínculo anterior · revise as permissões');
   }
+});
+
+test('B02: abrir e salvar vínculo legado não concede permissões especiais de ocorrência', () => {
+  const p = obterPermissoesIniciais('GESTOR', { contratoId: 'a', podeEditar: true });
+  expect(p.editarExigenciasOcorrencia).toBe(false);
+  expect(p.editarPesoOcorrencia).toBe(false);
+  expect(p.corrigirExecucaoOcorrencia).toBe(false);
+  expect(p.editarOcorrencias).toBe(true);
+});
+test('B02: o editor utiliza a ACL efetiva publicada pelo servidor, inclusive negações', () => {
+  const p = obterPermissoesIniciais('GESTOR', { contratoId: 'a', podeEditar: true,
+    permissoesDetalhadas: { editarOcorrencias: true }, permissoesEfetivas: { editarOcorrencias: false, editarPesoOcorrencia: true } });
+  expect(p.editarOcorrencias).toBe(false);
+  expect(p.editarPesoOcorrencia).toBe(true);
 });

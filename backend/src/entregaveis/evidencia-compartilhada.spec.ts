@@ -23,7 +23,7 @@ test('quantidade direta exige meta, unidade e ausência de outra fonte de mediç
   await expect(validarOcorrenciaQuantidade(manager([{}]),e,v)).rejects.toThrow();
   await expect(validarOcorrenciaQuantidade(manager([]),{...e,quantidadeRealizada:'1'} as Entregavel,v)).rejects.toThrow();
   await expect(validarOcorrenciaQuantidade(manager([]),{...e,tipo:'RECORRENTE'} as Entregavel,v)).rejects.toThrow();
-  expect(()=>normalizarVinculoQuantidade({...valor,origemQuantidade:'COMPROVACAO'})).toThrow();
+  await expect(validarOcorrenciaQuantidade(manager([]),e,normalizarVinculoQuantidade({...valor,origemQuantidade:'COMPROVACAO'}))).rejects.toThrow();
 });
 test('projeção da medição direta separa aprovação de pendência',async()=>{
   expect(await quantidadeDiretaEvidencias(manager([]),e)).toBeNull();

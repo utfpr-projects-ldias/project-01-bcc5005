@@ -1,4 +1,4 @@
-import { quantidadeApiParaBR, quantidadeBRParaApi } from './numero-quantidade-br';
+import { quantidadeApiParaBR, quantidadeBRParaApi, milesimosApi, formatarMilesimos, percentualQuantidadeExata } from './numero-quantidade-br';
 
 describe('quantidades pt-BR: distinguir milhares de decimais sem modificar valores da API', () => {
   it.each([
@@ -17,4 +17,18 @@ describe('quantidades pt-BR: distinguir milhares de decimais sem modificar valor
     expect(quantidadeApiParaBR('20.000')).toBe('20');
     expect(quantidadeApiParaBR('20000.000')).toBe('20.000');
   });
+});
+
+it('B06: mantém todos os dígitos de numeric(18,3), inclusive o último milésimo',()=>{
+  expect(quantidadeApiParaBR('999999999999999.998')).toBe('999.999.999.999.999,998');
+  expect(quantidadeBRParaApi('999.999.999.999.999,998')).toBe('999999999999999.998');
+  expect(quantidadeBRParaApi('1.000.000.000.000.000')).toBeNull();
+});
+
+it('B07: mantém diferença de um milésimo mesmo no limite de numeric(18,3)',()=>{
+  const meta=milesimosApi('999999999999999.999'), realizado=milesimosApi('999999999999999.998');
+  expect(meta-realizado).toBe(BigInt(1));
+  expect(formatarMilesimos(meta-realizado)).toBe('0,001');
+  expect(percentualQuantidadeExata(realizado,meta)).toBe(99.999);
+  expect(percentualQuantidadeExata(meta,meta)).toBe(100);
 });

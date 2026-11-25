@@ -1,8 +1,9 @@
+import { formatarPercentualSemAnteciparConclusao } from '@/lib/apresentacao-indicadores';
 /** Indicador de avanço físico; recebe o valor calculado pela API, nunca calcula uma nova fórmula. */
 export function ProgressoCircular({ valor, nome, tamanho = 'normal', neutro = false, corFisica = false }: { valor: number | null | undefined; nome: string; tamanho?: 'normal' | 'grande'; neutro?: boolean; corFisica?: boolean }) {
   const valido = typeof valor === 'number' && Number.isFinite(valor);
   const porcentagem = valido ? Math.max(0, Math.min(100, valor)) : null;
-  const texto = porcentagem === null ? '—' : `${porcentagem.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`;
+  const texto = porcentagem === null ? '—' : formatarPercentualSemAnteciparConclusao(porcentagem);
   return <div role="img" aria-label={`Progresso físico de ${nome}: ${porcentagem === null ? 'indisponível' : texto}`}
     data-pi-progresso-circular data-valor-disponivel={porcentagem !== null}
     className={`relative shrink-0 rounded-full bg-transparent text-center font-bold tabular-nums ${tamanho === 'grande' ? 'h-16 w-16 sm:h-[4.5rem] sm:w-[4.5rem]' : 'h-14 w-14'}`}>

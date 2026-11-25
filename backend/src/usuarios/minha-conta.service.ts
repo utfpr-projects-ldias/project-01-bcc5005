@@ -1,18 +1,21 @@
-import { ConflictException, ForbiddenException, Injectable, InternalServerErrorException, Logger, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, HttpException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import EmailPassword from 'supertokens-node/recipe/emailpassword';
 import { DataSource, type Repository } from 'typeorm';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
-import { IdentidadesFuncionariosService, RevogacaoSessoesPendenteError } from './identidades-funcionarios.service.js';
+import { IdentidadesFuncionariosService } from './identidades-funcionarios.service.js';
 import { PerfilUsuario } from './perfil-usuario.enum.js';
 import { Usuario } from './usuario.entity.js';
-import { normalizarNomeCompleto } from './nome-completo.js';
+import { criarLimiteLogin } from '../auth/limite-login.js';
+import { alterarEmailSeguro } from './alteracao-email-segura.js';
+import { alterarSenhaSegura } from './alteracao-senha-segura.js';
+import { normalizarNomePerfil } from './nome-completo.js';
 
 @Injectable()
 export class MinhaContaService {
-  private readonly logger = new Logger(MinhaContaService.name);
+  private readonly limitarSenhaAtual = criarLimiteLogin(300_000, 10);
 
   constructor(
     @InjectRepository(Usuario) private readonly repositorio: Repository<Usuario>,
@@ -23,11 +26,11 @@ export class MinhaContaService {
 
   /** Atualização do próprio nome não altera perfil, e-mail nem identidades externas. */
   async alterarNome(nomeInformado: string, ator: UsuarioAutenticado) {
-    const nome = normalizarNomeCompleto(nomeInformado);
+    const nome = normalizarNomePerfil(nomeInformado);
     return this.dataSource.transaction(async (manager) => {
       const repo = manager.getRepository(Usuario);
       const atual = await repo.findOne({ where: { id: ator.id }, lock: { mode: 'pessimistic_write' } });
-      if (!atual?.ativo || atual.supertokensUserId !== ator.supertokensUserId || atual.perfil !== ator.perfil)
+      if (!atual?.ativo || atual.bloqueioSessoesId || atual.supertokensUserId !== ator.supertokensUserId || atual.perfil !== ator.perfil)
         throw new ForbiddenException('Conta própria indisponível');
       if (atual.nome !== nome) {
         const nomeAnterior = atual.nome ?? null;
@@ -47,13 +50,14 @@ export class MinhaContaService {
       throw new ForbiddenException('Somente Administrador pode alterar as próprias credenciais nesta tela');
     }
     const atual = await this.repositorio.findOneBy({ id: ator.id, ativo: true });
-    if (!atual || atual.perfil !== PerfilUsuario.ADMINISTRADOR || atual.supertokensUserId !== ator.supertokensUserId) {
+    if (!atual || atual.bloqueioSessoesId || atual.perfil !== PerfilUsuario.ADMINISTRADOR || atual.supertokensUserId !== ator.supertokensUserId) {
       throw new ForbiddenException('Conta administrativa indisponível');
     }
     return atual;
   }
 
   private async verificarSenha(ator: UsuarioAutenticado, emailAtual: string, senhaAtual: string): Promise<void> {
+    if (this.limitarSenhaAtual(ator.id)) throw new HttpException('Muitas tentativas de confirmar a senha atual. Aguarde alguns minutos.', 429);
     // signIn verifica senha no SuperTokens mas não cria sessão; nunca confiar no email do body.
     const resultado = await EmailPassword.signIn('public', emailAtual, senhaAtual);
     if (resultado.status !== 'OK' || resultado.user.id !== ator.supertokensUserId) {
@@ -62,95 +66,17 @@ export class MinhaContaService {
   }
 
   async alterarEmail(email: string, senhaAtual: string, ator: UsuarioAutenticado) {
-    const atual = await this.autorValido(ator);
-    await this.verificarSenha(ator, atual.email, senhaAtual);
-    const destino = email.trim().toLowerCase();
-    if (destino === atual.email) return { id: atual.id, nome: atual.nome ?? null, email: atual.email, perfil: atual.perfil, ativo: true };
-    let emailAnterior: string | null = null;
-    let alterouCore = false;
-    let callbackConcluido = false;
-    try {
-      return await this.dataSource.transaction(async (manager) => {
-        const repo = manager.getRepository(Usuario);
-        const salvo = await repo.findOne({ where: { id: ator.id }, lock: { mode: 'pessimistic_write' } });
-        if (!salvo?.ativo || salvo.perfil !== PerfilUsuario.ADMINISTRADOR || salvo.supertokensUserId !== ator.supertokensUserId || salvo.email !== atual.email) {
-          throw new ForbiddenException('Conta alterada durante esta operação');
-        }
-        if (await repo.findOneBy({ email: destino })) throw new ConflictException('E-mail já cadastrado');
-        emailAnterior = salvo.email;
-        await this.identidades.alterarEmail(salvo.supertokensUserId, destino);
-        alterouCore = true;
-        salvo.email = destino;
-        await repo.save(salvo);
-        await this.auditoria.registrarNaTransacao(manager, ator, {
-          acao: AcaoAuditoria.USUARIO_EMAIL_ALTERADO, entidadeTipo: 'USUARIO', entidadeId: salvo.id,
-          dadosAnteriores: { email: emailAnterior }, dadosPosteriores: { email: destino },
-        });
-        callbackConcluido = true;
-        return { id: salvo.id, nome: salvo.nome ?? null, email: salvo.email, perfil: salvo.perfil, ativo: true };
-      });
-    } catch (erro: unknown) {
-      if (alterouCore && emailAnterior !== null) {
-        if (callbackConcluido) {
-          let persistido: Usuario | null;
-          try { persistido = await this.repositorio.findOneBy({ id: ator.id }); }
-          catch {
-            this.logger.error('Resultado indeterminado do COMMIT de e-mail próprio; consulta indisponível');
-            throw new InternalServerErrorException('E-mail com confirmação indeterminada; contate o suporte');
-          }
-          if (!persistido || persistido.supertokensUserId !== ator.supertokensUserId ||
-              (persistido.email !== destino && persistido.email !== emailAnterior)) {
-            this.logger.error('Estado de e-mail próprio divergente após falha de confirmação');
-            throw new InternalServerErrorException('E-mail com confirmação indeterminada; contate o suporte');
-          }
-          if (persistido.email === destino) {
-            this.logger.warn('COMMIT de e-mail próprio confirmado por leitura após erro de confirmação');
-            return { id: persistido.id, nome: persistido.nome ?? null, email: persistido.email,
-              perfil: persistido.perfil, ativo: persistido.ativo };
-          }
-        }
-        try { await this.identidades.alterarEmail(ator.supertokensUserId, emailAnterior); }
-        catch {
-          this.logger.error('Falha ao compensar mudança da própria conta no SuperTokens');
-          throw new InternalServerErrorException('E-mail inconsistente entre serviços; contate o suporte');
-        }
-      }
-      throw erro;
-    }
+    await this.autorValido(ator);
+    const salvo = await alterarEmailSeguro(this.dataSource, this.auditoria, this.identidades, ator, ator.id,
+      email.trim().toLowerCase(), alvo => this.verificarSenha(ator, alvo.email, senhaAtual));
+    return { id: salvo.id, nome: salvo.nome ?? null, email: salvo.email, perfil: salvo.perfil, ativo: salvo.ativo };
   }
 
   async alterarSenha(senhaAtual: string, novaSenha: string, ator: UsuarioAutenticado): Promise<void> {
-    const atual = await this.autorValido(ator);
-    await this.verificarSenha(ator, atual.email, senhaAtual);
-    if (senhaAtual === novaSenha) throw new ConflictException('A nova senha deve ser diferente da atual');
-    // Não registra senha em evento, resposta, log nem Postgres. Auditamos o usuário da sessão.
-    await this.auditoria.executarComAuditoria(ator, async () => ({ resultado: undefined, evento: {
-      acao: AcaoAuditoria.USUARIO_SENHA_REDEFINICAO_SOLICITADA, entidadeTipo: 'USUARIO', entidadeId: ator.id,
-      dadosPosteriores: { situacao: 'SOLICITADA_PELO_TITULAR' },
-    } }));
-    try {
-      await this.identidades.definirNovaSenha(atual.supertokensUserId, novaSenha);
-    } catch (erro) {
-      if (!(erro instanceof RevogacaoSessoesPendenteError)) throw erro;
-      try {
-        await this.auditoria.executarComAuditoria(ator, async () => ({ resultado: undefined, evento: {
-          acao: AcaoAuditoria.USUARIO_SENHA_REVOGACAO_PENDENTE, entidadeTipo: 'USUARIO', entidadeId: ator.id,
-          dadosPosteriores: { situacao: 'SENHA_ALTERADA_SESSOES_PENDENTES_PELO_TITULAR' },
-        } }));
-      } catch {
-        this.logger.error('Senha própria alterada; revogação pendente e auditoria parcial; intervenção necessária');
-      }
-      throw new InternalServerErrorException('Senha alterada, mas sessões anteriores podem continuar ativas; contate o suporte técnico');
-    }
-    try {
-      await this.auditoria.executarComAuditoria(ator, async () => ({ resultado: undefined, evento: {
-        acao: AcaoAuditoria.USUARIO_SENHA_REDEFINIDA, entidadeTipo: 'USUARIO', entidadeId: ator.id,
-        dadosPosteriores: { situacao: 'EFETIVADA_PELO_TITULAR' },
-      } }));
-    } catch {
-      this.logger.error('Senha própria alterada no SuperTokens mas auditoria final falhou');
-      throw new InternalServerErrorException('Senha alterada, mas auditoria incompleta; contate o suporte');
-    }
-    // IdentidadesFuncionariosService revoga todas as sessões após alterar senha.
+    await this.autorValido(ator);
+    await alterarSenhaSegura(this.dataSource, this.auditoria, this.identidades, ator, ator.id, novaSenha, async alvo => {
+      await this.verificarSenha(ator, alvo.email, senhaAtual);
+      if (senhaAtual === novaSenha) throw new ConflictException('A nova senha deve ser diferente da atual');
+    });
   }
 }

@@ -1,6 +1,6 @@
 import {
   Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Req,
-  UsePipes, ValidationPipe,
+  UsePipes, ValidationPipe, Query, DefaultValuePipe, ParseIntPipe,
 } from '@nestjs/common';
 import { EncerrarEtapaDto } from './dto/encerrar-etapa.dto.js';
 import { JustificativaDecisaoDto } from '../contratos/dto/justificativa-decisao.dto.js';
@@ -46,6 +46,12 @@ export class EtapasController {
     return this.etapas.detalhar(contratoId, etapaId);
   }
 
+  @Get(':etapaId/elegibilidade-conclusao')
+  @ExigirPoliticaOperacional('etapas:visualizar', { tipo: 'recurso', recurso: 'etapa', parametro: 'etapaId', parametroContratoPai: 'contratoId' })
+  elegibilidade(@Param('contratoId') c: string, @Param('etapaId') id: string) {
+    return this.etapas.elegibilidade(c, id);
+  }
+
   @Patch(':etapaId/solicitar-conclusao')
   @ExigirPoliticaOperacional('etapas:solicitar-conclusao', { tipo:'recurso',recurso:'etapa',parametro:'etapaId',parametroContratoPai:'contratoId' })
   solicitarConclusao(@Param('contratoId') contratoId:string,@Param('etapaId') etapaId:string,@Req() req:RequisicaoAutorizada){
@@ -84,8 +90,10 @@ export class EtapasController {
 
   @Get(':etapaId/historico')
   @ExigirPoliticaOperacional('etapas:visualizar', { tipo: 'recurso', recurso: 'etapa', parametro: 'etapaId', parametroContratoPai: 'contratoId' })
-  historico(@Param('contratoId') contratoId: string, @Param('etapaId') etapaId: string, @Req() req: RequisicaoAutorizada) {
-    return this.etapas.historico(contratoId, etapaId, req.usuarioDominio!);
+  historico(@Param('contratoId') contratoId: string, @Param('etapaId') etapaId: string, @Req() req: RequisicaoAutorizada,
+    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
+    @Query('limite', new DefaultValuePipe(100), ParseIntPipe) limite: number) {
+    return this.etapas.historico(contratoId, etapaId, req.usuarioDominio!, offset, limite);
   }
 
   @Patch(':etapaId/finalizar')

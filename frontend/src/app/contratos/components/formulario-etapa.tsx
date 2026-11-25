@@ -10,9 +10,10 @@ const campoClasse = 'w-full min-w-0 rounded-lg border border-brand-green/30 bg-b
 type Campo = keyof DadosEtapa;
 
 export function FormularioEtapa({ inicial, onSalvar, onCancelar, onSalvandoMudou }: {
-  inicial?: Etapa; onSalvar: (dados: DadosEtapa) => Promise<void>; onCancelar: () => void;
+  inicial?: Etapa; onSalvar: (dados: DadosEtapa, original?: Etapa) => Promise<void>; onCancelar: () => void;
   onSalvandoMudou?: (salvando: boolean) => void;
 }) {
+  const [original] = useState(inicial);
   const [dados, setDados] = useState<DadosEtapa>(() => inicial ? {
     nome: inicial.nome, codigo: inicial.codigo, descricao: inicial.descricao,
     inicioPrevisto: inicial.inicioPrevisto, terminoPrevisto: inicial.terminoPrevisto,
@@ -47,12 +48,12 @@ export function FormularioEtapa({ inicial, onSalvar, onCancelar, onSalvandoMudou
       if (Object.keys(revisoes).length) {setErros(revisoes); setErroGeral('Confira os campos destacados.'); return;}
       envio = dados;
     } else {
-      const resultado = validarEtapa(dados, inicial);
+      const resultado = validarEtapa(dados, original);
       if (!resultado.sucesso) {setErros(resultado.erros);setErroGeral('Confira os campos destacados.');return;}
       envio = resultado.dados;
     }
     setErros({}); setErroGeral(''); setSalvando(true); onSalvandoMudou?.(true);
-    try { await onSalvar(envio); }
+    try { if (original) await onSalvar(envio, original); else await onSalvar(envio); }
     catch (erro) {
       setErroGeral(erro instanceof ErroEtapa ? erro.message : 'Não foi possível salvar a etapa. Seus dados foram mantidos.');
     } finally { setSalvando(false); onSalvandoMudou?.(false); }
@@ -63,8 +64,8 @@ export function FormularioEtapa({ inicial, onSalvar, onCancelar, onSalvandoMudou
     <h4 className="pi-titulo-formulario">Identificação</h4>
     <div className="grid gap-3 sm:grid-cols-[minmax(8rem,11rem)_minmax(0,1fr)]">
       <div><label htmlFor="etapa-codigo" className="mb-1 block text-sm font-medium">Código</label>
-        <input id="etapa-codigo" maxLength={somenteMetadados ? Math.max(LIMITES_ETAPA.codigo, (inicial?.codigo ?? '').length) : LIMITES_ETAPA.codigo} inputMode="numeric" className={campoClasse} value={dados.codigo ?? ''} {...erroCampo('codigo')}
-          onChange={(e) => mudar('codigo', e.target.value.replace(/\D/g,'') || null)} /><span className="block text-right text-[11px] text-foreground/50">{(dados.codigo ?? '').length}/{LIMITES_ETAPA.codigo}</span>{mensagem('codigo')}</div>
+        <input id="etapa-codigo" maxLength={somenteMetadados ? Math.max(LIMITES_ETAPA.codigo, (inicial?.codigo ?? '').length) : LIMITES_ETAPA.codigo} className={campoClasse} value={dados.codigo ?? ''} {...erroCampo('codigo')}
+          onChange={(e) => mudar('codigo', e.target.value || null)} /><span className="block text-right text-[11px] text-foreground/50">{(dados.codigo ?? '').length}/{LIMITES_ETAPA.codigo}</span>{mensagem('codigo')}</div>
       <div><label htmlFor="etapa-nome" className="mb-1 block text-sm font-medium">Nome *</label>
         <input id="etapa-nome" maxLength={somenteMetadados ? Math.max(LIMITES_ETAPA.nome, (inicial?.nome ?? '').length) : LIMITES_ETAPA.nome} required className={campoClasse} value={dados.nome} {...erroCampo('nome')}
           onChange={(e) => mudar('nome', e.target.value)} /><span className="block text-right text-[11px] text-foreground/50">{dados.nome.length}/{LIMITES_ETAPA.nome}</span>{mensagem('nome')}</div>
@@ -79,7 +80,7 @@ export function FormularioEtapa({ inicial, onSalvar, onCancelar, onSalvandoMudou
       <div><label htmlFor="etapa-status" className="mb-1 block text-sm font-medium">Status</label>
         <select id="etapa-status" className={campoClasse} value={dados.status} {...erroCampo('status')}
           onChange={(e) => mudar('status', e.target.value as DadosEtapa['status'])}>
-          {Object.entries(STATUS_ETAPA).filter(([valor]) => valor !== 'CONCLUIDA' && valor !== 'ENCERRADA' && valor !== 'FINALIZADA').map(([valor, rotulo]) => <option value={valor} key={valor}>{rotulo}</option>)}
+          {Object.entries(STATUS_ETAPA).filter(([valor]) => valor === 'PLANEJADA' || valor === 'EM_ANDAMENTO').map(([valor, rotulo]) => <option value={valor} key={valor}>{rotulo}</option>)}
           {inicial?.status === 'CONCLUIDA' && <option value="CONCLUIDA" disabled>Concluída (após aprovação)</option>}
         </select>{mensagem('status')}</div>
     </div>}

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import type { Repository } from 'typeorm';
+import type { EntityManager, Repository } from 'typeorm';
+import { Usuario } from '../usuarios/usuario.entity.js';
 import { Contrato } from '../contratos/contrato.entity.js';
 
 import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
@@ -34,7 +35,18 @@ export class PoliticaAcessoService {
     const encontrado = await this.contratos.findOne({
       where: { id: contratoId }, select: { id: true, arquivadoEm: true, status: true, conclusaoSolicitadaEm: true },
     });
-    return Boolean(encontrado && !encontrado.arquivadoEm && !encontrado.conclusaoSolicitadaEm && encontrado.status !== 'CONCLUIDO' && (encontrado.status !== 'CONCLUIDO_PARCIALMENTE' || ['evidencias:anexar','evidencias:verificar','evidencias:reabrir','ocorrencias:vincular-evidencia','ocorrencias:solicitar-conclusao','ocorrencias:concluir','ocorrencias:reabrir','entregaveis:solicitar-conclusao','entregaveis:concluir','etapas:solicitar-conclusao','etapas:concluir','documentos:anexar','contratos:solicitar-conclusao'].includes(acao)) && encontrado.status !== 'FINALIZADO' && encontrado.status !== 'ENCERRADO' && encontrado.status !== 'CANCELADO' && encontrado.status !== 'SUSPENSO');
+    return Boolean(encontrado && !encontrado.arquivadoEm && !encontrado.conclusaoSolicitadaEm && encontrado.status !== 'CONCLUIDO' && (encontrado.status !== 'CONCLUIDO_PARCIALMENTE' || ['evidencias:anexar','evidencias:verificar','evidencias:reabrir','evidencias:arquivaresperada','evidencias:reativaresperada','ocorrencias:vincular-evidencia','ocorrencias:solicitar-conclusao','ocorrencias:concluir','ocorrencias:reabrir','entregaveis:solicitar-conclusao','entregaveis:concluir','etapas:solicitar-conclusao','etapas:concluir','documentos:anexar','contratos:solicitar-conclusao'].includes(acao)) && encontrado.status !== 'FINALIZADO' && encontrado.status !== 'ENCERRADO' && encontrado.status !== 'CANCELADO' && encontrado.status !== 'SUSPENSO');
+  }
+
+  /** Para mutações que envolvem múltiplos contratos: a ACL não pode mudar entre
+   * a decisão e o COMMIT. Usa a mesma ordenação autor/vínculo da administração. */
+  async permitidoNaTransacao(manager: EntityManager, usuario: UsuarioAutenticado, politica: Politica, contratoId: string): Promise<boolean> {
+    const atual = await manager.getRepository(Usuario).findOne({where:{id:usuario.id},lock:{mode:'pessimistic_read'}});
+    if (!atual?.ativo || atual.bloqueioSessoesId || atual.supertokensUserId !== usuario.supertokensUserId || atual.perfil !== usuario.perfil) return false;
+    const vinculos = manager.getRepository(PermissaoContrato);
+    if (atual.perfil !== PerfilUsuario.ADMINISTRADOR)
+      await vinculos.findOne({where:{usuarioId:usuario.id,contratoId},lock:{mode:'pessimistic_read'}});
+    return new PoliticaAcessoService(vinculos, manager.getRepository(Contrato)).permitido(usuario,politica,contratoId);
   }
 
   async permitido(usuario: UsuarioAutenticado, politica: Politica, contratoId?: string): Promise<boolean> {

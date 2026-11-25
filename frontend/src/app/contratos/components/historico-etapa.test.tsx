@@ -13,9 +13,18 @@ test('etapa apresenta contexto de entregável/evidência e nome do comprovante s
   }]);
   render(<HistoricoEtapa contratoId="contrato-1" etapaId="etapa-1" />);
   expect(screen.queryByText('evidencia-final.pdf')).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: /Rastreabilidade da etapa/i }));
+  fireEvent.click(screen.getByRole('button', { name: /Histórico da etapa/i }));
   await waitFor(() => expect(screen.getByText('Arquivo: evidencia-final.pdf')).toBeInTheDocument());
   expect(screen.getByText('Entregável: Relatório · Evidência: Foto')).toBeInTheDocument();
   expect(consultarHistoricoEtapa).toHaveBeenCalledWith('contrato-1', 'etapa-1', expect.any(AbortSignal));
   expect(screen.queryByText(/dadosAnteriores|dadosPosteriores/)).not.toBeInTheDocument();
+});
+
+test('diferencia erro de permissão de falha de consulta e permite tentar novamente', async () => {
+  (consultarHistoricoEtapa as jest.Mock).mockRejectedValueOnce({status:403}).mockResolvedValueOnce([]);
+  render(<HistoricoEtapa contratoId="contrato-1" etapaId="etapa-1" />);
+  fireEvent.click(screen.getByRole('button', { name: /Histórico da etapa/i }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Sem permissão');
+  fireEvent.click(screen.getByRole('button', {name:'Tentar novamente'}));
+  expect(await screen.findByText('Nenhum evento registrado.')).toBeInTheDocument();
 });

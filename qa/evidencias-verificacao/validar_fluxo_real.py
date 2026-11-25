@@ -13,6 +13,9 @@ import re
 import secrets
 import subprocess
 import sys
+from pathlib import Path as _CaminhoQA
+sys.path.insert(0, str(_CaminhoQA(__file__).resolve().parents[1]))
+from navegacao_contrato import localizar_pagina, abrir_pagina
 
 ROOT=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT/'qa'/'tec08-02'))
@@ -190,7 +193,7 @@ def fluxo(contas,visivel):
                 rel['provas'].append('Obrigatoriedade: sem delegação 403, delegação ADMIN 200, revogação 403')
                 rel['etapaAtual'] = 'Abrir etapa, entregável e evidência no Chromium'
                 gestor.goto(f'{WEB}/contratos/{contrato}',wait_until='domcontentloaded')
-                gestor.get_by_role('tab', name='Etapas').click()
+                localizar_pagina(gestor, 'Etapas').click()
                 gestor.get_by_role('button', name='Abrir detalhes da etapa 1: Etapa de evidências '+nome[-6:]).click()
                 modal_etapa=gestor.get_by_role('dialog', name=re.compile(r'^\d+\s*·\s*' + re.escape('Etapa de evidências '+nome[-6:]) + r'$'))
                 modal_etapa.wait_for(state='visible',timeout=15000)
@@ -199,7 +202,7 @@ def fluxo(contas,visivel):
                 try:
                     titulo.wait_for(state='visible',timeout=12000)
                 except Exception as primeira_falha:
-                    aba_comprovados=painel_entregaveis.get_by_role('tab',name='Entregáveis verificados')
+                    aba_comprovados=painel_entregaveis.get_by_role('tab',name='Entregáveis finalizados')
                     if aba_comprovados.count()==0:
                         raise primeira_falha
                     aba_comprovados.click()

@@ -1,3 +1,4 @@
+import { mensagemErroDominioHttp } from './erro-dominio-http';
 /** Contrato REST de usuários. Sem armazenar tokens ou credenciais no frontend. */
 export type PerfilFuncionario = "GESTOR" | "COLABORADOR";
 export type PerfilUsuario = "ADMINISTRADOR" | PerfilFuncionario;
@@ -11,7 +12,7 @@ export type UsuarioPublico = {
   criadoEm: string;
 };
 
-export type MeuPerfil = Pick<UsuarioPublico, "id" | "nome" | "email" | "perfil" | "ativo">;
+export type MeuPerfil = Pick<UsuarioPublico, "id" | "nome" | "email" | "perfil" | "ativo"> & { versaoAcesso?: string };
 export type NovoFuncionario = {
   nome: string;
   email: string;
@@ -35,7 +36,7 @@ export type OperacaoPermissao =
   'registrarAtividades' | 'editarAtividades' | 'verificarAtividades' | 'reabrirAtividades' | 'arquivarAtividades' | 'reativarAtividades' | 'excluirAtividadesArquivadas' |
   'editarContrato' | 'concluirContrato' | 'encerrarContrato' | 'reabrirContrato' | 'cancelarContrato' | 'reverterCancelamentoContrato' | 'suspenderContrato' | 'retomarContrato' | 'verificarDocumentos' | 'reabrirDocumentos' | 'verificarDocumentoPrincipal' | 'reabrirDocumentoPrincipal' | 'anexarDocumentos' | 'editarDocumentos' | 'arquivarDocumentos' | 'reativarDocumentos' | 'excluirDocumentosArquivados' | 'arquivarDocumentoPrincipal' | 'reativarDocumentoPrincipal' | 'excluirDocumentoPrincipal';
 export type PermissaoFuncionario = { contratoId: string; podeEditar: boolean;
-  permissoesDetalhadas?: Partial<Record<OperacaoPermissao, boolean>> | null };
+  permissoesDetalhadas?: Partial<Record<OperacaoPermissao, boolean>> | null; permissoesEfetivas?: Partial<Record<OperacaoPermissao, boolean>> };
 export const OPERACOES_CONTRATO: ReadonlyArray<{ chave: OperacaoPermissao; rotulo: string }> = [
   { chave: 'criarOcorrencias', rotulo: 'Cadastrar ocorrências' },
   { chave: 'editarOcorrencias', rotulo: 'Editar ocorrências abertas' },
@@ -116,9 +117,9 @@ export const OPERACOES_CONTRATO: ReadonlyArray<{ chave: OperacaoPermissao; rotul
 export function obterPermissoesIniciais(perfil: PerfilFuncionario, vinculo: PermissaoFuncionario): Record<OperacaoPermissao, boolean> {
   const resultado = {} as Record<OperacaoPermissao, boolean>;
   for (const { chave } of OPERACOES_CONTRATO) {
-    resultado[chave] = vinculo.permissoesDetalhadas?.[chave] ?? (
-      (['aprovarExecucaoManual', 'criarMetasMarco', 'editarMetasMarco', 'vincularMetasMarco', 'aprovarVinculosMetasMarco'].includes(chave) || chave.startsWith('concluir') || chave === 'encerrarContrato' || chave === 'encerrarEtapas' || chave === 'suspenderContrato' || chave === 'retomarContrato' || chave === 'cancelarContrato' || chave === 'reverterCancelamentoContrato' || chave === 'editarMetaOcorrencia' || chave === 'vincularAtividadesOcorrencia' || chave === 'vincularEvidenciasOcorrencia' || chave === 'alterarObrigatoriedade' || chave === 'verificarAtividades' || chave === 'arquivarAtividades' || chave === 'verificarDocumentos' || chave === 'reabrirDocumentos' || chave.endsWith('DocumentoPrincipal') || chave === 'bloquearOrdemEtapas' || chave === 'bloquearExecucaoOcorrencia' || chave === 'arquivarEtapas' || chave.startsWith('reativar') || chave.startsWith('reabrir') || chave.startsWith('excluir')) ? false :
-      chave === 'registrarAtividades' || chave === 'editarAtividades' ? vinculo.podeEditar :
+    resultado[chave] = vinculo.permissoesEfetivas?.[chave] ?? vinculo.permissoesDetalhadas?.[chave] ?? (
+      (['aprovarExecucaoManual', 'criarMetasMarco', 'editarMetasMarco', 'vincularMetasMarco', 'aprovarVinculosMetasMarco'].includes(chave) || chave.startsWith('concluir') || chave === 'encerrarContrato' || chave === 'encerrarEtapas' || chave === 'suspenderContrato' || chave === 'retomarContrato' || chave === 'cancelarContrato' || chave === 'reverterCancelamentoContrato' || chave === 'editarMetaOcorrencia' || chave === 'vincularAtividadesOcorrencia' || chave === 'vincularEvidenciasOcorrencia' || chave === 'alterarObrigatoriedade' || chave === 'editarExigenciasOcorrencia' || chave === 'editarPesoOcorrencia' || chave === 'corrigirExecucaoOcorrencia' || chave === 'verificarAtividades' || chave === 'arquivarAtividades' || chave === 'verificarDocumentos' || chave === 'reabrirDocumentos' || chave.endsWith('DocumentoPrincipal') || chave === 'bloquearOrdemEtapas' || chave === 'bloquearExecucaoOcorrencia' || chave === 'arquivarEtapas' || chave.startsWith('reativar') || chave.startsWith('reabrir') || chave.startsWith('excluir')) ? false :
+      chave === 'registrarAtividades' || chave === 'editarAtividades' ? perfil === 'GESTOR' && vinculo.podeEditar :
       chave === 'enviarComprovantes' || chave === 'verificarComprovantes' ? true :
       perfil === 'GESTOR' && vinculo.podeEditar);
   }
@@ -201,10 +202,14 @@ async function requisitar<T>(caminho: string, init?: RequestInit): Promise<T> {
     headers: { "Content-Type": "application/json", ...init?.headers },
   });
   if (!resposta.ok) {
+    if (resposta.status >= 500 && /\/(?:email|senha)$/.test(caminho))
+      throw new ErroApi(resposta.status, "Não foi possível confirmar a alteração de credenciais. Confira a situação da conta antes de tentar novamente; pode ser necessário regularizar as sessões.");
+    if (resposta.status === 429) throw new ErroApi(429, "Muitas tentativas. Aguarde alguns minutos antes de tentar novamente.");
     if (resposta.status === 401) throw new ErroApi(401, "Sua sessão expirou. Entre novamente.");
     if (resposta.status === 403) throw new ErroApi(403, "Você não tem permissão para esta operação.");
     if (resposta.status === 404) throw new ErroApi(404, "Usuário não encontrado. Atualize a lista.");
-    if (resposta.status === 409) throw new ErroApi(409, init?.method === "POST" ? "Este e-mail já está cadastrado." : "Conflito de dados. Atualize a lista.");
+    if (resposta.status === 409 || resposta.status === 503) throw new ErroApi(resposta.status, await mensagemErroDominioHttp(resposta,
+      resposta.status === 409 ? "Conflito de dados. Atualize a lista." : "Serviço temporariamente indisponível. Confira o resultado antes de reenviar."));
     if (resposta.status === 400) throw new ErroApi(400, "Dados inválidos. Confira os campos e as permissões informadas.");
     throw new ErroApi(resposta.status, "Não foi possível concluir a operação. Tente novamente.");
   }
@@ -270,4 +275,11 @@ export function alterarMeuEmail(email: string, senhaAtual: string): Promise<MeuP
 }
 export function alterarMinhaSenha(senhaAtual: string, novaSenha: string): Promise<void> {
   return requisitar<void>('/usuarios/me/senha', { method: 'PUT', body: JSON.stringify({ senhaAtual, novaSenha }) });
+}
+
+export type EventoAdministrativo = { id: string; acao: string; registradoEm: string; usuarioId: string;
+  usuarioNome: string | null; autor: string; codigoContrato: string | null; situacao: string | null };
+export function consultarHistoricoAdministrativo(antes?: string | null, signal?: AbortSignal) {
+  return requisitar<{ itens: EventoAdministrativo[]; proximo: string | null }>(
+    `/admin/historico${antes ? `?antes=${encodeURIComponent(antes)}` : ''}`, { signal });
 }

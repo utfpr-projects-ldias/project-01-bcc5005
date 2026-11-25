@@ -137,6 +137,8 @@ describe('HU09-01 — entidade Ocorrencia', () => {
       'NAO_INICIADO',
       'EM_ANDAMENTO',
       'PENDENTE_CONCLUSAO',
+      'PENDENTE_CONCLUSAO_PARCIAL',
+      'CONCLUIDO_PARCIALMENTE',
       'EM_REVISAO',
       'CONCLUIDO',
       'PENDENTE_ENCERRAMENTO',

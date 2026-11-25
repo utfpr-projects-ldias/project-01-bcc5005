@@ -16,7 +16,6 @@ import urllib.error
 import urllib.request
 
 RAIZ = Path(__file__).resolve().parents[2]
-BRANCHES = {'tec-08--04-05', 'tec-08-04-05', 'bugfixes_sprint4'}
 UUID = re.compile(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
 
 # Executado EXCLUSIVAMENTE no container backend. A saída não expõe storage_key,
@@ -84,9 +83,6 @@ def confirmar_contexto():
     git_raiz = Path(executar(['git', 'rev-parse', '--show-toplevel'])).resolve()
     if git_raiz != RAIZ:
         raise RuntimeError('Execução bloqueada fora da raiz do Git')
-    branch = executar(['git', 'branch', '--show-current'])
-    if branch not in BRANCHES:
-        raise RuntimeError(f'Branch não autorizada: {branch}')
     if os.environ.get('DOCKER_HOST', '') not in ('', 'unix:///var/run/docker.sock'):
         raise RuntimeError('DOCKER_HOST remoto/não padrão: não executar sobre ambientes externos')
     if not (RAIZ / '.env').is_file():

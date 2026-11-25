@@ -4,13 +4,19 @@ import {
 } from 'class-validator';
 import { StatusEtapa } from '../status-etapa.enum.js';
 
-/** PATCH: omissão mantém o valor, null limpa somente campos opcionais. */
+/** PATCH: omissão mantém o valor, null limpa somente campos opcionais.
+ * Limites físicos permitem reenviar nomes/códigos legados inalterados;
+ * EtapasService mantém os limites de negócio para novos valores. */
 export class AtualizarEtapaDto {
   @ValidateIf((_, valor: unknown) => valor !== undefined)
-  @IsString() @IsNotEmpty() @MaxLength(36)
+  @IsString() @Matches(/^[a-f0-9]{64}$/)
+  estadoAnterior?: string;
+
+  @ValidateIf((_, valor: unknown) => valor !== undefined)
+  @IsString() @IsNotEmpty() @MaxLength(255)
   nome?: string;
 
-  @IsOptional() @IsString() @MaxLength(15)
+  @IsOptional() @IsString() @MaxLength(50)
   codigo?: string | null;
 
   @IsOptional() @IsString() @MaxLength(400)

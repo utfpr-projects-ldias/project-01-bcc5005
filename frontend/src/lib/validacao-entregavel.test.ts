@@ -1,4 +1,4 @@
-import { inicialEntregavel, mudouEstrutura, validarEntregavel } from './validacao-entregavel';
+import { inicialEntregavel, mudouEstrutura, validarEntregavel, prepararEdicaoEntregavel } from './validacao-entregavel';
 import type { Entregavel, TipoEntregavel } from './entregaveis';
 const modelo = (tipo: TipoEntregavel) => ({ ...inicialEntregavel('etapa-a'), tipo, nome: 'Planejamento contratual', peso: '20', inicioPrevisto: '2026-01-01', terminoPrevisto: '2026-12-31' });
 test('todos os cinco tipos são aceitos com seus parâmetros específicos; sem progressos fictícios', () => {
@@ -109,9 +109,9 @@ test('início previsto obrigatório e término para recorrente/contínuo', () =>
   if (!semFim.sucesso) expect(semFim.erros.terminoPrevisto).toContain('término');
 });
 
-test('peso novo não pode ser zero, mas peso legado zero pode permanecer inalterado durante outra edição', () => {
+test('peso zero é válido e não contribui para a média ponderada', () => {
   const r = modelo('UNICO'); r.peso = '0';
-  expect(validarEntregavel(r).sucesso).toBe(false);
+  expect(validarEntregavel(r).sucesso).toBe(true);
   const antigo = { ...r, id: 'id-legado', peso: '0' } as unknown as Entregavel;
   const editado = { ...r, nome: 'Nome alterado' };
   expect(validarEntregavel(editado, antigo).sucesso).toBe(true);
@@ -128,4 +128,26 @@ test('recorrente quantitativo exige unidade e preserva a modalidade no planejame
   const v = validarEntregavel(r);
   expect(v.sucesso).toBe(true);
   if (v.sucesso) expect(v.dados.configuracaoPeriodicidade).toEqual({versao:1, modoRegistro:'QUANTITATIVO'});
+});
+
+test('B05: precisão completa de peso, quantidade e delta do formulário', () => {
+  const r = modelo('QUANTITATIVO'); r.peso='33,3333'; r.quantidadePrevista='999999999999999,002'; r.unidadeMedida='un';
+  const v = validarEntregavel(r); expect(v.sucesso).toBe(true);
+  if (!v.sucesso) throw new Error('Dados válidos');
+  expect(v.dados.peso).toBe('33.3333');
+  expect(v.dados.quantidadePrevista).toBe('999999999999999.002');
+  const base = {...v.dados, peso:'33.3333', quantidadePrevista:'999999999999999.001', versaoPlanejamento:'a'.repeat(64)} as unknown as Entregavel;
+  expect(prepararEdicaoEntregavel(base,v.dados)).toEqual({quantidadePrevista:'999999999999999.002',versaoPlanejamento:'a'.repeat(64)});
+  expect(prepararEdicaoEntregavel(base,{...v.dados,quantidadePrevista:base.quantidadePrevista})).toEqual({});
+  expect(prepararEdicaoEntregavel(base,v.dados,'informacoes')).toEqual({});
+});
+
+test('limites de cadastro de metadados coincidem com os contadores', () => {
+  for (const [campo, limite] of [['codigo',15],['nome',42],['descricao',200],['observacoes',100],['criterioConclusao',200]] as const) {
+    const r = modelo(campo==='criterioConclusao'?'MARCO':'UNICO');
+    r[campo]='x'.repeat(limite);
+    expect(validarEntregavel(r).sucesso).toBe(true);
+    r[campo]+='x';
+    expect(validarEntregavel(r).sucesso).toBe(false);
+  }
 });

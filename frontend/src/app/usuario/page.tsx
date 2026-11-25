@@ -30,8 +30,8 @@ export default function MinhaContaPage() {
   async function enviarNome(e: FormEvent<HTMLFormElement>) {
     e.preventDefault(); if (!perfil?.ativo || enviando) return;
     const ajustado = nome.trim().replace(/\s+/g, ' ');
-    if (ajustado.length < 3 || ajustado.length > 160 || !ajustado.includes(' ')) {
-      setFalha('Informe nome e sobrenome válidos (até 160 caracteres).'); return;
+    if (ajustado.length < 3 || ajustado.length > 160 || !/^\p{L}[\p{L}\p{M}'’.-]*(?: +\p{L}[\p{L}\p{M}'’.-]*)*$/u.test(ajustado)) {
+      setFalha('Informe um nome válido (de 3 a 160 caracteres).'); return;
     }
     setEnviando(true); setFalha('');
     try {
@@ -85,7 +85,8 @@ export default function MinhaContaPage() {
         <div><h2 className="font-semibold">Alterar meu nome</h2><p className="mt-1 text-xs text-foreground/60">Identificação exibida em seu perfil e no cabeçalho.</p></div>
         <label className="block text-sm" htmlFor="conta-nome">Nome completo</label>
         <input className={campo} id="conta-nome" value={nome} onChange={e => setNome(e.target.value)}
-          placeholder={perfil.nome ?? 'Nome e sobrenome'} maxLength={25} required autoComplete="name" />
+          placeholder={perfil.nome ?? 'Seu nome'} minLength={3} maxLength={160} required autoComplete="name" />
+        <p className="text-right text-xs text-foreground/65">{nome.length}/160 · mínimo 3</p>
         <button type="submit" className={botao} disabled={enviando}>{enviando ? 'Salvando...' : 'Atualizar nome'}</button>
       </form>
     </>}

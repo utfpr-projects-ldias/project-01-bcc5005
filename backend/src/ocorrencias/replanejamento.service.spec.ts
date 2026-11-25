@@ -67,3 +67,16 @@ describe('parâmetros dos períodos novos não reescrevem o calendário históri
     expect(comMeta.preservadas).toBe(1);
   });
 });
+
+describe('B06 — preservação da grade histórica',()=>{
+  it('recusa substituir intervalo iniciado no calendário ainda sem mudança de status',()=>{
+    expect(()=>planoDeRevisao([o('em-curso','2026-11-06','2026-11-14')],new Set(),dto,'2026-11-07')).toThrow(ConflictException);
+  });
+  it('recusa lacuna entre histórico e nova grade',()=>{
+    expect(()=>planoDeRevisao([o('antigo','2026-11-01','2026-11-06',Status.CONCLUIDO)],new Set(),dto,'2026-11-07')).toThrow(ConflictException);
+  });
+  it('preserva observações de período futuro',()=>{
+    const futuro=Object.assign(o('futuro','2026-11-08','2026-11-14'),{observacoes:'Planejamento acordado'});
+    expect(()=>planoDeRevisao([futuro],new Set(),dto,'2026-11-07')).toThrow(ConflictException);
+  });
+});

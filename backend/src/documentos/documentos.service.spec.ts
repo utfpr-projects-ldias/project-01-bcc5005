@@ -1,3 +1,4 @@
+import { Usuario } from '../usuarios/usuario.entity.js';
 import { jest } from '@jest/globals';
 import {
   BadRequestException,
@@ -50,7 +51,7 @@ const metadata = {
   arquivadoEm: null,
 };
 
-function ambiente() {
+function ambiente(identidade: UsuarioAutenticado = ator) {
   const repoSalvo = {
     create: jest.fn(
       (arg: Partial<DocumentoContratual>) =>
@@ -100,6 +101,8 @@ function ambiente() {
       permissoesDetalhadas: {},
     })),
   };
+  Object.assign(vinculoRepo,{findOne:jest.fn(async()=>vinculoRepo.findOneBy())});
+  const usuarioRepo = {findOne:jest.fn(async()=>({...identidade,ativo:true}))};
   const contratoRepo = {
     createQueryBuilder: jest.fn(() => contratoQb),
     findOne: jest.fn(async () => ({
@@ -110,7 +113,7 @@ function ambiente() {
   };
   const manager = {
     getRepository: jest.fn((entidade?: unknown) =>
-      entidade === Contrato
+      entidade === Usuario ? usuarioRepo : entidade === Contrato
         ? contratoRepo
         : entidade === PermissaoContrato
           ? vinculoRepo
@@ -259,7 +262,7 @@ describe('TEC08-02: documentos privados (serviço)', () => {
     });
     await expect(
       e.service.anexar(contratoId, dto, arquivo, ator),
-    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    ).resolves.toMatchObject({id:documentoId});
     expect(e.storage.removerOrfao).not.toHaveBeenCalled();
   });
 
@@ -317,12 +320,13 @@ describe('TEC08-02: documentos privados (serviço)', () => {
     ).rejects.toBeInstanceOf(PayloadTooLargeException);
   });
 
-  it('limita a 20 documentos, contando os arquivados, sob bloqueio do contrato', async () => {
+  it('limita a 20 documentos ativos sob bloqueio do contrato', async () => {
     const e = ambiente();
     e.repoSalvo.count.mockResolvedValueOnce(20);
     await expect(
-      e.service.anexar(contratoId, dto, arquivo, ator),
+      e.service.anexar(contratoId, {categoria:CategoriaDocumento.ANEXO}, arquivo, ator),
     ).rejects.toBeInstanceOf(ConflictException);
+    expect(e.repoSalvo.count).toHaveBeenCalledWith({where:{contratoId,arquivadoEm:expect.anything()}});
     expect(e.contratoQb.setLock).toHaveBeenCalledWith('pessimistic_write');
     expect(e.storage.removerOrfao).toHaveBeenCalledTimes(1);
     expect(e.repoSalvo.save).not.toHaveBeenCalled();
@@ -476,7 +480,8 @@ describe('TEC08-02: documentos privados (serviço)', () => {
   });
 
   it('GESTOR autorizado a anexar documentos pode enviar PDF principal sem permissão especial de arquivamento', async () => {
-    const e = ambiente();
+    const e = ambiente({...ator,perfil:PerfilUsuario.GESTOR});
+    e.vinculoRepo.findOneBy.mockResolvedValue({contratoId,usuarioId:ator.id,podeEditar:true,permissoesDetalhadas:{}});
     e.dataSource.getRepository = jest.fn(() => ({
       findOneBy: jest.fn(async () => ({ permissoesDetalhadas: {} })),
     })) as never;
@@ -490,7 +495,7 @@ describe('TEC08-02: documentos privados (serviço)', () => {
   });
 
   it('anexar principal não concede ao GESTOR o direito especial de arquivar esse documento', async () => {
-    const e = ambiente();
+    const e = ambiente({...ator,perfil:PerfilUsuario.GESTOR});
     e.dataSource.getRepository = jest.fn(() => ({
       findOneBy: jest.fn(async () => ({ permissoesDetalhadas: {} })),
     })) as never;
@@ -505,7 +510,7 @@ describe('TEC08-02: documentos privados (serviço)', () => {
 
   it('autorizações do PDF principal são independentes: arquivar não concede reativar nem excluir', async () => {
     const usuario = { ...ator, perfil: PerfilUsuario.GESTOR };
-    const a = ambiente();
+    const a = ambiente(usuario);
     a.vinculoRepo.findOneBy.mockResolvedValue({
       contratoId,
       usuarioId: ator.id,
@@ -519,7 +524,7 @@ describe('TEC08-02: documentos privados (serviço)', () => {
     await expect(
       a.service.arquivar(contratoId, documentoId, usuario),
     ).resolves.toMatchObject({ id: documentoId });
-    const b = ambiente();
+    const b = ambiente(usuario);
     b.repoSalvo.findOne.mockResolvedValueOnce({
       ...metadata,
       arquivadoEm: new Date(),
@@ -533,7 +538,7 @@ describe('TEC08-02: documentos privados (serviço)', () => {
     await expect(
       b.service.reativar(contratoId, documentoId, usuario),
     ).rejects.toBeInstanceOf(ForbiddenException);
-    const c = ambiente();
+    const c = ambiente(usuario);
     c.qb.getOne.mockResolvedValueOnce({
       ...metadata,
       arquivadoEm: new Date(),
@@ -551,7 +556,7 @@ describe('TEC08-02: documentos privados (serviço)', () => {
 
   it('permissão legada agrupada não concede poderes novos e o contrato concluído impede alteração', async () => {
     const usuario = { ...ator, perfil: PerfilUsuario.GESTOR };
-    const a = ambiente();
+    const a = ambiente(usuario);
     a.vinculoRepo.findOneBy.mockResolvedValue({
       contratoId,
       usuarioId: ator.id,
@@ -580,12 +585,12 @@ describe('TEC08-02: documentos privados (serviço)', () => {
   });
 
   it('exige permissão específica do gestor para verificar PDF principal', async () => {
-    const b = ambiente();
     const verificador = {
       ...ator,
       id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
       perfil: PerfilUsuario.GESTOR,
     };
+    const b = ambiente(verificador);
     b.vinculoRepo.findOneBy.mockResolvedValue({
       contratoId,
       usuarioId: verificador.id,
@@ -598,6 +603,11 @@ describe('TEC08-02: documentos privados (serviço)', () => {
       verificador,
     );
     expect(dado.situacao).toBe('VERIFICADO');
+    expect(b.repoSalvo.findOne).toHaveBeenCalledWith(expect.objectContaining({
+      select: expect.objectContaining({ storageKey: true, sha256: true, tamanho: true }),
+    }));
+    expect(b.storage.ler).toHaveBeenCalledWith(metadata.storageKey);
+    expect(dado).not.toHaveProperty('storageKey');
     expect(b.auditoria.registrarNaTransacao).toHaveBeenCalledWith(
       b.manager,
       verificador,
@@ -620,16 +630,16 @@ describe('TEC08-02: documentos privados (serviço)', () => {
   });
 
   it('reabertura de verificação exige permissão individual e preserva auditoria', async () => {
-    const a = ambiente();
-    a.repoSalvo.findOne.mockResolvedValue({
-      ...metadata,
-      verificadoEm: new Date(),
-    } as never);
     const verificador = {
       ...ator,
       id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
       perfil: PerfilUsuario.GESTOR,
     };
+    const a = ambiente(verificador);
+    a.repoSalvo.findOne.mockResolvedValue({
+      ...metadata,
+      verificadoEm: new Date(),
+    } as never);
     a.vinculoRepo.findOneBy.mockResolvedValue({
       contratoId,
       usuarioId: verificador.id,
@@ -642,7 +652,7 @@ describe('TEC08-02: documentos privados (serviço)', () => {
     await expect(
       a.service.reabrir(contratoId, documentoId, verificador),
     ).rejects.toBeInstanceOf(ForbiddenException);
-    const b = ambiente();
+    const b = ambiente(verificador);
     b.repoSalvo.findOne.mockResolvedValue({
       ...metadata,
       verificadoEm: new Date(),
@@ -661,7 +671,7 @@ describe('TEC08-02: documentos privados (serviço)', () => {
     expect(reaberto.situacao).toBe('EM_REVISAO');
   });
 
-  it('limite de dez anexos arquivados também vale quando o limite geral de vinte ainda não acabou', async () => {
+  it('arquiva anexos sem eliminar histórico ou impor teto de versões arquivadas', async () => {
     const e = ambiente();
     const anexo = {
       ...metadata,
@@ -669,8 +679,30 @@ describe('TEC08-02: documentos privados (serviço)', () => {
     } as DocumentoContratual;
     e.repoSalvo.findOne.mockResolvedValue(anexo as never);
     e.repoSalvo.count.mockResolvedValue(10);
-    await expect(
-      e.service.arquivar(contratoId, documentoId, ator),
-    ).rejects.toBeInstanceOf(ConflictException);
+    await expect(e.service.arquivar(contratoId,documentoId,ator)).resolves.toMatchObject({arquivadoEm:expect.any(Date)});
+    expect(e.storage.removerOrfao).not.toHaveBeenCalled();
   });
+});
+
+
+describe('B03 — regularização do PDF principal em conclusão parcial', () => {
+  it('permite arquivar o principal não verificado sem liberar outros documentos', async () => {
+    const e = ambiente();
+    e.contratoRepo.findOne.mockResolvedValue({id:contratoId,status:'CONCLUIDO_PARCIALMENTE',arquivadoEm:null});
+    expect((await e.service.arquivar(contratoId,documentoId,ator)).arquivadoEm).toBeInstanceOf(Date);
+    expect(e.storage.removerOrfao).not.toHaveBeenCalled();
+    const outro = ambiente();
+    outro.contratoRepo.findOne.mockResolvedValue({id:contratoId,status:'CONCLUIDO_PARCIALMENTE',arquivadoEm:null});
+    outro.repoSalvo.findOne.mockResolvedValue({...metadata,categoria:CategoriaDocumento.ANEXO} as never);
+    await expect(outro.service.arquivar(contratoId,documentoId,ator)).rejects.toBeInstanceOf(ConflictException);
+  });
+});
+
+// B09: uma prova indisponível não pode ganhar estado verificado.
+it('bloqueia verificação de documento com conteúdo divergente', async()=>{
+  const e=ambiente();
+  e.storage.ler.mockResolvedValueOnce(Buffer.from('corrompido'));
+  await expect(e.service.verificar(contratoId,documentoId,ator)).rejects.toBeInstanceOf(ServiceUnavailableException);
+  expect(e.repoSalvo.save).not.toHaveBeenCalled();
+  expect(e.auditoria.registrarNaTransacao).not.toHaveBeenCalled();
 });

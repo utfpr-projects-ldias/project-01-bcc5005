@@ -13,8 +13,9 @@ const base = (dados: Partial<Ocorrencia> = {}): Ocorrencia => ({
 function simular(fotos: number, relatorios: number) {
   const consultar = jest.fn(async (sql: string) => {
     if (sql.includes('ocorrencia_lancamentos')) return [{ total: '10' }];
-    if (sql.includes('atividade_ocorrencia_medicoes')) return [{ registrada: '0', verificada: '0', verificadas: '0', pendentes: '0' }];
-    return [{ fotos: String(fotos), relatorios: String(relatorios) }];
+    if (sql.includes('FROM atividades a') && !sql.includes('vw_provas_ocorrencia_r41')) return [{ registrada: '0', verificada: '0', verificadas: '0', pendentes: '0' }];
+    if (sql.includes('vw_provas_ocorrencia_r41')) return [{ total:String(fotos+relatorios), fotos: String(fotos), relatorios: String(relatorios) }];
+    throw new Error('Consulta não simulada: '+sql);
   });
   return { query: consultar } as unknown as EntityManager;
 }

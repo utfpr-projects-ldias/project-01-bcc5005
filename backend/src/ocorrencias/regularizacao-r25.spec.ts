@@ -1,3 +1,4 @@
+import { Usuario } from '../usuarios/usuario.entity.js';
 import { jest } from '@jest/globals';
 import { ConflictException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
@@ -57,7 +58,7 @@ describe('R25 — replanejamento sem perda de execução ou pesos', () => {
 
 function ambienteReplanejamento(comDependencia = false) {
   const contrato={id:cid,status:'EM_EXECUCAO',arquivadoEm:null,inicioVigencia:'2026-11-01',terminoVigencia:'2026-12-31'};
-  const entregavel={id:eid,contratoId:cid,tipo:'RECORRENTE',etapaId:'et',inicioPrevisto:'2026-11-01',terminoPrevisto:'2026-12-31',
+  const entregavel={id:eid,contratoId:cid,tipo:'RECORRENTE',etapaId:'et',inicioPrevisto:'2026-11-23',terminoPrevisto:'2026-11-29',
     periodicidade:PeriodicidadeEntregavel.SEMANAL,statusExecucao:'EM_ANDAMENTO',agendaInicioFuturo:null,unidadeMedida:'unidades',arquivadoEm:null};
   const etapa={id:'et',contratoId:cid,status:'EM_ANDAMENTO',arquivadoEm:null,conclusaoSolicitadaEm:null,encerramentoSolicitadoEm:null};
   const agenda=[Object.assign({},periodo('44444444-4444-4444-8444-444444444444','2026-11-23','2026-11-29',null),{contratoId:cid,entregavelId:eid,
@@ -72,7 +73,7 @@ function ambienteReplanejamento(comDependencia = false) {
     query:jest.fn(async(sql:string)=> sql.includes('SELECT o.id FROM ocorrencias') && comDependencia ? [{id:agenda[0].id}] : []),
     create:jest.fn((_tipo:unknown,valor:Record<string,unknown>)=>({...valor})),
     save:jest.fn(async(tipo:unknown,valor:Record<string,unknown>)=>{ if(tipo===Ocorrencia&&!valor.id) novos.push({...valor});return valor; }),
-    getRepository:jest.fn(()=>({upsert:jest.fn(async()=>undefined)})),
+    getRepository:jest.fn((tipo:unknown)=>tipo===Usuario?{findOne:async()=>({...ator,ativo:true})}:{upsert:jest.fn(async()=>undefined)}),
   };
   const auditoria={registrarNaTransacao:jest.fn(async()=>undefined)};
   const ds={transaction:(fn:(m:EntityManager)=>Promise<unknown>)=>fn(manager as unknown as EntityManager)};
@@ -95,4 +96,9 @@ describe('R25 — integração da prévia/confirmacão com a API transacional',(
     await expect(service.executar(cid,eid,entrada,ator as never)).rejects.toThrow(ConflictException);
     expect(novos).toHaveLength(0);
   });
+});
+
+it('redistribui saldo zero sem modificar períodos históricos com 100% de peso',()=>{
+  const agenda=[periodo('antigo','2026-11-01','2026-11-22','100.0000',StatusOcorrencia.CONCLUIDO),periodo('futuro','2026-11-23','2026-12-06','0.0000')];
+  expect(distribuirPesosFuturos(agenda,planoDeRevisao(agenda,new Set(),dto,'2026-11-22'))).toEqual(Array(14).fill('0.0000'));
 });

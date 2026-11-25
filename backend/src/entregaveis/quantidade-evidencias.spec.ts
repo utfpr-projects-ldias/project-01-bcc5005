@@ -1,7 +1,10 @@
 import { normalizarVinculoQuantidade, validarReferenciaComprovacao } from './quantidade-evidencias.js';
 const dados = { quantidadeExecutada: '25.125', ocorrenciaQuantidadeId: 'ocorrencia', origemQuantidade: 'NOVA_EXECUCAO' as const, referenciaExecucao: '  Lote  A ' };
-test('quantidade não vinculada a uma ocorrência não pode ser declarada', () => {
+test('quantidade sem modalidade e referência não pode ser declarada', () => {
   expect(() => normalizarVinculoQuantidade({ quantidadeExecutada: '25' })).toThrow();
+});
+test('nova execução quantitativa direta é válida com modalidade e referência próprias', () => {
+  expect(normalizarVinculoQuantidade({ quantidadeExecutada: '2', origemQuantidade: 'NOVA_EXECUCAO', referenciaExecucao: '  lote direto  ' })).toEqual({ quantidadeDeclarada:'2', ocorrenciaQuantidadeId:null, origemQuantidade:'NOVA_EXECUCAO', referenciaExecucao:'lote direto' });
 });
 test('nova execução mantém referência normalizada e uma única ocorrência', () => {
   expect(normalizarVinculoQuantidade(dados)).toEqual({ quantidadeDeclarada:'25.125', ocorrenciaQuantidadeId:'ocorrencia', origemQuantidade:'NOVA_EXECUCAO', referenciaExecucao:'lote a' });

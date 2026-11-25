@@ -45,6 +45,7 @@ export function situacaoDocumentalEtapa(
   _itens: Entregavel[] | undefined,
   _resumo: Record<string, ResumoDocumentalEntregavel> | undefined,
 ): StatusEtapa {
+  void _itens; void _resumo;
   if (etapa.reabertoEm && etapa.status === 'CONCLUIDA') return 'EM_ANDAMENTO';
   return etapa.status;
 }

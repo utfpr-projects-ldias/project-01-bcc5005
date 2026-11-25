@@ -27,6 +27,8 @@ describe('Patch38 — medição e critérios para ocorrências', () => {
     expect(r.quantidadeExecutada).toBe(15);
     expect(r.quantidadeRegistrada).toBe(20);
     expect(r.quantidadeRestante).toBe(5);
+    expect(r.quantidadeDisponivel).toBe(0);
+    expect(r.quantidadeDisponivelExata).toBe('0.000');
     expect(r.progressoPercentual).toBe(75);
     expect(r.requisitosAtendidos).toBe(false);
     expect(proximoStatusAutomatico(o, r)).toBe('EM_ANDAMENTO');
@@ -229,4 +231,27 @@ test('encerramento excepcional não congela contribuições em revisão',async()
   expect(()=>validarEncerramentoOcorrencia({permiteEncerramentoExcepcional:true},{...r,registrosExecucaoPendentes:true},true)).toThrow(/pendentes ou em revisão/);
   expect(()=>validarEncerramentoOcorrencia({permiteEncerramentoExcepcional:false},r,true)).toThrow(/desabilitado/);
   expect(()=>validarEncerramentoOcorrencia({permiteEncerramentoExcepcional:true},r,true)).not.toThrow();
+});
+
+// B07: a ausência de meta não transforma uma aprovação antiga em medição permanente.
+describe('B07 — origem da medição aprovada',()=>{
+  const legada=ocorrencia({metaQuantidade:null,status:StatusOcorrencia.CONCLUIDO,quantidadeAprovada:'10.000',exigeAtividade:false});
+  it('reduz contribuição quando os registros que sustentavam a aprovação são retirados',async()=>{
+    const resultado=await medicaoAprovadaAtual(gerente(0,0,0,0,0),{...legada,origemMedicaoAprovada:'REGISTROS'});
+    expect(resultado).toEqual({quantidade:'0.000',apta:false});
+  });
+  it('não aumenta uma medição já aprovada apenas pela chegada de novos registros',async()=>{
+    const resultado=await medicaoAprovadaAtual(gerente(12,0,0,0,0),{...legada,origemMedicaoAprovada:'REGISTROS'});
+    expect(resultado).toEqual({quantidade:'10.000',apta:true});
+  });
+  it('preserva declaração sem fontes identificáveis',async()=>{
+    expect(await medicaoReconhecidaAtual(gerente(0,0,0,0,0),legada)).toBe('10.000');
+  });
+  it('reconhece fonte histórica mesmo quando o lançamento está excluído',async()=>{
+    const manager={query:jest.fn<(...args:unknown[])=>Promise<unknown>>()
+      .mockResolvedValueOnce([{total:'0',registrada:'0',fontes:'1'}])
+      .mockResolvedValueOnce([{registrada:'0',verificada:'0',verificadas:'0',pendentes:'0'}])
+      .mockResolvedValueOnce([{total:'0',fotos:'0',relatorios:'0'}])} as unknown as EntityManager;
+    expect(await medicaoAprovadaAtual(manager,legada)).toEqual({quantidade:'0.000',apta:false});
+  });
 });

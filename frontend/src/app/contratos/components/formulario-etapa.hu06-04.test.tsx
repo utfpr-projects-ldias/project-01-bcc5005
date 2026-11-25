@@ -73,3 +73,16 @@ test('editar etapa usa identidade visual do registro e sinaliza envio em andamen
   await act(async () => { finalizar(); await pendente; });
   expect(screen.getByRole('button', { name: 'Salvar etapa' })).toHaveAttribute('aria-busy', 'false');
 });
+
+
+test('B04: preserva snapshot da edição após revalidação concorrente', async () => {
+  const etapa = { id:'e1', contratoId:'c1', nome:'Original', codigo:null, descricao:null, sequencia:1,
+    inicioPrevisto:null, terminoPrevisto:null, status:'PLANEJADA' as const, observacoes:null,
+    vigenciaContrato:{inicioVigencia:'2026-01-01', terminoVigencia:'2026-12-31'}, avisoVigencia:false, estadoEdicao:'a'.repeat(64) };
+  const salvar = jest.fn().mockResolvedValue(undefined);
+  const view = render(<FormularioEtapa inicial={etapa} onSalvar={salvar} onCancelar={jest.fn()} />);
+  fireEvent.change(screen.getByLabelText('Nome *'), { target:{value:'Novo nome'} });
+  view.rerender(<FormularioEtapa inicial={{...etapa, descricao:'Modificação externa', estadoEdicao:'b'.repeat(64)}} onSalvar={salvar} onCancelar={jest.fn()} />);
+  await act(async () => { fireEvent.click(screen.getByRole('button',{name:'Salvar etapa'})); });
+  expect(salvar).toHaveBeenCalledWith(expect.objectContaining({nome:'Novo nome',descricao:null}),etapa);
+});

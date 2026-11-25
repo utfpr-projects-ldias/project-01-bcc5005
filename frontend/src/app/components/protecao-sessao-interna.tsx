@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { doesSessionExist } from "supertokens-web-js/recipe/session";
-import { consultarMeuPerfil, ErroApi } from "@/lib/admin-usuarios";
+import Session, { doesSessionExist } from "supertokens-web-js/recipe/session";
+import { consultarMeuPerfil, ErroApi, type MeuPerfil } from "@/lib/admin-usuarios";
 import { useRepositorioConsultas } from "./provedor-consultas";
+import { chaveTexto } from "@/lib/repositorio-consultas";
 import { IndicadorCarregamento } from "./indicador-carregamento";
 
 type Estado = "verificando" | "autorizado" | "restrito" | "erro" | "redirecionando";
@@ -19,7 +20,9 @@ export function ProtecaoSessaoInterna({ children }: { children: ReactNode }) {
   const cache = useRepositorioConsultas();
   const [estado, setEstado] = useState<Estado>("verificando");
   const [versaoIdentidade, setVersaoIdentidade] = useState(0);
-  const ultimoUsuario = useRef<string | null>(null);
+  const ultimoUsuario = useRef<MeuPerfil | null>(null);
+  const [saindo, setSaindo] = useState(false);
+  const [falhaSaida, setFalhaSaida] = useState(false);
   const [jaAutorizado, setJaAutorizado] = useState(false);
   const abaFicouOcultaEm = useRef<number | null>(null);
   const ultimoRetorno = useRef<number | null>(null);
@@ -48,12 +51,17 @@ export function ProtecaoSessaoInterna({ children }: { children: ReactNode }) {
         }
         // Se a identidade mudou com o mesmo layout Next montado, nunca reutilizar
         // dados privados da conta anterior.
-        if (ultimoUsuario.current && ultimoUsuario.current !== perfil.id) {
+        if (ultimoUsuario.current && (ultimoUsuario.current.id !== perfil.id || ultimoUsuario.current.perfil !== perfil.perfil || ultimoUsuario.current.versaoAcesso !== perfil.versaoAcesso)) {
           cache.limpar();
           // Formulários locais pertencentes à identidade anterior não são reutilizados.
           setVersaoIdentidade(versao => versao + 1);
         }
-        ultimoUsuario.current = perfil.id;
+        else if (ultimoUsuario.current) {
+          await cache.revalidarProtegidas();
+          if (!montado) return;
+        }
+        cache.gravar(chaveTexto(['identidade', 'me']), perfil);
+        ultimoUsuario.current = perfil;
         setJaAutorizado(true);
         setEstado("autorizado");
       } catch (erro) {
@@ -106,7 +114,7 @@ export function ProtecaoSessaoInterna({ children }: { children: ReactNode }) {
         A visibilidade é ocultada e o conteúdo fica fora da árvore acessível até o aceite. */}
     <div key={versaoIdentidade} className="contents"
       style={{ visibility: estado === "autorizado" ? "visible" : "hidden" }}
-      aria-hidden={estado !== "autorizado"}>{children}</div>
+      inert={estado !== "autorizado"} aria-hidden={estado !== "autorizado"}>{children}</div>
     {estado === "verificando" && <div className="fixed inset-0 z-[90] flex items-center justify-center bg-background/95 p-6 text-foreground" role="status">
       <IndicadorCarregamento texto="Verificando sessão e permissões..." />
     </div>}
@@ -116,8 +124,19 @@ export function ProtecaoSessaoInterna({ children }: { children: ReactNode }) {
       <IndicadorCarregamento texto="Verificando sessão e permissões..." />
     </div>
   );
-  if (estado === "restrito") return <div className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
+  async function sairDaConta() {
+    if (saindo) return;
+    setSaindo(true); setFalhaSaida(false);
+    try {
+      await Session.signOut();
+      cache.limpar(); ultimoUsuario.current = null;
+      setEstado("redirecionando"); router.replace("/login");
+    } catch { setFalhaSaida(true); setSaindo(false); }
+  }
+  if (estado === "restrito") return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-6 text-foreground">
     <p role="alert">Conta inativa ou sem autorização. Contate um Administrador.</p>
+    <button type="button" disabled={saindo} onClick={() => void sairDaConta()} className="rounded-lg border border-brand-green/40 px-4 py-2">{saindo ? "Saindo..." : "Sair da conta"}</button>
+    {falhaSaida && <p role="alert">Não foi possível encerrar a sessão. Tente novamente.</p>}
   </div>;
   return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-6 text-foreground">
     <p role="alert">Não foi possível validar a sessão. Confira a conexão e tente novamente.</p>

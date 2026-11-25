@@ -1,14 +1,16 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ProtecaoSessaoInterna } from './protecao-sessao-interna';
 import { useRepositorioConsultas } from './provedor-consultas';
-import { doesSessionExist } from 'supertokens-web-js/recipe/session';
+import Session, { doesSessionExist } from 'supertokens-web-js/recipe/session';
 import { consultarMeuPerfil, ErroApi } from '@/lib/admin-usuarios';
 
 const mockSubstituir = jest.fn();
 const mockLimpar = jest.fn();
+const mockGravar = jest.fn();
+const mockRevalidar = jest.fn(async () => {});
 const mockRoteador = { replace: mockSubstituir };
 jest.mock('next/navigation', () => ({ useRouter: () => mockRoteador }));
-jest.mock('supertokens-web-js/recipe/session', () => ({ doesSessionExist: jest.fn() }));
+jest.mock('supertokens-web-js/recipe/session', () => ({ __esModule: true, doesSessionExist: jest.fn(), default: { signOut: jest.fn() } }));
 jest.mock('@/lib/admin-usuarios', () => ({
   ...jest.requireActual('@/lib/admin-usuarios'),
   consultarMeuPerfil: jest.fn(),
@@ -36,7 +38,7 @@ async function alternarAba(esperaMs = 5000) {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  hookCache.mockReturnValue({ limpar: mockLimpar });
+  hookCache.mockReturnValue({ limpar: mockLimpar, gravar: mockGravar, revalidarProtegidas: mockRevalidar });
   sessao.mockResolvedValue(true);
   perfil.mockResolvedValue(usuario);
 });
@@ -170,4 +172,24 @@ test('retorno prolongado mantém geometria de conteúdo enquanto esconde dados p
   expect(screen.getByText('Verificando sessão e permissões...').closest('.fixed')).not.toBeNull();
   await act(async () => { liberar(usuario); });
   expect(conteudo).toBeVisible();
+});
+
+test('B02: a mesma identidade com ACL diferente descarta rascunho protegido', async () => {
+  perfil.mockResolvedValueOnce({ ...usuario, versaoAcesso: 'antes' });
+  render(<ProtecaoSessaoInterna><input aria-label="Rascunho" defaultValue="Vazio" /></ProtecaoSessaoInterna>);
+  const antigo = await screen.findByRole('textbox', { name: 'Rascunho' });
+  fireEvent.change(antigo, { target: { value: 'Privado' } });
+  perfil.mockResolvedValueOnce({ ...usuario, versaoAcesso: 'depois' });
+  await alternarAba();
+  expect(screen.getByRole('textbox', { name: 'Rascunho' })).not.toBe(antigo);
+  expect(screen.getByRole('textbox', { name: 'Rascunho' })).toHaveValue('Vazio');
+  expect(mockLimpar).toHaveBeenCalled();
+});
+test('B02: conta restrita consegue sair sem o cabeçalho interno', async () => {
+  perfil.mockRejectedValueOnce(new ErroApi(403, 'Restrita'));
+  (Session.signOut as jest.Mock).mockResolvedValue(undefined);
+  render(<ProtecaoSessaoInterna><p>Área privada</p></ProtecaoSessaoInterna>);
+  fireEvent.click(await screen.findByRole('button', { name: 'Sair da conta' }));
+  await waitFor(() => expect(mockSubstituir).toHaveBeenCalledWith('/login'));
+  expect(Session.signOut).toHaveBeenCalledTimes(1);
 });

@@ -1,7 +1,6 @@
 import { jest } from '@jest/globals';
 import { iniciarHierarquiaOperacional } from './inicio-operacional.js';
 import { Entregavel } from '../entregaveis/entregavel.entity.js';
-import { Etapa } from '../etapas/etapa.entity.js';
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
 import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
 const ator={id:'u',email:'qa@example.invalid',perfil:PerfilUsuario.ADMINISTRADOR,supertokensUserId:'qa'};

@@ -1,3 +1,4 @@
+import { Usuario } from '../usuarios/usuario.entity.js';
 import { jest } from '@jest/globals';
 import { OcorrenciasService } from './ocorrencias.service.js';
 import { Ocorrencia } from './ocorrencia.entity.js';
@@ -18,9 +19,9 @@ function ambiente(podeEditar = true) {
     { id: '3', contratoId, entregavelId, periodoInicio: '2026-11-21', dataPrevista:'2026-11-21', status: 'CONCLUIDO', substituidaEm: null },
   ];
   const ocorrenciasRepo = { find: jest.fn(async () => linhas.filter(o => o.status === 'NAO_INICIADO' && !o.substituidaEm)) };
-  const permissaoRepo = { findOneBy: jest.fn(async () => ({podeEditar, permissoesDetalhadas: null})) };
+  const permissaoRepo = { findOne: jest.fn(async () => ({podeEditar, permissoesDetalhadas: null})) };
   const m = {
-    getRepository: jest.fn((entidade: unknown) => entidade === Ocorrencia ? ocorrenciasRepo :
+    getRepository: jest.fn((entidade: unknown) => entidade === Usuario ? {findOne:async({where}:{where:{id:string}})=>({... (where.id===admin.id?admin:gestor),ativo:true})} : entidade === Ocorrencia ? ocorrenciasRepo :
       entidade === PermissaoContrato ? permissaoRepo : null),
     findOne: jest.fn(async (entidade: unknown) => entidade === Contrato ? { id: contratoId, status: 'EM_EXECUCAO', arquivadoEm: null } : null),
     findOneBy: jest.fn(async (entidade: unknown) => entidade === Entregavel ? { id: entregavelId, etapaId:'etapa', arquivadoEm: null, statusExecucao:'EM_ANDAMENTO' } : entidade === Etapa ? { id:'etapa', arquivadoEm:null, status:'EM_ANDAMENTO', conclusaoSolicitadaEm:null, encerramentoSolicitadoEm:null } : null),

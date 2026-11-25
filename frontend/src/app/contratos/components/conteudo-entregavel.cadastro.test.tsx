@@ -1,4 +1,6 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import type { ReactElement } from 'react';
+import { ProvedorConsultas } from '@/app/components/provedor-consultas';
+import { act, fireEvent, render as renderSemProvider, screen, waitFor, within } from '@testing-library/react';
 import { ConteudoEntregavel } from './conteudo-entregavel';
 import { criarEvidenciaEsperada, enviarComprovante, consultarEvidencia, listarEvidenciasArquivadas, alterarArquivoEvidencia } from '@/lib/comprovantes';
 import type { Entregavel } from '@/lib/entregaveis';
@@ -33,7 +35,7 @@ function abrirCadastro() {
   fireEvent.click(screen.getByRole('button', { name: 'Nova evidência' }));
   const modal = screen.getByRole('dialog', { name: 'Nova evidência esperada' });
   // Modal aninhado mantém visível o contexto anterior, conforme modal-etapa.test.tsx.
-  expect(modal.parentElement).toHaveClass('bg-black/[0.055]', 'items-center');
+  expect(modal.parentElement).toHaveClass('bg-black/20', 'items-center');
   return modal;
 }
 test('cadastro com primeiro anexo fecha somente o modal após sucesso, sem duplicar o requisito', async () => {
@@ -377,3 +379,5 @@ test('API não pode devolver dados de outro entregável, mesmo com o ID da evid�
   expect(await within(dialogo).findByRole('alert')).toHaveTextContent('Dados de evidência incompatíveis');
   expect(within(dialogo).queryByRole('button', { name: 'Anexar comprovante' })).not.toBeInTheDocument();
 });
+
+function render(elemento: ReactElement) { return renderSemProvider(elemento, { wrapper: ProvedorConsultas }); }

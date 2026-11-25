@@ -175,8 +175,8 @@ test('modal superior não apaga a camada anterior e mantém acesso pelo botão V
     <ModalEtapa titulo="Entregável" camada="aninhada" ocupado={false} onFechar={() => {}}><p>Entregável</p></ModalEtapa>
     <ModalEtapa titulo="Evidência" camada="evidencia" ocupado={false} onFechar={() => {}}><p>Evidência</p></ModalEtapa></>);
   expect(screen.getByRole('dialog', { name: 'Etapa' }).parentElement).toHaveClass('bg-black/[0.12]');
-  expect(screen.getByRole('dialog', { name: 'Entregável' }).parentElement).toHaveClass('bg-black/[0.055]');
-  expect(screen.getByRole('dialog', { name: 'Evidência' }).parentElement).toHaveClass('bg-black/[0.055]');
+  expect(screen.getByRole('dialog', { name: 'Entregável' }).parentElement).toHaveClass('bg-black/20');
+  expect(screen.getByRole('dialog', { name: 'Evidência' }).parentElement).toHaveClass('bg-black/20');
   for (const titulo of ['Etapa', 'Entregável', 'Evidência']) {
     const camada = screen.getByRole('dialog', { name: titulo }).parentElement!;
     expect(camada.className).not.toMatch(/bg-background\/(90|95)/);
@@ -354,4 +354,35 @@ test('consulta interna preserva o documento e não cria uma camada modal', () =>
   expect(document.body.style.overflow).toBe(anterior);
   fireEvent.click(screen.getByRole('button',{name:'Voltar às etapas'}));
   expect(fechar).toHaveBeenCalledTimes(1);
+});
+
+test('cadastro mantém dimensões e impede alternância durante gravação', () => {
+  const selecionar=jest.fn();
+  const opcoes={MANUAL:true,ATIVIDADE:true,EVIDENCIA:true,OCORRENCIA:false};
+  const {rerender}=render(<ModalEtapa titulo="Novo registro" ocupado={false} onFechar={()=>{}} larguraFormulario="atividade" alturaEstavel navegacaoCadastro={{ativa:'MANUAL',opcoes,selecionar}}><input aria-label="Valor"/></ModalEtapa>);
+  const dialog=screen.getByRole('dialog');
+  const altura=dialog.style.height, largura=dialog.style.width;
+  expect(screen.getByRole('button',{name:'Manual'})).toHaveAttribute('aria-pressed','true');
+  expect(screen.getByRole('button',{name:'Ocorrência'})).toBeDisabled();
+  fireEvent.click(screen.getByRole('button',{name:'Atividade'}));
+  expect(selecionar).toHaveBeenCalledWith('ATIVIDADE');
+  rerender(<ModalEtapa titulo="Novo registro" ocupado onFechar={()=>{}} larguraFormulario="atividade" alturaEstavel navegacaoCadastro={{ativa:'ATIVIDADE',opcoes,selecionar}}><p>Outro formulário</p></ModalEtapa>);
+  expect(dialog.style.height).toBe(altura);expect(dialog.style.width).toBe(largura);
+  expect(screen.getByRole('button',{name:'Evidência'})).toBeDisabled();
+});
+
+test.each(['MANUAL','ATIVIDADE','EVIDENCIA','OCORRENCIA'] as const)('cadastro %s usa cabeçalho e dimensões compartilhados', ativa => {
+  const selecionar = jest.fn();
+  render(<ModalEtapa titulo={`Novo registro · ${ativa}`} contexto="Contexto variável" ocupado={false} onFechar={() => {}}
+    navegacaoCadastro={{ ativa, opcoes: { MANUAL: true, ATIVIDADE: true, EVIDENCIA: true, OCORRENCIA: false }, selecionar }}>
+    <form><input aria-label="Campo QA" /></form>
+  </ModalEtapa>);
+  const modal = screen.getByRole('dialog', { name: 'Novo registro' });
+  expect(modal).toHaveAttribute('data-pi-registro-cadastro', 'true');
+  expect(modal).toHaveAttribute('data-pi-formulario-modal', 'atividade');
+  expect(modal).toHaveAttribute('data-pi-modal-neutro', 'true');
+  expect(modal.style.height).toBe('min(88dvh, 850px)');
+  expect(modal.style.maxWidth).toBe('1024px');
+  expect(screen.queryByText('Contexto variável')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Ocorrência' })).toBeDisabled();
 });

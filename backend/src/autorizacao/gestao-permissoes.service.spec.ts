@@ -63,7 +63,7 @@ describe('TEC07-AJUSTES-01: permissões por contrato', () => {
     const resultado = await service.conceder(pessoaId, { contratoId, podeEditar: true }, ator);
     expect(resultado).toMatchObject({ contratoId, podeEditar: true });
     expect(auditoria).toHaveBeenCalledWith(manager, ator, expect.objectContaining({
-      acao: AcaoAuditoria.USUARIO_PERMISSAO_CONCEDIDA, entidadeId: pessoaId,
+      acao: AcaoAuditoria.USUARIO_PERMISSAO_CONCEDIDA, entidadeId: pessoaId, contratoIdAcl: contratoId,
     }));
   });
   it('ADMIN delega uma operação específica ao Colaborador, registra antes/depois na auditoria', async () => {
@@ -88,7 +88,7 @@ describe('TEC07-AJUSTES-01: permissões por contrato', () => {
     await service.revogar(pessoaId, contratoId, ator);
     expect(remover).toHaveBeenCalled();
     expect(auditoria).toHaveBeenCalledWith(manager, ator, expect.objectContaining({
-      acao: AcaoAuditoria.USUARIO_PERMISSAO_REVOGADA,
+      acao: AcaoAuditoria.USUARIO_PERMISSAO_REVOGADA, contratoIdAcl: contratoId,
     }));
   });
 });

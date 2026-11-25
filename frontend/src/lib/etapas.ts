@@ -1,3 +1,4 @@
+import { mensagemErroDominioHttp } from './erro-dominio-http';
 /** Contrato HTTP HU06-02 — Etapas reais, sem entidades financeiras ou dados de demonstração. */
 export type StatusEtapa = 'PLANEJADA' | 'EM_ANDAMENTO' | 'CONCLUIDA' | 'CONCLUIDO_PARCIALMENTE' | 'ENCERRADA' | 'FINALIZADA';
 export const STATUS_ETAPA: Record<StatusEtapa, string> = {
@@ -26,8 +27,15 @@ export type Etapa = {
   encerramentoMotivo?: string | null;
   vigenciaContrato: { inicioVigencia: string; terminoVigencia: string };
   avisoVigencia: boolean;
+  estadoEdicao?: string;
 };
 export type DadosEtapa = Pick<Etapa, 'nome' | 'codigo' | 'descricao' | 'inicioPrevisto' | 'terminoPrevisto' | 'status' | 'observacoes'>;
+
+export type AtualizacaoEtapa = Partial<DadosEtapa> & { estadoAnterior?: string };
+export type ElegibilidadeEtapa = {
+  podeSolicitarConclusao: boolean; podeSolicitarParcial: boolean; podeSolicitarEncerramento: boolean;
+  podeAprovarConclusao: boolean; podeAprovarEncerramento: boolean; podeFinalizar: boolean; decisoesPendentes: boolean;
+};
 
 export class ErroEtapa extends Error {
   constructor(public readonly status: number, mensagem: string) { super(mensagem); this.name = 'ErroEtapa'; }
@@ -57,14 +65,9 @@ async function requisitar<T>(caminho: string, init?: RequestInit): Promise<T> {
       403: 'Você não tem permissão para esta operação.',
       404: 'Contrato ou etapa indisponível. Atualize a página.',
       409: 'As etapas foram alteradas por outra pessoa. Atualize a lista antes de tentar novamente.',
+      503: 'Serviço temporariamente indisponível. Confira o resultado antes de reenviar.',
     };
-    let detalhe: unknown;
-    try { detalhe = await resposta.json(); } catch { /* resposta sem JSON */ }
-    const mensagemServidor = detalhe && typeof detalhe === 'object'
-      ? ('message' in detalhe ? (detalhe as { message?: unknown }).message : 'error' in detalhe ? (detalhe as { error?: unknown }).error : null) : null;
-    const mensagem = typeof mensagemServidor === 'string' ? mensagemServidor
-      : Array.isArray(mensagemServidor) ? mensagemServidor.filter((v): v is string => typeof v === 'string').join(' ') : '';
-    throw new ErroEtapa(resposta.status, mensagem || mensagens[resposta.status] || 'Não foi possível concluir a operação. Tente novamente.');
+    throw new ErroEtapa(resposta.status, await mensagemErroDominioHttp(resposta, mensagens[resposta.status] || 'Não foi possível concluir a operação. Tente novamente.'));
   }
   return (await resposta.json()) as T;
 }
@@ -75,7 +78,7 @@ export const listarEtapas = (contratoId: string) => requisitar<Etapa[]>(caminho(
 export const criarEtapa = (contratoId: string, dados: DadosEtapa) => requisitar<Etapa>(caminho(contratoId), {
   method: 'POST', body: JSON.stringify(dados),
 });
-export const editarEtapa = (contratoId: string, etapaId: string, dados: Partial<DadosEtapa>) => requisitar<Etapa>(
+export const editarEtapa = (contratoId: string, etapaId: string, dados: AtualizacaoEtapa) => requisitar<Etapa>(
   `${caminho(contratoId)}/${encodeURIComponent(etapaId)}`, { method: 'PATCH', body: JSON.stringify(dados) },
 );
 export const solicitarConclusaoEtapa = (c:string,e:string,parcial=false) => requisitar<Etapa>(`${caminho(c)}/${encodeURIComponent(e)}/solicitar-conclusao${parcial?'-parcial':''}`,{method:'PATCH'});
@@ -99,3 +102,5 @@ export const reordenarEtapas = (contratoId: string, idsOrdemAtual: string[], ids
     method: 'PATCH', body: JSON.stringify({ idsOrdemAtual, idsOrdemNova }),
   },
 );
+
+export const consultarElegibilidadeEtapa = (c: string, e: string, signal?: AbortSignal) => requisitar<ElegibilidadeEtapa>(`${caminho(c)}/${encodeURIComponent(e)}/elegibilidade-conclusao`, { signal });

@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals';
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
 import type { DataSource } from 'typeorm';
 import type { PoliticaAcessoService } from '../autorizacao/politica-acesso.service.js';
@@ -13,7 +13,7 @@ const grupoId = id(900);
 const usuario = {id:id(100), supertokensUserId:'st-user', nome:'Teste', email:'teste@example.com', perfil:PerfilUsuario.GESTOR} as const;
 
 describe('serviço de atividade compartilhada', () => {
-  const construir = (permitidos: Set<string>, estados: string[]) => {
+  const construir = (permitidos: Set<string>, estados: string[], visiveis?: Set<string>) => {
     const registros = estados.map((status, index) => ({ id:id(index+1), contratoId:id(index+101),
       atividadeCompartilhadaId:grupoId, status, excluidaEm:null }));
     const manager = {
@@ -24,8 +24,9 @@ describe('serviço de atividade compartilhada', () => {
     };
     const database = {transaction:jest.fn(async (f:(m:typeof manager)=>Promise<unknown>) => f(manager)),
       getRepository:jest.fn(() => ({find:jest.fn(async()=>registros)}))};
-    const acesso = {permitido:jest.fn(async (_ator:unknown, politica:{acao:string}, contratoId:string) =>
-      politica.acao === 'atividades:visualizar' || permitidos.has(contratoId))};
+    const permitido = jest.fn(async (_ator:unknown, politica:{acao:string}, contratoId:string) =>
+      politica.acao === 'atividades:visualizar' ? (visiveis?.has(contratoId) ?? true) : permitidos.has(contratoId));
+    const acesso = {permitido, permitidoNaTransacao: (_m:unknown, a:unknown, p:{acao:string}, cid:string) => permitido(a,p,cid)};
     const atividades = { verificarNaTransacao:jest.fn(async (_m:unknown,cid:string) => {
       const r = registros.find(x=>x.contratoId===cid); if(r) r.status='VERIFICADA';
     }), solicitarNaTransacao:jest.fn(async (_m:unknown,cid:string) => {
@@ -45,6 +46,13 @@ describe('serviço de atividade compartilhada', () => {
     expect(await service.aprovar(grupoId,{},usuario)).toMatchObject({total:6,aprovadas:2,novasAprovacoes:2});
     expect(await service.aprovar(grupoId,{},usuario)).toMatchObject({total:6,aprovadas:2,novasAprovacoes:0});
     expect(atividades.verificarNaTransacao).toHaveBeenCalledTimes(2);
+  });
+
+  it('não expõe contagem nem IDs de contratos invisíveis', async () => {
+    const {service,atividades} = construir(new Set([id(101)]), ['PENDENTE_CONCLUSAO','VERIFICADA'], new Set([id(101)]));
+    await expect(service.aprovar(grupoId,{contratoIds:[id(102)]},usuario)).rejects.toBeInstanceOf(NotFoundException);
+    expect(atividades.verificarNaTransacao).not.toHaveBeenCalled();
+    expect(await service.aprovar(grupoId,{},usuario)).toMatchObject({total:1,aprovadas:1,novasAprovacoes:1});
   });
 
   it('recusa seleção explícita de contrato sem permissão e não grava decisão', async () => {
@@ -82,4 +90,18 @@ describe('serviço de atividade compartilhada', () => {
       .rejects.toBeInstanceOf(ForbiddenException);
     expect(atividades.criarNaTransacao).not.toHaveBeenCalled();
   });
+  it('não inclui um novo destino sem autorização de registro', async () => {
+    const {service,atividades}=construir(new Set([id(101)]),['REGISTRADA']);
+    await expect(service.adicionarContratos(grupoId,{origemContratoId:id(101),vinculos:[{contratoId:id(102),entregavelIds:[id(501)]}]},usuario))
+      .rejects.toBeInstanceOf(ForbiddenException);
+    expect(atividades.criarNaTransacao).not.toHaveBeenCalled();
+  });
+
+  it('verifica autorização de todos os destinos antes de editar metadados', async () => {
+    const {service,auditoria}=construir(new Set([id(101)]),['REGISTRADA','REGISTRADA']);
+    await expect(service.editarMetadados(grupoId,{contratoIds:[id(101),id(102)],titulo:'Vistoria'},usuario))
+      .rejects.toBeInstanceOf(ForbiddenException);
+    expect(auditoria.registrarNaTransacao).not.toHaveBeenCalled();
+  });
+
 });

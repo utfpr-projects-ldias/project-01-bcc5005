@@ -7,5 +7,6 @@ export function diaLocalBrasil(agora = new Date()): string {
  * da execução reconhecida, inclusive ocorrências com percentual agregado zero.
  * Os argumentos de data são mantidos para os chamadores da agenda civil. */
 export function estadoTemporal<T extends string>(status: T, _inicio: string | null | undefined, _hoje = diaLocalBrasil()): T {
+  void _inicio; void _hoje;
   return status;
 }

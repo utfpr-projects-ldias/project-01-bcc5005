@@ -7,6 +7,7 @@ import { CHAVE_POLITICA } from '../autorizacao/politica.decorator.js';
 import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
 import { AtividadesController } from './atividades.controller.js';
 import { AtividadesService } from './atividades.service.js';
+import { Usuario } from '../usuarios/usuario.entity.js';
 import { Contrato } from '../contratos/contrato.entity.js';
 import { Entregavel } from '../entregaveis/entregavel.entity.js';
 import { Etapa } from '../etapas/etapa.entity.js';
@@ -135,6 +136,7 @@ describe('HU08 — registro somente em contrato, etapa e entregável abertos', (
     const e = { ...baseEtapa, ...config.etapa };
     const en = { ...baseEntregavel, ...config.entregavel };
     const manager = {
+      getRepository: jest.fn((alvo:unknown)=>({findOne:jest.fn(async()=>alvo===Usuario?{...ator,ativo:true,bloqueioSessoesId:null}:{contratoId,usuarioId:ator.id,podeEditar:false,permissoesDetalhadas:{registrarAtividades:true}})})),
       findOne: jest.fn(async (entidade: unknown) => entidade === Contrato ? c : null),
       find: jest.fn(async (entidade: unknown) => entidade === Entregavel ? [en] : entidade === Etapa ? [e] : []),
       create: jest.fn((_entidade: unknown, dados: unknown) => ({ id: itemId, ...(dados as object) })),

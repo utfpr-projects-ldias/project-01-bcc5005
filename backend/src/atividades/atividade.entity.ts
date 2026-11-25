@@ -31,11 +31,14 @@ export class AtividadeEntity {
   @Column({ type: 'text' }) descricao!: string;
   @Column({ type: 'varchar' }) tipo!: string;
   @Column({ type: 'varchar', nullable: true }) responsavel!: string | null;
-  @Column({ type: 'simple-array', nullable: true }) participantes!: string[] | null;
+  @Column({ type: 'text', array: true, nullable: true }) participantes!: string[] | null;
   @Column({ type: 'varchar', nullable: true }) local!: string | null;
   @Column({ type: 'varchar', nullable: true }) duracao!: string | null;
   @Column({ type: 'text', nullable: true }) observacoes!: string | null;
   @Column({ type: 'varchar', length: 20, default: 'REGISTRADA' }) status!: EstadoAtividade;
+  @Column({ name:'solicitada_em', type:'timestamptz', nullable:true }) solicitadaEm!: Date | null;
+  @Column({ name:'solicitada_por', type:'uuid', nullable:true }) solicitadaPor!: string | null;
+  @Column({ name:'verificada_por', type:'uuid', nullable:true }) verificadaPor!: string | null;
   @Column({ type: 'timestamptz', nullable: true }) verificadaEm!: Date | null;
   @Column({ type: 'timestamptz', nullable: true }) arquivadaEm!: Date | null;
   /** Exclusão lógica: auditoria e vínculos N:N nunca são apagados. */

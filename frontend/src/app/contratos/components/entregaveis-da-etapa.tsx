@@ -1,4 +1,5 @@
 'use client';
+import { formatarPercentualSemAnteciparConclusao } from '@/lib/apresentacao-indicadores';
 import { NavegadorEntregaveis } from './navegador-entregaveis';
 import { solicitarNavegacaoInterna } from './navegacao-interna';
 import { EtiquetaAtraso } from '@/app/components/etiqueta-atraso';
@@ -7,9 +8,9 @@ import { chaveTexto } from '@/lib/repositorio-consultas';
 import { resultadoFinalizacao } from '@/lib/finalizados';
 import { estadoDoObjeto, rotuloEstadoEntregavel } from '@/lib/identidade-operacional';
 import { AbasRolaveis } from '@/app/components/abas-rolaveis';
-import Link from 'next/link';
 import { createPortal } from 'react-dom';
 import { ModalEtapa } from './modal-etapa';
+import { sincronizarContrato } from '@/lib/sincronizar-contrato';
 import { useRepositorioConsultasOpcional } from '@/app/components/provedor-consultas';
 import { CHAVES_ENTREGAVEIS } from '@/hooks/use-entregaveis';
 import { IconeStatus } from '@/app/components/icones-status';
@@ -42,7 +43,6 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, mo
   const [iniciado, setIniciado] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [aviso, setAviso] = useState('');
-  const [mostrarLimitePeso, setMostrarLimitePeso] = useState(false);
   // A paleta é da própria etapa, não do contrato que foi arquivado.
   const contextoVisualEtapa = estadoProprioEtapa ?? (paiEmRevisao ? 'revisao' : paiConcluido ? 'concluido' : 'normal');
   const classeAbaAtiva = contextoVisualEtapa === 'pendente' ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-200' : contextoVisualEtapa === 'parcial' ? 'bg-amber-500/20 text-amber-700 dark:text-amber-200' : contextoVisualEtapa === 'nao-iniciado' ? 'bg-slate-500/25 text-foreground' : contextoVisualEtapa === 'arquivado' ? 'bg-amber-500/20 text-amber-200' : contextoVisualEtapa === 'revisao' ? 'bg-teal-700/25 text-teal-200' : contextoVisualEtapa === 'concluido' ? 'bg-violet-500/20 text-violet-200' : contextoVisualEtapa === 'finalizado' ? 'bg-purple-500/20 text-purple-200' : contextoVisualEtapa === 'encerrado' ? 'bg-slate-600/25 text-slate-200' : 'bg-brand-green text-on-brand-green';
@@ -250,20 +250,15 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, mo
     if (posicao.current) ajustarRestauracaoHistorico(posicao.current.restauracao);
   }, []);
   async function cadastrar(dados: DadosPlanejamentoEntregavel) {
-    if (paiBloqueado) return;
+    if (paiBloqueado || !podeCriar) throw new Error('O contexto não permite cadastrar entregáveis no estado atual.');
     await criarEntregavel(contratoId, dados);
+    if (cacheDetalhe) sincronizarContrato(cacheDetalhe, contratoId);
     setAberto(false); setIniciado(false); toastSucesso('Entregável cadastrado com sucesso.');
     // Se a leitura falhar depois do POST, o sucesso do cadastro não se perde.
     await atualizar().catch(() => {});
     atualizarDocumental?.();
   }
   // Nunca exibir um item cujo contrato/etapa nao corresponda ao contexto visivel.
-  const somaPesosContrato = (dados ?? []).filter(item => item.contratoId === contratoId && !item.arquivadoEm)
-    .reduce((total, item) => total + Number(item.peso ?? 0), 0);
-  const pesoDisponivel = Math.max(0, 100 - somaPesosContrato);
-  // O backend só aplica o teto da soma operacional ao contrato PONDERADO.
-  // Contratos SIMPLES admitem mais entregáveis mesmo com soma histórica >= 100%.
-  const limitePesoAtingido = modoCalculo === 'PONDERADO' && somaPesosContrato >= 100 - 0.00001;
   const visiveis = dados?.filter((e) => e.contratoId === contratoId && e.etapaId === etapaId && !e.arquivadoEm && !ocultadosLocais.includes(e.id)) ?? [];
   // Finalizados reúne conclusão integral (CONCLUIDO) e encerramento parcial (FINALIZADO).
   // Não soma percentuais e não promove encerrados a 100%.
@@ -308,7 +303,6 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, mo
       {abaEntregaveis === 'ativos' && podeCriar && !paiBloqueado && !erro && <button type="button" disabled={salvando} aria-expanded={aberto}
         aria-controls={`cadastro-entregavel-${etapaId}`} data-pi-cadastro-neutro data-tec08-acao-criar
         onClick={() => {
-          if (!aberto && dados && limitePesoAtingido) { setMostrarLimitePeso(true); return; }
           setIniciado(true); setAberto(anterior => !anterior); setAviso('');
         }}
         className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg bg-brand-green px-3 py-2 text-xs font-semibold text-on-brand-green transition-colors hover:brightness-110 focus-visible:outline-2 focus-visible:outline-brand-neon disabled:opacity-50">
@@ -321,15 +315,12 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, mo
     <div className="pi-ferramentas-etapa-v24">      {abaEntregaveis === 'pendentes' && <select aria-label="Tipo de solicitação do entregável" className="pi-filtro-sublinhado" value={tipoPendente} onChange={e=>setTipoPendente(e.target.value)}><option value="">Todas as solicitações</option><option value="PENDENTE_CONCLUSAO">Pendente de conclusão</option><option value="PENDENTE_CONCLUSAO_PARCIAL">Pendente de conclusão parcial</option><option value="PENDENTE_ENCERRAMENTO">Pendente de encerramento</option><option value="REGULARIZACAO">Regularização documental</option></select>}
       <select aria-label="Tipo de entregável" value={filtroTipo} onChange={e=>setFiltroTipo(e.target.value)} className="pi-filtro-sublinhado"><option value="">Todos os tipos</option>{Object.entries(ROTULOS_TIPO).map(([id,rotulo])=><option key={id} value={id}>{rotulo}</option>)}</select>
 <div className="pi-busca-operacional w-60 max-w-full min-w-0"><label className="sr-only" htmlFor={`${marcadorModal}-pesquisa`}>Pesquisar entregável</label><input id={`${marcadorModal}-pesquisa`} placeholder="Pesquisar entregável..." type="search" value={pesquisa} onChange={e=>setPesquisa(e.target.value)} className="w-full min-w-0 rounded-lg border border-current/20 bg-transparent px-3 py-2 text-sm"/></div></div>
-    {mostrarLimitePeso && modoCalculo === 'PONDERADO' && <ConfirmacaoSimples titulo="Limite do peso operacional"
-      descricao={`Os entregáveis deste contrato já representam 100% do peso operacional. Disponível: ${pesoDisponivel.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%. Redistribua os pesos antes de cadastrar outro entregável.`}
-      confirmar="Entendi" onCancelar={() => setMostrarLimitePeso(false)} onConfirmar={() => setMostrarLimitePeso(false)} />}
     {aviso && <p role="alert" className="mt-2 text-sm text-error-text">{aviso}</p>}
     {abaEntregaveis === 'ativos' && podeCriar && !paiBloqueado && !erro && iniciado && aberto && typeof document !== 'undefined' && createPortal(
       <ModalEtapa titulo="Novo entregável" contexto={contextoCadastro ?? "Cadastro na etapa selecionada"} camada="edicao" larguraFormulario="entregavel" formularioLongo ocupado={salvando}
         estadoContextual="normal" onFechar={() => { if (!salvando) setAberto(false); }}>
         <div id={`cadastro-entregavel-${etapaId}`} data-tec08-criacao="true">
-          <FormularioEntregavel contratoId={contratoId} etapaId={etapaId} pesosContrato={dados} modoCalculo={modoCalculo} onSalvar={cadastrar} onCancelar={() => setAberto(false)}
+          <FormularioEntregavel contratoId={contratoId} etapaId={etapaId} pesosContrato={dados} modoCalculo={modoCalculo} podeConfigurarPesos={Boolean(permissoes?.configurarPesos)} onSalvar={cadastrar} onCancelar={() => setAberto(false)}
             onSalvandoMudou={setSalvando} />
         </div>
       </ModalEtapa>, document.body)}
@@ -339,7 +330,7 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, mo
     </p>}
     {!mostrarArquivados && !carregando && !erro && !exibidos.length && <p className="mt-3 text-sm text-foreground/70">{abaEntregaveis === 'comprovados' ? 'Nenhum entregável finalizado.' : 'Nenhum entregável nesta situação.'}</p>}
     {mostrarArquivados&&!linhasTabela.length&&<p className="text-sm text-foreground/65">Nenhum entregável arquivado encontrado.</p>}
-    {!protegido&&(!erro||mostrarArquivados)&&linhasTabela.length>0&&(interno&&detalheId?<ul className="pi-lista-alternancia" aria-label="Entregáveis da etapa">{linhasTabela.map(e=>{const m=dadosLinha(e);return <li key={e.id}><button type="button" aria-current={detalheId===e.id?'true':undefined} onClick={ev=>abrirDetalhe(e.id,ev)} className="pi-titulo-tabela"><IconeTabela estado={m.estado}/><span className="min-w-0 flex-1"><strong className="block truncate" title={e.nome}>{e.nome}</strong><span className="pi-subtitulo-tabela block">{ROTULOS_TIPO[e.tipo]}</span></span><strong className="tabular-nums">{m.execucao==null?'—':`${m.execucao.toLocaleString('pt-BR',{maximumFractionDigits:1})}%`}</strong></button></li>;})}</ul>:<div className="pi-tabela-scroll"><table className="pi-tabela-operacional pi-tabela-entregaveis" aria-label="Entregáveis planejados da etapa"><colgroup>{Array.from({length:10},(_,i)=><col key={i}/>)}</colgroup><thead><tr>{[['titulo','Título'],['tipo','Tipo'],['execucao','Execução'],['peso','Contrato'],['ocorrencias','Ocorrências'],['atividades','Atividades'],['evidencias','Evidências'],['comprovacao','Comprovação'],['status','Status'],['prazo','Prazo']].map(([campo,titulo])=><CabecalhoColuna key={campo} campo={campo} titulo={titulo} ordem={ordemTabela} alternar={alternarOrdem}/>)}</tr></thead><tbody>{linhasTabela.map(e=>{const m=dadosLinha(e);return <tr key={e.id} data-entregavel-estado={m.estado} data-arquivado={Boolean(e.arquivadoEm)}><td><Link href={`/contratos/${encodeURIComponent(contratoId)}/entregaveis/${encodeURIComponent(e.id)}`} onClick={ev=>{if(ev.button!==0||ev.ctrlKey||ev.metaKey||ev.shiftKey||ev.altKey)return;ev.preventDefault();abrirDetalhe(e.id,ev);}} aria-label={e.nome} className="pi-titulo-tabela"><IconeTabela estado={m.estado}/><span className="min-w-0"><strong className="block truncate" title={e.nome}>{e.nome}</strong><span className="pi-subtitulo-tabela block">{rotuloCodigoPublico(e.codigoPublico)}</span></span></Link></td><td>{ROTULOS_TIPO[e.tipo]}</td><td><button type="button" className="pi-acao-tabela" aria-label={`Consultar situação de execução de ${e.nome}`} onClick={()=>setExplicarId(e.id)}><BarraTabela valor={m.execucao}/></button></td><td><strong className="whitespace-nowrap tabular-nums">{m.participacao==null?'—':`${m.participacao.toLocaleString('pt-BR',{maximumFractionDigits:2})}%`}</strong></td><td><AnelTabela nome="Ocorrências" fracao={m.ocorrencias}/></td><td><AnelTabela nome="Atividades" fracao={m.atividades} cor="text-emerald-600 dark:text-emerald-400"/></td><td><AnelTabela nome="Evidências" fracao={m.evidencias} cor="text-teal-600 dark:text-teal-400"/></td><td><ComprovacaoTabela fracao={m.comprovacao}/></td><td><StatusTabela estado={m.estado} rotulo={rotuloEstadoEntregavel(e.statusExecucao,Boolean(e.arquivadoEm),Boolean(e.reabertoEm),Boolean(e.regularizacaoDocumentalSolicitada))}/><EtiquetaAtraso atrasado={e.atrasado} finalizadoComAtraso={e.finalizadoComAtraso}/></td><td className="whitespace-nowrap">{e.terminoPrevisto?.split('-').reverse().join('/')??'—'}</td></tr>;})}</tbody></table></div>)}
+    {!protegido&&(!erro||mostrarArquivados)&&linhasTabela.length>0&&(interno&&detalheId?<ul className="pi-lista-alternancia" aria-label="Entregáveis da etapa">{linhasTabela.map(e=>{const m=dadosLinha(e);return <li key={e.id}><button type="button" aria-current={detalheId===e.id?'true':undefined} onClick={ev=>abrirDetalhe(e.id,ev)} className="pi-titulo-tabela"><IconeTabela estado={m.estado}/><span className="min-w-0 flex-1"><strong className="block truncate" title={e.nome}>{e.nome}</strong><span className="pi-subtitulo-tabela block">{ROTULOS_TIPO[e.tipo]}</span></span><strong className="tabular-nums">{m.execucao==null?'—':formatarPercentualSemAnteciparConclusao(m.execucao,1)}</strong></button></li>;})}</ul>:<div className="pi-tabela-scroll"><table className="pi-tabela-operacional pi-tabela-entregaveis" aria-label="Entregáveis planejados da etapa"><colgroup>{Array.from({length:10},(_,i)=><col key={i}/>)}</colgroup><thead><tr>{[['titulo','Título'],['tipo','Tipo'],['execucao','Execução'],['peso','Contrato'],['ocorrencias','Ocorrências'],['atividades','Atividades'],['evidencias','Evidências'],['comprovacao','Comprovação'],['status','Status'],['prazo','Prazo']].map(([campo,titulo])=><CabecalhoColuna key={campo} campo={campo} titulo={titulo} ordem={ordemTabela} alternar={alternarOrdem}/>)}</tr></thead><tbody>{linhasTabela.map(e=>{const m=dadosLinha(e);return <tr key={e.id} data-entregavel-estado={m.estado} data-arquivado={Boolean(e.arquivadoEm)}><td><button type="button" onClick={ev=>abrirDetalhe(e.id,ev)} aria-label={e.nome} className="pi-titulo-tabela"><IconeTabela estado={m.estado}/><span className="min-w-0"><strong className="block truncate" title={e.nome}>{e.nome}</strong><span className="pi-subtitulo-tabela block">{rotuloCodigoPublico(e.codigoPublico)}</span></span></button></td><td>{ROTULOS_TIPO[e.tipo]}</td><td><button type="button" className="pi-acao-tabela" aria-label={`Consultar situação de execução de ${e.nome}`} onClick={()=>setExplicarId(e.id)}><BarraTabela valor={m.execucao}/></button></td><td><strong className="whitespace-nowrap tabular-nums">{m.participacao==null?'—':`${m.participacao.toLocaleString('pt-BR',{maximumFractionDigits:2})}%`}</strong></td><td><AnelTabela nome="Ocorrências" fracao={m.ocorrencias}/></td><td><AnelTabela nome="Atividades" fracao={m.atividades} cor="text-emerald-600 dark:text-emerald-400"/></td><td><AnelTabela nome="Evidências" fracao={m.evidencias} cor="text-teal-600 dark:text-teal-400"/></td><td><ComprovacaoTabela fracao={m.comprovacao}/></td><td><StatusTabela estado={m.estado} rotulo={rotuloEstadoEntregavel(e.statusExecucao,Boolean(e.arquivadoEm),Boolean(e.reabertoEm),Boolean(e.regularizacaoDocumentalSolicitada))}/><EtiquetaAtraso atrasado={e.atrasado} finalizadoComAtraso={e.finalizadoComAtraso}/></td><td className="whitespace-nowrap">{e.terminoPrevisto?.split('-').reverse().join('/')??'—'}</td></tr>;})}</tbody></table></div>)}
     </>;
   const detalhe = detalheId && !protegido && (!erro || mostrarArquivados) && <ModalDetalheEntregavel key={`${detalheId}:${destinoInterno?.id===detalheId?destinoInterno?.origemRegistro??'':''}`} origemRegistro={destinoInterno?.id===detalheId?destinoInterno?.origemRegistro:undefined} interno={interno} contratoId={contratoId} etapaId={etapaId} pesosContrato={dados} modoCalculoContrato={modoCalculo}
     entregavelId={detalheId} itemInicial={[...(dados ?? []), ...arquivados].find(item => item.id === detalheId)}

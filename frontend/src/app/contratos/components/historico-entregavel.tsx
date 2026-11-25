@@ -16,12 +16,12 @@ export function HistoricoEntregavel({ contratoId, entregavelId, versao, ocultarT
       .catch(() => { if (!controller.signal.aborted) setConsulta({ chave, eventos: [], erro: 'Histórico indisponível nesta consulta.' }); });
     return () => controller.abort();
   }, [contratoId, entregavelId, chave]);
-  const atual = consulta?.chave === chave ? consulta : null;
+  const atual = consulta?.chave.startsWith(`${contratoId}:${entregavelId}:`) ? consulta : null;
   const eventos = atual?.eventos ?? [];
   const visiveis = expandido ? eventos : eventos.slice(0, 5);
-  return <section data-pi-historico-neutro aria-label="Histórico do entregável" className={`space-y-3 ${ocultarTitulo ? "pt-2" : "border-t border-current/20 pt-4"}`}>
+  return <section data-pi-historico-neutro aria-label="Histórico do entregável" className={`space-y-3 ${ocultarTitulo ? "pi-historico-corpo" : "border-t border-current/20 pt-4"}`}>
     <div className={`flex flex-wrap items-center gap-2 ${ocultarTitulo ? 'justify-start' : 'justify-between'}`}>
-      {!ocultarTitulo && <h2 className="text-sm font-semibold text-foreground">Rastreabilidade do entregável</h2>}
+      {!ocultarTitulo && <h2 className="text-sm font-semibold text-foreground">Histórico do entregável</h2>}
       <span className="text-xs text-foreground/60">{atual ? `${eventos.length}${eventos.length === 100 ? '+' : ''} eventos consultados` : 'Carregando histórico…'}</span>
     </div>
     {atual?.erro ? <p role="status" className="text-xs text-foreground/70">{atual.erro}</p> :
@@ -36,7 +36,7 @@ export function HistoricoEntregavel({ contratoId, entregavelId, versao, ocultarT
         {ev.nomeArquivo && <p className="break-all text-foreground/80">Arquivo: {ev.nomeArquivo}</p>}
         {ev.justificativa && <p className="break-words text-foreground/80">Justificativa: {ev.justificativa}</p>}
         <p className="text-foreground/60"><time dateTime={ev.ocorridoEm}>{new Date(ev.ocorridoEm).toLocaleString('pt-BR')}</time>
-          {ev.ator ? ` · ${ev.ator.email}` : ' · autor não disponível'}</p>
+          {ev.ator ? ` · ${ev.ator.nome ? `${ev.ator.nome} (${ev.ator.email})` : ev.ator.email}` : ' · autor não disponível'}</p>
       </li>)}
     </ol>}
     {eventos.length > 5 && <button type="button" onClick={() => setExpandido(v => !v)}

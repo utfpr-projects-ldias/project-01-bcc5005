@@ -1,7 +1,7 @@
 'use client';
 import { CampoDuracao } from './campo-duracao';
 import { CampoDataCivil } from '@/app/components/campo-data-civil';
-import { useState, type FormEvent } from 'react';
+import { useState, useCallback, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { SeletorVinculosMultiplos } from './seletor-vinculos-multiplos';
 import { SeletorOcorrencia } from './seletor-ocorrencia';
@@ -15,7 +15,8 @@ import {CampoContribuicaoDisponivel} from '@/app/contratos/components/campo-cont
 import {ModalContribuicaoDestino} from '@/app/contratos/components/modal-contribuicao-destino';
 import { ModalEtapa } from '@/app/contratos/components/modal-etapa';
 import { useEntregaveis } from '@/hooks/use-entregaveis';
-import { editarAtividadeApi, type Atividade } from '@/hooks/use-atividades';
+import { SeletorResponsavel, type OpcaoResponsavel } from '@/app/contratos/components/seletor-responsavel';
+import { editarAtividadeApi, pesquisarResponsaveisAtividade, type Atividade } from '@/hooks/use-atividades';
 import { atividadeSchema, TIPOS_ATIVIDADE, type FormularioAtividade } from '@/lib/validacao-atividade';
 import { estadoDoObjeto } from '@/lib/identidade-operacional';
 
@@ -44,6 +45,9 @@ export function ModalEdicaoAtividade({ atividade, contratoId, origem, onFechar, 
       ? [{ ocorrenciaId: atividade.ocorrenciaId, quantidade: atividade.quantidadeExecucao }] : []), entregavelIds: atividade.entregaveis.map(x => x.id),
   }));
   const acesso=useAcessoContrato(contratoId),perfil=useMeuPerfil();
+  const [responsavelEscolhido,setResponsavelEscolhido]=useState<OpcaoResponsavel|null>(atividade.responsavelId?{id:atividade.responsavelId,email:atividade.responsavel??'',nome:atividade.responsavel}:null);
+  const [responsavelAlterado,setResponsavelAlterado]=useState(false);
+  const buscarResponsavel=useCallback((termo:string,signal:AbortSignal)=>pesquisarResponsaveisAtividade(contratoId,termo,signal),[contratoId]);
   const podeMedirOcorrencia=Boolean(perfil.dados?.ativo&&(perfil.dados.perfil==='ADMINISTRADOR'||acesso.dados?.permissoes?.registrarExecucaoOcorrencia));
   const podeContribuir=Boolean(perfil.dados?.ativo&&(perfil.dados.perfil==='ADMINISTRADOR'||acesso.dados?.permissoes?.editarExecucaoFisica));
   const [diretas,setDiretas]=useState<MedicaoDireta[]>(atividade.medicoesDiretas??[]);
@@ -88,6 +92,7 @@ export function ModalEdicaoAtividade({ atividade, contratoId, origem, onFechar, 
         (validarTexto as Record<string, unknown>)[chave] = form[chave].slice(0, limites[chave]);
       }
     }
+    if(form.participantes===textoOriginal.participantes) validarTexto.participantes='';
     const validado = atividadeSchema.safeParse(validarTexto);
     if (!validado.success) {
       const erros: Record<string, string> = {};
@@ -103,7 +108,7 @@ export function ModalEdicaoAtividade({ atividade, contratoId, origem, onFechar, 
     try {
       const normalizados = {
         ...validado.data, dataHora: form.dataHora === dataLocal(atividade.dataHora) ? new Date(atividade.dataHora).toISOString() : new Date(validado.data.dataHora).toISOString(),
-        participantes: form.participantes.split(',').map(x => x.trim()).filter(Boolean),
+        participantes: form.participantes===textoOriginal.participantes ? (atividade.participantes??[]) : form.participantes.split(',').map(x => x.trim()).filter(Boolean),
       };
       const anteriores = {
         titulo: atividade.titulo, dataHora: new Date(atividade.dataHora).toISOString(),
@@ -129,6 +134,7 @@ export function ModalEdicaoAtividade({ atividade, contratoId, origem, onFechar, 
           : (novoComparacao ?? null) === (anterior ?? null);
         if (!igual) alteracoes[chave] = normalizados[chave];
       }
+      if(responsavelAlterado){alteracoes.responsavelId=responsavelEscolhido?.id??null;delete alteracoes.responsavel;}
       if(JSON.stringify(diretas)!==JSON.stringify(atividade.medicoesDiretas??[]))alteracoes.medicoesDiretas=diretas;
       if(JSON.stringify(parcelas)!==JSON.stringify(atividade.parcelasPercentuais??[]))alteracoes.parcelasPercentuais=parcelas.map(p=>({...p,percentual:p.percentual.replace(',','.')}));
       if (Object.keys(alteracoes).length) await editarAtividadeApi(contratoId, atividade.id, alteracoes as Partial<Omit<import('@/hooks/use-atividades').DadosAtividade, 'contratoId'>>);
@@ -157,8 +163,9 @@ export function ModalEdicaoAtividade({ atividade, contratoId, origem, onFechar, 
         <textarea required rows={2} maxLength={500} className={CAMPO} value={form.descricao} onChange={e => campo('descricao', e.target.value)} /><span className="block text-right text-[11px] text-foreground/55">{form.descricao.length}/500</span></label>
       {errosCampos.descricao && <p className="text-xs text-error-text">{errosCampos.descricao}</p>}
       <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-2">
-        <label className="block text-sm font-medium">Responsável
-          <input maxLength={25} className={CAMPO} value={form.responsavel} onChange={e => campo('responsavel', e.target.value)} /></label>
+        <div><SeletorResponsavel semprePesquisar rotulo="Responsável" valor={responsavelEscolhido?.id??null} selecionado={responsavelEscolhido} pesquisar={buscarResponsavel} desabilitado={salvando} onChange={(_,u)=>{setResponsavelEscolhido(u??null);setResponsavelAlterado(true);}}/>
+          {!responsavelAlterado&&!responsavelEscolhido&&atividade.responsavel&&<p className="text-xs text-foreground/65">Responsável registrado: {atividade.responsavel}</p>}
+          {(responsavelEscolhido||(!responsavelAlterado&&atividade.responsavel))&&<button type="button" className="text-xs underline" onClick={()=>{setResponsavelEscolhido(null);setResponsavelAlterado(true);}}>Remover atribuição</button>}</div>
         <label className="block text-sm font-medium">Participantes
           <input maxLength={500} className={CAMPO} value={form.participantes} onChange={e => campo('participantes', e.target.value)} /></label>
         <label className="block text-sm font-medium">Local

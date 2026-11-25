@@ -1,3 +1,4 @@
+import { milesimos, quantidadeDecimal, percentualQuantidade } from '../common/quantidade-exata.js';
 import { entregaveisComInicio } from './inicio-operacional.js';
 import { quantidadeDiretaEvidencias } from '../entregaveis/quantidade-evidencias.js';
 import { BadRequestException } from '@nestjs/common';
@@ -10,12 +11,10 @@ import { medicaoAprovadaAtual, medicaoReconhecidaAtual, resumoMedicao } from '..
 import { calcularPeriodosRecorrentes } from '../ocorrencias/ocorrencias.service.js';
 import { avaliarAgendaRecorrente, avaliarPesosAgenda } from '../ocorrencias/avaliar-agenda-recorrente.js';
 import { calcularFisico } from './motor-progresso.js';
+import { dataEfetivaValida } from '../common/data-civil.js';
 import { estadoOperacionalEntregavel, estadoOcorrenciaReconhecida, indicadoresPrazoEntregavel } from '../entregaveis/estado-operacional-entregavel.js';
 const numero = (v: string | null | undefined) => v == null ? null : Number(v);
-const decimal = (valores: string[]) => {
-  const soma = valores.reduce((s, v) => { const [i, f = ''] = v.split('.'); return s + BigInt(i) * 1000n + BigInt(f.padEnd(3, '0')); }, 0n);
-  return `${soma / 1000n}.${String(soma % 1000n).padStart(3, '0')}`;
-};
+const decimal = (valores: string[]) => quantidadeDecimal(valores.reduce((s, v) => s + milesimos(v), 0n));
 /** Fonte única da projeção física e operacional para consultas de entregável e contrato. */
 export async function resumirFisicoEntregavel(m: EntityManager, e: Entregavel, ocorrencias: Ocorrencia[], configuracao?: ConfiguracaoOcorrencias) {
   ocorrencias = ocorrencias.filter(o => !o.substituidaEm);
@@ -42,13 +41,14 @@ export async function resumirFisicoEntregavel(m: EntityManager, e: Entregavel, o
     // O entregável mantém os limites contratuais; a configuração de agenda
     // controla a grade corrente. Aprovados históricos não são reescritos.
     const inicio = e.agendaInicioFuturo ?? e.inicioPrevisto;
-    const fim = e.agendaInicioFuturo ? (configuracao?.terminoPrevisto ?? e.terminoPrevisto) : e.terminoPrevisto;
+    const fim = e.agendaInicioFuturo ? configuracao?.terminoPrevisto : e.terminoPrevisto;
+    realizado = null;
     if (inicio && fim && e.periodicidade) {
       try {
         const grade = calcularPeriodosRecorrentes(inicio, fim, e.periodicidade);
         const agendaFisica = await Promise.all(ocorrencias.map(async o => (await medicaoAprovadaAtual(m, o)).apta ? o : {...o, status: 'EM_REVISAO' as Ocorrencia['status']}));
-        const gradeAvaliada = avaliarAgendaRecorrente(agendaFisica, grade, inicio);
-        if (gradeAvaliada.completa || !ocorrencias.length) {
+        const gradeAvaliada = avaliarAgendaRecorrente(agendaFisica, grade, inicio, e.inicioPrevisto, e.terminoPrevisto);
+        if (gradeAvaliada.completa || (!ocorrencias.length && !e.agendaInicioFuturo)) {
           periodos = gradeAvaliada.total;
           realizado = String(gradeAvaliada.concluidas);
           const pesos = avaliarPesosAgenda(agendaFisica);
@@ -61,11 +61,15 @@ export async function resumirFisicoEntregavel(m: EntityManager, e: Entregavel, o
   }
   const percentualManual = await percentualComParcelas(m,e);
   const semExecucaoInicial = ((!ocorrencias.length || e.tipo === 'CONTINUO') && !e.execucoesIntegradas && e.percentualExecucao == null && e.quantidadeRealizada == null && e.dataEfetivaMarco == null && (!e.statusExecucao || e.statusExecucao === 'NAO_INICIADO')) || (e.tipo === 'CONTINUO' && percentualManual == null && !e.execucoesIntegradas && e.statusExecucao === 'EM_ANDAMENTO');
-  const percentual = (e.tipo === 'UNICO' && percentualManual == null && ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? '')) ? null : calcularFisico({ tipo: e.tipo, percentualManual, quantidadePrevista: numero(previsto), quantidadeRealizada: numero(realizado), ocorrenciasPrevistas: periodos, ocorrenciasConcluidas: numero(realizado), dataEfetivaMarco: e.tipo === 'MARCO' && ['CONCLUIDO','CONCLUIDO_PARCIALMENTE'].includes(e.statusExecucao ?? '') ? e.dataEfetivaMarco : null });
-  const percentualCalculado = semExecucaoInicial && percentual == null ? 0 : e.tipo==='RECORRENTE'
+  const parcelasInvalidas = (e.tipo === 'UNICO' || e.tipo === 'CONTINUO') && e.execucoesIntegradas && percentualManual == null;
+  const dataMarcoInvalida = e.tipo === 'MARCO' && Boolean(e.dataEfetivaMarco) && !dataEfetivaValida(e.dataEfetivaMarco);
+  const percentual = e.tipo === 'QUANTITATIVO' ? (previsto == null || realizado == null ? null : percentualQuantidade(milesimos(realizado), milesimos(previsto), false)) : (e.tipo === 'UNICO' && percentualManual == null && ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? '')) ? null : calcularFisico({ tipo: e.tipo, percentualManual, quantidadePrevista: numero(previsto), quantidadeRealizada: numero(realizado), ocorrenciasPrevistas: periodos, ocorrenciasConcluidas: numero(realizado), dataEfetivaMarco: e.tipo === 'MARCO' && ['CONCLUIDO','CONCLUIDO_PARCIALMENTE'].includes(e.statusExecucao ?? '') ? e.dataEfetivaMarco : null });
+  const percentualCalculado = parcelasInvalidas || dataMarcoInvalida ? null : semExecucaoInicial && percentual == null && e.tipo !== 'RECORRENTE' ? 0 : e.tipo==='RECORRENTE'
     ? pesosSerieIncompletos ? null : percentualPonderadoSerie ?? percentual
     : percentual;
   if (pesosSerieIncompletos) fonte='PESOS_SERIE_INCOMPLETOS';
+  if (parcelasInvalidas) fonte='CONFLITO_PERCENTUAL';
+  if (dataMarcoInvalida) fonte='DATA_MARCO_INVALIDA';
   let statusEntregavel = estadoOperacionalEntregavel(e, percentualCalculado, ocorrencias);
   if (statusEntregavel === 'NAO_INICIADO' && !e.arquivadoEm && !e.reabertoEm) {
     const candidatas = ocorrencias.filter(o => !o.substituidaEm && o.status === 'NAO_INICIADO' && (o.execucoesPercentuais || o.metaQuantidade != null));

@@ -7,10 +7,13 @@ import { useState } from 'react';
 import { LinkVoltar } from '@/app/components/link-voltar';
 import { AreaContratos, Aviso } from '@/app/contratos/components/area-contratos';
 import { useMeuPerfil } from '@/hooks/use-meu-perfil';
-import { useAcessoContrato } from '@/hooks/use-contratos';
+import { useAcessoContrato, useContrato } from '@/hooks/use-contratos';
 import { FormularioEntregavel } from '@/app/contratos/components/formulario-entregavel';
-import { editarEntregavel } from '@/lib/entregaveis';
-import type { DadosPlanejamentoEntregavel } from '@/lib/validacao-entregavel';
+import { editarEntregavel, ErroEntregavel, type Entregavel } from '@/lib/entregaveis';
+import { prepararEdicaoEntregavel, type DadosPlanejamentoEntregavel } from '@/lib/validacao-entregavel';
+import { useEtapas } from '@/hooks/use-etapas';
+import { useRepositorioConsultasOpcional } from '@/app/components/provedor-consultas';
+import { sincronizarContrato } from '@/lib/sincronizar-contrato';
 import { useDetalheEntregavel, useEntregaveis } from '@/hooks/use-entregaveis';
 import { useProgresso } from '@/hooks/use-progresso';
 import { ConteudoEntregavel } from '@/app/contratos/components/conteudo-entregavel';
@@ -30,33 +33,27 @@ export default function DetalheEntregavelPage() {
   // Ações de evidência usam permissões granulares, independentes da edição de entregáveis.
   const acessoValido = habilitado && !acesso.erro && !acesso.carregando;
   const permissoes = acessoValido ? acesso.dados?.permissoes : undefined;
-  const podeEditar = Boolean(permissoes?.editarEntregaveis);
-  async function salvar(dados: DadosPlanejamentoEntregavel) {
-    if (!podeEditar || !consulta.dados || consulta.dados.id !== entregavelId || consulta.dados.contratoId !== contratoId) return;
-    // A edição do planejamento nunca pode reenviar o checklist: cada evidência
-    // é alterada por sua própria API, com autorização e concorrência isoladas.
-    const planejamento: Partial<DadosPlanejamentoEntregavel> = { ...dados };
-    delete planejamento.evidenciasEsperadas;
-    const campos = ['etapaId', 'nome', 'tipo', 'codigo', 'descricao', 'responsavelId',
-      'inicioPrevisto', 'terminoPrevisto', 'quantidadePrevista', 'unidadeMedida',
-      'periodicidade', 'configuracaoPeriodicidade', 'peso', 'criterioConclusao', 'observacoes'] as const;
-    const alteracoes: Partial<DadosPlanejamentoEntregavel> = {};
-    for (const campo of campos) {
-      const novo = planejamento[campo];
-      const atual = consulta.dados[campo];
-      const igual = campo === 'configuracaoPeriodicidade'
-        ? JSON.stringify(novo ?? null) === JSON.stringify(atual ?? null)
-        : (campo === 'peso' || campo === 'quantidadePrevista') && novo != null && atual != null
-          ? Number(novo) === Number(atual)
-          : (novo ?? null) === (atual ?? null);
-      if (!igual) (alteracoes as Record<string, unknown>)[campo] = novo;
-    }
+  const contrato = useContrato(contratoId, habilitado);
+  const etapas = useEtapas(contratoId, habilitado);
+  const cache = useRepositorioConsultasOpcional();
+  const pai = etapas.dados?.find(e => e.id === consulta.dados?.etapaId);
+  const raiz = contrato.dados;
+  const atual = consulta.dados;
+  const contextoAtivo = Boolean(acessoValido && raiz?.id === contratoId && pai?.contratoId === contratoId && !contrato.erro && !etapas.erro && !raiz.arquivadoEm && !raiz.conclusaoSolicitadaEm && !['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','ENCERRADO','SUSPENSO','CANCELADO'].includes(raiz.status) && !pai.arquivadoEm && !pai.conclusaoSolicitadaEm && !pai.encerramentoSolicitadoEm && !['CONCLUIDA','CONCLUIDO_PARCIALMENTE','ENCERRADA','FINALIZADA'].includes(pai.status));
+  const bloqueado = !contextoAtivo || Boolean(atual?.arquivadoEm || atual?.regularizacaoDocumentalSolicitada || ['PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(atual?.statusExecucao ?? '') || (!atual?.reabertoEm && ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(atual?.statusExecucao ?? '')));
+  const podeEditar = !bloqueado && Boolean(permissoes?.editarEntregaveis);
+  const regularizacao = Boolean(acessoValido && raiz?.id === contratoId && pai?.contratoId === contratoId && !contrato.erro && !etapas.erro && !raiz.arquivadoEm && !raiz.conclusaoSolicitadaEm && !['CONCLUIDO','FINALIZADO','ENCERRADO','SUSPENSO','CANCELADO'].includes(raiz.status) && !pai.arquivadoEm && !pai.conclusaoSolicitadaEm && !pai.encerramentoSolicitadoEm && !['CONCLUIDA','ENCERRADA','FINALIZADA'].includes(pai.status) && atual?.statusExecucao === 'CONCLUIDO_PARCIALMENTE' && !atual.arquivadoEm && !atual.regularizacaoDocumentalSolicitada);
+  async function salvar(dados: DadosPlanejamentoEntregavel, base?: Entregavel) {
+    if (!podeEditar || !base || base.id !== entregavelId || base.contratoId !== contratoId)
+      throw new ErroEntregavel(409, 'O entregável não permite edição no estado atual.');
+    const alteracoes = prepararEdicaoEntregavel(base, dados);
     if (Object.keys(alteracoes).length) await editarEntregavel(contratoId, entregavelId, alteracoes);
+    if (cache) sincronizarContrato(cache, contratoId);
     setEditando(false); toastSucesso('Planejamento atualizado.');
     void consulta.atualizar().catch(() => {});
   }
   // Nao exibir dados de cache se a identidade perdeu acesso ou se a API negou a consulta.
-  const erro = perfil.erro || consulta.erro || acesso.erro;
+  const erro = perfil.erro || consulta.erro || acesso.erro || contrato.erro || etapas.erro;
   const item = !erro && habilitado && consulta.dados?.contratoId === contratoId &&
     consulta.dados?.id === entregavelId ? consulta.dados : undefined;
   return <AreaContratos titulo="Detalhe do entregável">
@@ -80,15 +77,15 @@ export default function DetalheEntregavelPage() {
         podeConfigurarPesos={Boolean(permissoes?.configurarPesos)}
         podeReplanejarOcorrencias={Boolean(permissoes?.configurarAgendaOcorrencias)} />
     </div>}
-    {item && !editando && <ConteudoEntregavel item={item}
-      podeEditarEsperada={Boolean(permissoes?.editarEvidencias)}
-      podeCriarEvidencia={Boolean(permissoes?.criarEvidencias)}
-      podeArquivarEvidencia={Boolean(permissoes?.arquivarEvidencias)}
-      podeReativarEvidencia={Boolean(permissoes?.reativarEvidencias)}
-      podeReabrirEvidencia={Boolean(permissoes?.reabrirEvidencias)}
-      podeExcluirEvidenciaArquivada={Boolean(permissoes?.excluirEvidenciasArquivadas)}
-      podeAlterarObrigatoriedade={Boolean(permissoes?.alterarObrigatoriedade)}
-      podeEnviarComprovantes={Boolean(permissoes?.enviarComprovantes)} podeVerHistorico
-      aoAtualizarEsperada={() => { void consulta.atualizar().catch(() => {}); }} />}
+    {item && (!editando || !podeEditar) && <ConteudoEntregavel item={item} bloqueadoPorPai={bloqueado} somenteLeituraExecucao={bloqueado} regularizacaoDocumental={regularizacao} permissoesExecucao={bloqueado && !regularizacao ? undefined : permissoes}
+      podeEditarEsperada={!bloqueado && Boolean(permissoes?.editarEvidencias)}
+      podeCriarEvidencia={!bloqueado && Boolean(permissoes?.criarEvidencias)}
+      podeArquivarEvidencia={!bloqueado && Boolean(permissoes?.arquivarEvidencias)}
+      podeReativarEvidencia={!bloqueado && Boolean(permissoes?.reativarEvidencias)}
+      podeReabrirEvidencia={(!bloqueado || regularizacao) && Boolean(permissoes?.reabrirEvidencias)}
+      podeExcluirEvidenciaArquivada={!bloqueado && Boolean(permissoes?.excluirEvidenciasArquivadas)}
+      podeAlterarObrigatoriedade={!bloqueado && Boolean(permissoes?.alterarObrigatoriedade)}
+      podeEnviarComprovantes={(!bloqueado || regularizacao) && Boolean(permissoes?.enviarComprovantes)} podeVerHistorico
+      aoAtualizarEsperada={() => { if (cache) sincronizarContrato(cache, contratoId); void consulta.atualizar().catch(() => {}); }} />}
   </AreaContratos>;
 }

@@ -16,15 +16,16 @@ export class UpdateAtividadeDto {
   @ValidateIf((_obj, valor) => valor !== undefined) @IsString() @IsNotEmpty() @Matches(/\S/, {message: 'Não informe somente espaços.'}) @MaxLength(500) descricao?: string;
   @ValidateIf((_obj, valor) => valor !== undefined) @IsString() @IsNotEmpty() @Matches(/\S/, {message: 'Não informe somente espaços.'}) @MaxLength(40) tipo?: string;
   @IsOptional() @IsUUID() ocorrenciaId?: string | null;
-  @ValidateIf((_obj, valor) => valor !== undefined) @IsArray() @ArrayUnique() @IsUUID('all', { each: true }) ocorrenciaIds?: string[];
-  @ValidateIf((_obj, valor) => valor !== undefined) @IsArray() @ArrayUnique((m: MedicaoAtividadeDto) => m?.ocorrenciaId)
+  @ValidateIf((_obj, valor) => valor !== undefined) @IsArray() @ArrayMaxSize(100) @ArrayUnique() @IsUUID('all', { each: true }) ocorrenciaIds?: string[];
+  @ValidateIf((_obj, valor) => valor !== undefined) @IsArray() @ArrayMaxSize(100) @ArrayUnique((m: MedicaoAtividadeDto) => m?.ocorrenciaId)
   @ValidateNested({ each: true }) @Type(() => MedicaoAtividadeDto)
   medicoes?: MedicaoAtividadeDto[];
   @IsOptional() @IsString() @Matches(/^\d{1,15}(?:\.\d{1,3})?$/) quantidadeExecucao?: string | null;
+  @IsOptional() @IsUUID() responsavelId?: string | null;
   @ValidateIf((_obj, valor) => valor !== undefined) @IsString() @MaxLength(25) responsavel?: string;
   @ValidateIf((_obj, valor) => valor !== undefined) @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) @MaxLength(25, { each: true }) participantes?: string[];
   @ValidateIf((_obj, valor) => valor !== undefined) @IsString() @MaxLength(50) local?: string;
   @ValidateIf((_obj, valor) => valor !== undefined) @IsString() @MaxLength(25) duracao?: string;
   @ValidateIf((_obj, valor) => valor !== undefined) @IsString() @MaxLength(200) observacoes?: string;
-  @ValidateIf((_obj, valor) => valor !== undefined) @IsArray() @ArrayMinSize(1) @ArrayUnique() @IsUUID('all', { each: true }) entregavelIds?: string[];
+  @ValidateIf((_obj, valor) => valor !== undefined) @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @ArrayUnique() @IsUUID('all', { each: true }) entregavelIds?: string[];
 }

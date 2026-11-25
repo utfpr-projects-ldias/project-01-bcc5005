@@ -32,3 +32,11 @@ test('sem exigência não inventa comprovante; exigência da ocorrência é inde
   query.mockResolvedValueOnce([{...base,obrigatorias:0,verificadas:0,total:1,verificadas_total:0,ocorrencias_exigidas:1,situacao:'SEM_EVIDENCIA'}]);
   expect((await service.resumoDocumental(cid))[eid]).toMatchObject({obrigatorias:0,verificadas:0,ocorrenciasExigidas:1,ocorrenciasAtendidas:0,situacaoComprovacao:'SEM_EVIDENCIA'});
 });
+
+test('B10: as cotas de ocorrência usam hash distinto e MIME, como o gate', async () => {
+  const {service, query} = setup();
+  await service.resumoDocumental(cid);
+  expect(query).toHaveBeenCalledWith(expect.stringContaining('count(DISTINCT c.sha256)'),[cid]);
+  expect(query).toHaveBeenCalledWith(expect.stringContaining("c.tipo_mime LIKE 'image/%'"),[cid]);
+  expect(query).toHaveBeenCalledWith(expect.stringContaining("c.tipo_mime NOT LIKE 'image/%'"),[cid]);
+});

@@ -1,3 +1,5 @@
+import { chaveUpload } from './idempotencia-upload';
+import { mensagemErroDominioHttp } from './erro-dominio-http';
 /** TEC08-03 — contrato HTTP REAL de documentos contratuais (TEC08-02).
  * Evidências da HU10 são outro domínio; nunca expor storageKey nem URLs públicas.
  */
@@ -59,7 +61,7 @@ const MENSAGENS: Record<number, string> = {
   404: 'Documento ou contrato não encontrado, ou acesso não autorizado.',
   409: 'Operação incompatível com o estado atual. Confira a verificação, a revisão e os limites de documentos.',
   413: 'Arquivo acima do limite permitido ou capacidade de armazenamento excedida.',
-  503: 'Arquivo ou serviço temporariamente indisponível. Tente novamente mais tarde.',
+  503: 'Arquivo ou serviço temporariamente indisponível. Confira o resultado antes de reenviar.',
 };
 
 async function requisitar(caminho: string, init?: RequestInit): Promise<Response> {
@@ -75,7 +77,7 @@ async function requisitar(caminho: string, init?: RequestInit): Promise<Response
   }
   if (!resposta.ok) {
     throw new ErroDocumento(resposta.status,
-      MENSAGENS[resposta.status] ?? 'Não foi possível concluir a operação. Tente novamente.');
+      await mensagemErroDominioHttp(resposta, MENSAGENS[resposta.status] ?? 'Não foi possível concluir a operação. Tente novamente.'));
   }
   return resposta;
 }
@@ -113,16 +115,19 @@ export function validarSelecaoDocumento(arquivo: File | null, categoria: Categor
 export async function enviarDocumento(contratoId: string, categoria: CategoriaDocumento, arquivo: File, descricao: string): Promise<DocumentoContratual> {
   const erro = validarSelecaoDocumento(arquivo, categoria);
   if (erro) throw new ErroDocumento(400, erro);
-  if (descricao.length > 140 || (descricao.length > 0 && !descricao.trim())) {
-    throw new ErroDocumento(400, 'A descrição deve ter até 140 caracteres e não pode conter somente espaços.');
+  if (descricao.length > 70 || (descricao.length > 0 && !descricao.trim())) {
+    throw new ErroDocumento(400, 'A descrição deve ter até 70 caracteres e não pode conter somente espaços.');
   }
   const dados = new FormData();
   dados.append('categoria', categoria);
   if (descricao.trim()) dados.append('descricao', descricao.trim());
   dados.append('arquivo', arquivo);
   // Nunca definir Content-Type manualmente: o browser gera boundary multipart.
-  const resposta = await requisitar(base(contratoId), { method: 'POST', body: dados });
-  return resposta.json() as Promise<DocumentoContratual>;
+  const op = chaveUpload(arquivo,base(contratoId),dados);
+  const resposta = await requisitar(base(contratoId), { method: 'POST', headers:{'Idempotency-Key':op.chave}, body: dados });
+  const item = await resposta.json() as DocumentoContratual;
+  op.concluir();
+  return item;
 }
 
 export async function verificarDocumento(contratoId: string, id: string): Promise<DocumentoContratual> {

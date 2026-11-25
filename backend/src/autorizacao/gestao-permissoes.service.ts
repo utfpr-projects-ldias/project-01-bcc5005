@@ -11,7 +11,7 @@ import { Usuario } from '../usuarios/usuario.entity.js';
 import { Contrato } from '../contratos/contrato.entity.js';
 import { PermissaoContrato } from './permissao-contrato.entity.js';
 import type { ConcederPermissaoDto } from './dto/conceder-permissao.dto.js';
-import { validarPermissoes } from './permissoes-granulares.js';
+import { permissoesEfetivas, validarPermissoes } from './permissoes-granulares.js';
 
 @Injectable()
 export class GestaoPermissoesService {
@@ -20,7 +20,7 @@ export class GestaoPermissoesService {
   private async validarAdministrador(ator: UsuarioAutenticado) {
     if (ator?.perfil !== PerfilUsuario.ADMINISTRADOR) throw new ForbiddenException('Somente Administrador pode gerir vínculos');
     const admin = await this.db.getRepository(Usuario).findOneBy({ id: ator.id, ativo: true });
-    if (!admin || admin.supertokensUserId !== ator.supertokensUserId || admin.perfil !== PerfilUsuario.ADMINISTRADOR) {
+    if (!admin || admin.bloqueioSessoesId || admin.supertokensUserId !== ator.supertokensUserId || admin.perfil !== PerfilUsuario.ADMINISTRADOR) {
       throw new ForbiddenException('Administrador não está ativo');
     }
   }
@@ -38,7 +38,7 @@ export class GestaoPermissoesService {
       if (registro) bloqueados.set(id, registro);
     }
     const admin = bloqueados.get(ator.id);
-    if (!admin?.ativo || admin.perfil !== PerfilUsuario.ADMINISTRADOR ||
+    if (!admin?.ativo || admin.bloqueioSessoesId || admin.perfil !== PerfilUsuario.ADMINISTRADOR ||
         admin.supertokensUserId !== ator.supertokensUserId) {
       throw new ForbiddenException('Administrador não está ativo');
     }
@@ -52,7 +52,7 @@ export class GestaoPermissoesService {
     const itens = await this.db.getRepository(PermissaoContrato).find({
       where: { usuarioId }, order: { contratoId: 'ASC' },
     });
-    return itens.map((v) => ({ contratoId: v.contratoId, podeEditar: v.podeEditar, permissoesDetalhadas: v.permissoesDetalhadas ?? null }));
+    return itens.map((v) => ({ contratoId: v.contratoId, podeEditar: alvo.perfil === PerfilUsuario.GESTOR && v.podeEditar, permissoesDetalhadas: v.permissoesDetalhadas ?? null, permissoesEfetivas: permissoesEfetivas(alvo.perfil, v.podeEditar, v.permissoesDetalhadas) }));
   }
 
   async conceder(usuarioId: string, dto: ConcederPermissaoDto, ator: UsuarioAutenticado) {
@@ -85,7 +85,7 @@ export class GestaoPermissoesService {
         ? Object.assign(anterior, { podeEditar: dto.podeEditar, permissoesDetalhadas: proximas })
         : vinculos.create({ usuarioId, contratoId: dto.contratoId, podeEditar: dto.podeEditar, permissoesDetalhadas: proximas }));
       await this.auditoria.registrarNaTransacao(manager, ator, {
-        acao: AcaoAuditoria.USUARIO_PERMISSAO_CONCEDIDA, entidadeTipo: 'USUARIO', entidadeId: usuarioId,
+        acao: AcaoAuditoria.USUARIO_PERMISSAO_CONCEDIDA, entidadeTipo: 'USUARIO', entidadeId: usuarioId, contratoIdAcl: salvo.contratoId,
         dadosAnteriores: anteriores,
         dadosPosteriores: { contratoId: salvo.contratoId, podeEditar: salvo.podeEditar, permissoesDetalhadas: salvo.permissoesDetalhadas },
       });
@@ -104,7 +104,7 @@ export class GestaoPermissoesService {
       if (!vinculo) throw new NotFoundException('Vínculo não encontrado');
       await vinculos.remove(vinculo);
       await this.auditoria.registrarNaTransacao(manager, ator, {
-        acao: AcaoAuditoria.USUARIO_PERMISSAO_REVOGADA, entidadeTipo: 'USUARIO', entidadeId: usuarioId,
+        acao: AcaoAuditoria.USUARIO_PERMISSAO_REVOGADA, entidadeTipo: 'USUARIO', entidadeId: usuarioId, contratoIdAcl: vinculo.contratoId,
         dadosAnteriores: { contratoId, podeEditar: vinculo.podeEditar, permissoesDetalhadas: vinculo.permissoesDetalhadas ?? null }, dadosPosteriores: null,
       });
     });

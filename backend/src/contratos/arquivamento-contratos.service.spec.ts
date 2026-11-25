@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals';
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { ContratosService } from './contratos.service.js';
+import { Usuario } from '../usuarios/usuario.entity.js';
 import { Contrato } from './contrato.entity.js';
 import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
@@ -14,13 +15,13 @@ function cenario() {
   const findOne = jest.fn(async () => atual);
   const save = jest.fn(async (v: unknown) => v);
   const repo = { findOne, save };
-  const manager = { getRepository: jest.fn(() => repo) };
+  const manager = { getRepository: jest.fn((entidade: unknown) => entidade === Usuario ? { findOne: jest.fn(async () => ({ ...admin, ativo: true })) } : repo), query: jest.fn(async () => [{possui:false}]) };
   const evento = jest.fn(async (_: unknown, executar: (m: unknown) => Promise<unknown>) => {
     const resultado = await executar(manager);
     return (resultado as {resultado: Contrato}).resultado;
   });
   const service = new ContratosService({} as never, { executarComAuditoria: evento } as never, {} as never);
-  return { service, atual, evento, repo };
+  return { service, atual, evento, repo, manager };
 }
 
 test('arquivar mantém status e grava registro auditado na mesma transação', async () => {
@@ -46,5 +47,13 @@ test('contrato aguardando decisão não pode ser arquivado', async () => {
   const { service, atual, repo } = cenario();
   Object.assign(atual, { conclusaoSolicitadaEm: new Date() });
   await expect(service.alterarArquivamento(id, true, admin)).rejects.toBeInstanceOf(ConflictException);
+  expect(repo.save).not.toHaveBeenCalled();
+});
+
+
+test('B03: solicitação de um descendente impede arquivamento da raiz', async () => {
+  const {service, manager, repo} = cenario();
+  manager.query.mockResolvedValue([{possui:true}]);
+  await expect(service.alterarArquivamento(id,true,admin)).rejects.toBeInstanceOf(ConflictException);
   expect(repo.save).not.toHaveBeenCalled();
 });

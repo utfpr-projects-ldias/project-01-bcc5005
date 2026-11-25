@@ -1,3 +1,4 @@
+import { Usuario } from '../usuarios/usuario.entity.js';
 import { jest } from '@jest/globals';
 import { BadRequestException } from '@nestjs/common';
 import type { DataSource, Repository, EntityManager } from 'typeorm';
@@ -18,7 +19,7 @@ function ambiente(comEntregavel = true) {
   const m={
     findOne:jest.fn(async(entidade:unknown)=>entidade===Contrato?{id:'c',status:'EM_EXECUCAO',arquivadoEm:null}:entidade===Etapa?{id:'t',arquivadoEm:null,status:'PLANEJADA'}:null),
     findOneBy:jest.fn(async(entidade:unknown)=>entidade===Entregavel?e:entidade===Etapa?{id:'t',arquivadoEm:null,status:'PLANEJADA'}:null),
-    getRepository:jest.fn((entidade:unknown)=>entidade===Ocorrencia?repo:{
+    getRepository:jest.fn((entidade:unknown)=>entidade===Usuario?{findOne:async()=>({id:"administrador",perfil:"ADMINISTRADOR",ativo:true})}:entidade===Ocorrencia?repo:{
       findOneBy:jest.fn(async()=>entidade===Entregavel && comEntregavel?e:null),
     }),
     query:jest.fn(async(sql:string)=>sql.includes('FROM ocorrencia_lancamentos')?[{total:'0'}]:

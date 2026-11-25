@@ -10,7 +10,10 @@ import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
 import { PerfilUsuario } from './perfil-usuario.enum.js';
 import { Usuario } from './usuario.entity.js';
-import { IdentidadesFuncionariosService, RevogacaoSessoesPendenteError } from './identidades-funcionarios.service.js';
+import { IdentidadesFuncionariosService } from './identidades-funcionarios.service.js';
+import { alterarEmailSeguro } from './alteracao-email-segura.js';
+import { alterarSenhaSegura } from './alteracao-senha-segura.js';
+import { PermissaoContrato } from '../autorizacao/permissao-contrato.entity.js';
 import { normalizarNomeCompleto } from './nome-completo.js';
 import type { CriarFuncionarioDto } from './dto/criar-funcionario.dto.js';
 import type { AtualizarFuncionarioDto } from './dto/atualizar-funcionario.dto.js';
@@ -70,7 +73,7 @@ export class AdministracaoUsuariosService {
     try {
       const usuario = await this.dataSource.transaction(async (manager) => {
         const autor = await manager.getRepository(Usuario).findOne({ where: { id: ator.id }, lock: { mode: 'pessimistic_write' } });
-        if (!autor?.ativo || autor.perfil !== PerfilUsuario.ADMINISTRADOR || autor.supertokensUserId !== ator.supertokensUserId) {
+        if (!autor?.ativo || autor.bloqueioSessoesId || autor.perfil !== PerfilUsuario.ADMINISTRADOR || autor.supertokensUserId !== ator.supertokensUserId) {
           throw new ForbiddenException('Administrador não está ativo');
         }
         const registro = manager.getRepository(Usuario).create({
@@ -126,7 +129,7 @@ export class AdministracaoUsuariosService {
       throw new ForbiddenException('Alteração de credencial da própria conta Administrador não permitida');
     }
     const autor = await this.repositorio.findOneBy({ id: ator.id, ativo: true });
-    if (!autor || autor.perfil !== PerfilUsuario.ADMINISTRADOR || autor.supertokensUserId !== ator.supertokensUserId) {
+    if (!autor || autor.bloqueioSessoesId || autor.perfil !== PerfilUsuario.ADMINISTRADOR || autor.supertokensUserId !== ator.supertokensUserId) {
       throw new ForbiddenException('Administrador não está ativo');
     }
     const alvo = await this.repositorio.findOneBy({ id });
@@ -141,111 +144,17 @@ export class AdministracaoUsuariosService {
       throw new BadRequestException('E-mail inválido');
     }
     await this.carregarAlvo(id, ator);
-    // Mantém exclusividade administrativa e bloqueia simultaneamente autor e alvo.
-    let idCore: string | undefined;
-    let anterior: string | undefined;
-    let mudouNoCore = false;
-    let callbackConcluido = false;
-    try {
-      return await this.dataSource.transaction(async (manager) => {
-        const repo = manager.getRepository(Usuario);
-        const ids = [ator.id, id].sort();
-        const bloqueados = new Map<string, Usuario>();
-        for (const usuarioId of ids) {
-          const u = await repo.findOne({ where: { id: usuarioId }, lock: { mode: 'pessimistic_write' } });
-          if (u) bloqueados.set(usuarioId, u);
-        }
-        const autor = bloqueados.get(ator.id);
-        const alvo = bloqueados.get(id);
-        if (!autor?.ativo || autor.perfil !== PerfilUsuario.ADMINISTRADOR || autor.supertokensUserId !== ator.supertokensUserId) {
-          throw new ForbiddenException('Administrador não está ativo');
-        }
-        if (!alvo) throw new NotFoundException('Funcionário não encontrado');
-        if (alvo.perfil === PerfilUsuario.ADMINISTRADOR) throw new ForbiddenException('Conta administrativa protegida');
-        if (alvo.email === email) return this.publico(alvo);
-        if (await repo.findOneBy({ email })) throw new ConflictException('E-mail já cadastrado');
-        anterior = alvo.email;
-        idCore = alvo.supertokensUserId;
-        // ST não participa do commit local: reconciliar o resultado se a confirmação falhar.
-        await this.identidades.alterarEmail(idCore, email);
-        mudouNoCore = true;
-        alvo.email = email;
-        await repo.save(alvo);
-        await this.auditoria.registrarNaTransacao(manager, ator, {
-          acao: AcaoAuditoria.USUARIO_EMAIL_ALTERADO,
-          entidadeTipo: 'USUARIO', entidadeId: alvo.id,
-          dadosAnteriores: { email: anterior }, dadosPosteriores: { email },
-        });
-        callbackConcluido = true;
-        return this.publico(alvo);
-      });
-    } catch (erro: unknown) {
-      if (mudouNoCore && idCore && anterior) {
-        if (callbackConcluido) {
-          let persistido: Usuario | null;
-          try { persistido = await this.repositorio.findOneBy({ id }); }
-          catch {
-            this.logger.error('Resultado indeterminado do COMMIT de e-mail; reconciliação indisponível');
-            throw new InternalServerErrorException('E-mail com confirmação indeterminada; contate o suporte técnico');
-          }
-          if (!persistido || persistido.supertokensUserId !== idCore ||
-              (persistido.email !== email && persistido.email !== anterior)) {
-            this.logger.error('E-mail com estado persistido divergente; exige reconciliação técnica');
-            throw new InternalServerErrorException('E-mail com confirmação indeterminada; contate o suporte técnico');
-          }
-          if (persistido.email === email) {
-            this.logger.warn('COMMIT de e-mail confirmado por leitura após erro de confirmação');
-            return this.publico(persistido);
-          }
-        }
-        try { await this.identidades.alterarEmail(idCore, anterior); }
-        catch {
-          this.logger.error('Falha compensando e-mail após erro de banco/commit/auditoria; reconciliação manual necessária');
-          throw new InternalServerErrorException('E-mail inconsistente; contate o suporte técnico');
-        }
-      }
-      throw erro;
-    }
+    return this.publico(await alterarEmailSeguro(this.dataSource, this.auditoria, this.identidades, ator, id, email));
   }
 
-  /** A senha pertence só ao Core. Audita a tentativa ANTES do efeito não transacional. */
+  /** Senha e revogação usam bloqueio durável e revalidam autor/alvo sob lock. */
   async redefinirSenha(id: string, novaSenha: string, ator: UsuarioAutenticado): Promise<void> {
-    const alvo = await this.carregarAlvo(id, ator);
+    await this.carregarAlvo(id, ator);
     if (novaSenha.length < 12 || novaSenha.length > 128 ||
       !/^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^a-zA-Z0-9]).+$/.test(novaSenha)) {
       throw new BadRequestException('Senha fora da política mínima');
     }
-    await this.auditoria.executarComAuditoria(ator, async () => ({
-      resultado: undefined,
-      evento: { acao: AcaoAuditoria.USUARIO_SENHA_REDEFINICAO_SOLICITADA,
-        entidadeTipo: 'USUARIO', entidadeId: alvo.id, dadosPosteriores: { situacao: 'SOLICITADA' } },
-    }));
-    try {
-      await this.identidades.definirNovaSenha(alvo.supertokensUserId, novaSenha);
-    } catch (erro) {
-      if (!(erro instanceof RevogacaoSessoesPendenteError)) throw erro;
-      try {
-        await this.auditoria.executarComAuditoria(ator, async () => ({
-          resultado: undefined,
-          evento: { acao: AcaoAuditoria.USUARIO_SENHA_REVOGACAO_PENDENTE,
-            entidadeTipo: 'USUARIO', entidadeId: alvo.id,
-            dadosPosteriores: { situacao: 'SENHA_ALTERADA_SESSOES_PENDENTES' } },
-        }));
-      } catch {
-        this.logger.error('Senha atualizada, revogação de sessões pendente e auditoria parcial; intervenção necessária');
-      }
-      throw new InternalServerErrorException('Senha alterada, mas sessões anteriores podem continuar ativas; contate o suporte técnico');
-    }
-    try {
-      await this.auditoria.executarComAuditoria(ator, async () => ({
-        resultado: undefined,
-        evento: { acao: AcaoAuditoria.USUARIO_SENHA_REDEFINIDA,
-          entidadeTipo: 'USUARIO', entidadeId: alvo.id, dadosPosteriores: { situacao: 'EFETIVADA' } },
-      }));
-    } catch {
-      this.logger.error('Senha alterada no SuperTokens; auditoria de confirmação falhou; reconciliação necessária');
-      throw new InternalServerErrorException('Senha alterada, mas auditoria incompleta; contate o suporte técnico');
-    }
+    await alterarSenhaSegura(this.dataSource, this.auditoria, this.identidades, ator, id, novaSenha);
   }
 
   /**
@@ -281,7 +190,7 @@ export class AdministracaoUsuariosService {
         if (encontrado) bloqueados.set(usuarioId, encontrado);
       }
       const autorReal = bloqueados.get(ator.id);
-      if (!autorReal || !autorReal.ativo || autorReal.perfil !== PerfilUsuario.ADMINISTRADOR ||
+      if (!autorReal || !autorReal.ativo || autorReal.bloqueioSessoesId || autorReal.perfil !== PerfilUsuario.ADMINISTRADOR ||
           autorReal.supertokensUserId !== ator.supertokensUserId) {
         throw new ForbiddenException('Administrador não está ativo');
       }
@@ -292,6 +201,12 @@ export class AdministracaoUsuariosService {
           (alvo.id !== ator.id || dto.perfil !== undefined || dto.ativo !== undefined)) {
         throw new ForbiddenException('Conta de Administrador permite apenas atualizar o próprio nome');
       }
+      if (alvo.bloqueioSessoesId && (dto.ativo === true || dto.perfil !== undefined))
+        throw new ConflictException('Regularize as sessões antes de alterar a situação ou o perfil');
+      // Reativar exige confirmar revogação; desativação permanece possível mesmo
+      // se o Core estiver indisponível. O guard nega domínio inativo.
+      if ((dto.ativo === true && !alvo.ativo) || (dto.perfil === PerfilUsuario.GESTOR && alvo.perfil !== PerfilUsuario.GESTOR))
+        await this.identidades.revogarSessoes(alvo.supertokensUserId);
       // Não concede promoção administrativa, mesmo com PATCH direto.
       const mudancasAnteriores: Record<string, unknown> = {};
       const mudancasPosteriores: Record<string, unknown> = {};
@@ -308,7 +223,26 @@ export class AdministracaoUsuariosService {
       if (dto.ativo !== undefined) alterar('ativo', dto.ativo);
       if (Object.keys(mudancasPosteriores).length === 0) return this.publico(alvo);
 
+      if (mudancasPosteriores.perfil !== undefined) {
+        const vinculos = manager.getRepository(PermissaoContrato);
+        const anteriores = await vinculos.find({where:{usuarioId:alvo.id,podeEditar:true},order:{contratoId:'ASC'}});
+        for (const vinculo of anteriores) {
+          vinculo.podeEditar = false;
+          await vinculos.save(vinculo);
+          await this.auditoria.registrarNaTransacao(manager, ator, {
+            acao: AcaoAuditoria.USUARIO_PERMISSAO_CONCEDIDA, entidadeTipo:'USUARIO', entidadeId:alvo.id,
+            contratoIdAcl:vinculo.contratoId,
+            dadosAnteriores:{contratoId:vinculo.contratoId,podeEditar:true,permissoesDetalhadas:vinculo.permissoesDetalhadas},
+            dadosPosteriores:{contratoId:vinculo.contratoId,podeEditar:false,permissoesDetalhadas:vinculo.permissoesDetalhadas},
+          });
+        }
+        mudancasPosteriores.vinculosLegadosRegularizados = anteriores.length;
+      }
       await repositorio.save(alvo);
+      if (mudancasPosteriores.ativo === false || mudancasPosteriores.perfil === PerfilUsuario.COLABORADOR) {
+        try { await this.identidades.revogarSessoes(alvo.supertokensUserId); }
+        catch { this.logger.warn('Revogação de sessões não confirmada; permissões locais permanecem atualizadas'); }
+      }
       await this.auditoria.registrarNaTransacao(manager, ator, {
         acao: AcaoAuditoria.USUARIO_ATUALIZADO,
         entidadeTipo: 'USUARIO',

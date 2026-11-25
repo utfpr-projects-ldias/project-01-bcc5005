@@ -4,7 +4,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import type { Repository } from 'typeorm';
+import { IsNull, type Repository } from 'typeorm';
 
 import { PerfilUsuario } from './perfil-usuario.enum.js';
 import { Usuario } from './usuario.entity.js';
@@ -32,7 +32,7 @@ export class UsuariosService {
 
   /** Ausência, bloqueio ou conta legada: sem direitos no domínio. */
   async buscarAtivoPorSupertokensId(id: string): Promise<Usuario | null> {
-    return this.usuarios.findOneBy({ supertokensUserId: id, ativo: true });
+    return this.usuarios.findOneBy({ supertokensUserId: id, ativo: true, bloqueioSessoesId: IsNull() });
   }
 
   /**

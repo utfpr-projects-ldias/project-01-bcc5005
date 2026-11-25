@@ -32,8 +32,8 @@ function ListaAtividadesVinculadas({ contratoId, entregavelId, somenteLeitura = 
   const idFiltros=useId();
   const [painelFiltros,setPainelFiltros] = useState<'periodo'|'adicionais'|null>(null);
   const raizFiltros=useRef<HTMLDivElement>(null);
-  const gatilhoFiltro=useRef<HTMLButtonElement|null>(null);
-  useEffect(()=>{if(!visivel)setPainelFiltros(null);},[visivel]);
+  const [gatilhoFiltro,setGatilhoFiltro]=useState<HTMLButtonElement|null>(null);
+  if(!visivel && painelFiltros!==null) setPainelFiltros(null);
   const [busca, setBusca] = useState('');
   const [buscaEfetiva,setBuscaEfetiva] = useState('');
   const [responsavelEfetivo,setResponsavelEfetivo] = useState('');
@@ -64,7 +64,7 @@ function ListaAtividadesVinculadas({ contratoId, entregavelId, somenteLeitura = 
     page: pagina, limit: 10, busca:buscaEfetiva, tipo:filtros.tipo, ordem, diario:true, habilitada:visivel&&!intervaloInvalido, ocorrenciaId:filtros.ocorrenciaId, responsavel:responsavelEfetivo, comEvidencias:filtros.comEvidencias, comExecucao:filtros.comExecucao,
   });
   const totalPaginas = Math.max(1, Math.ceil(total / 10));
-  useEffect(()=>{if(!loading&&!atualizando&&!erro&&!intervaloInvalido&&pagina>totalPaginas)setPagina(totalPaginas);},[loading,atualizando,erro,intervaloInvalido,pagina,totalPaginas]);
+  if(!loading&&!atualizando&&!erro&&!intervaloInvalido&&pagina>totalPaginas) setPagina(totalPaginas);
   const acesso = useAcessoContrato(contratoId);
   const permissoes = acesso.erro ? undefined : acesso.dados?.permissoes;
   const podeRegistrar = Boolean(permissoes?.registrarAtividades && !acesso.erro && !somenteLeitura);
@@ -112,17 +112,17 @@ function ListaAtividadesVinculadas({ contratoId, entregavelId, somenteLeitura = 
     <div ref={raizFiltros} className="pi-diario-ferramentas pi-diario-ferramentas-compactas" data-pi-filtros-diario>
       <label className="min-w-0"><span className="sr-only">Pesquisar atividade</span><input type="search" maxLength={120} placeholder="Pesquisar atividade..." value={busca} onChange={e=>setBusca(e.target.value)} className={campo}/></label>
       <label className="min-w-0"><span className="sr-only">Situação das atividades</span><select aria-label="Situação das atividades" value={filtros.status} onChange={e=>{setPagina(1);setFiltros(v=>({...v,status:e.target.value as FiltroEstadoAtividade}));}} className="pi-diario-campo pi-diario-status-compacto"><option value="TODAS_ATUAIS">Todos os status</option><option value="ATIVAS">Ativas</option><option value="PENDENTE_CONCLUSAO">Pendentes de conclusão</option><option value="VERIFICADA">Finalizadas</option><option value="ARQUIVADA">Arquivadas</option></select></label>
-      <button type="button" aria-expanded={painelFiltros==='periodo'} aria-controls={`${idFiltros}-periodo`} className="pi-diario-filtro-botao pi-filtros-sem-borda pi-diario-periodo-compacto" onClick={e=>{gatilhoFiltro.current=e.currentTarget;setEdicaoFiltros(filtros);setPainelFiltros(p=>p==='periodo'?null:'periodo');}}><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4m8-4v4M4 10h16"/></svg><span className="truncate" title={periodoRotulo}>{periodoRotulo}</span></button>
-      <button type="button" aria-expanded={painelFiltros==='adicionais'} aria-controls={`${idFiltros}-adicionais`} className="pi-diario-filtro-botao pi-filtros-sem-borda" onClick={e=>{gatilhoFiltro.current=e.currentTarget;setEdicaoFiltros(filtros);setPainelFiltros(p=>p==='adicionais'?null:'adicionais');}}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M4 6h16M7 12h10m-7 6h4"/></svg>Filtros{quantidadeFiltrosAdicionais>0?` (${quantidadeFiltrosAdicionais})`:''}</button>
+      <button type="button" aria-expanded={painelFiltros==='periodo'} aria-controls={`${idFiltros}-periodo`} className="pi-diario-filtro-botao pi-filtros-sem-borda pi-diario-periodo-compacto" onClick={e=>{setGatilhoFiltro(e.currentTarget);setEdicaoFiltros(filtros);setPainelFiltros(p=>p==='periodo'?null:'periodo');}}><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4m8-4v4M4 10h16"/></svg><span className="truncate" title={periodoRotulo}>{periodoRotulo}</span></button>
+      <button type="button" aria-expanded={painelFiltros==='adicionais'} aria-controls={`${idFiltros}-adicionais`} className="pi-diario-filtro-botao pi-filtros-sem-borda" onClick={e=>{setGatilhoFiltro(e.currentTarget);setEdicaoFiltros(filtros);setPainelFiltros(p=>p==='adicionais'?null:'adicionais');}}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M4 6h16M7 12h10m-7 6h4"/></svg>Filtros{quantidadeFiltrosAdicionais>0?` (${quantidadeFiltrosAdicionais})`:''}</button>
 
     </div>
-    {painelFiltros&&createPortal(<ModalEtapa titulo={painelFiltros==='periodo'?'Período das atividades':'Filtros de atividades'} contexto="Consulta de registros" estadoContextual="normal" larguraFormulario="registro" camada="edicao" ocupado={false} focoRetorno={gatilhoFiltro.current} onFechar={()=>setPainelFiltros(null)}><div className="pi-filtros-modal">
+    {painelFiltros&&createPortal(<ModalEtapa titulo={painelFiltros==='periodo'?'Período das atividades':'Filtros de atividades'} contexto="Consulta de registros" estadoContextual="normal" larguraFormulario="registro" camada="edicao" ocupado={false} focoRetorno={gatilhoFiltro} onFechar={()=>setPainelFiltros(null)}><div className="pi-filtros-modal">
     <div id={`${idFiltros}-periodo`} hidden={painelFiltros!=='periodo'} data-pi-filtros-diario className="pi-diario-filtros-expandidos">
       <label className="min-w-0 space-y-1 text-xs font-medium text-foreground/85">Data inicial
-        <CampoDataCivil className={campo} value={edicaoFiltros.dataInicio} onChange={e => { setEdicaoFiltros(v => ({ ...v, dataInicio: e.target.value })); }} />
+        <CampoDataCivil aria-label="Data inicial" className={campo} value={edicaoFiltros.dataInicio} onChange={e => { setEdicaoFiltros(v => ({ ...v, dataInicio: e.target.value })); }} />
       </label>
       <label className="min-w-0 space-y-1 text-xs font-medium text-foreground/85">Data final
-        <CampoDataCivil className={campo} value={edicaoFiltros.dataFim} onChange={e => { setEdicaoFiltros(v => ({ ...v, dataFim: e.target.value })); }} />
+        <CampoDataCivil aria-label="Data final" className={campo} value={edicaoFiltros.dataFim} onChange={e => { setEdicaoFiltros(v => ({ ...v, dataFim: e.target.value })); }} />
       </label>
     </div>
     <div id={`${idFiltros}-adicionais`} hidden={painelFiltros!=='adicionais'} data-pi-filtros-diario className="pi-diario-filtros-expandidos">
@@ -134,6 +134,7 @@ function ListaAtividadesVinculadas({ contratoId, entregavelId, somenteLeitura = 
       <label className="min-w-0 space-y-1 text-xs font-medium text-foreground/85">Comprovantes vinculados<select className={campo} value={edicaoFiltros.comEvidencias} onChange={e=>{setEdicaoFiltros(v=>({...v,comEvidencias:e.target.value as FiltroPresenca}));}}><option value="">Todos</option><option value="sim">Com comprovantes</option><option value="nao">Sem comprovantes</option></select></label>
       <label className="min-w-0 space-y-1 text-xs font-medium text-foreground/85">Contribuição física<select className={campo} value={edicaoFiltros.comExecucao} onChange={e=>{setEdicaoFiltros(v=>({...v,comExecucao:e.target.value as FiltroPresenca}));}}><option value="">Todas</option><option value="sim">Com contribuição declarada</option><option value="nao">Sem contribuição adicional</option></select></label>
     </div>
+    {painelFiltros==='periodo'&&edicaoFiltros.dataInicio&&edicaoFiltros.dataFim&&edicaoFiltros.dataInicio>edicaoFiltros.dataFim&&<p role="alert" className="text-xs text-error-text">A data inicial não pode ser posterior à data final.</p>}
     <div className="flex justify-end gap-2 pt-2"><button type="button" className="pi-link-contextual" onClick={()=>setEdicaoFiltros(v=>({...v,...(painelFiltros==='periodo'?{dataInicio:'',dataFim:''}:{tipo:'',etapaId:'',entregavelId:'',ocorrenciaId:'',responsavel:'',comEvidencias:'',comExecucao:''})}))}>Limpar</button><button type="button" data-pi-acao="primaria" className="rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-on-brand-green" disabled={Boolean(edicaoFiltros.dataInicio&&edicaoFiltros.dataFim&&edicaoFiltros.dataInicio>edicaoFiltros.dataFim)} onClick={()=>{setFiltros(v=>({...edicaoFiltros,status:v.status}));setPagina(1);setPainelFiltros(null);}}>Concluir</button></div></div></ModalEtapa>,document.body)}
     {intervaloInvalido && <p role="alert" className="text-xs text-error-text">A data inicial não pode ser posterior à data final.</p>}
     <div className="flex min-h-6 flex-wrap items-center justify-between gap-2 text-xs text-foreground/65"><span>{intervaloInvalido?'Intervalo inválido':`${total} ${total===1?'atividade encontrada':'atividades encontradas'}`}</span>{temFiltros&&<button type="button" onClick={limpar} className="pi-link-contextual font-medium">Limpar filtros</button>}</div>
@@ -143,7 +144,7 @@ function ListaAtividadesVinculadas({ contratoId, entregavelId, somenteLeitura = 
       : atividades.length === 0 ? <p className="py-4 text-sm text-foreground/65">Nenhuma atividade encontrada.</p>
       : <div data-pi-linha-tempo className="space-y-4">{agruparDiario(atividades,ordem).map(grupo=><section key={grupo.chave} aria-label={grupo.rotulo} className="space-y-2">
         <h4 className="text-xs font-semibold text-foreground/65">{grupo.rotulo}</h4>
-        <ol className="space-y-2">{grupo.itens.map(atividade=><li key={atividade.id} className="min-w-0">
+        <ol className="pi-lista-registros-contrato">{grupo.itens.map(atividade=><li key={atividade.id} className="min-w-0">
           <CartaoAtividade contratoId={contratoId} atividade={atividade} permissoes={permissoesDaLista} compacto diario onAbrirEntregavel={onAbrirEntregavel} onAbrirOcorrencia={onAbrirOcorrencia} dentroEntregavel={fixo} estadosEntregaveis={estadoPorEntregavel} etapasPorId={etapasPorId} onAtualizada={() => { void atualizar(); }} />
           {atividade.atividadeCompartilhadaId && <ProgressoAtividadeCompartilhada grupoId={atividade.atividadeCompartilhadaId} onAtualizada={() => { void atualizar(); }} />}
         </li>)}</ol></section>)}</div>}

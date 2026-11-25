@@ -138,7 +138,9 @@ describe('HU07-05 — responsáveis ativos (incluindo Administrador) sem concede
     const service = new EntregaveisService({} as never, {} as never, dataSource, {} as never, {} as never);
     await service.consultarResponsaveis();
     await service.consultarResponsaveis('gestor@empresa.test');
-    expect(findAndCount).toHaveBeenCalledTimes(2);
+    await service.consultarResponsaveis('------------------------------------');
+    expect(findAndCount).toHaveBeenCalledTimes(3);
+    expect((findAndCount.mock.calls[2]?.[0] as {where:unknown[]}|undefined)?.where).toHaveLength(2);
     const todas = findAndCount.mock.calls[0]?.[0] as { where: { ativo: boolean }; take: number };
     expect(todas.take).toBe(20);
     expect(todas.where).toEqual({ ativo: true });

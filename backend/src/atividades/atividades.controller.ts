@@ -9,6 +9,7 @@ import { IsUUID } from 'class-validator';
 
 class VincularComprovanteDto { @IsUUID() comprovanteId!: string; }
 import { CreateAtividadeDto } from './dto/create-atividade.dto.js';
+import { EditarReferenciasAtividadeDto } from './dto/referencias-atividade.dto.js';
 import { UpdateAtividadeDto } from './dto/update-atividade.dto.js';
 import { TransicaoAtividadeDto } from './dto/transicao-atividade.dto.js';
 
@@ -31,7 +32,7 @@ export class AtividadesController {
   }
 
   @Get('responsaveis')
-  @ExigirPoliticaOperacional('atividades:registrar', { tipo: 'contrato', parametro: 'contratoId' })
+  @ExigirPoliticaOperacional('atividades:listar', { tipo: 'contrato', parametro: 'contratoId' })
   responsaveis(@Param('contratoId') contratoId: string, @Query('busca') busca: string | undefined, @Req() req: RequisicaoAutorizada) {
     return this.atividades.consultarResponsaveis(contratoId, busca, req.usuarioDominio!);
   }
@@ -62,6 +63,12 @@ export class AtividadesController {
   desvincularComprovante(@Param('contratoId') contratoId:string,@Param('id') id:string,@Param('comprovanteId') comprovanteId:string,@Req() req:RequisicaoAutorizada){
     return this.comprovantes.desvincular(contratoId,id,comprovanteId,req.usuarioDominio!);
   }
+  @Patch(':id/referencias')
+  @ExigirPoliticaOperacional('atividades:editar',{tipo:'recurso',recurso:'atividade',parametro:'id',parametroContratoPai:'contratoId'})
+  editarReferencias(@Param('contratoId') c:string,@Param('id') id:string,@Body() dto:EditarReferenciasAtividadeDto,@Req() req:RequisicaoAutorizada){
+    return this.atividades.editarReferencias(c,id,dto,req.usuarioDominio!);
+  }
+
   @Patch(':id')
   @ExigirPoliticaOperacional('atividades:editar', {
     tipo: 'recurso', recurso: 'atividade', parametro: 'id', parametroContratoPai: 'contratoId',

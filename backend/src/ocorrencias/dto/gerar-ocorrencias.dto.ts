@@ -4,6 +4,7 @@ export class GerarOcorrenciasDto {
   @IsOptional()
   @IsBoolean()
   forcarRegeneracaoFuturas?: boolean;
+  @IsOptional() @IsBoolean() recuperarFaltantes?: boolean;
   @IsOptional() @IsInt() @Min(0) @Max(99) minimoAtividadesVerificadas?: number;
   @IsOptional() @IsInt() @Min(0) @Max(99) minimoEvidenciasVerificadas?: number;
   @IsOptional() @IsInt() @Min(0) @Max(99) minimoFotos?: number;

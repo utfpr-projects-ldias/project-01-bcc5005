@@ -14,7 +14,7 @@ const A = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const B = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const D = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const ID = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
-const ator = { id: 'admin-qa', perfil: PerfilUsuario.ADMINISTRADOR, nome: 'QA', email: 'qa@example.invalid' } as never;
+const ator = { id: 'admin-qa', perfil: PerfilUsuario.ADMINISTRADOR, nome: 'QA', email: 'qa@example.invalid', supertokensUserId:'qa' };
 
 type Medicao = { ocorrenciaId: string; quantidade: string };
 function montar(opts: { prim?: string | null; secundarias?: string[]; quantidade?: string | null; medicoes?: Medicao[] } = {}) {
@@ -32,6 +32,7 @@ function montar(opts: { prim?: string | null; secundarias?: string[]; quantidade
   let medicoes = [...(opts.medicoes ?? [])];
   const eventos: Array<{ dadosAnteriores?: Record<string, unknown>; dadosPosteriores?: Record<string, unknown> }> = [];
   const manager = {
+    getRepository: jest.fn(() => ({findOne:jest.fn(async()=>({...ator,ativo:true,bloqueioSessoesId:null}))})),
     findOne: jest.fn(async (entidade: unknown, opcoes?: { where?: { id?: string } }) => {
       if (entidade === AtividadeEntity) return atividade;
       if (entidade === Contrato) return { id: C, status: 'EM_EXECUCAO', arquivadoEm: null };
@@ -47,6 +48,7 @@ function montar(opts: { prim?: string | null; secundarias?: string[]; quantidade
       if (sql.includes('INSERT INTO atividade_ocorrencia_medicoes')) {
         medicoes.push({ ocorrenciaId: String(parametros?.[1]), quantidade: String(parametros?.[3]) }); return [];
       }
+      if (sql.includes('referencia_execucao IS NOT NULL')) return [];
       if (sql.includes('FROM atividade_ocorrencia_medicoes')) return medicoes.map(m => ({ ...m }));
       if (sql.includes('FROM ocorrencia_lancamentos')) return [{ total: '0' }];
       if (sql.includes('FROM atividades a')) return [{ registrada: '0', verificada: '0', verificadas: '0', pendentes: '0' }];
@@ -77,6 +79,12 @@ describe('R28 — medição, desvinculação e primária não alteram progresso 
     expect(c.eventos[0].dadosAnteriores?.medicoes).toHaveLength(2);
     expect(c.eventos[0].dadosPosteriores?.medicoes).toEqual([{ ocorrenciaId: B, quantidade: '3.000' }]);
     expect(c.manager.findOne).toHaveBeenCalledWith(Ocorrencia, expect.objectContaining({ where: { id: A }, lock: { mode: 'pessimistic_write' } }));
+  });
+  it('não reintroduz quantidade legada quando existem medições individuais', async()=>{
+    const c=montar({prim:A,secundarias:[A],medicoes:[{ocorrenciaId:A,quantidade:'2.000'}]});
+    await expect(c.service.update(C,ID,{quantidadeExecucao:'1.000'},ator)).rejects.toThrow('medições individuais');
+    expect(c.manager.save).not.toHaveBeenCalled();
+    expect(c.medicoes()).toHaveLength(1);
   });
   it('não transfere quantidade legada ao trocar somente a ocorrência principal', async () => {
     const c = montar({ prim: A, secundarias: [A, B], quantidade: '10.000' });

@@ -254,9 +254,20 @@ export class Ocorrencia {
   @Column({ name: 'modo_registro', type: 'varchar', length: 16, default: 'DESCRITIVO' })
   modoRegistro!: 'QUANTITATIVO' | 'DESCRITIVO';
 
+  /** Data da decisão formal, distinta da data em que o trabalho ocorreu. */
+  @Column({ name: 'concluida_em', type: 'timestamptz', nullable: true })
+  concluidaEm?: Date | null;
+
+  @Column({ name: 'concluida_por', type: 'uuid', nullable: true })
+  concluidaPor?: string | null;
+
   /** Snapshot da quantidade aprovada; histórico protegido de edições comuns. */
   @Column({ name: 'quantidade_aprovada', type: 'numeric', precision: 18, scale: 3, nullable: true })
   quantidadeAprovada!: string | null;
+
+  /** NULL: decisão anterior à identificação explícita da fonte. */
+  @Column({ name: 'origem_medicao_aprovada', type: 'varchar', length: 16, nullable: true })
+  origemMedicaoAprovada?: 'DECLARACAO' | 'REGISTROS' | null;
 
   /**
    * Observações operacionais da ocorrência.
