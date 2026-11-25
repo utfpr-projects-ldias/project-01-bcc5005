@@ -7,6 +7,8 @@ import { useListaContratos, useAcessoContrato } from '@/hooks/use-contratos';
 import { useEntregaveis } from '@/hooks/use-entregaveis';
 import { useEtapas } from '@/hooks/use-etapas';
 import { useOcorrencias } from '@/hooks/use-ocorrencias';
+import { useRepositorioConsultasOpcional } from '@/app/components/provedor-consultas';
+import { sincronizarEvidenciaCompartilhada } from '@/lib/sincronizar-evidencia-compartilhada';
 import { criarCompartilhada, type VinculoCompartilhado } from '@/lib/atividades-compartilhadas';
 
 const campo = 'w-full min-w-0 rounded-lg border border-brand-green/30 bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-green/30';
@@ -19,7 +21,7 @@ function EditorContrato({ contratoId, valor, onChange, nome }: {
   const entregaveis = useEntregaveis(contratoId);
   const etapas = useEtapas(contratoId);
   const ocorrencias = useOcorrencias(contratoId);
-  const permitido = Boolean(acesso.dados?.permissoes?.registrarAtividades && !acesso.erro);
+  const permitido = Boolean(acesso.dados?.permissoes?.registrarAtividades && acesso.dados?.permissoes?.compartilharAtividades && !acesso.erro);
   const podeVincularOcorrencia = Boolean(acesso.dados?.permissoes?.vincularAtividadesOcorrencia);
   const podeMedirOcorrencia = Boolean(acesso.dados?.permissoes?.registrarExecucaoOcorrencia);
   const etapasAbertas = new Set((etapas.dados??[]).filter(e=>!e.arquivadoEm && !e.conclusaoSolicitadaEm && !e.encerramentoSolicitadoEm && !['CONCLUIDA','CONCLUIDO_PARCIALMENTE','ENCERRADA'].includes(e.status)).map(e=>e.id));
@@ -78,6 +80,7 @@ export function ModalAtividadeCompartilhada({ contratoInicialId, onFechar, onSal
   const contratos = useMemo(() => (consulta.dados ?? []).filter(c => !c.arquivadoEm &&
     ['PLANEJAMENTO','EM_EXECUCAO','EM_ENCERRAMENTO'].includes(c.status)), [consulta.dados]);
   const [vinculos, setVinculos] = useState<VinculoCompartilhado[]>(() => [vazio(contratoInicialId)]);
+  const cache=useRepositorioConsultasOpcional();
   const [titulo, setTitulo] = useState('');
   const [descricao, setDescricao] = useState('');
   const [dataHora, setDataHora] = useState('');
@@ -99,6 +102,7 @@ export function ModalAtividadeCompartilhada({ contratoInicialId, onFechar, onSal
     try {
       await criarCompartilhada({ titulo: titulo.trim(), dataHora: new Date(dataHora).toISOString(),
         descricao: descricao.trim(), tipo, vinculos });
+      sincronizarEvidenciaCompartilhada(cache,contratoInicialId);
       try { await onSalvo?.(); } catch { /* cadastro confirmado não pode ser repetido por falha de atualização */ }
       onFechar();
     } catch (e) { setErro(e instanceof Error ? e.message : 'Não foi possível criar a atividade multicontrato.'); }

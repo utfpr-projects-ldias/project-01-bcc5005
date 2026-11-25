@@ -15,7 +15,7 @@ const indicadores: {filtro:Exclude<FiltroDashboard,'todos'>;titulo:string;icone:
   {filtro:'planejamento',titulo:'Em planejamento',icone:'planejamento',tom:'neutro'},
   {filtro:'encerramento',titulo:'Vigência a vencer',icone:'prazo',tom:'ambar'},
   {filtro:'atrasados',titulo:'Contratos com atraso',icone:'alerta',tom:'vermelho'},
-  {filtro:'concluidos',titulo:'Contratos concluídos',icone:'concluido',tom:'violeta'},
+  {filtro:'concluidos',titulo:'Contratos finalizados',icone:'concluido',tom:'violeta'},
   {filtro:'pendentes',titulo:'Entregáveis pendentes',icone:'pendente',tom:'neutro'},
   {filtro:'proximas',titulo:'Próximas obrigações',icone:'proximas',tom:'ambar'},
 ];

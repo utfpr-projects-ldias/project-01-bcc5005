@@ -228,10 +228,6 @@ export function PreviaContrato({ contratoId, fechar, foco, destinoInicial }: { c
         setEtapaSobreposta(evento.data.aberta);
         return;
       }
-      if (evento.data?.tipo === 'pi:evidencia-compartilhada-atualizada') {
-        sincronizarEvidenciaCompartilhada(cacheContrato);
-        return;
-      }
       if (evento.data?.tipo === 'pi:estrutura-operacional-atualizada') {
         cacheContrato?.invalidar(['contratos', 'elegibilidade-conclusao', contratoId]);
         cacheContrato?.invalidar(['execucao', contratoId]);

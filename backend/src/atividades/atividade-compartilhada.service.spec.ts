@@ -13,7 +13,7 @@ const grupoId = id(900);
 const usuario = {id:id(100), supertokensUserId:'st-user', nome:'Teste', email:'teste@example.com', perfil:PerfilUsuario.GESTOR} as const;
 
 describe('serviço de atividade compartilhada', () => {
-  const construir = (permitidos: Set<string>, estados: string[], visiveis?: Set<string>) => {
+  const construir = (permitidos: Set<string>, estados: string[], visiveis?: Set<string>, compartilhamento=permitidos) => {
     const registros = estados.map((status, index) => ({ id:id(index+1), contratoId:id(index+101),
       atividadeCompartilhadaId:grupoId, status, excluidaEm:null }));
     const manager = {
@@ -25,7 +25,7 @@ describe('serviço de atividade compartilhada', () => {
     const database = {transaction:jest.fn(async (f:(m:typeof manager)=>Promise<unknown>) => f(manager)),
       getRepository:jest.fn(() => ({find:jest.fn(async()=>registros)}))};
     const permitido = jest.fn(async (_ator:unknown, politica:{acao:string}, contratoId:string) =>
-      politica.acao === 'atividades:visualizar' ? (visiveis?.has(contratoId) ?? true) : permitidos.has(contratoId));
+      politica.acao === 'atividades:visualizar' ? (visiveis?.has(contratoId) ?? true) : politica.acao === 'atividades:compartilhar' ? compartilhamento.has(contratoId) : permitidos.has(contratoId));
     const acesso = {permitido, permitidoNaTransacao: (_m:unknown, a:unknown, p:{acao:string}, cid:string) => permitido(a,p,cid)};
     const atividades = { verificarNaTransacao:jest.fn(async (_m:unknown,cid:string) => {
       if(registros.some(x=>x.contratoId===cid)) for(const r of registros) if(['REGISTRADA','PENDENTE_CONCLUSAO'].includes(r.status)) r.status='VERIFICADA';
@@ -89,6 +89,16 @@ describe('serviço de atividade compartilhada', () => {
       vinculos:[{contratoId:id(101),entregavelIds:[id(501)]},{contratoId:id(102),entregavelIds:[id(502)]}]},usuario))
       .rejects.toBeInstanceOf(ForbiddenException);
     expect(atividades.criarNaTransacao).not.toHaveBeenCalled();
+  });
+  it('registrar não concede compartilhamento na origem nem no destino', async () => {
+    const autorizados=new Set([id(101),id(102)]);
+    for(const permitido of [id(101),id(102)]) {
+      const {service,atividades}=construir(autorizados,[],undefined,new Set([permitido]));
+      await expect(service.criar({titulo:'Vistoria',dataHora:'2026-11-14T12:00:00.000Z',descricao:'Visita técnica',tipo:'Inspeção',
+        vinculos:[{contratoId:id(101),entregavelIds:[id(501)]},{contratoId:id(102),entregavelIds:[id(502)]}]},usuario))
+        .rejects.toBeInstanceOf(ForbiddenException);
+      expect(atividades.criarNaTransacao).not.toHaveBeenCalled();
+    }
   });
   it('não inclui um novo destino sem autorização de registro', async () => {
     const {service,atividades}=construir(new Set([id(101)]),['REGISTRADA']);

@@ -58,15 +58,15 @@ export const CLASSES_ACAO_MENU: Record<IntencaoAcao, string> = {
 };
 
 /** Rótulo operacional único para lista, modal e tela de detalhe. */
-export function rotuloEstadoEntregavel(status?: string | null, arquivado?: boolean, reaberto?: boolean, regularizacaoSolicitada?: boolean): string {
+export function rotuloEstadoEntregavel(status?: string | null, arquivado?: boolean, reaberto?: boolean, regularizacaoSolicitada?: boolean, encerradoAdministrativamente?: boolean | null): string {
   if (arquivado) return 'Arquivado';
   if (regularizacaoSolicitada) return 'Pendente de regularização documental';
   if (status === 'PENDENTE_ENCERRAMENTO') return 'Pendente de encerramento';
   if (status === 'PENDENTE_CONCLUSAO_PARCIAL') return 'Pendente de conclusão parcial';
   if (status === 'PENDENTE_CONCLUSAO') return 'Pendente de conclusão';
   if (reaberto) return 'Em revisão';
-  if (status === 'CONCLUIDO_PARCIALMENTE') return 'Concluído parcialmente';
-  if (status === 'CONCLUIDO') return 'Concluído';
+  if (status === 'CONCLUIDO_PARCIALMENTE') return encerradoAdministrativamente ? 'Concluído parcialmente · Encerrado' : 'Concluído parcialmente';
+  if (status === 'CONCLUIDO') return encerradoAdministrativamente ? 'Concluído · Encerrado' : 'Concluído';
   if (status === 'FINALIZADO') return 'Encerrado';
   if (status === 'EM_ANDAMENTO') return 'Em andamento';
   return 'Não iniciado';

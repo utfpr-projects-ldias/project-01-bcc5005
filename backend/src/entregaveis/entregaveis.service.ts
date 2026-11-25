@@ -689,10 +689,13 @@ export class EntregaveisService implements OnModuleInit {
       const contextoAtivo = contratoAtivo && etapaAtiva && !e.arquivadoEm &&
         (contrato.status !== 'CONCLUIDO_PARCIALMENTE' || (regularizacao && !contrato.conclusaoSolicitadaEm));
       if (!contextoAtivo) impedimentos.push('O contrato, a etapa ou o entregável não permitem esta decisão no estado atual.');
-      const pendente = Boolean(e.regularizacaoDocumentalSolicitada || ['PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? ''));
+      const pendenteConclusao = Boolean(e.regularizacaoDocumentalSolicitada || ['PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL'].includes(e.statusExecucao ?? ''));
+      const encerramentoPendente = e.statusExecucao === 'PENDENTE_ENCERRAMENTO';
+      const pendente = pendenteConclusao || encerramentoPendente;
       const aberto = !pendente && !['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(e.statusExecucao ?? '');
-      if (pendente) impedimentos.push('Já existe uma solicitação aguardando decisão.');
-      if (!aberto && !regularizacao && !pendente) impedimentos.push('O entregável já possui uma decisão final.');
+      const abertoParaConclusao = !pendenteConclusao && !['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(e.statusExecucao ?? '');
+      if (pendenteConclusao) impedimentos.push('Já existe uma solicitação aguardando decisão.');
+      if (!abertoParaConclusao && !regularizacao && !pendenteConclusao) impedimentos.push('O entregável já possui uma decisão final.');
       if (!solicitar) impedimentos.push('Sua conta não possui permissão para solicitar conclusão.');
       const fisico = await aptidaoFisicaParaConclusao(m, e);
       if (!fisico.apto) impedimentos.push(fisico.motivo);
@@ -730,8 +733,8 @@ export class EntregaveisService implements OnModuleInit {
       const apto = contextoAtivo && fisico.apto && !atividadesPendentes && !descendentesPendentes;
       const encerramentoApto = contextoAtivo && !regularizacao;
       if (descendentesPendentes) impedimentos.push('Há registros aguardando decisão.');
-      const podeSolicitarConclusao = solicitar && apto && (aberto || (regularizacao && !pendente)) && documentacaoCompleta;
-      const podeSolicitarParcial = solicitar && apto && aberto && !documentacaoCompleta;
+      const podeSolicitarConclusao = solicitar && apto && (abertoParaConclusao || (regularizacao && !pendenteConclusao)) && documentacaoCompleta;
+      const podeSolicitarParcial = solicitar && apto && abertoParaConclusao && !documentacaoCompleta;
       const podeAprovar = aprovar && apto && (e.regularizacaoDocumentalSolicitada || e.statusExecucao === 'PENDENTE_CONCLUSAO' ? documentacaoCompleta : e.statusExecucao === 'PENDENTE_CONCLUSAO_PARCIAL' && !documentacaoCompleta);
       return { podeSolicitarConclusao, podeSolicitarParcial, podeAprovar: Boolean(podeAprovar),
         podeSolicitarEncerramento: solicitar && encerramentoApto && aberto,
@@ -749,7 +752,7 @@ export class EntregaveisService implements OnModuleInit {
       const e = await m.findOne(Entregavel, { where: { contratoId, id }, lock: { mode: 'pessimistic_write' } });
       if (!e || e.arquivadoEm) throw new NotFoundException('Entregável indisponível');
       const regularizacao = e.statusExecucao === 'CONCLUIDO_PARCIALMENTE';
-      if (e.regularizacaoDocumentalSolicitada || (!regularizacao && ['PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO','CONCLUIDO','FINALIZADO'].includes(e.statusExecucao ?? '')))
+      if (e.regularizacaoDocumentalSolicitada || (!regularizacao && ['PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','CONCLUIDO','FINALIZADO'].includes(e.statusExecucao ?? '')))
         throw new ConflictException('Já existe uma solicitação ou decisão final');
       await this.validarRegularizacao(m, e, regularizacao, contrato);
       const fisico = await aptidaoFisicaParaConclusao(m, e);
@@ -779,7 +782,7 @@ export class EntregaveisService implements OnModuleInit {
       await this.bloquearContrato(m, contratoId, true);
       const e = await m.findOne(Entregavel, { where: { contratoId, id }, lock: { mode: 'pessimistic_write' } });
       if (!e || e.arquivadoEm) throw new NotFoundException('Entregável indisponível');
-      if (['PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO','CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(e.statusExecucao ?? ''))
+      if (['PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(e.statusExecucao ?? ''))
         throw new ConflictException('Já existe uma solicitação ou decisão final');
       const etapa = await m.findOneBy(Etapa, { id: e.etapaId, contratoId });
       if (!etapa || etapa.arquivadoEm || etapa.conclusaoSolicitadaEm || etapa.encerramentoSolicitadoEm ||

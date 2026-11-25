@@ -30,10 +30,10 @@ export type OperacaoPermissao =
   'criarEtapas' | 'editarEtapas' | 'reordenarEtapas' | 'bloquearOrdemEtapas' | 'arquivarEtapas' | 'reativarEtapas' | 'reabrirEtapas' | 'reabrirEtapasEncerradas' | 'encerrarEtapas' | 'concluirEtapas' | 'excluirEtapasArquivadas' |
   'criarEntregaveis' | 'editarEntregaveis' | 'arquivarEntregaveis' | 'reativarEntregaveis' | 'reabrirEntregaveis' | 'concluirEntregaveis' | 'excluirEntregaveisArquivados' |
   'criarEvidencias' | 'editarEvidencias' | 'arquivarEvidencias' | 'reativarEvidencias' | 'reabrirEvidencias' | 'excluirEvidenciasArquivadas' |
-  'alterarObrigatoriedade' | 'enviarComprovantes' | 'verificarComprovantes' |
+  'alterarObrigatoriedade' | 'enviarComprovantes' | 'verificarComprovantes' | 'compartilharEvidencias' |
   'criarOcorrencias' | 'editarOcorrencias' | 'editarMetaOcorrencia' | 'vincularAtividadesOcorrencia' | 'vincularEvidenciasOcorrencia' | 'editarExigenciasOcorrencia' | 'editarPesoOcorrencia' | 'registrarExecucaoOcorrencia' | 'aprovarExecucaoManual' | 'corrigirExecucaoOcorrencia' | 'corrigirExecucaoAprovada' | 'bloquearExecucaoOcorrencia' | 'excluirExecucaoOcorrencia' | 'concluirOcorrencias' | 'reabrirOcorrencias' | 'configurarAgendaOcorrencias' | 'editarExecucaoFisica' | 'configurarPesos' |
   'criarMetasMarco' | 'editarMetasMarco' | 'vincularMetasMarco' | 'aprovarVinculosMetasMarco' |
-  'registrarAtividades' | 'editarAtividades' | 'verificarAtividades' | 'reabrirAtividades' | 'arquivarAtividades' | 'reativarAtividades' | 'excluirAtividadesArquivadas' |
+  'registrarAtividades' | 'editarAtividades' | 'compartilharAtividades' | 'verificarAtividades' | 'reabrirAtividades' | 'arquivarAtividades' | 'reativarAtividades' | 'excluirAtividadesArquivadas' |
   'editarContrato' | 'concluirContrato' | 'encerrarContrato' | 'reabrirContrato' | 'cancelarContrato' | 'reverterCancelamentoContrato' | 'suspenderContrato' | 'retomarContrato' | 'verificarDocumentos' | 'reabrirDocumentos' | 'verificarDocumentoPrincipal' | 'reabrirDocumentoPrincipal' | 'anexarDocumentos' | 'editarDocumentos' | 'arquivarDocumentos' | 'reativarDocumentos' | 'excluirDocumentosArquivados' | 'arquivarDocumentoPrincipal' | 'reativarDocumentoPrincipal' | 'excluirDocumentoPrincipal';
 export type PermissaoFuncionario = { contratoId: string; podeEditar: boolean;
   permissoesDetalhadas?: Partial<Record<OperacaoPermissao, boolean>> | null; permissoesEfetivas?: Partial<Record<OperacaoPermissao, boolean>> };
@@ -61,6 +61,7 @@ export const OPERACOES_CONTRATO: ReadonlyArray<{ chave: OperacaoPermissao; rotul
   { chave: 'vincularMetasMarco', rotulo: 'Solicitar vínculos com metas de Marco' },
   { chave: 'aprovarVinculosMetasMarco', rotulo: 'Aprovar ou rejeitar vínculos de Marco' },
   { chave: 'registrarAtividades', rotulo: 'Registrar atividades no diário' },
+  { chave: 'compartilharAtividades', rotulo: 'Compartilhar atividades entre contratos' },
   { chave: 'editarAtividades', rotulo: 'Editar atividades registradas' },
   { chave: 'verificarAtividades', rotulo: 'Verificar atividades (especial)' },
   { chave: 'reabrirAtividades', rotulo: 'Reabrir atividades verificadas (especial)' },
@@ -94,6 +95,7 @@ export const OPERACOES_CONTRATO: ReadonlyArray<{ chave: OperacaoPermissao; rotul
   { chave: 'alterarObrigatoriedade', rotulo: 'Alterar obrigatoriedade de evidências' },
   { chave: 'enviarComprovantes', rotulo: 'Enviar comprovantes' },
   { chave: 'verificarComprovantes', rotulo: 'Verificar comprovantes' },
+  { chave: 'compartilharEvidencias', rotulo: 'Compartilhar evidências entre entregáveis e contratos' },
   { chave: 'concluirContrato', rotulo: 'Aprovar conclusão ou encerramento solicitado' },
   { chave: 'encerrarContrato', rotulo: 'Solicitar encerramento administrativo com justificativa' },
   { chave: 'reabrirContrato', rotulo: 'Reabrir contrato concluído (especial)' },

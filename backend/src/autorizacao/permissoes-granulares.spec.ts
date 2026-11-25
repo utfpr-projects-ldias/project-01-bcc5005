@@ -248,3 +248,18 @@ test('edição padrão não permite arquivar, aprovar, reabrir ou corrigir execu
   expect(p.reabrirEntregaveis).toBe(false);
   expect(permissoesEfetivas('GESTOR', false, null).enviarComprovantes).toBe(false);
 });
+
+ test('compartilhamento exige delegação própria e não concede aprovação', () => {
+   for (const perfil of ['GESTOR','COLABORADOR']) {
+     const base=permissoesEfetivas(perfil,true,null);
+     expect(base.compartilharEvidencias).toBe(false);
+     expect(base.compartilharAtividades).toBe(false);
+     const delegado=permissoesEfetivas(perfil,false,{compartilharEvidencias:true,compartilharAtividades:true});
+     expect(delegado.compartilharEvidencias).toBe(true);
+     expect(delegado.compartilharAtividades).toBe(true);
+     expect(delegado.verificarComprovantes).toBe(false);
+     expect(delegado.verificarAtividades).toBe(false);
+   }
+   expect(permissoesEfetivas('ADMINISTRADOR',false,null).compartilharEvidencias).toBe(true);
+   expect(permissoesEfetivas('ADMINISTRADOR',false,null).compartilharAtividades).toBe(true);
+ });

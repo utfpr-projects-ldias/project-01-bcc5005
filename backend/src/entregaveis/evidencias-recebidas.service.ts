@@ -72,14 +72,16 @@ export class EvidenciasRecebidasService {
 
   /** A ACL do contrato de origem nunca concede acesso aos demais destinos. */
   private async permissaoDestino(m: EntityManager, contratoId: string, ator: UsuarioAutenticado) {
-    if (ator.perfil === PerfilUsuario.ADMINISTRADOR) return { enviar: true, criarOpcional: true };
+    if (ator.perfil === PerfilUsuario.ADMINISTRADOR) return { enviar: true, criarOpcional: true, compartilhar: true };
     const v = await m.getRepository(PermissaoContrato).findOneBy({ contratoId, usuarioId: ator.id });
-    if (!v) return { enviar: false, criarOpcional: false };
+    if (!v) return { enviar: false, criarOpcional: false, compartilhar: false };
     const p = permissoesEfetivas(ator.perfil, v.podeEditar, v.permissoesDetalhadas);
-    return { enviar: p.enviarComprovantes, criarOpcional: p.criarEvidencias && p.alterarObrigatoriedade };
+    return { enviar: p.enviarComprovantes, criarOpcional: p.criarEvidencias && p.alterarObrigatoriedade, compartilhar: p.compartilharEvidencias };
   }
   async listarDestinos(contratoId: string, entregavelId: string, ator: UsuarioAutenticado) {
     if (!await this.db.manager.findOneBy(Entregavel,{id:entregavelId,contratoId})) throw new NotFoundException('Entregável não encontrado');
+    const origem = await this.permissaoDestino(this.db.manager,contratoId,ator);
+    if (!origem.enviar || !origem.compartilhar) return [];
     const linhas: {contratoId:string;contrato:string;entregavelId:string;entregavel:string;esperadaId:string|null;tipo:string|null;descricao:string|null}[] = await this.db.manager.query(`
       SELECT c.id AS "contratoId",c.numero_contrato AS contrato,e.id AS "entregavelId",e.nome AS entregavel,
         ev.id AS "esperadaId",ev.tipo_evidencia AS tipo,ev.descricao
@@ -99,7 +101,7 @@ export class EvidenciasRecebidasService {
     for (const linha of linhas) {
       if (!permissoes.has(linha.contratoId)) permissoes.set(linha.contratoId,await this.permissaoDestino(this.db.manager,linha.contratoId,ator));
       const p=permissoes.get(linha.contratoId)!;
-      if (!p.enviar) continue;
+      if (!p.enviar || !p.compartilhar) continue;
       if (linha.esperadaId) saida.push(linha);
       if (p.criarOpcional && !opcionais.has(linha.entregavelId)) { opcionais.add(linha.entregavelId); saida.push({...linha,esperadaId:null,tipo:null,descricao:null}); }
     }
@@ -363,7 +365,7 @@ export class EvidenciasRecebidasService {
     return m.query(`SELECT ev.id AS "esperadaId",e.id AS "entregavelId",e.nome AS entregavel,c.id AS "contratoId",c.numero_contrato AS contrato
       FROM evidencias_esperadas ev JOIN entregaveis e ON e.id=ev.entregavel_id JOIN contratos c ON c.id=e.contrato_id
       JOIN etapas et ON et.id=e.etapa_id AND et.contrato_id=c.id
-      WHERE (ev.id=$1 OR ev.rascunho_envio->>'origemCompartilhadaId'=$1::text)
+      WHERE (ev.id=$1::uuid OR ev.rascunho_envio->>'origemCompartilhadaId'=($1::uuid)::text)
       AND ev.arquivado_em IS NULL AND e.arquivado_em IS NULL AND et.arquivado_em IS NULL AND c.arquivado_em IS NULL
       AND ($2::boolean OR EXISTS(SELECT 1 FROM permissoes_contrato p WHERE p.contrato_id=c.id AND p.usuario_id=$3) OR c.responsavel_interno_id=$3)
       ORDER BY c.numero_contrato,e.nome,ev.id`,[origemId,ator.perfil===PerfilUsuario.ADMINISTRADOR,ator.id]) as Promise<{esperadaId:string;entregavelId:string;entregavel:string;contratoId:string;contrato:string}[]>;
@@ -374,6 +376,7 @@ export class EvidenciasRecebidasService {
     const idsO = idsVinculadosEnvio(dto.ocorrenciasVinculadas);
     const idsA = idsVinculadosEnvio(dto.atividadesVinculadas);
     const destinos = destinosEvidencia(dto.destinosCompartilhados);
+    if (destinos.length) await exigirPermissaoTransacional(m,e.contratoId,ator,'compartilharEvidencias');
     if (q && (dto.percentualExecucao || dto.comprovaExecucaoId) || dto.percentualExecucao && dto.comprovaExecucaoId)
       throw new BadRequestException('Informe uma única modalidade de contribuição.');
     const verificar = async (alvo: Entregavel, quantidade: ReturnType<typeof normalizarVinculoQuantidade>, percentual: string | undefined, ocorrenciaId: string | undefined, ocorrencias: string[], atividades: string[], referencia?: string) => {
@@ -420,7 +423,7 @@ export class EvidenciasRecebidasService {
       const alvo = await m.findOneBy(Entregavel,{id:d.entregavelId});
       if (!alvo) throw new NotFoundException('Destino indisponível.');
       const permis = await this.permissaoDestino(m,alvo.contratoId,ator);
-      if (!permis.enviar || !d.esperadaId && !permis.criarOpcional) throw new ForbiddenException('Sem autorização no destino.');
+      if (!permis.enviar || !permis.compartilhar || !d.esperadaId && !permis.criarOpcional) throw new ForbiddenException('Sem autorização no destino.');
       const contrato = await m.findOneBy(Contrato,{id:alvo.contratoId});
       if (!contrato || contrato.arquivadoEm || contrato.conclusaoSolicitadaEm || !FASES_OPERACIONAIS_CONTRATO.includes(contrato.status)) throw new ConflictException('Destino indisponível.');
       if (d.esperadaId) {
@@ -445,7 +448,12 @@ export class EvidenciasRecebidasService {
       const destinos=destinosEvidencia(dto.rascunhoEnvio?.destinosCompartilhados);
       const alvos=destinos.length?await m.findBy(Entregavel,{id:In(destinos.map(d=>d.entregavelId))}):[];
       if(alvos.length!==destinos.length)throw new NotFoundException('Entregável vinculado não encontrado.');
-      for(const cid of [...new Set(alvos.map(e=>e.contratoId))].sort())await exigirPermissaoTransacional(m,cid,ator,'enviarComprovantes');
+      if (destinos.length) {
+        for (const cid of [...new Set([contratoId,...alvos.map(e=>e.contratoId)])].sort()) {
+          await exigirPermissaoTransacional(m,cid,ator,'compartilharEvidencias');
+          await exigirPermissaoTransacional(m,cid,ator,'enviarComprovantes');
+        }
+      }
       const contratosBloqueados=new Map<string,Contrato>();
       for(const cid of [...new Set([contratoId,...alvos.map(e=>e.contratoId)])].sort())contratosBloqueados.set(cid,await this.contratoEditavel(m,cid));
       const contrato=contratosBloqueados.get(contratoId)!;
@@ -706,7 +714,10 @@ export class EvidenciasRecebidasService {
         const alvos = destinos.length ? await m.findBy(Entregavel,{id:In(destinos.map(d=>d.entregavelId))}) : [];
         if (alvos.length!==destinos.length) throw new NotFoundException('Destino indisponível.');
         const contratosEnvio = [...new Set([contratoId,...alvos.map(e=>e.contratoId)])].sort();
-        for (const cid of contratosEnvio) await exigirPermissaoTransacional(m,cid,ator,'enviarComprovantes');
+        for (const cid of contratosEnvio) {
+          await exigirPermissaoTransacional(m,cid,ator,'enviarComprovantes');
+          if (destinos.length) await exigirPermissaoTransacional(m,cid,ator,'compartilharEvidencias');
+        }
         const contratosBloqueados = new Map<string,Contrato>();
         for (const cid of contratosEnvio) contratosBloqueados.set(cid,await this.contratoEditavel(m,cid));
         const anterior = await recuperar(m);
@@ -803,7 +814,7 @@ export class EvidenciasRecebidasService {
           if (!e) throw new NotFoundException('Destino indisponível.');
           this.exigirRegularizacao(contratosBloqueados.get(e.contratoId)!,e);
           const p = await this.permissaoDestino(m,e.contratoId,ator);
-          if (!p.enviar) throw new ForbiddenException('Sem autorização no contrato de destino.');
+          if (!p.enviar || !p.compartilhar) throw new ForbiddenException('Sem autorização para compartilhar no contrato de destino.');
           if (e.statusExecucao==='CONCLUIDO_PARCIALMENTE') throw new ConflictException('Regularize a documentação no próprio entregável parcialmente concluído.');
           await this.etapaAtiva(m,e);
           const requisitos=m.getRepository(EvidenciaEsperada);

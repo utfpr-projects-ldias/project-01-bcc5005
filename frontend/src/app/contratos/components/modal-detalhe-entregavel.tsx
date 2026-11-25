@@ -1,5 +1,5 @@
 'use client';
-import { BotaoExcluirModal, BotaoEditarModal, BotaoAcaoModal } from '@/app/components/botoes-modal';
+import { BotaoExcluirModal, BotaoEditarModal, BotaoAcaoModal, BotaoArquivarModal } from '@/app/components/botoes-modal';
 import { solicitarNavegacaoInterna } from './navegacao-interna';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
@@ -175,7 +175,7 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, vigencia, entregav
       await transicaoAdministrativaEntregavel(contratoId, entregavelId, acao,
         acao === 'solicitar-encerramento' ? motivoEncerramento.trim() : undefined);
       setConfirmarEncerramento(false); setDialogoSolicitacao(null); setMotivoEncerramento('');
-      toastSucesso(acao === 'aprovar-encerramento' ? 'Entregável finalizado sem alterar o avanço físico.' : 'Solicitação registrada. Aguarda aprovação.', acao === 'aprovar-encerramento' ? 'Encerramento aprovado' : acao === 'solicitar-conclusao-parcial' ? 'Conclusão parcial solicitada' : acao === 'solicitar-encerramento' ? 'Encerramento solicitado' : regularizacao ? 'Regularização solicitada' : 'Conclusão solicitada');
+      toastSucesso(acao === 'aprovar-encerramento' ? 'Entregável finalizado sem alterar o avanço físico.' : acao === 'solicitar-conclusao' && item?.statusExecucao === 'PENDENTE_ENCERRAMENTO' ? 'O pedido de encerramento foi convertido em solicitação de conclusão.' : acao === 'solicitar-conclusao-parcial' && item?.statusExecucao === 'PENDENTE_ENCERRAMENTO' ? 'O pedido de encerramento foi convertido em solicitação de conclusão parcial.' : 'Solicitação registrada. Aguarda aprovação.', acao === 'aprovar-encerramento' ? 'Encerramento aprovado' : acao === 'solicitar-conclusao-parcial' ? 'Conclusão parcial solicitada' : acao === 'solicitar-encerramento' ? 'Encerramento solicitado' : regularizacao ? 'Regularização solicitada' : 'Conclusão solicitada');
       await atualizarDecisoes();
     } catch (erro) {setErroConclusao(erro instanceof Error ? erro.message : 'Não foi possível alterar a situação do entregável.');}
     finally {setSalvando(false);}
@@ -211,7 +211,7 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, vigencia, entregav
     retornoEsquerda={interno || !retornoContextual} formularioLongo={editando && !interno}
     etiquetaNoContexto
     atrasado={item?.atrasado} finalizadoComAtraso={item?.finalizadoComAtraso}
-    etiqueta={item ? rotuloEstadoEntregavel(item.statusExecucao, Boolean(item.arquivadoEm), Boolean(item.reabertoEm), Boolean(item.regularizacaoDocumentalSolicitada)) : undefined}
+    etiqueta={item ? rotuloEstadoEntregavel(item.statusExecucao, Boolean(item.arquivadoEm), Boolean(item.reabertoEm), Boolean(item.regularizacaoDocumentalSolicitada), Boolean(item.motivoFinalizacao)) : undefined}
     identidadeEntregavel
     arquivado={Boolean(item?.arquivadoEm)} revisao={Boolean(item?.reabertoEm && !item?.arquivadoEm && !pendenteDecisao)} concluido={!item?.arquivadoEm && !item?.reabertoEm && !editando && item?.statusExecucao === 'CONCLUIDO'} estadoContextual={estadoDoObjeto({objeto:'entregavel',status:item?.statusExecucao,arquivado:Boolean(item?.arquivadoEm),reaberto:Boolean(item?.reabertoEm),pendenteConclusao:Boolean(item?.regularizacaoDocumentalSolicitada)})}
 
@@ -231,7 +231,14 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, vigencia, entregav
           onClick={() => (item.regularizacaoDocumentalSolicitada || ['PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL'].includes(item.statusExecucao ?? '')) ? setConfirmarConclusao(true) : void transicionar('aprovar-encerramento')}
           className="rounded-lg border border-green-600/60 bg-green-600/20 px-3 py-2 text-xs font-semibold text-green-800 hover:bg-green-600/30 dark:text-green-200 disabled:opacity-35">Aprovar</button>
         {permissoes?.concluirEntregaveis && item.statusExecucao !== 'PENDENTE_ENCERRAMENTO' && !podeConcluir && <button type="button" onClick={()=>setDialogoSolicitacao('impedimentos')} className="text-xs underline text-foreground/75">Ver impedimentos</button>}
-      </div> : <MenuAcoesObjeto rotulo={item.arquivadoEm ? 'Reativar' : ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(item.statusExecucao ?? '') ? 'Reabrir' : 'Fechar'} disabled={salvando}
+        {item.statusExecucao === 'PENDENTE_ENCERRAMENTO' && permissoes?.editarEntregaveis && <div className="ml-2 flex flex-wrap items-center gap-2">
+          {podeSolicitarConclusao && <button type="button" disabled={salvando} onClick={() => void transicionar('solicitar-conclusao')} className="rounded-lg border border-violet-500/50 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-500/20 dark:text-violet-200 disabled:opacity-35">Solicitar conclusão</button>}
+          {podeSolicitarParcial && <button type="button" disabled={salvando} onClick={() => {setErroConclusao('');setDialogoSolicitacao('parcial');}} className="rounded-lg border border-violet-500/50 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-500/20 dark:text-violet-200 disabled:opacity-35">Solicitar conclusão parcial</button>}
+        </div>}
+      </div> : !item.arquivadoEm && !item.reabertoEm && ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(item.statusExecucao ?? '') ? <>
+        {!bloqueioEdicao && permissoes?.reabrirEntregaveis && onReabrir && <MenuAcoesObjeto rotulo="Reabrir" disabled={salvando} acaoDireta={onReabrir}/>}
+        {!bloqueioEdicao && podeArquivar && onArquivar && <BotaoArquivarModal rotulo="Arquivar entregável" disabled={salvando} onClick={onArquivar}/>}
+      </> : <MenuAcoesObjeto rotulo={item.arquivadoEm ? 'Reativar' : ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(item.statusExecucao ?? '') ? 'Reabrir' : 'Fechar'} disabled={salvando}
         pendenteConclusao={['PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL'].includes(item.statusExecucao ?? '')}
         acaoDireta={item.arquivadoEm && permissoes?.reativarEntregaveis ? onReativar
           : !podeArquivar && !item.arquivadoEm && !item.reabertoEm && ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(item.statusExecucao ?? '') && permissoes?.reabrirEntregaveis && !bloqueioEdicao ? onReabrir : undefined}>

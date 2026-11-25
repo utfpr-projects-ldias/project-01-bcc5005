@@ -549,3 +549,18 @@ test('filtros de situação por aba, tipos independentes e limpeza conjunta', ()
   expect(within(screen.getByRole('combobox',{name:'Situação do entregável'})).getByRole('option',{name:'Em revisão'})).toBeInTheDocument();
   expect(screen.getByRole('button',{name:'Entrega revista'})).toBeInTheDocument();
 });
+
+
+test('entregável finalizado tem reabertura direta e arquivamento separado', async () => {
+  const fechado: Entregavel = {...e, statusExecucao:'CONCLUIDO'};
+  consultarDetalhe.mockReturnValue({dados:fechado,carregando:false,atualizar:jest.fn()});
+  render(<EntregaveisDaEtapa {...props} dados={[fechado]} podeArquivar permissoes={{reabrirEntregaveis:true,arquivarEntregaveis:true} as never}/>);
+  fireEvent.click(screen.getByRole('tab',{name:'Entregáveis finalizados'}));
+  const detalhe = within(await abrirDetalheAtivo());
+  expect(detalhe.getByRole('button',{name:'Reabrir'})).not.toHaveAttribute('aria-haspopup');
+  const arquivo = detalhe.getByRole('button',{name:'Arquivar entregável'});
+  expect(arquivo).toHaveAttribute('data-pi-arquivar-modal');
+  fireEvent.click(arquivo);
+  expect(screen.getByRole('dialog',{name:'Arquivar entregável?'})).toBeInTheDocument();
+  expect(arquivarEntregavel).not.toHaveBeenCalled();
+});

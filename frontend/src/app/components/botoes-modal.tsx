@@ -33,3 +33,11 @@ export function BotaoExcluirModal({ rotulo, className = '', ...props }: Omit<But
     <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg>
   </button>;
 }
+
+/** Arquivamento independente do menu de reabertura; preserva confirmação e autorização do chamador. */
+export function BotaoArquivarModal({ rotulo, className = '', ...props }: Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'type' | 'children'> & { rotulo: string }) {
+  return <button {...props} type="button" aria-label={rotulo} title={rotulo} data-pi-arquivar-modal data-pi-intencao="arquivar"
+    className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-40 ${className}`}>
+    <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v11h14V9M10 13h4"/></svg>
+  </button>;
+}

@@ -1,4 +1,6 @@
 'use client';
+
+import { CampoBuscaSugestoes } from '@/app/components/campo-busca-sugestoes';
 import { MetricasCartaoOcorrencia, PesoOcorrencia } from '@/app/contratos/components/agenda-contrato';
 import { CampoPercentual } from '@/app/components/campo-percentual';
 import { CampoDataCivil } from '@/app/components/campo-data-civil';
@@ -24,7 +26,6 @@ import { consultarAtividade, editarAtividadeApi, listarAtividadesVinculaveis, tr
 import { estadoTemporal, diaLocalBrasil } from '@/lib/estado-temporal';
 import { useRepositorioConsultasOpcional } from '@/app/components/provedor-consultas';
 import { sincronizarEvidenciaCompartilhada } from '@/lib/sincronizar-evidencia-compartilhada';
-import { CampoBuscaSugestoes } from '@/app/components/campo-busca-sugestoes';
 import { useProgresso } from '@/hooks/use-progresso';
 import { SeletorEntregavel } from './seletor-entregavel';
 import { CalendarioOcorrencias } from './calendario-ocorrencias';
@@ -972,22 +973,26 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, regulari
     {detalhe && mostrarVincular && <ModalEtapa titulo="Vincular atividade" contexto={tituloApresentacao(detalhe, periodos[detalhe.entregavelId])}
       estadoContextual="normal" larguraFormulario="registro" camada="edicao" estreito ocupado={ocupado}
       onFechar={() => { if (!ocupado) {setMostrarVincular(false); setErroVinculo('');} }}>
-      <div className="space-y-4">
-        <p className="text-sm text-foreground/70">Selecione uma atividade já registrada neste entregável. A vinculação não conclui a ocorrência nem duplica quantidades.</p>
-        <div className="min-w-0">
-          <p className="mb-2 text-xs font-semibold">Pesquisar atividade</p>
-          <CampoBuscaSugestoes contextual rotulo="Pesquisar atividade" valor={buscaVinculo} placeholder="Digite o título da atividade..." onChange={valor=>{
-            setBuscaVinculo(valor);
-            const encontrada=atividadesDisponiveis.find(a=>`${a.titulo} · ${a.id.slice(0,8)}`===valor);
-            setAtividadeParaVincular(encontrada?.id ?? '');
-          }} opcoes={atividadesDisponiveis.filter(a=>!detalhe.atividades?.some(v=>v.id===a.id)).map(a=>`${a.titulo} · ${a.id.slice(0,8)}`)} maximo={5} />
-          {consultandoVinculos && <p role="status" className="mt-2 text-xs text-foreground/70">Consultando atividades...</p>}
-          {!consultandoVinculos && atividadesDisponiveis.length === 0 && !erroVinculo && <p className="mt-2 text-xs text-foreground/70">Nenhuma atividade registrada disponível neste entregável.</p>}
-          {atividadeParaVincular && <p className="mt-3 rounded-lg border border-current/25 bg-current/[0.06] p-2 text-xs font-semibold">✓ Atividade selecionada</p>}
+      <div className="space-y-3 text-sm">
+        <p className="text-foreground/75">Selecione uma atividade já registrada neste entregável. A vinculação não conclui a ocorrência nem duplica quantidades.</p>
+        <label className="block text-sm font-medium">Pesquisar atividade
+          <div className="relative mt-1">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/55"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg>
+            <input className="w-full min-w-0 rounded-lg border border-current/30 bg-background py-2 pl-9 pr-3 text-sm" type="search" maxLength={120}
+              placeholder="Digite o título da atividade..." value={buscaVinculo} onChange={e => { setBuscaVinculo(e.target.value); setAtividadeParaVincular(''); }} />
+          </div>
+        </label>
+        <div className="max-h-48 space-y-1 overflow-auto rounded-lg border border-current/25 p-2" role="radiogroup" aria-label="Atividades disponíveis">
+          {atividadesDisponiveis.filter(a=>!detalhe.atividades?.some(v=>v.id===a.id)).filter(a=>`${a.titulo} ${a.tipo??''}`.toLocaleLowerCase('pt-BR').includes(buscaVinculo.trim().toLocaleLowerCase('pt-BR'))).map(a => <label key={a.id} className="flex min-w-0 cursor-pointer items-start gap-3 rounded-lg p-2 hover:bg-current/10">
+            <input type="radio" name="atividade-ocorrencia" checked={atividadeParaVincular === a.id} onChange={() => setAtividadeParaVincular(a.id)} />
+            <span className="min-w-0 flex-1"><strong className="block truncate" title={a.titulo}>{a.titulo}</strong><span className="text-xs text-foreground/70">{a.tipo || 'Atividade registrada'}</span></span>
+          </label>)}
+          {consultandoVinculos && <p role="status" className="p-2 text-xs text-foreground/70">Consultando atividades...</p>}
+          {!consultandoVinculos && atividadesDisponiveis.filter(a=>!detalhe.atividades?.some(v=>v.id===a.id)).filter(a=>`${a.titulo} ${a.tipo??''}`.toLocaleLowerCase('pt-BR').includes(buscaVinculo.trim().toLocaleLowerCase('pt-BR'))).length === 0 && !erroVinculo && <p className="p-2 text-xs text-foreground/70">Nenhuma atividade registrada disponível neste entregável.</p>}
         </div>
         {erroVinculo && <p role="alert" className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-error-text">{erroVinculo}</p>}
-        <div className="flex justify-end gap-2 border-t border-current/15 pt-3">
-          <button type="button" className="rounded-lg border border-red-500/60 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-500/20 focus-visible:outline-2 focus-visible:outline-red-400 dark:text-red-300 disabled:opacity-50" disabled={ocupado} onClick={()=>setMostrarVincular(false)}>Cancelar</button>
+        <div className="flex flex-wrap justify-end gap-2 border-t border-current/15 pt-3">
+          <button type="button" onClick={()=>setMostrarVincular(false)} disabled={ocupado} className="rounded-lg border border-current/25 px-4 py-2 text-sm font-semibold text-foreground hover:bg-current/10">Cancelar</button>
           <button type="button" data-pi-acao="primaria" className="pi-ocorrencia-confirmar-vinculo" disabled={ocupado || !atividadeParaVincular || !podeVincularAtividade} onClick={()=>void confirmarVinculo()}>{ocupado?'Vinculando...':'Confirmar vínculo'}</button>
         </div>
       </div>

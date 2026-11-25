@@ -3,7 +3,7 @@ import { EtiquetaAtraso } from '@/app/components/etiqueta-atraso';
 
 import type { EstadoContextual } from '@/lib/estado-visivel-contrato';
 import { contextoDaDecisao, coresDecisao } from '@/lib/cores-decisoes';
-import { useEffect, useLayoutEffect, useId, useRef, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 
 export type OrigemCadastroRegistro = 'MANUAL'|'ATIVIDADE'|'EVIDENCIA'|'OCORRENCIA';
 export type NavegacaoCadastroRegistro = { ativa: OrigemCadastroRegistro; opcoes: Record<OrigemCadastroRegistro, boolean>; selecionar: (origem: OrigemCadastroRegistro) => void };
@@ -13,6 +13,7 @@ import { useCamadaInterativa } from '@/lib/camadas-interativas';
 import { bloquearRolagemDocumento } from '@/lib/bloqueio-rolagem-modal';
 import { MenuAcoesObjeto } from '@/app/components/menu-acoes-objeto';
 import { rotuloCodigoPublico } from '@/lib/codigos-publicos';
+import { ConfirmacaoSimples } from '@/app/components/confirmacao-simples';
 
 /** Edição/criação em sobreposição: sem rolagem para o rodapé, foco contido e retorno ao gatilho. */
 export function ModalEtapa({ titulo, ocupado, onFechar, focoRetorno, contexto = 'Planejamento do contrato', rotuloFechar = 'Fechar edição da etapa', textoFechar = 'Fechar ×', camada = 'principal', bloqueadoPorSubmodal = false, neutro = false, compacto = false, estreito = false, larguraAmpla = false, retornoEsquerda = false, mostrarXComVoltar = false, somenteIconeFechar = true, ocultarFechar = false, alturaEstavel = false, formularioLongo = false, formularioHorizontal = false, cabecalhoUmaLinha = false, concluido = false, arquivado = false, revisao = false, estadoContextual = 'normal', acoes, acoesComoMenu = false, rotuloMenuAcoes = 'Fechar', codigoPublico, etiqueta, etiquetaNoContexto = false, atrasado, finalizadoComAtraso, identidadeEntregavel = false, interno = false, cabecalhoContextual = false, larguraFormulario, larguraDetalhe = false, consultaRegistros = false, navegacaoCadastro, ancora, children }: {
@@ -27,6 +28,7 @@ export function ModalEtapa({ titulo, ocupado, onFechar, focoRetorno, contexto = 
   const cadastroAlterado = useRef(false);
   const fecharRef = useRef<HTMLButtonElement>(null);
   const bloqueioInicial = useRef(bloqueadoPorSubmodal);
+  const [confirmarTrocaOrigem, setConfirmarTrocaOrigem] = useState<OrigemCadastroRegistro | null>(null);
   useCamadaInterativa(true, () => painel.current, () => { if (!ocupado && !bloqueadoPorSubmodal) onFechar(); }, interno ? 60 : camada === 'edicao' ? 150 : camada === 'evidencia' ? 130 : camada === 'aninhada' ? 115 : 100);
   useEffect(() => {
     if (interno) return;
@@ -153,6 +155,7 @@ export function ModalEtapa({ titulo, ocupado, onFechar, focoRetorno, contexto = 
   const hierarquia = Boolean((retornoEsquerda && (identidadeEntregavel || interno || ancora)) || (larguraDetalhe && etiquetaNoContexto));
   const etiquetaSituacao = etiqueta && <span className={`max-w-full rounded-full border px-2 py-0.5 text-xs font-semibold ${corTitulo} ${corConclusao}`}>{etiqueta}</span>;
   const etiquetaPrazo = <EtiquetaAtraso atrasado={atrasado} finalizadoComAtraso={finalizadoComAtraso}/>;
+  const situacoesHierarquia = hierarquia && (etiqueta || atrasado || finalizadoComAtraso) ? <div className="pi-header-situacoes max-w-full">{etiquetaSituacao}{etiquetaPrazo}</div> : null;
   const cabecalho = (
       <header data-pi-cabecalho-hierarquia={hierarquia || undefined} data-pi-cabecalho-contextual={cabecalhoContextual || undefined} className={`flex shrink-0 items-center justify-between gap-2 border-b ${interno ? "px-0 py-3" : "px-3 py-3 sm:px-5"} ${cabecalhoUmaLinha ? 'flex-wrap sm:flex-nowrap' : 'flex-wrap'} ${corConclusao}`}>
         {retornoEsquerda && <button ref={fecharRef} type="button" onClick={fechar} disabled={ocupado}
@@ -161,9 +164,9 @@ export function ModalEtapa({ titulo, ocupado, onFechar, focoRetorno, contexto = 
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><path d="m14 6-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>}
         <div className="min-w-0 flex-1 pi-header-identidade"><div className="flex min-w-0 flex-wrap items-center justify-start gap-2 pi-header-contexto">{contextoExibido && <p title={contextoExibido} className={`min-w-0 truncate text-[11px] font-semibold uppercase tracking-wider text-foreground/60 ${cabecalhoUmaLinha ? 'whitespace-nowrap' : ''}`}>{contextoExibido}</p>}
-          {!hierarquia && etiquetaNoContexto && etiqueta && <span className={`max-w-[145px] shrink-0 truncate whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold ${corTitulo} ${corConclusao}`}>{etiqueta}</span>}{!hierarquia && etiquetaPrazo}</div>
+          {!hierarquia && etiquetaNoContexto && etiqueta && <span className={`max-w-[145px] shrink-0 truncate whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold ${corTitulo} ${corConclusao}`}>{etiqueta}</span>}{!hierarquia && etiquetaPrazo}{etiquetaNoContexto && situacoesHierarquia}</div>
           <div className="mt-0.5 flex min-w-0 items-baseline gap-2 pi-header-titulo"><h2 id={tituloId} tabIndex={-1} data-pi-foco-inicial title={tituloExibido} className={`min-w-0 text-lg font-semibold leading-snug ${corTitulo} ${!hierarquia && (cabecalhoUmaLinha || camada === 'evidencia') ? 'block truncate whitespace-nowrap' : 'line-clamp-2 break-words [overflow-wrap:anywhere]'}`}>{tituloExibido}</h2>{codigoPublico != null && <span className="shrink-0 font-mono text-xs text-foreground/60">{rotuloCodigoPublico(codigoPublico)}</span>}{!hierarquia && !etiquetaNoContexto && etiqueta && <span className={`max-w-[170px] shrink-0 truncate whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold ${corTitulo} ${corConclusao}`}>{etiqueta}</span>}</div>
-          {hierarquia && (etiqueta || atrasado || finalizadoComAtraso) && <div className="pi-header-situacoes">{etiquetaSituacao}{etiquetaPrazo}</div>}
+          {!etiquetaNoContexto && situacoesHierarquia}
         </div>
         <div className={`pi-header-acoes flex shrink-0 items-center justify-end gap-1 sm:gap-2 ${cabecalhoUmaLinha ? 'flex-wrap sm:flex-nowrap' : 'flex-wrap'}`}>
 
@@ -191,9 +194,10 @@ export function ModalEtapa({ titulo, ocupado, onFechar, focoRetorno, contexto = 
       style={{ ...(larguraExplicita ? { width: `min(100%, ${larguraExplicita}px)`, maxWidth: `${larguraExplicita}px` } : {}), maxHeight: 'calc(100dvh - 24px)', minHeight: 0, ...(navegacaoCadastro ? { height: 'min(88dvh, 850px)', maxHeight: 'min(88dvh, 850px)' } : formularioLongo && !larguraFormulario ? { height: 'min(88dvh, 850px)' } : {}) }}
       className={`flex w-full ${larguraPainel} ${alturaPainel} min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border ${corConclusao} bg-background text-foreground shadow-[0_18px_65px_rgba(0,0,0,0.3)] ${bloqueadoPorSubmodal ? 'pointer-events-none' : ''}`}>
       {cabecalho}
-      {navegacaoCadastro && <nav className="pi-nav-cadastro-registro" aria-label="Tipo de registro">{(Object.keys(rotulosRegistro) as OrigemCadastroRegistro[]).map(origem => <button type="button" key={origem} aria-pressed={navegacaoCadastro.ativa===origem} disabled={ocupado||!navegacaoCadastro.opcoes[origem]} onClick={()=>{if(origem===navegacaoCadastro.ativa)return;if(cadastroAlterado.current&&!window.confirm('Descartar o preenchimento atual e trocar o tipo de registro?'))return;navegacaoCadastro.selecionar(origem);}}>{rotulosRegistro[origem]}</button>)}</nav>}
+      {navegacaoCadastro && <nav className="pi-nav-cadastro-registro" aria-label="Tipo de registro">{(Object.keys(rotulosRegistro) as OrigemCadastroRegistro[]).map(origem => <button type="button" key={origem} aria-pressed={navegacaoCadastro.ativa===origem} disabled={ocupado||!navegacaoCadastro.opcoes[origem]} onClick={()=>{if(origem===navegacaoCadastro.ativa)return;if(cadastroAlterado.current){setConfirmarTrocaOrigem(origem);return;}navegacaoCadastro.selecionar(origem);}}>{rotulosRegistro[origem]}</button>)}</nav>}
       <div data-tec08-corpo-modal className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4" onChangeCapture={()=>{if(navegacaoCadastro)cadastroAlterado.current=true;}} onClickCapture={ev=>{if(navegacaoCadastro&&ev.target instanceof Element&&ev.target.closest('button, [role=option]'))cadastroAlterado.current=true;}}>{children}</div>
     </div>
   </div>;
-  return ancora && typeof document !== "undefined" ? createPortal(janela, document.body) : janela;
+  const conteudo = <>{janela}{confirmarTrocaOrigem && <ConfirmacaoSimples titulo="Descartar o preenchimento atual?" descricao="Ao trocar o tipo de registro, o preenchimento atual será descartado." confirmar="Trocar tipo de registro" descarte onCancelar={() => setConfirmarTrocaOrigem(null)} onConfirmar={() => { const destino = confirmarTrocaOrigem; setConfirmarTrocaOrigem(null); cadastroAlterado.current = false; if (destino) navegacaoCadastro?.selecionar(destino); }} />}</>;
+  return ancora && typeof document !== "undefined" ? createPortal(conteudo, document.body) : conteudo;
 }

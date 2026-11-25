@@ -16,9 +16,9 @@ import { contarAprovacoes } from './resumo-compartilhado.js';
 import type { CreateAtividadeDto } from './dto/create-atividade.dto.js';
 import { AprovarCompartilhadaDto, CriarAtividadeCompartilhadaDto, AdicionarContratosAtividadeDto, EditarMetadadosCompartilhadosDto } from './dto/atividade-compartilhada.dto.js';
 
-const politica = (acao: 'atividades:registrar' | 'atividades:visualizar' | 'atividades:verificar' | 'atividades:editar') => ({
+const politica = (acao: 'atividades:registrar' | 'atividades:compartilhar' | 'atividades:visualizar' | 'atividades:verificar' | 'atividades:editar') => ({
   acao,
-  escopoOperacional: acao === 'atividades:registrar'
+  escopoOperacional: acao === 'atividades:registrar' || acao === 'atividades:compartilhar'
     ? { tipo: 'contrato' as const, parametro: 'contratoId' }
     : { tipo: 'recurso' as const, recurso: 'atividade' as const, parametro: 'id' },
 });
@@ -30,7 +30,7 @@ export class AtividadeCompartilhadaService {
     private readonly auditoria: AuditoriaService,
     private readonly atividades: AtividadesService) {}
 
-  private async pode(ator: UsuarioAutenticado, acao: 'atividades:registrar' | 'atividades:visualizar' | 'atividades:verificar' | 'atividades:editar', contratoId: string, manager?: EntityManager) {
+  private async pode(ator: UsuarioAutenticado, acao: 'atividades:registrar' | 'atividades:compartilhar' | 'atividades:visualizar' | 'atividades:verificar' | 'atividades:editar', contratoId: string, manager?: EntityManager) {
     return manager ? this.acesso.permitidoNaTransacao(manager,ator,politica(acao),contratoId) : this.acesso.permitido(ator, politica(acao), contratoId);
   }
 
@@ -42,8 +42,9 @@ export class AtividadeCompartilhadaService {
     return this.database.transaction(async manager => {
       // Autorização em TODOS os contratos antes de criar qualquer atividade.
       for (const vinculo of vinculos) {
-        if (!await this.pode(ator, 'atividades:registrar', vinculo.contratoId, manager))
-          throw new ForbiddenException('Sem autorização para registrar atividade em todos os contratos selecionados');
+        if (!await this.pode(ator, 'atividades:registrar', vinculo.contratoId, manager) ||
+            !await this.pode(ator, 'atividades:compartilhar', vinculo.contratoId, manager))
+          throw new ForbiddenException('Sem autorização para registrar e compartilhar atividades em todos os contratos selecionados');
       }
       const grupoId = randomUUID();
       await manager.save(AtividadeCompartilhada, manager.create(AtividadeCompartilhada,
@@ -77,7 +78,8 @@ export class AtividadeCompartilhadaService {
       const registros=await m.find(AtividadeEntity,{where:{atividadeCompartilhadaId:id}});
       const origem=registros.find(a=>a.contratoId===dto.origemContratoId&&!a.excluidaEm);
       if(!origem)throw new NotFoundException('Origem da atividade não encontrada.');
-      for(const v of vinculos)if(!await this.pode(ator,'atividades:registrar',v.contratoId,m))throw new ForbiddenException('Sem autorização para registrar em todos os novos destinos.');
+      if(!await this.pode(ator,'atividades:compartilhar',dto.origemContratoId,m))throw new ForbiddenException('Sem autorização para compartilhar na origem.');
+      for(const v of vinculos)if(!await this.pode(ator,'atividades:registrar',v.contratoId,m)||!await this.pode(ator,'atividades:compartilhar',v.contratoId,m))throw new ForbiddenException('Sem autorização para registrar e compartilhar em todos os novos destinos.');
       if(registros.filter(a=>!a.excluidaEm).length+vinculos.length>20||vinculos.some(v=>registros.some(a=>a.contratoId===v.contratoId)))throw new ConflictException('Um dos destinos já está vinculado ou o limite do grupo foi atingido.');
       for(const cid of [...new Set([dto.origemContratoId,...vinculos.map(v=>v.contratoId)])].sort()){
         const c=await m.findOne(Contrato,{where:{id:cid},lock:{mode:'pessimistic_write'}});

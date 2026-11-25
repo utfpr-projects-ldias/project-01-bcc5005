@@ -29,7 +29,7 @@ import { ModalCadastroAtividade } from '@/app/atividades/components/modal-cadast
 import { CartaoAtividade } from '@/app/atividades/components/cartao-atividade';
 import { consultarAtividade, type Atividade } from '@/hooks/use-atividades';
 import { sincronizarContrato } from '@/lib/sincronizar-contrato';
-import { sincronizarEvidenciaCompartilhada } from '@/lib/sincronizar-evidencia-compartilhada';
+import { sincronizarEvidenciaCompartilhada, EVENTO_REGISTROS_COMPARTILHADOS } from '@/lib/sincronizar-evidencia-compartilhada';
 import { useRepositorioConsultasOpcional } from '@/app/components/provedor-consultas';
 import type { PermissoesContrato } from '@/lib/contratos';
 
@@ -72,6 +72,11 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
     voltarEdicaoRef.current = voltar; setEdicaoAberta(Boolean(voltar)); registrarVoltaEdicao?.(voltar);
   }, [registrarVoltaEdicao]);
   const [versaoEstado, setVersaoEstado] = useState(0);
+  useEffect(() => {
+    const atualizar = () => setVersaoEstado(v => v + 1);
+    window.addEventListener(EVENTO_REGISTROS_COMPARTILHADOS, atualizar);
+    return () => window.removeEventListener(EVENTO_REGISTROS_COMPARTILHADOS, atualizar);
+  }, []);
   const [ocultasLocais, setOcultasLocais] = useState<string[]>([]);
   const evidenciasAtivas = item.evidenciasEsperadas.filter(e => !ocultasLocais.includes(e.id));
   // Estado persistido do entregável prevalece sobre qualquer permissão de envio.

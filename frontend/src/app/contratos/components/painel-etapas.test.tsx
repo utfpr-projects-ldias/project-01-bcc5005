@@ -708,3 +708,22 @@ test('etapa arquivada oferece lixeira separada do fechamento', () => {
   fireEvent.click(lixeira);
   expect(screen.getByRole('dialog', { name: 'Excluir etapa arquivada?' })).toBeInTheDocument();
 });
+
+
+test.each([true,false])('etapa finalizada oferece arquivamento independente da reabertura (%s)', reabrir => {
+  consultar.mockReturnValue(estado([{...base, status:'CONCLUIDA'}]));
+  render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar permissoes={{arquivarEtapas:true,reabrirEtapas:reabrir} as never}/>);
+  fireEvent.click(screen.getByRole('tab', {name:/Finalizadas/}));
+  fireEvent.click(screen.getByRole('button', {name:'Abrir detalhes da etapa 1: Planejamento'}));
+  const detalhe = within(screen.getByRole('dialog', {name:/1 · Planejamento/}));
+  const arquivo = detalhe.getByRole('button', {name:'Arquivar etapa'});
+  expect(arquivo).toHaveAttribute('data-pi-arquivar-modal');
+  if (reabrir) {
+    const botao = detalhe.getByRole('button', {name:'Reabrir'});
+    expect(botao).not.toHaveAttribute('aria-haspopup');
+    expect(botao.querySelector('svg')).toHaveClass('pi-icone-reabrir-verde');
+  } else expect(detalhe.queryByRole('button', {name:'Reabrir'})).not.toBeInTheDocument();
+  fireEvent.click(arquivo);
+  expect(screen.getByRole('dialog', {name:'Arquivar etapa?'})).toBeInTheDocument();
+  expect(alterarArquivamentoEtapa).not.toHaveBeenCalled();
+});

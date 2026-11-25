@@ -746,7 +746,7 @@ export default function DetalheContratoPage() {
               className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-300 ${pdfAptoParaDecisao ? 'border-violet-500 bg-violet-700 text-white hover:bg-violet-600' : 'border-violet-500/45 bg-violet-950/20 text-violet-200/40 disabled:cursor-not-allowed'}`}><IconeConclusao className="h-4 w-4 shrink-0 text-violet-300" /> Aprovar</button>
           </> : contrato.arquivadoEm ? null : (concluido || encerrado || finalizado) && (administrador || acessoQuery.dados?.permissoes?.reabrirContrato) ? (
             <button type="button" onClick={() => setConfirmarReabertura(true)} disabled={alterandoArquivo}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-400/40 bg-slate-500/10 px-3 text-xs font-semibold text-foreground hover:bg-slate-500/20 focus-visible:outline-2 focus-visible:outline-brand-neon disabled:opacity-50" aria-label="Reabrir contrato concluído"><IconeReabertura className="h-4 w-4 text-green-500" /> Reabrir</button>
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-400/40 bg-slate-500/10 px-3 text-xs font-semibold text-foreground hover:bg-slate-500/20 focus-visible:outline-2 focus-visible:outline-brand-neon disabled:opacity-50" aria-label="Reabrir contrato concluído"><IconeReabertura className="h-4 w-4 shrink-0 pi-icone-reabrir-verde" /> Reabrir</button>
           ) : podeFecharRevisao && podeEditar ? (
             <button type="button" data-tec08-decisao="fechamento" aria-label={tituloFechamento} disabled={alterandoArquivo}
               onClick={() => setConfirmarFechamentoRevisao(true)}

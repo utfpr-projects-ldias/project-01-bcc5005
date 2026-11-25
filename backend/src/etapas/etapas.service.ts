@@ -293,7 +293,7 @@ export class EtapasService {
 
   private async podeFinalizarFilhos(m: EntityManager, contratoId: string, etapaId: string): Promise<boolean> {
     const filhos = await m.findBy(Entregavel, { contratoId, etapaId, arquivadoEm: IsNull() });
-    if (!filhos.some(f => f.statusExecucao === 'FINALIZADO') || filhos.some(f => f.reabertoEm || f.regularizacaoDocumentalSolicitada || !['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(f.statusExecucao ?? ''))) return false;
+    if (!filhos.some(f => f.statusExecucao === 'FINALIZADO' || Boolean(f.motivoFinalizacao)) || filhos.some(f => f.reabertoEm || f.regularizacaoDocumentalSolicitada || !['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(f.statusExecucao ?? ''))) return false;
     if (await decisoesDescendentesEtapa(m, contratoId, etapaId, filhos)) return false;
     for (const filho of filhos.filter(f => f.statusExecucao !== 'FINALIZADO')) {
       if (!(await aptidaoFisicaParaConclusao(m, filho)).apto || (filho.tipo === 'MARCO' && !filho.dataEfetivaMarco)) return false;

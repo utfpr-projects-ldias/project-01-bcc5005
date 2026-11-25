@@ -7,10 +7,10 @@ export const CHAVES_PERMISSOES = [
   'criarEtapas', 'editarEtapas', 'reordenarEtapas', 'bloquearOrdemEtapas', 'arquivarEtapas', 'reativarEtapas', 'reabrirEtapas', 'encerrarEtapas', 'reabrirEtapasEncerradas', 'excluirEtapasArquivadas',
   'criarEntregaveis', 'editarEntregaveis', 'arquivarEntregaveis', 'reativarEntregaveis', 'reabrirEntregaveis', 'excluirEntregaveisArquivados',
   'criarEvidencias', 'editarEvidencias', 'arquivarEvidencias', 'reativarEvidencias', 'reabrirEvidencias', 'excluirEvidenciasArquivadas',
-  'alterarObrigatoriedade', 'enviarComprovantes', 'verificarComprovantes',
+  'alterarObrigatoriedade', 'enviarComprovantes', 'verificarComprovantes', 'compartilharEvidencias',
   'criarOcorrencias', 'editarOcorrencias', 'editarMetaOcorrencia', 'vincularAtividadesOcorrencia', 'vincularEvidenciasOcorrencia', 'editarExigenciasOcorrencia', 'editarPesoOcorrencia', 'registrarExecucaoOcorrencia', 'aprovarExecucaoManual', 'corrigirExecucaoOcorrencia', 'corrigirExecucaoAprovada', 'bloquearExecucaoOcorrencia', 'excluirExecucaoOcorrencia', 'concluirOcorrencias', 'reabrirOcorrencias', 'configurarAgendaOcorrencias', 'editarExecucaoFisica', 'configurarPesos',
   'criarMetasMarco', 'editarMetasMarco', 'vincularMetasMarco', 'aprovarVinculosMetasMarco',
-  'registrarAtividades', 'editarAtividades', 'verificarAtividades', 'reabrirAtividades', 'arquivarAtividades', 'reativarAtividades', 'excluirAtividadesArquivadas',
+  'registrarAtividades', 'editarAtividades', 'compartilharAtividades', 'verificarAtividades', 'reabrirAtividades', 'arquivarAtividades', 'reativarAtividades', 'excluirAtividadesArquivadas',
   'editarContrato', 'concluirContrato', 'encerrarContrato', 'reabrirContrato', 'cancelarContrato', 'reverterCancelamentoContrato', 'suspenderContrato', 'retomarContrato', 'verificarDocumentos', 'reabrirDocumentos', 'concluirEtapas', 'concluirEntregaveis', 'anexarDocumentos', 'editarDocumentos', 'arquivarDocumentos', 'reativarDocumentos', 'excluirDocumentosArquivados', 'verificarDocumentoPrincipal', 'reabrirDocumentoPrincipal', 'arquivarDocumentoPrincipal', 'reativarDocumentoPrincipal', 'excluirDocumentoPrincipal', 'administrarDocumentoPrincipal',
 ] as const;
 export type ChavePermissao = typeof CHAVES_PERMISSOES[number];
@@ -51,6 +51,7 @@ export const ACAO_PERMISSAO: Readonly<Record<string, ChavePermissao>> = {
   'evidencias:anexar': 'enviarComprovantes',
   'evidencias:verificar': 'verificarComprovantes',
   'atividades:registrar': 'registrarAtividades',
+  'atividades:compartilhar': 'compartilharAtividades',
   'atividades:editar': 'editarAtividades',
   'atividades:verificar': 'verificarAtividades',
   'atividades:reabrir': 'reabrirAtividades',

@@ -54,3 +54,23 @@ test('sugestões de pesquisa longas continuam completas e selecionáveis', () =>
   fireEvent.click(opcao);
   expect(mudar).toHaveBeenCalledWith(nome);
 });
+
+
+test.each(['Etapa','Entregável'])('%s do novo registro abrevia apenas a apresentação', rotulo => {
+  const completo = 'Primeira parte do nome muito longo — sufixo pesquisável';
+  function Exemplo() {
+    const [valor, setValor] = useState('');
+    return <SeletorEntregavel rotulo={rotulo} itens={[{id:'1', nome:completo}]} valor={valor} onChange={setValor} limiteRotulo={28}/>;
+  }
+  render(<Exemplo/>);
+  const campo = screen.getByRole('combobox', {name:rotulo});
+  fireEvent.focus(campo);
+  fireEvent.change(campo, {target:{value:'sufixo pesquisável'}});
+  const opcao = screen.getByRole('option', {name:completo});
+  expect(opcao).toHaveAttribute('title', completo);
+  expect(opcao.textContent?.length).toBeLessThanOrEqual(28);
+  expect(opcao.textContent).toMatch(/…$/);
+  fireEvent.click(opcao);
+  expect(campo).toHaveValue(opcao.textContent);
+  expect(campo).toHaveAttribute('title', completo);
+});
