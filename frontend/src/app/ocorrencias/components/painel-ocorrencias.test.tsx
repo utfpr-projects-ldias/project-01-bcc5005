@@ -32,7 +32,7 @@ const ocorrencia = { id: 'oc-1', contratoId: 'c-1', entregavelId: 'e-1', titulo:
 beforeEach(() => {
   jest.clearAllMocks();
   (useProgresso as jest.Mock).mockReturnValue({ progresso: { entregaveis: [] }, usarOcorrencias: jest.fn(), loading: false });
-  (useAcessoContrato as jest.Mock).mockReturnValue({ dados: { podeEditar: true, permissoes: { criarOcorrencias: true, editarOcorrencias: true, concluirOcorrencias: true, reabrirOcorrencias: true, configurarAgendaOcorrencias: true } }, erro: null });
+  (useAcessoContrato as jest.Mock).mockReturnValue({ dados: { podeEditar: true, permissoes: { criarOcorrencias: true, editarOcorrencias: true, concluirOcorrencias: true, reabrirOcorrencias: true, configurarAgendaOcorrencias: true, editarExigenciasOcorrencia: true } }, erro: null });
   (useMeuPerfil as jest.Mock).mockReturnValue({ dados: { perfil: 'GESTOR', ativo: true } });
   (useEtapas as jest.Mock).mockReturnValue({ dados: [{ id: 'etapa-1', status: 'PLANEJADA', arquivadoEm: null }] });
   (useEntregaveis as jest.Mock).mockReturnValue({ dados: [{ id: 'e-1', etapaId: 'etapa-1', tipo: 'QUANTITATIVO', nome: 'Medições', statusExecucao: 'EM_EXECUCAO', arquivadoEm: null }] });
@@ -138,6 +138,7 @@ test('quantidade declarada exige conciliação explícita antes de registrar oco
 
 
 test('recorrente diária usa calendário automaticamente, sem escolha lista/calendário', async () => {
+  (useProgresso as jest.Mock).mockReturnValue({progresso:{entregaveis:[{entregavelId:'e-1',percentualExecucao:100,previsto:'1',realizado:'1'}]},loading:false});
   (useEntregaveis as jest.Mock).mockReturnValue({ dados: [{ id: 'e-1', etapaId: 'etapa-1', tipo: 'RECORRENTE', periodicidade: 'DIARIA', nome: 'Rotina diária', arquivadoEm: null }] });
   ocorrencias.mockReturnValue({ ocorrencias: [{ ...ocorrencia, origem: 'RECORRENTE', periodoInicio: '2026-12-01', periodoFim: '2026-12-01', dataPrevista: '2026-12-01', status: 'CONCLUIDO' }], loading: false, erro: null });
   render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" />);
@@ -151,7 +152,7 @@ test('recorrente diária usa calendário automaticamente, sem escolha lista/cale
 
 test('recorrente sem agenda oferece geração manual com confirmação explícita', async () => {
   const gerarOcorrenciasRecorrentes = jest.fn().mockResolvedValue(6);
-  (useEntregaveis as jest.Mock).mockReturnValue({ dados: [{ id: 'e-1', etapaId: 'etapa-1', tipo: 'RECORRENTE', periodicidade: 'DIARIA', inicioPrevisto: '2026-12-01', terminoPrevisto: '2026-12-06', nome: 'Rotina', arquivadoEm: null }] });
+  (useEntregaveis as jest.Mock).mockReturnValue({ dados: [{ id: 'e-1', etapaId: 'etapa-1', tipo: 'RECORRENTE', periodicidade: 'DIARIA', configuracaoPeriodicidade:{versao:1,modoRegistro:'DESCRITIVO'}, inicioPrevisto: '2026-12-01', terminoPrevisto: '2026-12-06', nome: 'Rotina', arquivadoEm: null }] });
   ocorrencias.mockReturnValue({ ocorrencias: [], loading: false, erro: null, gerarOcorrenciasRecorrentes, atualizar: jest.fn() });
   render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" embutido />);
   const gerar = screen.getByRole('button', { name: /Gerar ocorrências/i });
@@ -173,7 +174,7 @@ test('atividade vinculada abre detalhe contextual por API sem navegar para outra
   const botao = await screen.findByRole('button', { name: /Conferência/ });
   fireEvent.click(botao);
   await waitFor(() => expect(screen.getByText('Descrição da atividade')).toBeInTheDocument());
-  expect(consultarAtividade).toHaveBeenCalledWith('c-1', 'a-1');
+  expect(consultarAtividade).toHaveBeenCalledWith('c-1', 'a-1', expect.anything());
   expect(screen.queryByRole('link', { name: 'Conferência' })).not.toBeInTheDocument();
 });
 
@@ -194,7 +195,7 @@ test('meta quantitativa exibe o executado sem confundi-lo com a quantidade aprov
   ocorrencias.mockReturnValue({ ocorrencias: [{ ...ocorrencia, modoRegistro: 'QUANTITATIVO', metaQuantidade: '20.000', quantidadeExecutada: '10.000', quantidadeAprovada: null, status: 'EM_ANDAMENTO' }], loading: false, erro: null });
   render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" />);
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da ocorrência Medição de outubro/ })); });
-  expect(within(screen.getByLabelText('Resumo físico da ocorrência')).getByText('10 / 20')).toBeInTheDocument();
+  expect(within(screen.getByLabelText('Resumo da ocorrência')).getByText('10 / 20')).toBeInTheDocument();
 });
 
 test('ocorrência pendente não admite edição e exige a permissão de concluir', async () => {
@@ -232,7 +233,7 @@ test('cadastro dentro do entregável não repete a seleção e usa meta textual 
 });
 
 
-test('ocorrência pendente apresenta cartão violeta com etiqueta amarela e aprovação somente no cabeçalho do modal', () => {
+test('ocorrência pendente apresenta cartão violeta com etiqueta amarela e aprovação somente no cabeçalho do modal', async () => {
   ocorrencias.mockReturnValue({ ocorrencias: [{ ...ocorrencia, status: 'PENDENTE_CONCLUSAO' }], loading: false, erro: null });
   render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" />);
   fireEvent.click(screen.getByRole('tab', { name: 'Pendentes de conclusão' }));
@@ -240,7 +241,7 @@ test('ocorrência pendente apresenta cartão violeta com etiqueta amarela e apro
   expect(cartao).toHaveClass('border-violet-400/55');
   expect(cartao.querySelectorAll('span')[2]).toHaveClass('bg-amber-500/10');
   expect(screen.queryByRole('button', { name: /Editar ocorrência Medição de outubro/ })).not.toBeInTheDocument();
-  fireEvent.click(cartao);
+  await act(async () => { fireEvent.click(cartao); });
   const modal = screen.getByRole('dialog', { name: 'Medição de outubro' });
   expect(modal.querySelector('header')).toContainElement(screen.getByRole('button', { name: /Aprovar/ }));
 });
@@ -392,4 +393,69 @@ test('Visão Geral abre diretamente o detalhe pelo ID mesmo com lista ainda carr
   expect(await screen.findByRole('dialog',{name:ocorrencia.titulo})).toBeVisible();
   expect(consultarDetalhe).toHaveBeenCalledWith('oc-1');
   expect(screen.queryByRole('heading',{name:'Ocorrências'})).not.toBeInTheDocument();
+});
+
+test('B06: recuperar agenda existente não envia metas ou exigências editadas',async()=>{
+  const gerarOcorrenciasRecorrentes=jest.fn().mockResolvedValue(1);
+  (useEntregaveis as jest.Mock).mockReturnValue({dados:[{id:'e-1',etapaId:'etapa-1',tipo:'RECORRENTE',nome:'Rotina',periodicidade:'DIARIA',inicioPrevisto:'2026-12-01',terminoPrevisto:'2026-12-02',configuracaoPeriodicidade:{versao:1,modoRegistro:'DESCRITIVO'},arquivadoEm:null}]});
+  ocorrencias.mockReturnValue({ocorrencias:[{...ocorrencia,origem:'RECORRENTE',periodoInicio:'2026-12-01',periodoFim:'2026-12-01'}],loading:false,erro:null,gerarOcorrenciasRecorrentes});
+  render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1"/>);
+  fireEvent.click(screen.getByRole('button',{name:'Verificar / completar agenda'}));
+  fireEvent.click(screen.getByRole('button',{name:'Confirmar recuperação'}));
+  await waitFor(()=>expect(gerarOcorrenciasRecorrentes).toHaveBeenCalledWith('e-1',{recuperarFaltantes:true}));
+});
+
+
+const recorrenteParaAgenda = { id:'e-1', etapaId:'etapa-1', tipo:'RECORRENTE', nome:'Rotina',
+  periodicidade:'DIARIA', configuracaoPeriodicidade:{versao:1,modoRegistro:'QUANTITATIVO'},
+  inicioPrevisto:'2026-12-01', terminoPrevisto:'2026-12-06', unidadeMedida:'unidades', arquivadoEm:null };
+
+test('agenda inicial ocupa o calendário e retorna à grade após receber ocorrências', () => {
+  (useEntregaveis as jest.Mock).mockReturnValue({dados:[recorrenteParaAgenda]});
+  ocorrencias.mockReturnValue({ocorrencias:[],loading:false,erro:null});
+  const painel = <PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" calendarioInicial={<div>Grade do calendário</div>}/>;
+  const {rerender} = render(painel);
+  expect(screen.getByText('Agenda ainda não gerada')).toBeInTheDocument();
+  expect(screen.queryByText('Grade do calendário')).not.toBeInTheDocument();
+  expect(screen.queryByRole('heading',{name:'Registros'})).not.toBeInTheDocument();
+  ocorrencias.mockReturnValue({ocorrencias:[{...ocorrencia,origem:'RECORRENTE'}],loading:false,erro:null});
+  rerender(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" calendarioInicial={<div>Grade do calendário</div>}/>);
+  expect(screen.getByText('Grade do calendário')).toBeInTheDocument();
+  expect(screen.queryByText('Agenda ainda não gerada')).not.toBeInTheDocument();
+});
+
+test('lista com calendário externo não repete o aviso nem oferece geração inicial', () => {
+  (useEntregaveis as jest.Mock).mockReturnValue({dados:[recorrenteParaAgenda]});
+  ocorrencias.mockReturnValue({ocorrencias:[],loading:false,erro:null});
+  render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" calendarioExterno/>);
+  expect(screen.getByRole('heading',{name:'Registros'})).toBeInTheDocument();
+  expect(screen.queryByText('Agenda ainda não gerada')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:/Configurar e gerar ocorrências/})).not.toBeInTheDocument();
+});
+
+test('agenda inicial não concede geração em modo somente leitura', () => {
+  (useEntregaveis as jest.Mock).mockReturnValue({dados:[recorrenteParaAgenda]});
+  ocorrencias.mockReturnValue({ocorrencias:[],loading:false,erro:null});
+  render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" somenteLeitura calendarioInicial={<div>Grade</div>}/>);
+  expect(screen.getByText('Agenda ainda não gerada')).toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:/Configurar e gerar ocorrências/})).not.toBeInTheDocument();
+});
+
+test('geração quantitativa apresenta meta e unidade juntas e preserva a validação decimal', async () => {
+  (useEntregaveis as jest.Mock).mockReturnValue({dados:[recorrenteParaAgenda]});
+  (useMeuPerfil as jest.Mock).mockReturnValue({dados:{perfil:'ADMINISTRADOR',ativo:true}});
+  const gerarOcorrenciasRecorrentes=jest.fn().mockResolvedValue(6);
+  ocorrencias.mockReturnValue({ocorrencias:[],loading:false,erro:null,gerarOcorrenciasRecorrentes});
+  render(<PainelOcorrencias contratoId="c-1" entregavelIdInicial="e-1" calendarioInicial={<div>Grade</div>}/>);
+  fireEvent.click(screen.getByRole('button',{name:/Configurar e gerar ocorrências/}));
+  const modal=screen.getByRole('dialog',{name:'Gerar ocorrências recorrentes'});
+  expect(within(modal).getByText('Diária')).toBeInTheDocument();
+  expect(within(modal).getByText('unidades')).toBeInTheDocument();
+  const meta=within(modal).getByRole('textbox',{name:/Meta por período/});
+  const confirmar=within(modal).getByRole('button',{name:'Confirmar geração'});
+  expect(confirmar).toBeDisabled();
+  fireEvent.change(meta,{target:{value:'2,501'}});
+  expect(confirmar).toBeEnabled();
+  fireEvent.click(confirmar);
+  await waitFor(()=>expect(gerarOcorrenciasRecorrentes).toHaveBeenCalledWith('e-1',expect.objectContaining({modoRegistro:'QUANTITATIVO',metaQuantidade:'2.501'})));
 });

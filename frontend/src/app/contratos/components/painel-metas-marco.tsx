@@ -1,4 +1,5 @@
 'use client';
+import { formatarPercentualSemAnteciparConclusao } from '@/lib/apresentacao-indicadores';
 import { CampoDataCivil } from '@/app/components/campo-data-civil';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import type { PermissoesContrato } from '@/lib/contratos';
@@ -65,13 +66,13 @@ export function PainelMetasMarco({contratoId,entregavelId,permissoes,readOnly=fa
       <div className="flex items-start justify-between gap-3"><div className="min-w-0"><strong className="block truncate text-sm" title={m.titulo}>{m.titulo}</strong>
         <p className="mt-1 text-xs text-foreground/65">{m.dataPrevista||([m.inicioPrevisto,m.terminoPrevisto].filter(Boolean).join(' até '))||'Sem data obrigatória'}</p></div>
         {permitido('editarMetasMarco')&&<button type="button" className="shrink-0 rounded-lg border border-current/25 px-2 py-1 text-xs" onClick={()=>{setEditarId(m.id);setForm({titulo:m.titulo,tipo:m.tipo,quantidadeExigida:m.quantidadeExigida,dataPrevista:m.dataPrevista,inicioPrevisto:m.inicioPrevisto,terminoPrevisto:m.terminoPrevisto,observacoes:m.observacoes});}}>Editar</button>}</div>
-      <div className="flex items-center justify-between text-xs"><span>{m.quantidadeAprovada}/{m.quantidadeExigida} vínculos válidos</span><strong>{m.percentualPreparacao.toFixed(0)}%</strong></div>
+      <div className="flex items-center justify-between text-xs"><span>{m.quantidadeAprovada}/{m.quantidadeExigida} vínculos válidos</span><strong>{formatarPercentualSemAnteciparConclusao(m.percentualPreparacao,0)}</strong></div>
       <Progresso nome={`Progresso de ${m.titulo}`} valor={m.percentualPreparacao}/>
       <button type="button" className="rounded-lg border border-current/25 px-3 py-2 text-xs" aria-expanded={expandida===m.id} onClick={()=>void abrirMeta(m)}>{expandida===m.id?'Ocultar vínculos':'Gerenciar vínculos'}</button>
       {expandida===m.id&&<div className="space-y-3 border-t border-current/15 pt-3">
         {m.vinculos.length===0&&<p className="text-xs text-foreground/60">Nenhum vínculo solicitado.</p>}
         {m.vinculos.map(v=><div key={v.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-current/15 p-2 text-xs">
-          <div className="min-w-0"><span className="font-semibold">{v.status==='APROVADO'?v.elegivel?'Aprovado':'Revalidação necessária':v.status==='REJEITADO'?'Em revisão':'Pendente de aprovação'}</span>
+          <div className="min-w-0"><span className="font-semibold">{v.status==='APROVADO'?v.elegivel?'Aprovado':'Revalidação necessária':v.status==='REJEITADO'?'Rejeitado · Em revisão':'Pendente de aprovação'}</span>
             <p className="truncate text-foreground/55" title={v.ocorrenciaId||v.atividadeId||v.comprovanteId||''}>{v.ocorrenciaId||v.atividadeId||v.comprovanteId}</p></div>
           {v.status==='PENDENTE'&&permitido('aprovarVinculosMetasMarco')&&<div className="flex flex-wrap items-center gap-2">
             <label className="text-xs">Justificativa para rejeição (opcional)

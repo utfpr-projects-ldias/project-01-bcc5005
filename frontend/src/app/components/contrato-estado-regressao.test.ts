@@ -4,10 +4,13 @@ import path from 'node:path';
 const src = (file: string) => readFileSync(path.resolve(process.cwd(), file), 'utf8');
 
 test('a carteira distingue o estado encerrado da categoria de filtro concluídos', () => {
-  const pagina = src('src/app/contratos/page.tsx');
-  expect(pagina).toContain('data-tec08-estado={c.arquivadoEm');
-  expect(pagina).toContain("encerrado ? 'encerrado'");
-  expect(pagina).toContain('data-situacao={situacao}');
+  const estado = src('src/lib/estado-visivel-contrato.ts');
+  const linha = src('src/app/contratos/components/linha-contrato.tsx');
+  const tabela = src('src/app/contratos/components/tabela-operacional.tsx');
+  expect(estado).toContain("contrato.status === 'ENCERRADO' && !contrato.reabertoEm) return 'encerrado'");
+  expect(estado).toContain("contrato.status === 'ENCERRADO') && !contrato.reabertoEm) return 'concluidos'");
+  expect(linha).toContain('<StatusTabela estado={estado} rotulo={rotulo}');
+  expect(tabela).toContain('data-situacao={estado}');
 });
 
 test('a aba de atividades do contrato não cria navegação circular', () => {

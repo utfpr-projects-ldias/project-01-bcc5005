@@ -21,10 +21,10 @@ export const atividadeSchema = z.object({
   local: opcional('Local', 50),
   observacoes: opcional('Observações', 200),
   ocorrenciaId: z.string().uuid().nullable().optional(),
-  ocorrenciaIds: z.array(z.string().uuid()).refine(ids => new Set(ids).size === ids.length, 'Ocorrências repetidas.').optional(),
-  medicoes: z.array(z.object({ ocorrenciaId: z.string().uuid(), quantidade: z.string().regex(/^\d{1,12}(?:\.\d{1,3})?$/, 'Quantidade inválida.') })).refine(m => new Set(m.map(v=>v.ocorrenciaId)).size === m.length,'Ocorrências repetidas.').optional(),
+  ocorrenciaIds: z.array(z.string().uuid()).max(100).refine(ids => new Set(ids).size === ids.length, 'Ocorrências repetidas.').optional(),
+  medicoes: z.array(z.object({ ocorrenciaId: z.string().uuid(), quantidade: z.string().regex(/^\d{1,15}(?:\.\d{1,3})?$/, 'Quantidade inválida.') })).max(100).refine(m => new Set(m.map(v=>v.ocorrenciaId)).size === m.length,'Ocorrências repetidas.').optional(),
   quantidadeExecucao: z.string().regex(/^\d{1,15}(?:\.\d{1,3})?$/, 'Informe uma quantidade válida.').nullable().optional(),
-  entregavelIds: z.array(z.string().uuid()).min(1, 'Selecione pelo menos um entregável.')
+  entregavelIds: z.array(z.string().uuid()).min(1, 'Selecione pelo menos um entregável.').max(100)
     .refine(ids => new Set(ids.map(id => id.toLowerCase())).size === ids.length, 'Entregáveis repetidos.'),
 });
 export type FormularioAtividade = z.input<typeof atividadeSchema>;

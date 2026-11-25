@@ -32,7 +32,25 @@ export type Contrato = {
   conclusaoParcialSolicitada?: boolean;
   encerramentoSolicitado?: boolean;
 };
-export type DadosContrato = Omit<Contrato, 'id' | 'codigoPublico' | 'ordemEtapasBloqueada' | 'arquivadoEm' | 'arquivadoPor' | 'reabertoEm' | 'encerradoEm' | 'encerradoPor' | 'motivoEncerramento'> & { retomarOperacao?: boolean };
+export type DadosContrato = Omit<Contrato, 'id' | 'codigoPublico' | 'ordemEtapasBloqueada' | 'arquivadoEm' | 'arquivadoPor' | 'reabertoEm' | 'encerradoEm' | 'encerradoPor' | 'motivoEncerramento'> & { retomarOperacao?: boolean; estadoAnterior?: string };
+const CAMPOS_EDICAO = ['numeroContrato','processoAdministrativo','orgaoContratante','unidadeResponsavel','objeto','descricao','dataAssinatura','inicioVigencia','terminoVigencia','status','responsavelInternoId','fiscalGestor','modoCalculo','observacoes'] as const;
+export function estadoEdicaoContrato(c: Contrato): string {
+  return JSON.stringify([...CAMPOS_EDICAO.map(k => c[k] ?? null), c.arquivadoEm ?? null,
+    c.reabertoEm ?? null, c.conclusaoSolicitadaEm ?? null, Boolean(c.encerramentoSolicitado)]);
+}
+/** Só alterações em relação à versão que abriu o formulário, nunca à consulta revalidada. */
+export function prepararEdicaoContrato(base: Contrato, dados: DadosContrato): Partial<DadosContrato> {
+  const alteracoes: Partial<DadosContrato> = {};
+  for (const campo of CAMPOS_EDICAO) {
+    if (campo === 'modoCalculo') continue; // endpoint versionado da execução
+    const anterior = ['dataAssinatura','inicioVigencia','terminoVigencia'].includes(campo)
+      ? dataCivil(base[campo]) || null : base[campo];
+    if (dados[campo] !== undefined && (dados[campo] ?? null) !== (anterior ?? null))
+      (alteracoes as Record<string, unknown>)[campo] = dados[campo];
+  }
+  if (Object.keys(alteracoes).length) alteracoes.estadoAnterior = estadoEdicaoContrato(base);
+  return alteracoes;
+}
 /** Formato apenas de leitura: o servidor gera e mantém esse valor. */
 export function rotuloCodigoPublico(codigo: string): string { return `#${codigo}`; }
 /** A mesma fonte de chaves usada no editor de permissões (evita divergência no frontend). */
@@ -74,11 +92,12 @@ async function requisitar<T>(path: string, init?: RequestInit): Promise<T> {
       403: 'Você não tem permissão para esta operação.',
       404: 'Contrato não encontrado ou não autorizado.',
       409: 'Conflito de dados. Atualize e tente novamente.',
+      503: 'Serviço temporariamente indisponível. Confira o resultado antes de reenviar.',
     };
     // Mostrar motivos de conflito de domínio para orientar decisões como Retomar.
     // Nunca refletir SQL, stack trace ou HTML de falha na interface.
     let detalheConflito: string | null = null;
-    if (resp.status === 400 || resp.status === 409) {
+    if (resp.status === 400 || resp.status === 409 || resp.status === 503) {
       try {
         const corpo: unknown = await resp.json();
         if (corpo && typeof corpo === 'object' && 'message' in corpo) {
@@ -123,15 +142,7 @@ export const retomarContrato = (id: string, motivo: string) =>
 export const reverterCancelamentoContrato = (id: string, motivo: string) =>
   requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/reverter-cancelamento`, { method: 'PATCH', body: JSON.stringify({ motivo }) });
 /** Fechamento administrativo parcial: somente após resolver todas as obrigações. */
-export async function finalizarContrato(c: string, motivo: string): Promise<Contrato> {
-  const r = await fetch(`${API}/contratos/${encodeURIComponent(c)}/finalizar`, {
-    method:'PATCH', credentials:'include', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({motivo}),
-  });
-  if (!r.ok) { const corpo = await r.json().catch(() => null);
-    throw new Error(typeof corpo?.message === 'string' ? corpo.message : 'Finalização não autorizada: confira a situação das etapas e entregáveis.'); }
-  return await r.json() as Contrato;
-}
+export const finalizarContrato = (id: string, motivo: string) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/finalizar`, {method:'PATCH', body: JSON.stringify({motivo})});
 export const concluirContrato = (id: string) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/concluir`, { method: 'PATCH' });
 export const encerrarContratoAntecipadamente = (id: string, motivo: string) =>
   requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/solicitar-encerramento`, {
@@ -142,6 +153,7 @@ export const fecharRevisaoContrato = (id: string, motivo: string) => requisitar<
 export const reabrirContrato = (id: string, motivo: string) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/reabrir`, { method: 'PATCH', body: JSON.stringify({ motivo }) });
 export const reativarContrato = (id: string, motivo: string) => requisitar<Contrato>(`/contratos/${encodeURIComponent(id)}/reativar`, { method: 'PATCH', body: JSON.stringify({ motivo }) });
 
+export const consultarElegibilidadeExclusao = (id: string) => requisitar<{ apto: boolean; motivo: string | null }>(`/contratos/${encodeURIComponent(id)}/elegibilidade-exclusao`);
 export const excluirContratoArquivado = (id: string) => requisitar<{ excluido: true; arquivosPendentes: number }>(`/contratos/${encodeURIComponent(id)}`, { method: 'DELETE' });
 export async function editarContrato(id: string, dados: Partial<DadosContrato>, confirmacaoVigencia?: string) {
   const base = `/contratos/${encodeURIComponent(id)}`;
@@ -149,9 +161,9 @@ export async function editarContrato(id: string, dados: Partial<DadosContrato>, 
   if (confirmacaoVigencia) return enviar({ ...dados, confirmacaoVigencia });
   try { return await enviar(dados); }
   catch (erro) {
-    if (!(erro instanceof ErroContrato) || erro.status !== 409 || erro.message !== 'Confirme o impacto da vigência na agenda recorrente.') throw erro;
+    if (!(erro instanceof ErroContrato) || erro.status !== 409 || erro.message !== 'Confirme o impacto da vigência sobre o planejamento.') throw erro;
     const impacto = await requisitar<{ confirmacao: string; total: number; planos: number; preservadasFora: number; futurasFora: number; bloqueado: boolean }>(`${base}/impacto-vigencia`, { method: 'POST', body: JSON.stringify({ inicioVigencia: dados.inicioVigencia, terminoVigencia: dados.terminoVigencia }) });
-    if (impacto.bloqueado) throw new ErroContrato(409, 'Replaneje a agenda futura antes de alterar a vigência.');
+    if (impacto.bloqueado) throw new ErroContrato(409, 'Replaneje os registros futuros afetados antes de alterar a vigência.');
     throw new ConfirmacaoVigenciaNecessaria(impacto, dados);
   }
 }
@@ -187,7 +199,7 @@ export function terminoPorMeses(inicio: string, meses: number): string | null {
 export function dataCivil(valor: string | null | undefined): string { return valor?.slice(0, 10) ?? ''; }
 
 /** Pré-validação retornada pela API; não substitui checagem transacional na gravação. */
-export type ElegibilidadeConclusao = { apto: boolean; aptoParcial?: boolean; solicitada: boolean; pendencias: string[] };
+export type ElegibilidadeConclusao = { apto: boolean; aptoParcial?: boolean; podeEncerrarAntecipadamente?: boolean; podeFinalizar?: boolean; solicitada: boolean; pendencias: string[] };
 export const consultarElegibilidadeConclusao = (id: string, signal?: AbortSignal) =>
   requisitar<ElegibilidadeConclusao>(`/contratos/${encodeURIComponent(id)}/elegibilidade-conclusao`, { signal });
 export const solicitarConclusaoContrato = (id: string, parcial = false) =>

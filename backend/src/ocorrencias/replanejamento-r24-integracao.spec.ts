@@ -1,3 +1,4 @@
+import { Usuario } from '../usuarios/usuario.entity.js';
 import { ConflictException } from '@nestjs/common';
 import { jest } from '@jest/globals';
 import { ReplanejamentoService } from './replanejamento.service.js';
@@ -15,7 +16,7 @@ const ator={id:'33333333-3333-4333-8333-333333333333',perfil:'ADMINISTRADOR'};
 const dto={inicioFuturo:'2026-11-23',terminoPrevisto:'2026-11-24',periodicidade:PeriodicidadeEntregavel.DIARIA};
 function ambiente(opcao:{pendenciaEtapa?:boolean;pendenciaEntregavel?:boolean;divergente?:boolean}={}) {
   const c={id:cid,status:'EM_EXECUCAO',arquivadoEm:null,inicioVigencia:'2026-11-01',terminoVigencia:'2026-12-31'};
-  const e={id:eid,contratoId:cid,tipo:'RECORRENTE',etapaId:'etapa',inicioPrevisto:'2026-11-01',terminoPrevisto:'2026-11-30',
+  const e={id:eid,contratoId:cid,tipo:'RECORRENTE',etapaId:'etapa',inicioPrevisto:'2026-11-23',terminoPrevisto:opcao.divergente?'2026-11-26':'2026-11-24',
     periodicidade:PeriodicidadeEntregavel.DIARIA, statusExecucao:opcao.pendenciaEntregavel?'PENDENTE_CONCLUSAO':'EM_ANDAMENTO',
     agendaInicioFuturo:null, unidadeMedida:null,arquivadoEm:null};
   const etapa={id:'etapa',contratoId:cid,status:'EM_ANDAMENTO',arquivadoEm:null,
@@ -38,7 +39,7 @@ function ambiente(opcao:{pendenciaEtapa?:boolean;pendenciaEntregavel?:boolean;di
       return valor;
     }),
     create:jest.fn((_tipo:unknown,valor:Record<string,unknown>)=>({...valor})),
-    getRepository:jest.fn((tipo:unknown)=>tipo===ConfiguracaoOcorrencias?{upsert}:null),
+    getRepository:jest.fn((tipo:unknown)=>tipo===Usuario?{findOne:async()=>({...ator,ativo:true})}:tipo===ConfiguracaoOcorrencias?{upsert}:null),
   };
   const auditoria={registrarNaTransacao:jest.fn(async()=>undefined)};
   const ds={transaction:(fn:(manager:unknown)=>Promise<unknown>)=>fn(m)};
@@ -65,9 +66,19 @@ describe('R24 — replanejamento transacional de requisitos',()=>{
       expect(novos).toHaveLength(0);
     }
   });
+  it('exige alteração explícita do prazo e persiste planejamento somente após confirmação',async()=>{
+    const {service,e,novos}=ambiente();
+    const entrada={...dto,terminoPrevisto:'2026-11-25'};
+    await expect(service.executar(cid,eid,entrada,ator as never)).rejects.toThrow(/explicitamente/);
+    const previa=await service.executar(cid,eid,{...entrada,alterarPrazo:true},ator as never);
+    expect(previa.prazoAlterado).toEqual({anterior:'2026-11-24',novo:'2026-11-25'});
+    expect(e.terminoPrevisto).toBe('2026-11-24'); expect(novos).toHaveLength(0);
+    await service.executar(cid,eid,{...entrada,alterarPrazo:true,confirmacao:previa.confirmacao},ator as never);
+    expect(e.terminoPrevisto).toBe('2026-11-25'); expect(novos).toHaveLength(3);
+  });
   it('não aceita requisitos heterogêneos sem regularização explícita',async()=>{
     const {service}=ambiente({divergente:true});
-    await expect(service.executar(cid,eid,dto,ator as never)).rejects.toThrow(/exigências diferentes/);
+    await expect(service.executar(cid,eid,{...dto,terminoPrevisto:'2026-11-26'},ator as never)).rejects.toThrow(/exigências diferentes/);
   });
   it('preserva período referenciado por declaração preliminar de evidência',async()=>{
     const {service,m,novos}=ambiente();

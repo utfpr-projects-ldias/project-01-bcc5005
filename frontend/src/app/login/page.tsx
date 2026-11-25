@@ -113,8 +113,11 @@ export default function LoginPage() {
       setFase("redirecionando");
       router.replace("/dashboard");
       router.refresh();
-    } catch {
-      setServerError("Erro de conexão ao entrar. Tente novamente.");
+    } catch (erro) {
+      const falha = erro as { status?: number; statusCode?: number; response?: { status?: number } } | null;
+      setServerError(falha?.status === 429 || falha?.statusCode === 429 || falha?.response?.status === 429
+        ? "Muitas tentativas de login. Aguarde alguns minutos antes de tentar novamente."
+        : "Erro de conexão ao entrar. Tente novamente.");
     } finally {
       setSubmitting(false);
     }

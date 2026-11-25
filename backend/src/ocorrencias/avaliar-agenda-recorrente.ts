@@ -1,27 +1,36 @@
 import type { Ocorrencia } from './ocorrencia.entity.js';
 
-/** Um registro concluído antigo pode cobrir somente um período novo.
- * Preserva os períodos anteriores à revisão sem modificar suas datas.
- * O fechamento físico exige agenda integralmente representada.
- */
+type Intervalo = { inicio: string; fim: string };
+type Periodo = Pick<Ocorrencia, 'periodoInicio' | 'periodoFim' | 'status'>;
+const concluido = (o: Periodo) => ['CONCLUIDO','CONCLUIDO_PARCIALMENTE'].includes(o.status);
+const chave = (inicio: string | null, fim: string | null) => `${inicio}/${fim}`;
+
+/** A série histórica e a grade corrente devem cobrir a obrigação sem lacunas,
+ * sobreposições ou períodos extras. Um registro somente cobre seu próprio intervalo. */
 export function avaliarAgendaRecorrente(
-  ocorrencias: Pick<Ocorrencia, 'periodoInicio' | 'periodoFim' | 'status'>[],
-  periodos: Array<{ inicio: string; fim: string }>,
-  inicioAgenda: string,
+  ocorrencias: readonly Periodo[], periodos: readonly Intervalo[], inicioAgenda: string,
+  inicioObrigacao?: string | null, fimObrigacao?: string | null,
 ) {
-  const anteriores = ocorrencias.filter(o => Boolean(o.periodoFim && o.periodoFim < inicioAgenda));
-  const futuras = ocorrencias.filter(o => !anteriores.includes(o));
-  const usadas = new Set<number>();
-  for (const o of futuras.filter(o => ['CONCLUIDO','CONCLUIDO_PARCIALMENTE'].includes(o.status))) {
-    const indice = periodos.findIndex((p, i) => !usadas.has(i) &&
-      Boolean(o.periodoInicio && o.periodoFim && o.periodoInicio <= p.fim && o.periodoFim >= p.inicio));
-    if (indice >= 0) usadas.add(indice);
+  const anteriores = ocorrencias.filter(o => o.periodoFim != null && o.periodoFim < inicioAgenda);
+  const atuais = ocorrencias.filter(o => !anteriores.includes(o));
+  const grade = periodos.map(p => chave(p.inicio,p.fim));
+  const registros = new Map<string, Periodo[]>();
+  for (const o of atuais) {
+    const k = chave(o.periodoInicio,o.periodoFim);
+    registros.set(k,[...(registros.get(k) ?? []),o]);
   }
-  const completa = periodos.every((p, i) => usadas.has(i) ||
-    futuras.some(o => !['CONCLUIDO','CONCLUIDO_PARCIALMENTE'].includes(o.status) && o.periodoInicio === p.inicio && o.periodoFim === p.fim));
-  const concluidasAnteriores = anteriores.filter(o => ['CONCLUIDO','CONCLUIDO_PARCIALMENTE'].includes(o.status)).length;
+  const intervalos = [...anteriores.map(o=>({inicio:o.periodoInicio,fim:o.periodoFim})), ...periodos]
+    .sort((a,b)=>(a.inicio??'').localeCompare(b.inicio??''));
+  const continua = intervalos.every((p,i) => p.inicio != null && p.fim != null && p.inicio <= p.fim &&
+    (i===0 || (intervalos[i-1].fim != null && Date.parse(`${intervalos[i-1].fim}T00:00:00Z`) + 86_400_000 === Date.parse(`${p.inicio}T00:00:00Z`))));
   const total = anteriores.length + periodos.length;
-  const concluidas = concluidasAnteriores + usadas.size;
+  const concluidas = anteriores.filter(concluido).length + grade.filter(k=>{
+    const itens=registros.get(k); return itens?.length===1 && concluido(itens[0]);
+  }).length;
+  const completa = periodos.length > 0 && periodos[0].inicio === inicioAgenda && continua && total <= 500 &&
+    (!inicioObrigacao || intervalos[0]?.inicio===inicioObrigacao) &&
+    (!fimObrigacao || intervalos.at(-1)?.fim===fimObrigacao) &&
+    atuais.length===grade.length && grade.every(k=>registros.get(k)?.length===1);
   return { completa, total, concluidas };
 }
 

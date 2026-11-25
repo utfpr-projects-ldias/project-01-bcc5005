@@ -108,7 +108,7 @@ export class ContratosController {
   }
 
   @Patch(':id/solicitar-conclusao-parcial')
-  @ExigirPolitica('contratos:editar', 'id')
+  @ExigirPolitica('contratos:solicitar-conclusao', 'id')
   solicitarConclusaoParcial(@Param('id') id: string, @Req() req: RequisicaoAutorizada) {
     return this.contratos.solicitarConclusao(id, req.usuarioDominio!,true);
   }
@@ -194,6 +194,12 @@ export class ContratosController {
   @ExigirPolitica('contratos:arquivar', 'id')
   arquivar(@Param('id') id: string, @Req() req: RequisicaoAutorizada) {
     return this.contratos.alterarArquivamento(id, true, req.usuarioDominio!);
+  }
+
+  @Get(':id/elegibilidade-exclusao')
+  @ExigirPolitica('contratos:excluir', 'id')
+  elegibilidadeExclusao(@Param('id') id: string, @Req() req: RequisicaoAutorizada) {
+    return this.exclusao.elegibilidade(id, req.usuarioDominio!);
   }
 
   @Delete(':id')

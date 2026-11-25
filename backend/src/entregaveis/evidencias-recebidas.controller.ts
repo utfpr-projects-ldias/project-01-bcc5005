@@ -105,7 +105,7 @@ export class EvidenciasRecebidasController {
     @Param('esperadaId') id: string, @UploadedFile() arquivo: ArquivoComprovante | undefined,
     @Body() dto: EnviarComprovanteDto, @Req() req: RequisicaoAutorizada) {
     if (!arquivo) throw new BadRequestException('Selecione um arquivo');
-    return this.service.enviar(c, e, id, arquivo, dto, req.usuarioDominio!);
+    return this.service.enviar(c, e, id, arquivo, dto, req.usuarioDominio!, req.headers?.['idempotency-key']);
   }
   @Post(':esperadaId/comprovantes/:comprovanteId/verificar')
   @HttpCode(HttpStatus.OK)

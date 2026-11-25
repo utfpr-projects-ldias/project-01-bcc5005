@@ -20,5 +20,6 @@ export class ExecucaoLancamento {
   @Column({ name:'autor_nome', type:'varchar', length:255 }) autorNome!: string;
   @Column({ name:'decidido_por', type:'uuid', nullable:true }) decididoPor!: string|null;
   @Column({ name:'decidido_em', type:'timestamptz', nullable:true }) decididoEm!: Date|null;
+  @Column({ name:'pedido_original', type:'jsonb', nullable:true }) pedidoOriginal?: import('./pedido-manual.js').PedidoManual | null;
   @Column({ name:'criado_em', type:'timestamptz', default:()=> 'now()' }) criadoEm!: Date;
 }

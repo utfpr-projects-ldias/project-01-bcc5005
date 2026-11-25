@@ -34,7 +34,7 @@ describe('HU07-05 — regressão contratual frontend → API', () => {
       for (const campo of ['quantidadeRealizada','statusExecucao','percentualExecucao','situacaoComprovacao']) {
         expect(resultado.dados).not.toHaveProperty(campo);
       }
-      expect(resultado.dados.configuracaoPeriodicidade).toEqual(tipo === 'RECORRENTE' ? { versao: 1 } : null);
+      expect(resultado.dados.configuracaoPeriodicidade).toEqual(tipo === 'RECORRENTE' ? { versao: 1, modoRegistro: 'DESCRITIVO' } : null);
     },
   );
   it('recusa valores inválidos sem enviar o planejamento', () => {

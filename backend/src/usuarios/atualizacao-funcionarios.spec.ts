@@ -13,13 +13,15 @@ const ator = { id: adminId, supertokensUserId: 'st-admin', email: 'admin@example
 const buscar = jest.fn<(id: string) => Promise<Usuario | null>>();
 const salvar = jest.fn<(usuario: Usuario) => Promise<Usuario>>();
 const auditar = jest.fn<() => Promise<void>>();
+const revogarSessoes = jest.fn<(id:string)=>Promise<void>>();
 const manager = { getRepository: () => ({
+  find: async () => [],
   findOne: ({ where }: { where: { id: string } }) => buscar(where.id), save: salvar,
 }) } as unknown as EntityManager;
 const transacao = jest.fn<(callback: (manager: EntityManager) => Promise<unknown>) => Promise<unknown>>();
 const svc = new AdministracaoUsuariosService(
   {} as Repository<Usuario>,
-  {} as IdentidadesFuncionariosService,
+  {revogarSessoes} as unknown as IdentidadesFuncionariosService,
   { transaction: transacao } as unknown as DataSource,
   { registrarNaTransacao: auditar } as unknown as AuditoriaService,
 );
@@ -30,6 +32,7 @@ const funcionario = () => Object.assign(new Usuario(), { id: funcionarioId, supe
 
 beforeEach(() => {
   jest.resetAllMocks();
+  revogarSessoes.mockResolvedValue(undefined);
   buscar.mockImplementation(async (id) => id === adminId ? admin() : id === funcionarioId ? funcionario() : null);
   salvar.mockImplementation(async (usuario) => usuario);
   auditar.mockResolvedValue(undefined);
@@ -43,6 +46,12 @@ describe('TEC07-06: atualizações de domínio auditáveis', () => {
     expect(salvar).toHaveBeenCalledTimes(1);
     expect(auditar).toHaveBeenCalledTimes(1);
     expect(auditar.mock.calls[0]).toBeDefined();
+  });
+  it('não reativa se a revogação das sessões falhar', async () => {
+    buscar.mockImplementation(async id => id === adminId ? admin() : Object.assign(funcionario(),{ativo:false}));
+    revogarSessoes.mockRejectedValueOnce(new Error('Core indisponível'));
+    await expect(svc.atualizar(funcionarioId,{ativo:true},ator)).rejects.toThrow('Core indisponível');
+    expect(salvar).not.toHaveBeenCalled();
   });
   it('falha na auditoria reverte a transação (erro propagado)', async () => {
     auditar.mockRejectedValue(new Error('falha auditoria'));

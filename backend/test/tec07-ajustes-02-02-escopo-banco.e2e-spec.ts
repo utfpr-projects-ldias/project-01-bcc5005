@@ -33,7 +33,7 @@ suite('TEC07-AJUSTES-02-02 — escopo real no PostgreSQL isolado', () => {
       entities: [Contrato, Usuario, Etapa, PermissaoContrato],
       migrations: migrationsCompletas,
     }).initialize();
-    await db.runMigrations();
+    await db.runMigrations({ transaction: 'each' });
 
     const criarContrato = async (numero: string): Promise<string> => {
       const codigoPublico = await codigoPublicoLivreParaTeste(db);
@@ -90,4 +90,28 @@ suite('TEC07-AJUSTES-02-02 — escopo real no PostgreSQL isolado', () => {
     expect(await politica.permitido(admin, { acao: 'etapas:visualizar', escopoOperacional: escopo }, raiz!)).toBe(true);
     expect(await resolver.resolver(escopo, { etapaId: 'ffffffff-ffff-4fff-8fff-ffffffffffff' })).toBeNull();
   });
+  it('B06: rejeita períodos recorrentes sobrepostos, preservando versões substituídas', async () => {
+    const qr=db.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
+    try {
+      const [e]=await qr.query(`INSERT INTO entregaveis
+        (contrato_id,etapa_id,nome,tipo,inicio_previsto,termino_previsto,periodicidade,configuracao_periodicidade)
+        VALUES ($1,$2,'QA B06','RECORRENTE','2026-11-01','2026-11-14','SEMANAL','{"versao":1,"modoRegistro":"DESCRITIVO"}'::jsonb) RETURNING id`,[contratoPermitido,etapaPermitida]) as {id:string}[];
+      const inserir=(inicio:string,fim:string)=>qr.query(`INSERT INTO ocorrencias
+        (contrato_id,entregavel_id,titulo,origem,modo_registro,periodo_inicio,periodo_fim,data_prevista)
+        VALUES ($1,$2,'QA B06','RECORRENTE','DESCRITIVO',$3,$4,$4) RETURNING id`,[contratoPermitido,e.id,inicio,fim]) as Promise<{id:string}[]>;
+      const [primeira]=await inserir('2026-11-01','2026-11-07');
+      await inserir('2026-11-08','2026-11-14');
+      await qr.query('SAVEPOINT b06_sobreposicao');
+      await expect(inserir('2026-11-03','2026-11-05')).rejects.toMatchObject({driverError:{code:'23P01',constraint:'ex_b06_agenda_sem_sobreposicao'}});
+      await qr.query('ROLLBACK TO SAVEPOINT b06_sobreposicao');
+      await qr.query('UPDATE ocorrencias SET substituida_em=now() WHERE id=$1',[primeira.id]);
+      await expect(inserir('2026-11-01','2026-11-07')).resolves.toHaveLength(1);
+    } finally {
+      await qr.rollbackTransaction();
+      await qr.release();
+    }
+  });
+
 });

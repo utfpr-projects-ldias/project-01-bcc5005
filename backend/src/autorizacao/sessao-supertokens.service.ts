@@ -8,7 +8,7 @@ import Session from 'supertokens-node/recipe/session';
 export class SessaoSuperTokensService {
   async identificar(req: Request, res: Response): Promise<string> {
     try {
-      const session = await Session.getSession(req, res, { sessionRequired: true });
+      const session = await Session.getSession(req, res, { sessionRequired: true, checkDatabase: true });
       if (!session) throw new UnauthorizedException('Sessão obrigatória');
       return session.getUserId();
     } catch (error: unknown) {

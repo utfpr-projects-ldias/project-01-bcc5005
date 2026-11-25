@@ -11,8 +11,9 @@ import { ResolverEscopoContratoService } from '../autorizacao/resolver-escopo-co
 import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
 import { CriarEntregavelDto, EditarEntregavelDto, SubstituirChecklistDto } from './dto/planejamento-entregavel.dto.js';
-import { EntregaveisService, validarPlanejamento } from './entregaveis.service.js';
+import { EntregaveisService, validarMetadadosEntregavel, validarPlanejamento, validarVigenciaPlanejamento, versaoPlanejamentoEntregavel } from './entregaveis.service.js';
 import { Entregavel } from './entregavel.entity.js';
+import { EvidenciaEsperada } from './evidencia-esperada.entity.js';
 import { TipoEntregavel } from './tipo-entregavel.enum.js';
 import { PeriodicidadeEntregavel } from './periodicidade-entregavel.enum.js';
 
@@ -139,9 +140,13 @@ describe('HU07-02 — serviço integra escopo, auditoria e transações', () => 
   const auditoria = { registrarResolvedorContexto: jest.fn(), registrarNaTransacao: jest.fn(async () => undefined) };
   const escopos = { registrarAdaptador: jest.fn() };
   let modoCalculo: 'SIMPLES' | 'PONDERADO' = 'PONDERADO';
+  const usuario = { findOneBy: jest.fn(async () => ({...ator, nome:null, ativo:true})), findOne: jest.fn(async () => ({...ator, ativo:true})) };
+  const acl = { findOne: jest.fn(async () => ({podeEditar:false,permissoesDetalhadas:{criarEntregaveis:true,configurarPesos:false}})) };
+  const checklist = {find: jest.fn(async (): Promise<EvidenciaEsperada[]> => []), save: jest.fn()};
+  const comprovante = {findOne: jest.fn(async (): Promise<{status:string}|null> => null)};
   const ctx = {
     query: jest.fn(async () => [{ soma: '0' }]),
-    getRepository: jest.fn((entity: { name: string }) => entity.name === 'Entregavel' ? repositorio : ({
+    getRepository: jest.fn((entity: { name: string }) => entity.name === 'Usuario' ? usuario : entity.name === 'PermissaoContrato' ? acl : entity.name === 'Entregavel' ? repositorio : entity.name === 'EvidenciaEsperada' ? checklist : entity.name === 'ComprovanteEvidencia' ? comprovante : ({
       findOneBy: jest.fn(async () => ({ id: etapa, ativo: true, modoCalculo })),
       find: jest.fn(async () => []),
       createQueryBuilder: jest.fn(() => ({ setLock: () => ({ where: () => ({ getOne: async () => ({ id: contrato }) }) }) })),
@@ -154,7 +159,13 @@ describe('HU07-02 — serviço integra escopo, auditoria e transações', () => 
     auditoria as unknown as AuditoriaService,
     escopos as unknown as ResolverEscopoContratoService,
   );
-  beforeEach(() => { jest.clearAllMocks(); modoCalculo = 'PONDERADO'; });
+  beforeEach(() => { jest.clearAllMocks(); usuario.findOne.mockReset().mockImplementation(async () => ({...ator, ativo:true})); modoCalculo = 'PONDERADO'; });
+
+  it('B05: rejeita versão desatualizada antes da escrita', async () => {
+    repositorio.findOneBy.mockResolvedValueOnce(Object.assign(exemplo(),{id}));
+    await expect(service.editar(contrato,id,{nome:'Novo nome',versaoPlanejamento:'a'.repeat(64)},ator)).rejects.toThrow(/planejamento mudou/);
+    expect(repositorio.save).not.toHaveBeenCalled();
+  });
 
   it('registra escopo persistido e resolvedor de auditoria, sem confiar no body', async () => {
     service.onModuleInit();
@@ -172,6 +183,26 @@ describe('HU07-02 — serviço integra escopo, auditoria e transações', () => 
     expect(auditoria.registrarNaTransacao).toHaveBeenCalledWith(ctx, ator, expect.objectContaining({
       entidadeTipo: 'ENTREGAVEL', entidadeId: id,
     }));
+  });
+  it('cadastro com peso positivo exige delegação específica', async () => {
+    const colaborador = {...ator,perfil:PerfilUsuario.COLABORADOR};
+    usuario.findOne.mockResolvedValueOnce({...colaborador,ativo:true}).mockResolvedValueOnce({...colaborador,ativo:true});
+    const dto = { etapaId: etapa, nome: 'Entrega ponderada', tipo: TipoEntregavel.UNICO, inicioPrevisto: '2026-10-30', peso: '20' } as CriarEntregavelDto;
+    await expect(service.criar(contrato,dto,colaborador)).rejects.toThrow('Sem permissão');
+    expect(repositorio.save).not.toHaveBeenCalled();
+  });
+  it('checklist coletivo não altera descrição de evidência verificada', async () => {
+    repositorio.findOneBy.mockResolvedValueOnce(Object.assign(exemplo(),{id}));
+    checklist.find.mockResolvedValueOnce([Object.assign(new EvidenciaEsperada(),{id, tipoEvidencia:'FOTO', descricao:'Original', obrigatoria:true, arquivadoEm:null})]);
+    comprovante.findOne.mockResolvedValueOnce({status:'VERIFICADA'});
+    await expect(service.substituirChecklist(contrato,id,{itens:[{id,tipoEvidencia:'FOTO',descricao:'Alterada',obrigatoria:true}]},ator)).rejects.toThrow('Evidência verificada');
+    expect(checklist.save).not.toHaveBeenCalled();
+  });
+  it('cadastro recorrente rejeita agenda acima de 500 períodos sem persistir', async () => {
+    await expect(service.criar(contrato,{etapaId:etapa,nome:'Agenda longa',tipo:TipoEntregavel.RECORRENTE,
+      inicioPrevisto:'2026-01-01',terminoPrevisto:'2028-01-01',peso:'0',periodicidade:PeriodicidadeEntregavel.DIARIA,
+      configuracaoPeriodicidade:{versao:1,modoRegistro:'DESCRITIVO'}},ator)).rejects.toThrow('500 períodos');
+    expect(repositorio.save).not.toHaveBeenCalled();
   });
   it('modo ponderado rejeita peso que excede a parcela restante sem inventar conflito de replanejamento', async () => {
     ctx.query.mockResolvedValueOnce([{ soma: '100' }]);
@@ -302,4 +333,38 @@ describe('Rastreabilidade contextual: nomes da época do evento', () => {
     expect(resultado[1]).toEqual(expect.objectContaining({ nomeArquivo: 'versao-2026.pdf' }));
     expect(resultado[0]).not.toHaveProperty('dadosAnteriores');
   });
+});
+
+
+describe('B05 — precisão, vigência e versão do planejamento', () => {
+  it('aceita caracteres suplementares, peso zero e quatro casas', () => {
+    const e=exemplo(); e.nome='😀'.repeat(22); e.peso='0';
+    expect(()=>validarPlanejamento(e)).not.toThrow();
+    e.peso='33.3333'; expect(()=>validarPlanejamento(e)).not.toThrow();
+    e.nome='😀'.repeat(43); expect(()=>validarPlanejamento(e)).toThrow(BadRequestException);
+  });
+  it('verifica datas novas sem impedir metadados de planejamento histórico', () => {
+    const e=exemplo(); const vigencia={inicioVigencia:'2026-11-01',terminoVigencia:'2026-11-30'};
+    expect(()=>validarVigenciaPlanejamento(e,vigencia)).toThrow(BadRequestException);
+    expect(()=>validarVigenciaPlanejamento(e,vigencia,e)).not.toThrow();
+    expect(()=>validarVigenciaPlanejamento({...e,inicioPrevisto:'2026-11-01'},vigencia,e)).not.toThrow();
+  });
+  it('hash não depende da escala decimal ou ordem do JSON, mas diferencia milésimos grandes', () => {
+    const e=exemplo(TipoEntregavel.RECORRENTE); e.configuracaoPeriodicidade={versao:1,modoRegistro:'DESCRITIVO'};
+    e.quantidadePrevista='999999999999999.001';
+    const v=versaoPlanejamentoEntregavel(e);
+    expect(versaoPlanejamentoEntregavel({...e,peso:'12.5',configuracaoPeriodicidade:{modoRegistro:'DESCRITIVO',versao:1}})).toBe(v);
+    expect(versaoPlanejamentoEntregavel({...e,quantidadePrevista:'999999999999999.002'})).not.toBe(v);
+    expect(versaoPlanejamentoEntregavel({...e,agendaInicioFuturo:'2026-11-02'})).not.toBe(v);
+  });
+});
+
+it('limita novos metadados aos contadores da interface', () => {
+  for (const [campo,limite] of [['codigo',15],['nome',42],['descricao',200],['observacoes',100],['unidadeMedida',40],['criterioConclusao',200]] as const) {
+    const e=exemplo();
+    e[campo]='x'.repeat(limite);
+    expect(()=>validarMetadadosEntregavel(e,undefined,[campo])).not.toThrow();
+    e[campo]+='x';
+    expect(()=>validarMetadadosEntregavel(e,undefined,[campo])).toThrow(BadRequestException);
+  }
 });

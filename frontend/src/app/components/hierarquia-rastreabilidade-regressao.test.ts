@@ -13,7 +13,7 @@ function ordemEmFonte(arquivo: string, marcadores: string[]) {
 test('entregável mantém identificação, rastreabilidade, evidências e atividades nesta ordem', () => {
   ordemEmFonte('src/app/contratos/components/conteudo-entregavel.tsx', [
     'Informações do entregável',
-    'Rastreabilidade do entregável',
+    'Histórico do entregável',
     'aria-label="Consultar evidências"',
     '<AtividadesVinculadas contratoId={item.contratoId}',
   ]);
@@ -25,9 +25,9 @@ test('etapa mantém identificação e rastreabilidade antes dos entregáveis', (
   ]);
 });
 
-test('evidência exibe rastreabilidade antes da comprovação documental', () => {
+test('evidência exibe comprovação documental antes da rastreabilidade', () => {
   ordemEmFonte('src/app/contratos/components/painel-comprovacao-evidencia.tsx', [
-    'data-testid="status-verificacao"', 'data-tec08-historico-evidencia', 'aria-label="Comprovação da evidência"',
+    'data-testid="status-verificacao"', 'aria-label="Comprovação da evidência"', 'data-tec08-historico-evidencia',
   ]);
 });
 

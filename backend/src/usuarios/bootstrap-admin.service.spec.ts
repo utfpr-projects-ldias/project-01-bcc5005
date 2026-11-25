@@ -27,7 +27,7 @@ describe('bootstrap inicial controlado / TEC07-01', () => {
     getRepository: () => ({ countBy: contar, findOneBy: buscar, createQueryBuilder: () => queryBuilder }),
   };
   const transacao = jest.fn<(cb: (transactionManager: typeof manager) => Promise<Usuario>) => Promise<Usuario>>();
-  const banco = { transaction: transacao } as unknown as DataSource;
+  const banco = { transaction: transacao, getRepository: () => ({findOneBy: buscar}) } as unknown as DataSource;
   const criar = jest.fn<(email: string, password: string) => Promise<string>>();
   const autenticar = jest.fn<(email: string, password: string) => Promise<string>>();
   const identidades: ProvedorIdentidadeBootstrap = { criar, autenticar };
@@ -77,6 +77,16 @@ describe('bootstrap inicial controlado / TEC07-01', () => {
     }, identidades);
     expect(autenticar).toHaveBeenCalledWith('admin@example.com', 'senhaSegura1234');
     expect(criar).not.toHaveBeenCalled();
+  });
+
+  it('preserva identidade quando o COMMIT ocorreu mas a resposta foi perdida', async () => {
+    contar.mockResolvedValue(0); criar.mockResolvedValue('st-admin'); executar.mockResolvedValue({});
+    const salvo = Object.assign(new Usuario(), {id:'admin-uuid',supertokensUserId:'st-admin',email:'admin@example.com',perfil:'ADMINISTRADOR',ativo:true});
+    buscar.mockResolvedValueOnce(null).mockResolvedValueOnce(salvo).mockResolvedValueOnce(salvo);
+    transacao.mockImplementationOnce(async cb => { await cb(manager); throw new Error('COMMIT indeterminado'); });
+    const excluir = jest.fn<(id:string)=>Promise<void>>();
+    await expect(criarAdministradorInicial(banco,{modo:'novo',email:'admin@example.com',senha:'senhaSegura1234'}, {...identidades,excluirCriacaoIncompleta:excluir})).resolves.toBe(salvo);
+    expect(excluir).not.toHaveBeenCalled();
   });
 
   it('rejeita senha fraca antes de consultar o banco', async () => {

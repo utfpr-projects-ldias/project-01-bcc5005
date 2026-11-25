@@ -33,9 +33,6 @@ test('peso operacional obrigatório aceita soma provisória e impede valor acima
   expect(gravar).not.toHaveBeenCalled();
   fireEvent.change(screen.getByLabelText('Peso operacional (%) *'), { target: { value: '101' } });
   expect(screen.getByLabelText('Peso operacional (%) *')).toHaveValue('100');
-  fireEvent.change(screen.getByLabelText('Peso operacional (%) *'), { target: { value: '0' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Cadastrar entregável' }));
-  expect(gravar).not.toHaveBeenCalled();
   fireEvent.change(screen.getByLabelText('Peso operacional (%) *'), { target: { value: '18.25' } });
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Cadastrar entregável' })); });
   if (screen.queryByRole('button', { name: 'Entendi' })) await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Entendi' })); });
@@ -45,7 +42,7 @@ test('edição preserva checklist e campos operacionais existentes sem modificá
   montar({ ...item, peso: '20' });
   fireEvent.change(screen.getByLabelText('Nome *'), { target: { value: 'Manutenção periódica' } });
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' })); });
-  expect(gravar).toHaveBeenCalledWith(expect.objectContaining({ nome: 'Manutenção periódica', periodicidade: 'MENSAL', evidenciasEsperadas: [expect.objectContaining({ id: 'ev1' })] }));
+  expect(gravar).toHaveBeenCalledWith(expect.objectContaining({ nome: 'Manutenção periódica', periodicidade: 'MENSAL', evidenciasEsperadas: [expect.objectContaining({ id: 'ev1' })] }), expect.objectContaining({nome:item.nome}));
 });
 test('novo entregável mantém data única e esconde checklist na criação', () => {
   montar();
@@ -258,4 +255,18 @@ test('saldo na edição substitui o próprio peso sem somá-lo duas vezes',()=>{
   expect(screen.getByText('100,00%')).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText('Peso operacional (%) *'),{target:{value:'45'}});
   expect(screen.getByText('55,00%')).toBeInTheDocument();
+});
+
+test('B05: cadastro sem delegação de pesos envia zero e preserva precisão para quem pode configurar', async () => {
+  const v = render(<FormularioEntregavel etapaId="etapa-a" modoCalculo="PONDERADO" pesosContrato={[{id:'outro',peso:'100'}]} onSalvar={gravar} onCancelar={cancelar} podeConfigurarPesos={false}/>);
+  expect(screen.getByLabelText('Peso operacional (%) *')).toBeDisabled();
+  expect(screen.getByLabelText('Peso operacional (%) *')).toHaveValue('0');
+  fireEvent.change(screen.getByLabelText('Nome *'),{target:{value:'Sem peso'}}); preencherInicio();
+  await act(async()=>{fireEvent.click(screen.getByRole('button',{name:'Cadastrar entregável'}));});
+  expect(gravar).toHaveBeenCalledWith(expect.objectContaining({peso:'0'}));
+  v.unmount();
+  render(<FormularioEntregavel etapaId="etapa-a" modoCalculo="PONDERADO" onSalvar={gravar} onCancelar={cancelar} podeConfigurarPesos/>);
+  const peso = screen.getByLabelText('Peso operacional (%) *');
+  fireEvent.change(peso,{target:{value:'33,3333'}}); fireEvent.blur(peso);
+  expect(peso).toHaveValue('33,3333');
 });

@@ -14,6 +14,9 @@ import re
 import secrets
 import subprocess
 import sys
+from pathlib import Path as _CaminhoQA
+sys.path.insert(0, str(_CaminhoQA(__file__).resolve().parents[1]))
+from navegacao_contrato import localizar_pagina, abrir_pagina
 import time
 from urllib.parse import quote, urlsplit
 
@@ -171,9 +174,9 @@ def comprovar_ui(page, painel, itens: list[dict]) -> None:
     if not itens:
         painel.get_by_text("Ainda não há etapas cadastradas", exact=False).wait_for(timeout=10000)
         return
-    lista = painel.get_by_role("list", name="Etapas em ordem de execução")
-    page.wait_for_function("n => document.querySelectorAll('ol[aria-label=\"Etapas em ordem de execução\"] > li').length === n", arg=len(itens), timeout=15000)
-    linhas = lista.locator(":scope > li")
+    lista = painel.get_by_role("table", name="Etapas e entregáveis")
+    page.wait_for_function("n => document.querySelectorAll('table[aria-label=\"Etapas e entregáveis\"] > tbody > tr[data-etapa-estado]').length === n", arg=len(itens), timeout=15000)
+    linhas = lista.locator(":scope > tbody > tr[data-etapa-estado]")
     garantir(linhas.count() == len(itens), "Quantidade de Etapas exibidas na UI difere da API")
     for indice, etapa in enumerate(itens):
         garantir(etapa["nome"] in linhas.nth(indice).inner_text(), f"Ordem da UI difere da API na posição {indice + 1}")
@@ -188,10 +191,10 @@ def verificar_detalhe_leitor(page, painel, etapa: dict) -> None:
     botao.wait_for(state='visible', timeout=20000)
     garantir(botao.count() == 1, f'Etapa de leitura {nome!r} ausente/duplicada na interface')
     botao.click()
-    modal = page.get_by_role('dialog', name=re.compile(
+    modal = page.get_by_role('region', name=re.compile(
         r'^\d+\s*·\s*' + re.escape(nome) + r'$'))
     modal.wait_for(state='visible', timeout=20000)
-    garantir(modal.get_attribute('aria-modal') == 'true', 'Etapa não abriu em modal acessível')
+    garantir(modal.get_attribute('data-pi-detalhe-interno') is not None, 'Etapa não abriu em modal acessível')
     garantir(modal.get_by_role('button', name='Editar etapa', exact=True).count() == 0,
              'Usuário somente leitura recebeu ação Editar etapa no detalhe aberto')
     modal.get_by_role('button', name='Voltar às etapas', exact=True).click()
@@ -206,10 +209,10 @@ def confirmar_retorno_edicao_no_detalhe(page, painel, nome_editado: str) -> None
     próprio do produto e só depois procuramos o cartão na lista de etapas.
     Um botão atrás de um diálogo não é um elemento visível/clicável.
     """
-    detalhe = page.get_by_role('dialog', name=re.compile(
+    detalhe = page.get_by_role('region', name=re.compile(
         r'^\d+\s*·\s*' + re.escape(nome_editado) + r'$'))
     detalhe.wait_for(state='visible', timeout=25000)
-    garantir(detalhe.get_attribute('aria-modal') == 'true',
+    garantir(detalhe.get_attribute('data-pi-detalhe-interno') is not None,
              'Após edição, o detalhe da etapa não retornou ao modal acessível')
     detalhe.get_by_role('button', name='Voltar às etapas', exact=True).click()
     detalhe.wait_for(state='detached', timeout=15000)
@@ -304,17 +307,19 @@ def main() -> int:
             else:
                 # O contrato abre em "Visão geral"; Etapas fica em tabpanel hidden.
                 # Selecionar a aba pela UI é parte do QA real, não um mock.
-                aba_etapas = page.get_by_role("tab", name="Etapas", exact=True)
+                aba_etapas = localizar_pagina(page, "Etapas")
                 aba_etapas.wait_for(state="visible", timeout=20000)
                 aba_etapas.click()
-                garantir(aba_etapas.get_attribute("aria-selected") == "true",
+                page.locator("#painel-etapas").wait_for(state="visible", timeout=25000)
+                garantir(page.locator("#painel-etapas").is_visible(),
                          "A aba Etapas não foi selecionada após clique")
                 painel = page.locator('section[aria-labelledby="titulo-etapas"]')
                 painel.wait_for(timeout=20000)
                 # Controle real por teclado na viewport escolhida, com foco visível
                 # e tabulação. Não afirmar auditoria WCAG completa ou estética.
-                aba_etapas.focus()
-                garantir(page.evaluate("document.activeElement?.getAttribute('role') === 'tab'"),
+                foco_navegacao = page.locator('.pi-nav-desktop button[aria-current="page"]:visible').or_(page.get_by_role("button", name="Abrir navegação do contrato", exact=True))
+                foco_navegacao.focus()
+                garantir(page.evaluate("document.activeElement?.tagName === 'BUTTON'"),
                          "A aba Etapas não recebeu foco pelo navegador")
                 page.keyboard.press("Tab")
                 garantir(page.evaluate("""() => {
@@ -330,7 +335,7 @@ def main() -> int:
                 page.wait_for_function("""() => {
                     const painel = document.querySelector('section[aria-labelledby="titulo-etapas"]');
                     return !!painel && (
-                      !!painel.querySelector('ol[aria-label="Etapas em ordem de execução"]') ||
+                      !!painel.querySelector('table[aria-label="Etapas e entregáveis"]') ||
                       painel.textContent.includes('Ainda não há etapas cadastradas') ||
                       !!painel.querySelector('[role="alert"]')
                     );
@@ -453,9 +458,10 @@ def main() -> int:
                     print("[OK] Reordenação real gravada no PostgreSQL")
 
                     page.reload(wait_until="domcontentloaded")
-                    aba_etapas = page.get_by_role("tab", name="Etapas", exact=True)
+                    aba_etapas = localizar_pagina(page, "Etapas")
                     aba_etapas.click()
-                    garantir(aba_etapas.get_attribute("aria-selected") == "true", "F5: aba Etapas não selecionada")
+                    page.locator("#painel-etapas").wait_for(state="visible", timeout=25000)
+                    garantir(page.locator("#painel-etapas").is_visible(), "F5: aba Etapas não selecionada")
                     painel = page.locator('section[aria-labelledby="titulo-etapas"]')
                     painel.wait_for(timeout=20000)
                     comprovar_ui(page, painel, depois)
@@ -473,9 +479,10 @@ def main() -> int:
                             time.sleep(1)
                         garantir(teste["status"] == 200, "Backend não respondeu após restart")
                         page.reload(wait_until="domcontentloaded")
-                        aba_etapas = page.get_by_role("tab", name="Etapas", exact=True)
+                        aba_etapas = localizar_pagina(page, "Etapas")
                         aba_etapas.click()
-                        garantir(aba_etapas.get_attribute("aria-selected") == "true", "Reinício: aba Etapas não selecionada")
+                        page.locator("#painel-etapas").wait_for(state="visible", timeout=25000)
+                        garantir(page.locator("#painel-etapas").is_visible(), "Reinício: aba Etapas não selecionada")
                         painel = page.locator('section[aria-labelledby="titulo-etapas"]')
                         painel.wait_for(timeout=20000)
                         reiniciadas = etapas_http(page, api, args.contrato_id)

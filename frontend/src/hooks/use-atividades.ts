@@ -7,17 +7,17 @@ export type FiltroEstadoAtividade = EstadoAtividade | 'ATIVAS' | 'TODAS_ATUAIS' 
 
 export type Atividade = {
   id: string; contratoId: string; atividadeCompartilhadaId?: string | null; titulo: string; dataHora: string; descricao: string;
-  tipo: string; responsavel: string | null; participantes: string[] | null;
+  tipo: string; responsavel: string | null; responsavelId?:string|null; participantes: string[] | null;
   local: string | null; duracao: string | null; observacoes: string | null;
   ocorrenciaId?: string | null; ocorrenciaIds?: string[]; medicoesDiretas?: {entregavelId:string;quantidade:string}[]; medicoes?: { ocorrenciaId: string; quantidade: string }[]; ocorrencias?: {id: string; entregavelId: string; titulo: string; status: string; inicioPeriodo?: string | null; terminoPeriodo?: string | null}[]; quantidadeExecucao?: string | null;
   entregaveis: { id: string; nome: string; codigoPublico?: number; etapaId?: string }[];
   parcelasPercentuais?:{entregavelId:string;ocorrenciaId?:string;percentual:string}[];
-  comprovantesVinculados?: number; contribuicoesDiario?: { destino:string; entregavelId:string|null; ocorrenciaId:string|null; valor:number; unidade:string; situacao:string; reconhecida:boolean }[];
+  comprovantesVinculados?: number; comprovantesHistoricos?:number; contribuicoesDiario?: { destino:string; entregavelId:string|null; ocorrenciaId:string|null; valor:number; valorExato?:string|null; unidade:string; situacao:string; reconhecida:boolean }[];
   status: EstadoAtividade; verificadaEm: string | null; arquivadaEm: string | null; excluidaEm?: string | null;
 };
 export type DadosAtividade = {
   contratoId: string; titulo: string; dataHora: string; descricao: string; tipo: string;
-  responsavelId?: string; responsavel?: string; participantes?: string[]; local?: string; duracao?: string;
+  responsavelId?: string | null; responsavel?: string; participantes?: string[]; local?: string; duracao?: string;
   referenciaQuantitativa?:string; ocorrenciaReferenciaId?:string;
   parcelasPercentuais?:{entregavelId:string;ocorrenciaId?:string;percentual:string}[];
   percentualExecucao?: string; comprovaExecucaoId?: string; entregavelExecucaoId?: string; ocorrenciaExecucaoId?: string;
@@ -69,10 +69,10 @@ export async function listarAtividadesVinculaveis(contratoId: string, entregavel
 }
 
 export type ComprovanteAtividade = {
-  id: string; nomeOriginal: string; tipoEvidencia: string; status: 'VERIFICADA'|'PENDENTE_VERIFICACAO'|'REJEITADA'; entregavelId: string; vinculado: boolean;
+  id: string; nomeOriginal: string; tipoEvidencia: string; status: 'VERIFICADA'|'PENDENTE_VERIFICACAO'|'REJEITADA'; entregavelId: string; vinculado: boolean; vigente?:boolean;
 };
 export function pesquisarResponsaveisAtividade(contratoId:string,busca:string,signal?:AbortSignal) {
-  return requisitar<{itens:{id:string;email:string}[];total:number}>(`${base(contratoId)}/responsaveis?${new URLSearchParams({busca})}`,{signal});
+  return requisitar<{itens:{id:string;email:string;nome?:string|null}[];total:number}>(`${base(contratoId)}/responsaveis?${new URLSearchParams({busca})}`,{signal});
 }
 export function listarEvidenciasAtividade(contratoId: string, atividadeId: string): Promise<{
   vinculadas: ComprovanteAtividade[]; disponiveis: ComprovanteAtividade[];

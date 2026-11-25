@@ -28,7 +28,7 @@ export function RegistroContratoAvulso({contratoId,alvo,gatilho,bloqueado,paiArq
  const aguardando=consulta.carregando||etapas.carregando||(alvo.tipo==='EVIDENCIA'&&evidencia.carregando)||(alvo.tipo==='MANUAL'&&registrosManuais.carregando);
  const pronto=Boolean(item&&etapa&&(alvo.tipo!=='EVIDENCIA'||evidencia.dados)&&(alvo.tipo!=='MANUAL'||registrosManuais.dados));
  const fechar=()=>{onFechar();requestAnimationFrame(()=>{if(gatilho?.isConnected)gatilho.focus({preventScroll:true});});};
- if(!pronto&&!erro&&aguardando)return <span role="status" className="sr-only">Consultando registro.</span>;
+ if(!pronto&&!erro&&aguardando)return alvo.tipo==='CADASTRO'?createPortal(<ModalEtapa titulo="Novo registro" contexto="" ocupado={false} onFechar={fechar} focoRetorno={gatilho} camada="edicao" navegacaoCadastro={{ativa:alvo.origem,opcoes:{MANUAL:false,ATIVIDADE:false,EVIDENCIA:false,OCORRENCIA:false},selecionar:semAcao}}><p role="status" className="text-sm text-foreground/70">Consultando entregável e permissões…</p></ModalEtapa>,document.body):<span role="status" className="sr-only">Consultando registro.</span>;
  if(erro||!pronto||!item||!etapa)return createPortal(<ModalEtapa titulo="Registro indisponível" ocupado={false} onFechar={fechar} focoRetorno={gatilho} camada="aninhada" larguraFormulario="registro-manual"><p role="alert">{erro?'Não foi possível consultar o registro.':'Registro indisponível.'}</p></ModalEtapa>,document.body);
  const arquivado=paiArquivado||Boolean(etapa.arquivadoEm||item.arquivadoEm);
  const etapaPendente=Boolean(etapa.conclusaoSolicitadaEm||etapa.encerramentoSolicitadoEm);

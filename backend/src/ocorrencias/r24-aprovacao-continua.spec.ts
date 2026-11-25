@@ -1,3 +1,4 @@
+import { Usuario } from '../usuarios/usuario.entity.js';
 import { ConflictException } from '@nestjs/common';
 import { jest } from '@jest/globals';
 import { OcorrenciasService } from './ocorrencias.service.js';
@@ -13,7 +14,7 @@ function ambiente() {
   const e={id:'ent',contratoId,etapaId:'et',tipo:'CONTINUO',terminoPrevisto:'2026-11-23',arquivadoEm:null,statusExecucao:'EM_ANDAMENTO'};
   const etapa={id:'et',status:'EM_ANDAMENTO',arquivadoEm:null,conclusaoSolicitadaEm:null,encerramentoSolicitadoEm:null};
   const repo={findOne:jest.fn(async()=>o),save:jest.fn(async(x:unknown)=>x)};
-  const m={getRepository:jest.fn((tipo:unknown)=>tipo===Ocorrencia?repo:null),
+  const m={getRepository:jest.fn((tipo:unknown)=>tipo===Usuario?{findOne:async()=>({...ator,ativo:true})}:tipo===Ocorrencia?repo:null),
     findOne:jest.fn(async(tipo:unknown)=>tipo===Contrato?{id:contratoId,status:'EM_EXECUCAO',arquivadoEm:null}:tipo===Etapa?etapa:null),
     findOneBy:jest.fn(async(tipo:unknown)=>tipo===Entregavel?e:null),
     save:jest.fn(async(_tipo:unknown,x:unknown)=>x),
@@ -40,6 +41,7 @@ describe('R24 — conclusão de ocorrência contínua não contorna vigência',(
     const {service,o,auditoria}=ambiente();
     await service.concluir(contratoId,o.id,ator as never);
     expect(o.status).toBe('CONCLUIDO');
+    expect(o).toMatchObject({concluidaEm: new Date('2026-11-23T03:01:00Z'),concluidaPor:ator.id});
     expect(auditoria.registrarNaTransacao).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,3 +1,4 @@
+import { Usuario } from '../usuarios/usuario.entity.js';
 import { jest } from '@jest/globals';
 import { OcorrenciasService } from './ocorrencias.service.js';
 import { Ocorrencia } from './ocorrencia.entity.js';
@@ -16,7 +17,7 @@ describe('R24 — ativação em lotes sob hierarquia fechada',()=>{
       status:'NAO_INICIADO',substituidaEm:null}));
     const repo={find:jest.fn(async(opts:{skip?:number;take?:number})=>linhas.filter(o=>o.status==='NAO_INICIADO')
       .slice(opts.skip??0,(opts.skip??0)+(opts.take??500)))};
-    const m={getRepository:jest.fn((tipo:unknown)=>tipo===Ocorrencia?repo:null),
+    const m={getRepository:jest.fn((tipo:unknown)=>tipo===Usuario?{findOne:async()=>({...ator,ativo:true})}:tipo===Ocorrencia?repo:null),
       findOne:jest.fn(async(tipo:unknown)=>tipo===Contrato?{id:cid,status:'EM_EXECUCAO',arquivadoEm:null}:null),
       findOneBy:jest.fn(async(tipo:unknown,where:{id:string})=>tipo===Entregavel?
         {id:where.id,etapaId:where.id,contratoId:cid,statusExecucao:where.id==='pendente'?'PENDENTE_CONCLUSAO':'EM_ANDAMENTO',arquivadoEm:null}:

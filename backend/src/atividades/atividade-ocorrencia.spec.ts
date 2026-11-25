@@ -19,6 +19,7 @@ function montar(ocorrencia: { entregavelId: string; substituidaEm?: Date } | nul
   const entregavel = { id, etapaId: id, contratoId, arquivadoEm: null, statusExecucao: 'EM_ANDAMENTO' };
   const atividade = { id, contratoId, ocorrenciaId: null as string | null, titulo: 'Anterior', dataHora: new Date('2026-11-01T15:00:00Z'), tipo: 'Reunião', descricao: 'Preservada', responsavel: 'QA', status: 'REGISTRADA', entregaveis: [entregavel] };
   const manager = {
+    getRepository: jest.fn(() => ({findOne:jest.fn(async()=>({...ator,ativo:true,bloqueioSessoesId:null}))})),
     findOne: jest.fn(async (entidade: unknown) => entidade === Contrato ? { status: statusContrato } : entidade === Ocorrencia ? ocorrenciaPersistida : entidade === AtividadeEntity ? atividade : null),
     findOneBy: jest.fn(async (entidade: unknown) => entidade === Entregavel ? { ...entregavel, tipo: 'RECORRENTE' } : null),
     find: jest.fn(async (entidade: unknown) => entidade === Entregavel ? [entregavel] : entidade === Etapa ? [{ id, status: 'PLANEJADA' }] : []),

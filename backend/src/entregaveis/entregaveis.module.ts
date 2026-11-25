@@ -24,5 +24,6 @@ import { ExclusaoPlanejamentoModule } from './exclusao-planejamento.module.js';
   ],
   controllers: [EntregaveisController, EvidenciasRecebidasController],
   providers: [EntregaveisService, EvidenciasRecebidasService, ArquivamentoPlanejamentoService],
+  exports: [EntregaveisService],
 })
 export class EntregaveisModule {}

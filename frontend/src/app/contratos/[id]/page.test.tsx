@@ -13,6 +13,7 @@ jest.mock('@/app/components/provedor-consultas', () => ({ useConsulta: jest.fn()
 jest.mock('@/hooks/use-meu-perfil', () => ({ useMeuPerfil: jest.fn() }));
 jest.mock('@/hooks/use-documentos', () => ({ useDocumentos: jest.fn() }));
 jest.mock('@/hooks/use-contratos', () => ({ useContrato: jest.fn(), useAcessoContrato: jest.fn(), useResponsaveis: jest.fn(), useMutacoesContrato: jest.fn(), usePendentesConclusao: jest.fn() }));
+jest.mock('@/hooks/use-ocorrencias', () => ({ useOcorrencias: () => ({ ocorrencias: [], loading: false, erro: null }) }));
 jest.mock('@/hooks/use-etapas', () => ({ useEtapas: jest.fn() }));
 jest.mock('@/hooks/use-entregaveis', () => ({ useEntregaveis: jest.fn(), useResumoDocumentalContrato: jest.fn() }));
 jest.mock('../components/painel-documentos', () => ({
@@ -40,7 +41,7 @@ const contrato: Contrato = {
   inicioVigencia: '2026-10-01', terminoVigencia: '2027-10-01', status: 'EM_EXECUCAO',
   responsavelInternoId: null, fiscalGestor: null, modoCalculo: 'SIMPLES', observacoes: null,
 };
-function abrirNavegacao(){fireEvent.click(screen.getByRole('button',{name:'Abrir navegação do contrato'}));return screen.getByRole('navigation',{name:'Páginas do contrato'});}
+function abrirNavegacao(){fireEvent.click(screen.getByRole('button',{name:'Abrir navegação do contrato'}));return document.querySelector<HTMLElement>('[data-pi-navegacao-direita][data-aberto="true"]')!;}
 function navegar(nome:string){fireEvent.click(within(abrirNavegacao()).getByRole('button',{name:nome}));}
 const retorno = (dados: unknown) => ({ dados, carregando: false, erro: undefined, atualizando: false });
 beforeEach(() => {
@@ -60,7 +61,7 @@ beforeEach(() => {
 });
 test('HU06-03: integra Etapas uma vez ao detalhe real do Contrato sem cabeçalho adicional', () => {
   render(<DetalheContratoPage />);
-  expect(screen.getByRole('heading', { name: 'Visão geral' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Acompanhamento' })).toBeInTheDocument();
   navegar('Documentos');
   expect(screen.getByRole('heading', { name: 'Documentos' })).toBeInTheDocument();
   // Ser Gestor sem permissao de editar cadastro ou documentos nao libera gestao.
@@ -75,7 +76,7 @@ test('HU06-03: gestão depende da permissão individual, inclusive para Colabora
   const view = render(<DetalheContratoPage />);
   navegar('Etapas');
   expect(screen.getByTestId('painel-etapas')).toHaveTextContent('consulta');
-  navegar('Visão geral');
+  navegar('Acompanhamento');
   navegar('Documentos');
   expect(screen.getByTestId('painel-documentos')).toHaveTextContent('consulta');
   perfil.mockReturnValue(retorno({ ativo: true, perfil: 'COLABORADOR' }));
@@ -85,7 +86,7 @@ test('HU06-03: gestão depende da permissão individual, inclusive para Colabora
   view.rerender(<DetalheContratoPage />);
   navegar('Etapas');
   expect(screen.getByTestId('painel-etapas')).toHaveTextContent('consulta');
-  navegar('Visão geral');
+  navegar('Acompanhamento');
   navegar('Documentos');
   expect(screen.getByTestId('painel-documentos')).toHaveTextContent('consulta');
 });
@@ -243,7 +244,7 @@ test('TEC08-03: aprovação bloqueada orienta claramente anexar o PDF e abre a a
   expect(aprovar).toHaveAttribute('aria-describedby', 'aviso-pdf-principal-conclusao');
   expect(aprovar).toHaveClass('disabled:cursor-not-allowed');
   const aviso = screen.getByTestId('aviso-pdf-principal-conclusao');
-  expect(aviso).toHaveTextContent('Falta anexar e verificar o PDF principal');
+  expect(aviso).toHaveTextContent('Devolva a solicitação para revisão antes de regularizar o PDF principal');
   fireEvent.click(within(aviso).getByRole('button', { name: 'Ir para Documentos' }));
   expect(screen.getByRole('heading', { name: 'Documentos' })).toBeInTheDocument();
 });
@@ -257,7 +258,7 @@ test('TEC08-03: PDF anexado mas não verificado continua bloqueando a aprovaçã
   (useDocumentos as jest.Mock).mockReturnValue({ ...retorno({ itens: [{ categoria: 'CONTRATO_PRINCIPAL', verificadoEm: null, reabertoEm: null, arquivadoEm: null }] }), atualizar: jest.fn() });
   render(<DetalheContratoPage />);
   expect(screen.getByRole('button', { name: 'Aprovar conclusão do contrato' })).toBeDisabled();
-  expect(screen.getByTestId('aviso-pdf-principal-conclusao')).toHaveTextContent('Verifique o PDF principal');
+  expect(screen.getByTestId('aviso-pdf-principal-conclusao')).toHaveTextContent('Devolva a solicitação para revisão antes de regularizar o PDF principal');
 });
 
 test('TEC08-03: no contrato suspenso, Retomar substitui Editar/Arquivar no topo', () => {
@@ -279,7 +280,7 @@ test('TEC08-03: reabertura substitui ações bloqueadas do contrato concluído',
   const faixa = screen.getByTestId('barra-navegacao-contrato');
   expect(within(faixa).getByRole('button', { name: 'Reabrir contrato concluído' })).toBeInTheDocument();
   expect(within(faixa).queryByRole('button', { name: 'Editar contrato' })).not.toBeInTheDocument();
-  expect(within(faixa).queryByRole('button', { name: 'Arquivar contrato' })).not.toBeInTheDocument();
+  expect(within(faixa).getByRole('button', { name: 'Arquivar contrato' })).toBeEnabled();
 });
 
 
@@ -293,10 +294,10 @@ test('contrato encerrado informa ao design system estado cinza nas abas e açõe
 
 test('Visão geral preserva execução e épicos sem aba redundante',()=>{
   render(<DetalheContratoPage/>);
-  expect(screen.getByText('Acompanhamento da execução')).toBeInTheDocument();
-  expect(screen.getByText('Épicos e marcos')).toBeInTheDocument();
+  expect(screen.getByRole('group', { name: 'Registros do contrato' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Execução manual' })).toBeInTheDocument();
   const nav=abrirNavegacao();
-  expect(within(nav).getAllByRole('button')).toHaveLength(4);
+  expect(within(nav).getAllByRole('button')).toHaveLength(3);
   expect(within(nav).queryByRole('button',{name:'Execução'})).not.toBeInTheDocument();
   nav.querySelectorAll('rect, path').forEach(el=>{expect(el.closest('svg')).not.toBeNull();expect(el.namespaceURI).toBe('http://www.w3.org/2000/svg');});
 });
@@ -308,6 +309,16 @@ test('edição administrativa não gera opção de responsável sem ID de domín
   render(<DetalheContratoPage />);
   fireEvent.click(screen.getByRole('button', { name: 'Editar contrato' }));
   const seletor = screen.getByRole('combobox', { name: /Responsável pelo contrato/ });
-  expect(within(seletor).getAllByRole('option')).toHaveLength(1);
-  expect(within(seletor).getByRole('option', { name: 'Não atribuído' })).toHaveValue('');
+  fireEvent.click(seletor);
+  expect(within(screen.getByRole('listbox',{name:'Responsáveis encontrados'})).queryAllByRole('option')).toHaveLength(0);
+  expect(seletor).toHaveValue('');
+});
+
+test('anexos contratuais não exibem evidências de execução; acompanhamento mantém a consulta',()=>{
+  render(<DetalheContratoPage/>);
+  navegar('Documentos');
+  expect(within(document.getElementById('painel-documentos')!).queryByRole('region',{name:'Evidências de execução'})).not.toBeInTheDocument();
+  navegar('Acompanhamento');
+  fireEvent.click(screen.getByRole('button',{name:'Evidências',exact:true}));
+  expect(screen.getByRole('region',{name:'Evidências de execução'})).toBeInTheDocument();
 });

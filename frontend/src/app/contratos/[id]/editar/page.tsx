@@ -6,7 +6,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useMeuPerfil } from '@/hooks/use-meu-perfil';
 import { useContrato, useAcessoContrato, useResponsaveis, useMutacoesContrato } from '@/hooks/use-contratos';
-import { type DadosContrato } from '@/lib/contratos';
+import { ConfirmacaoVigenciaNecessaria, prepararEdicaoContrato, type DadosContrato, type Contrato } from '@/lib/contratos';
+import { ConfirmacaoSimples } from '@/app/components/confirmacao-simples';
 import { AreaContratos, Aviso } from '../../components/area-contratos';
 import { FormularioContrato } from '../../components/formulario-contrato';
 
@@ -25,27 +26,42 @@ export default function EditarContratoPage() {
   const erroConsulta = erroPerfil || contratoQuery.erro || acessoQuery.erro || responsaveisQuery.erro;
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
-  const autorizado = !!perfil?.ativo && !!acessoQuery.dados?.podeEditar && !erroConsulta;
+  const [impacto, setImpacto] = useState<ConfirmacaoVigenciaNecessaria | null>(null);
+  const autorizado = !!perfil?.ativo && !!(acessoQuery.dados?.permissoes?.editarContrato ?? acessoQuery.dados?.podeEditar) && !erroConsulta &&
+    !contratoQuery.dados?.arquivadoEm && !contratoQuery.dados?.conclusaoSolicitadaEm && !contratoQuery.dados?.encerramentoSolicitado &&
+    !['CONCLUIDO','CONCLUIDO_PARCIALMENTE','ENCERRADO','FINALIZADO','SUSPENSO','CANCELADO'].includes(contratoQuery.dados?.status ?? '');
   const contrato = autorizado ? contratoQuery.dados : undefined;
   const responsaveis = [
     ...(admin && perfil ? [{ ...perfil, criadoEm: '' }] : []),
     ...(responsaveisQuery.dados?.usuarios ?? []),
   ].filter((u,indice,todos)=>todos.findIndex(v=>v.id===u.id)===indice);
-  async function salvar(dados: DadosContrato) {
+  async function persistir(dados: Partial<DadosContrato>, confirmacao?: string) {
+    if (salvando) return;
     setSalvando(true); setErro('');
     try {
-      // Não-ADMIN/Gestor não pode alterar responsável: a política do servidor autoriza
-      // edição do contrato por vínculo, não gestão de carteiras de outros usuários.
-      const atualizado = await editar(id, dados);
+      const atualizado = await editar(id, dados, confirmacao);
+      setImpacto(null);
       router.push(`/contratos/${encodeURIComponent(atualizado.id)}`);
-    } catch (e) { setErro(e instanceof Error ? e.message : 'Falha ao salvar alterações.'); }
-    finally { setSalvando(false); }
+    } catch (e) {
+      if (e instanceof ConfirmacaoVigenciaNecessaria) setImpacto(e);
+      else { setImpacto(null); setErro(e instanceof Error ? e.message : 'Falha ao salvar alterações.'); }
+    } finally { setSalvando(false); }
+  }
+  async function salvar(dados: DadosContrato, base: Contrato = contrato!) {
+    if (!base || !autorizado) return;
+    const alteracoes = prepararEdicaoContrato(base, dados);
+    if (!Object.keys(alteracoes).length) { router.push(`/contratos/${encodeURIComponent(id)}`); return; }
+    await persistir(alteracoes);
   }
   return <AreaContratos titulo="Editar contrato">
     <LinkVoltar href={`/contratos/${encodeURIComponent(id)}`}>Voltar aos detalhes</LinkVoltar>
     {carregando ? <Aviso>Verificando permissão de edição...</Aviso> : !autorizado ? <Aviso erro>{erro || (erroConsulta instanceof Error ? erroConsulta.message : 'Edição não permitida.')}</Aviso> : contrato ? <>
       {erro && <Aviso erro>{erro}</Aviso>}
-      <FormularioContrato inicial={contrato} responsaveis={responsaveis} onSalvar={salvar} salvando={salvando} podeDefinirResponsavel={admin} />
+      <FormularioContrato key={contrato.id} inicial={contrato} responsaveis={responsaveis} onSalvar={salvar} onSalvarComBase={salvar} salvando={salvando} podeDefinirResponsavel={admin} />
     </> : <Aviso erro>Contrato indisponível.</Aviso>}
+    {impacto && <ConfirmacaoSimples titulo="Confirmar alteração da vigência?"
+      descricao={`${impacto.impacto.total} ocorrência(s) e ${impacto.impacto.planos} planejamento(s) serão preservados; ${impacto.impacto.preservadasFora} registro(s) históricos ficarão fora da nova vigência.`}
+      confirmar="Confirmar vigência" ocupado={salvando} onCancelar={() => setImpacto(null)}
+      onConfirmar={() => void persistir(impacto.dados, impacto.impacto.confirmacao)} />}
   </AreaContratos>;
 }

@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { constants } from 'node:fs';
-import { link, lstat, mkdir, open, readdir, stat, unlink } from 'node:fs/promises';
+import { link, lstat, mkdir, open, readdir, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import type { ArmazenamentoArquivos, ArquivoPendente, ReferenciaCompensacao, SolicitarArmazenamento } from './contrato-armazenamento.js';
 import { ArquivoInvalidoError, LimiteArmazenamentoError, POLITICA_PROVISORIA, validarArquivo, validarPolitica, type PoliticaArquivos } from './politica-arquivos.js';
@@ -41,11 +41,21 @@ export class ArmazenamentoLocal implements ArmazenamentoArquivos {
     return path.join(this.raiz, chave.slice(0, 2), `${chave}.bin`);
   }
 
-  private async garantirPasta(pasta: string): Promise<void> {
-    await mkdir(pasta, { recursive: true, mode: 0o700 });
-    const info = await lstat(pasta);
-    if (!info.isDirectory() || info.isSymbolicLink()) throw new ArmazenamentoIndisponivelError();
+  private async conferirPasta(pasta: string, criar = false): Promise<void> {
+    const { root } = path.parse(pasta);
+    let atual = root;
+    for (const parte of pasta.slice(root.length).split(path.sep).filter(Boolean)) {
+      atual = path.join(atual, parte);
+      if (criar) {
+        try { await mkdir(atual, { mode: 0o700 }); }
+        catch (erro) { if ((erro as NodeJS.ErrnoException).code !== 'EEXIST') throw erro; }
+      }
+      const info = await lstat(atual);
+      if (!info.isDirectory() || info.isSymbolicLink()) throw new ArmazenamentoIndisponivelError('Diretório privado inválido');
+    }
   }
+
+  private garantirPasta(pasta: string): Promise<void> { return this.conferirPasta(pasta, true); }
 
   private async preparar(): Promise<void> {
     await this.garantirPasta(this.raiz);
@@ -61,16 +71,29 @@ export class ArmazenamentoLocal implements ArmazenamentoArquivos {
   private async ocupacao(): Promise<number> {
     let total = 0;
     for (const entrada of await readdir(this.raiz, { withFileTypes: true })) {
-      if (entrada.name === '.tmp') continue;
+      if (entrada.name === '.tmp') {
+        const pasta = path.join(this.raiz, '.tmp');
+        await this.conferirPasta(pasta);
+        for (const item of await readdir(pasta, { withFileTypes: true })) {
+          if (!/^[a-f0-9]{32}\.part$/.test(item.name) || !item.isFile() || item.isSymbolicLink())
+            throw new ArmazenamentoIndisponivelError('Temporário não gerenciado');
+          const info = await lstat(path.join(pasta, item.name));
+          if (!info.isFile() || info.isSymbolicLink()) throw new ArmazenamentoIndisponivelError();
+          total += info.size;
+          if (!Number.isSafeInteger(total)) throw new LimiteArmazenamentoError('Capacidade inválida');
+        }
+        continue;
+      }
       if (!PASTA.test(entrada.name) || !entrada.isDirectory() || entrada.isSymbolicLink()) {
         throw new ArmazenamentoIndisponivelError('Diretório contém entrada não gerenciada');
       }
       for (const item of await readdir(path.join(this.raiz, entrada.name), { withFileTypes: true })) {
         if (!CHAVE.test(item.name.slice(0, 32)) || !item.name.endsWith('.bin') ||
-            item.name.length !== 36 || !item.isFile() || item.isSymbolicLink()) {
+            item.name.length !== 36 || !item.name.startsWith(entrada.name) || !item.isFile() || item.isSymbolicLink()) {
           throw new ArmazenamentoIndisponivelError('Armazenamento contém arquivo não gerenciado');
         }
-        const info = await stat(path.join(this.raiz, entrada.name, item.name));
+        const info = await lstat(path.join(this.raiz, entrada.name, item.name));
+        if (!info.isFile() || info.isSymbolicLink()) throw new ArmazenamentoIndisponivelError();
         total += info.size;
         if (!Number.isSafeInteger(total)) throw new LimiteArmazenamentoError('Capacidade inválida');
       }
@@ -112,10 +135,10 @@ export class ArmazenamentoLocal implements ArmazenamentoArquivos {
         this.pendentes.set(chave, tokenCompensacao);
         return retorno;
       } catch (erro) {
-        if (criado) await unlink(destino).catch(() => undefined);
+        if (criado) await this.conferirPasta(path.dirname(destino)).then(() => unlink(destino)).catch(() => undefined);
         throw erro;
       } finally {
-        await unlink(temporario).catch(() => undefined);
+        await this.conferirPasta(path.dirname(temporario)).then(() => unlink(temporario)).catch(() => undefined);
       }
     });
   }
@@ -123,7 +146,8 @@ export class ArmazenamentoLocal implements ArmazenamentoArquivos {
   async ler(chave: string): Promise<Buffer> {
     const nome = this.caminho(chave);
     try {
-      const arquivo = await open(nome, constants.O_RDONLY | constants.O_NOFOLLOW);
+      await this.conferirPasta(path.dirname(nome));
+      const arquivo = await open(nome, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
       try {
         const info = await arquivo.stat();
         if (!info.isFile() || info.size > this.politica.maxArquivoBytes) throw new ArmazenamentoIndisponivelError();
@@ -138,7 +162,8 @@ export class ArmazenamentoLocal implements ArmazenamentoArquivos {
   async existe(chave: string): Promise<boolean> {
     const nome = this.caminho(chave);
     try {
-      const arquivo = await open(nome, constants.O_RDONLY | constants.O_NOFOLLOW);
+      await this.conferirPasta(path.dirname(nome));
+      const arquivo = await open(nome, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
       try { return (await arquivo.stat()).isFile(); } finally { await arquivo.close(); }
     } catch (erro) {
       if ((erro as NodeJS.ErrnoException).code === 'ENOENT') return false;
@@ -165,6 +190,7 @@ export class ArmazenamentoLocal implements ArmazenamentoArquivos {
     await this.exclusivo(async () => {
       const destino = this.caminho(chave);
       try {
+        await this.conferirPasta(path.dirname(destino));
         await unlink(destino);
       } catch (erro) {
         if ((erro as NodeJS.ErrnoException).code !== 'ENOENT') throw erro;
@@ -179,7 +205,9 @@ export class ArmazenamentoLocal implements ArmazenamentoArquivos {
       // o mesmo blob enquanto a remoção compensatória está em andamento.
       this.pendentes.delete(referencia.chave);
       try {
-        await unlink(this.caminho(referencia.chave));
+        const destino = this.caminho(referencia.chave);
+        await this.conferirPasta(path.dirname(destino));
+        await unlink(destino);
       } catch (erro) {
         this.pendentes.set(referencia.chave, referencia.tokenCompensacao);
         throw erro;

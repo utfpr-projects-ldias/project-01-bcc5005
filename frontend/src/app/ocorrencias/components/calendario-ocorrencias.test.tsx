@@ -48,3 +48,15 @@ test('troca de situação preserva mês, dia e marcadores da agenda integral', (
   fireEvent.click(screen.getByRole('button',{name:/Abrir ocorrência Ocorrência B/}));
   expect(abrir).toHaveBeenCalledWith(registros[1],expect.any(HTMLElement));
 });
+
+test('B06: período que cruza o mês continua visível nos dias cobertos',()=>{
+  const abrir=jest.fn();
+  const registro=item('C','2090-12-30','2091-01-05','NAO_INICIADO');
+  const {container}=render(<CalendarioOcorrencias periodicidade="SEMANAL" registros={[registro]} aoAbrir={abrir}/>);
+  fireEvent.click(screen.getByRole('button',{name:'Próximo período'}));
+  const dia=container.querySelector('time[datetime="2091-01-04"]')?.closest('button') as HTMLButtonElement;
+  fireEvent.click(dia);
+  fireEvent.click(screen.getByRole('button',{name:/Abrir ocorrência Ocorrência C/}));
+  expect(abrir).toHaveBeenCalledTimes(1);
+  expect(abrir).toHaveBeenCalledWith(registro,expect.any(HTMLElement));
+});

@@ -2,6 +2,8 @@ import { SetMetadata } from '@nestjs/common';
 import type { AcaoOperacional, RecursoOperacional } from './politicas-operacionais.js';
 
 export const CHAVE_POLITICA = 'autorizacao:politica';
+export const CHAVE_ROTA_PUBLICA = 'autorizacao:rota-publica';
+export const RotaPublica = () => SetMetadata(CHAVE_ROTA_PUBLICA, true);
 
 /** Nunca aceitar política, perfil ou ID de usuário enviado pelo cliente. */
 export type AcaoLegada =

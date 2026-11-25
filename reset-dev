@@ -5,7 +5,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 ROOT=$(pwd -P)
 bloquear() { echo "BLOQUEADO: $*" >&2; exit 2; }
 [[ $(basename "$ROOT") == project-01-bcc5005 ]] || bloquear 'Diretório do projeto inesperado.'
-[[ $(git branch --show-current) == bugfixes_sprint4 || $(git branch --show-current) == develop ]] || bloquear 'Somente branches de desenvolvimento autorizadas.'
+[[ $(git branch --show-current) == bugfixes_sprint4 || $(git branch --show-current) == develop || $(git branch --show-current) == dashboard-sprint5 ]] || bloquear 'Somente branches de desenvolvimento autorizadas.'
 [[ ${NODE_ENV:-development} == development && -z ${DOCKER_HOST:-} && -z ${DOCKER_CONTEXT:-} ]] || bloquear 'Ambiente remoto ou não local.'
 [[ ${1:---consultar} == --consultar || ${1:-} == --executar ]] && [[ $# -le 1 ]] || bloquear 'Use --consultar ou --executar.'
 [[ -f .env && -f docker-compose.yml ]] || bloquear 'Configuração local ausente.'
@@ -51,7 +51,8 @@ read_db <<'SQL'
 BEGIN;
 SET LOCAL lock_timeout = '5s';
 -- Sem CASCADE: dependência não mapeada interrompe e reverte a transação.
-TRUNCATE TABLE public.execucoes_entregavel, public.vinculos_metas_marco, public.metas_marco,
+TRUNCATE TABLE public.uploads_documentais, public.execucoes_quantitativas_diretas,
+ public.atividade_entregavel_medicoes, public.execucoes_entregavel, public.vinculos_metas_marco, public.metas_marco,
  public.atividade_comprovantes, public.atividade_ocorrencia_medicoes, public.ocorrencia_comprovantes,
  public.ocorrencia_lancamentos, public.atividade_ocorrencias, public.atividade_entregaveis,
  public.atividades, public.atividades_compartilhadas, public.configuracoes_ocorrencias,

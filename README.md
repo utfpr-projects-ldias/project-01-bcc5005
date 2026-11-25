@@ -12,21 +12,6 @@ Sistema web interno para acompanhar **contratos de prestação de serviços**, s
 | Testes e qualidade | Jest, React Testing Library, Supertest, ESLint (frontend), Oxlint (backend) |
 | Ambiente | Node.js 24 (containers Alpine), Docker Engine e Docker Compose |
 
-## Testes centralizados
-
-A execução de **todos os testes** agora tem uma única referência:
-[Central de QA e testes](qa/README.md).
-
-```bash
-./configurar-testes  # só na primeira configuração (ou para verificar o ambiente)
-./back              # todos os testes backend, inclusive E2E PostgreSQL
-./front             # todos os testes frontend e QA real do navegador
-./testes-all        # tudo em um único ZIP em ~/Downloads
-```
-
-Não é mais necessário procurar comandos espalhados pelos READMEs das issues.
-Os roteiros antigos continuam versionados como histórico e são chamados pelo
-executor central. A configuração reutiliza contas DEV e não cria backups.
 
 ## Uso diário
 
@@ -96,6 +81,13 @@ docker compose exec backend npm run build
 docker compose exec backend npm run admin:create -- rinaldi@gmail.com
 ```
 
+A API retorna HTTP 503 enquanto o histórico de migrations não corresponder ao código ou o SuperTokens estiver indisponível. Execute `migration:run` antes de aguardar `docker compose up -d --wait`. Cada migration é executada em transação individual; as novas constraints verificam também os dados existentes, sem corrigi-los silenciosamente. Se uma constraint falhar, revise os registros indicados pelo PostgreSQL.
+
+Para credenciais com caracteres reservados em URI, configure `POSTGRES_CONNECTION_URI` com os componentes de usuário, senha e banco codificados (percent-encoding), mantendo os valores reais em `POSTGRES_USER`, `POSTGRES_PASSWORD` e `POSTGRES_DB`.
+
+O diagnóstico de storage é somente leitura. Com a API parada e o banco disponível, execute `docker compose run --rm --no-deps backend sh -c 'npm run build && npm run storage:verificar'` para identificar referências ausentes, arquivos órfãos e temporários. Nenhum arquivo é removido. Reinicie os serviços após a inspeção.
+
+
 O último comando solicita e confirma a senha no próprio terminal. Ele é executado **uma vez por banco novo** e não recria um Administrador já existente. O comando `admin:create` faz parte da **TEC07-01** e estará disponível nas outras branches depois que essa sub-issue for integrada à `develop`.
 
 Acesse **http://localhost:3000/login**. A API NestJS fica em `http://localhost:3001`.
@@ -136,3 +128,19 @@ docker compose exec frontend npm test
 Após aplicar as migrations pendentes pelo procedimento normal, execute `./reset-dev --consultar` para diagnosticar as contagens e possíveis valores legados de execução, sem modificar dados. Confira as inconsistências antes da limpeza.
 
 Para remover permanentemente os dados operacionais **de teste**, execute `./reset-dev --executar` e digite a confirmação solicitada no terminal. O script verifica a branch, o Compose de desenvolvimento, o daemon e os volumes locais, além de exigir um administrador ativo. Mantém os usuários, a autenticação, a estrutura e as migrations; limpa vínculos, aprovações, permissões por contrato, auditoria operacional de teste e o volume exclusivo de arquivos. Não usa `down -v`, não faz backup automático e não é executado na inicialização nem na instalação de patches. Use apenas na carteira descartável. Se houver falha, confira a mensagem antes de religar as aplicações.
+
+## Testes centralizados
+
+A execução de **todos os testes** agora tem uma única referência:
+[Central de QA e testes](qa/README.md).
+
+```bash
+./configurar-testes  # só na primeira configuração (ou para verificar o ambiente)
+./back              # todos os testes backend, inclusive E2E PostgreSQL
+./front             # todos os testes frontend e QA real do navegador
+./testes-all        # tudo em um único ZIP em ~/Downloads
+```
+
+Não é mais necessário procurar comandos espalhados pelos READMEs das issues.
+Os roteiros antigos continuam versionados como histórico e são chamados pelo
+executor central. A configuração reutiliza contas DEV e não cria backups.

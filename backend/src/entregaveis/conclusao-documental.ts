@@ -100,6 +100,7 @@ export async function concluirEtapaAposFilhos(
     depois: { status: StatusEtapa; reabertoEm: Date | null; conclusaoSolicitadaEm: Date | null; conclusaoSolicitadaPor: string | null }) => Promise<void>,
   solicitanteId: string | null = null,
 ): Promise<boolean> {
+  if (!solicitanteId) return false; // Toda solicitação persistida possui autor.
   const repo = m.getRepository(Etapa);
   const etapa = await repo.findOneBy({ id: etapaId, contratoId });
   if (!etapa || etapa.arquivadoEm || etapa.conclusaoSolicitadaEm || etapa.encerramentoSolicitadoEm ||

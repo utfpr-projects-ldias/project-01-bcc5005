@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { jest } from '@jest/globals';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
@@ -21,6 +21,7 @@ function montar(estado: 'REGISTRADA' | 'PENDENTE_CONCLUSAO' | 'VERIFICADA' | 'AR
     arquivadaEm: estado === 'ARQUIVADA' ? new Date() : null,
   });
   const manager = {
+    getRepository: jest.fn(() => ({findOne:jest.fn(async()=>({...usuario,ativo:true,bloqueioSessoesId:null}))})),
     findOne: jest.fn(async (entidade: unknown) => entidade===Contrato ? {id:contrato,status:'EM_EXECUCAO'} : item),
     save: jest.fn(async () => item),
   };
@@ -39,8 +40,12 @@ describe('HU08-05-01 — estados e auditoria transacional de atividades', () => 
     const c = montar('REGISTRADA');
     await c.service.solicitarConclusao(contrato, id, usuario);
     expect(c.item.status).toBe('PENDENTE_CONCLUSAO');
+    expect(c.item.solicitadaPor).toBe(usuario.id);
+    expect(c.item.solicitadaEm).toBeInstanceOf(Date);
     await c.service.verificar(contrato, id, usuario, 'Conferido pelo gestor');
     expect(c.item.status).toBe('VERIFICADA');
+    expect(c.item.verificadaPor).toBe(usuario.id);
+    expect(c.item.solicitadaEm).toBeNull();
     expect(c.manager.findOne).toHaveBeenNthCalledWith(2, AtividadeEntity,
       expect.objectContaining({ lock: { mode: 'pessimistic_write' } }));
     expect(c.manager.findOne).toHaveBeenNthCalledWith(3, AtividadeEntity,
@@ -55,6 +60,13 @@ describe('HU08-05-01 — estados e auditoria transacional de atividades', () => 
     expect(c.item.status).toBe('ARQUIVADA');
     expect(c.item.arquivadaEm).toBeInstanceOf(Date);
     expect(c.registrar).toHaveBeenCalledWith(expect.objectContaining({ acao: AcaoAuditoria.ATIVIDADE_ARQUIVADA }));
+  });
+  it('bloqueia uma identidade desativada antes de adquirir o lock do contrato', async()=>{
+    const c=montar('REGISTRADA');
+    c.manager.getRepository.mockReturnValueOnce({findOne:jest.fn(async()=>({...usuario,ativo:false,bloqueioSessoesId:null}))});
+    await expect(c.service.solicitarConclusao(contrato,id,usuario)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(c.manager.findOne).not.toHaveBeenCalled();
+    expect(c.manager.save).not.toHaveBeenCalled();
   });
   it('reativar não reabre edição; exige reabertura posterior', async () => {
     const c = montar('ARQUIVADA');

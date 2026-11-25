@@ -32,7 +32,7 @@ if q.stdout.strip()!='0':
         print('ADMIN DEV EXISTENTE: nenhuma credencial ou conta alterada')
         sys.exit(0)
     raise SystemExit('Resultado inesperado ao consultar Administrador DEV')
-cmd=['docker','compose','exec','-T','backend','node','dist/usuarios/cli/bootstrap-admin.js']
+cmd=['docker','compose','exec','-T','backend','node','--loader','ts-node/esm','src/usuarios/cli/bootstrap-admin.ts']
 result=subprocess.run(cmd,input='novo\n'+email+'\n'+senha+'\n',text=True,cwd=raiz,capture_output=True)
 if result.returncode:
     # No print do stdout/stderr para não refletir possíveis tokens/segredos

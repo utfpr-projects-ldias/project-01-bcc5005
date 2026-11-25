@@ -3992,3 +3992,221 @@ li > .pi-card-ocorrencia-v18 { width:100%; max-width:76rem; margin-inline:auto; 
 [data-tec08-painel-evidencia][data-evidencia-estado] [data-pi-historico-neutro] summary,
 [data-tec08-painel-evidencia][data-evidencia-estado] [data-pi-historico-neutro] [class*="text-brand-neon"] {color:var(--text-primary)!important;}
 [data-tec08-painel-evidencia][data-evidencia-estado] [data-pi-historico-neutro] li::before {background-color:var(--text-secondary)!important;}
+
+/* Cadastro e consulta operacional: dimensões e paleta neutra, sem saltos. */
+.pi-seletor-responsavel .pi-responsavel-opcoes {
+  position:absolute; inset-inline:0; top:calc(100% + 4px); bottom:auto;
+  margin:0; z-index:50; box-shadow:0 8px 22px rgb(0 0 0 / .25);
+}
+.pi-seletor-responsavel .pi-responsavel-opcoes[data-acima=true] { top:auto; bottom:calc(100% + 4px); }
+.pi-quadro-info { border:0!important; background:transparent!important; padding:0!important; }
+.pi-historico-compacto {
+  width:fit-content; max-width:100%; min-width:0; border:1px solid var(--pi-workspace-borda,rgb(148 163 184 / .25))!important;
+  border-radius:8px; padding:8px 12px; background:transparent!important;
+}
+.pi-historico-compacto:has(>button[aria-expanded=true]), .pi-historico-compacto[open] { width:min(100%,48rem); }
+.pi-historico-compacto summary, .pi-historico-compacto > button { color:var(--text-primary)!important; background:transparent!important; }
+[data-tec08-painel-evidencia][data-evidencia-estado] .pi-historico-evidencia,
+[data-tec08-painel-evidencia][data-evidencia-estado] .pi-anexo-evidencia { border-color:var(--pi-workspace-borda,rgb(148 163 184 / .25))!important; background:transparent!important; }
+[data-tec08-painel-evidencia][data-evidencia-estado] .pi-anexo-evidencia :is(button,svg) { color:var(--text-primary)!important; border-color:var(--pi-workspace-borda,rgb(148 163 184 / .25))!important; }
+[data-pi-entregavel] .pi-navegacao-registros > button[role=tab] { border:1px solid transparent!important; background:transparent!important; box-shadow:none!important; }
+[data-pi-entregavel] .pi-navegacao-registros > button[aria-selected=true] { color:var(--text-primary)!important; background:color-mix(in srgb,var(--text-primary) 7%,transparent)!important; border-bottom-color:var(--text-secondary)!important; }
+[data-pi-entregavel] .pi-navegacao-registros > button:focus-visible { outline:2px solid var(--text-secondary); outline-offset:-2px; }
+.pi-agenda-filtros-v14 .pi-filtros-agenda-abas { padding:3px; border-radius:8px; }
+.pi-agenda-filtros-v14 .pi-filtros-agenda-abas button { min-height:32px; }
+.pi-cadastro-em-modal .pi-escolhas-registro { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; padding-bottom:12px; border-bottom:1px solid var(--pi-workspace-borda); }
+.pi-cadastro-em-modal .pi-escolhas-registro label { justify-content:center; min-height:42px; border-radius:8px; }
+.pi-carteira-controles { grid-template-columns:minmax(130px,205px) minmax(0,420px); justify-content:start; gap:12px; }
+.pi-carteira-controles .pi-filtro-campo { grid-column:1; grid-row:1; }
+.pi-carteira-controles .pi-filtro-pesquisa { grid-column:2; grid-row:1; }
+.pi-carteira-controles .pi-filtro-status { grid-column:1; grid-row:2; }
+.pi-carteira-controles .pi-limpar-filtros { grid-column:2; grid-row:2; justify-self:end; border-color:var(--pi-workspace-borda)!important; background:transparent!important; color:var(--text-secondary)!important; }
+.pi-carteira-controles .pi-limpar-filtros:hover { background:color-mix(in srgb,var(--text-primary) 6%,transparent)!important; }
+@media(max-width:480px){
+  .pi-carteira-controles { grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px; }
+  .pi-cadastro-em-modal .pi-escolhas-registro { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+
+.pi-seletor-responsavel { position:relative; }
+.pi-nav-cadastro-registro { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; padding:10px 16px; flex-shrink:0; border-bottom:1px solid var(--pi-workspace-borda); }
+.pi-nav-cadastro-registro button { min-height:40px; border:1px solid transparent; border-radius:8px; padding:6px 8px; font-size:.875rem; font-weight:600; color:var(--text-secondary); }
+.pi-nav-cadastro-registro button[aria-pressed=true] { color:var(--text-primary); border-color:var(--pi-workspace-borda); background:color-mix(in srgb,var(--text-primary) 8%,transparent); box-shadow:inset 0 -2px var(--text-secondary); }
+.pi-nav-cadastro-registro button:disabled { opacity:.4; cursor:not-allowed; }
+.pi-nav-cadastro-registro button:focus-visible { outline:2px solid var(--text-secondary); }
+@media(max-width:480px){ .pi-nav-cadastro-registro { grid-template-columns:repeat(2,minmax(0,1fr)); padding:6px 10px; } }
+
+
+/* Novo registro: uma geometria comum às quatro origens. A regra neutra legada
+   usava height:auto!important e anulava a altura do componente React. */
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-pi-modal-neutro][data-pi-registro-cadastro] {
+  width:min(100%,1024px)!important; max-width:1024px!important;
+  height:min(88dvh,850px)!important; max-height:min(88dvh,850px)!important;
+  min-height:0!important;
+}
+[data-tec08-modal] > [data-pi-registro-cadastro] > [data-tec08-corpo-modal] {
+  flex:1 1 0!important; min-height:0; overflow-y:auto; overflow-x:hidden;
+  scrollbar-gutter:stable; padding:18px 20px!important;
+}
+[data-pi-registro-cadastro] > [data-tec08-corpo-modal] > form {
+  display:flex; flex-direction:column; min-height:100%; width:100%; gap:12px; box-sizing:border-box;
+}
+[data-pi-registro-cadastro] > [data-tec08-corpo-modal] > form > * { min-width:0; margin-block:0!important; }
+[data-tec08-modal] > [data-pi-registro-cadastro] > [data-tec08-corpo-modal] > form > .pi-rodape-formulario {
+  margin-top:auto!important; position:sticky!important; bottom:0; z-index:2;
+  background:var(--pi-form-superficie,var(--bg-primary))!important;
+  border-color:var(--pi-form-borda)!important; padding:12px 0 4px!important;
+}
+[data-pi-registro-cadastro] > .pi-nav-cadastro-registro {
+  display:flex; align-items:center; justify-content:flex-start; flex-wrap:wrap; gap:6px;
+  padding:8px 20px; border-color:var(--pi-form-borda);
+}
+[data-pi-registro-cadastro] > .pi-nav-cadastro-registro > button {
+  flex:0 0 auto; width:auto; min-width:0; min-height:34px; padding:6px 14px;
+  border:1px solid transparent!important; border-radius:7px; box-shadow:none!important;
+  color:var(--text-secondary)!important; background:transparent!important;
+}
+[data-pi-registro-cadastro] > .pi-nav-cadastro-registro > button[aria-pressed=true] {
+  border-color:var(--pi-form-borda)!important; color:var(--text-primary)!important;
+  background:color-mix(in srgb,var(--text-primary) 7%,transparent)!important;
+  box-shadow:inset 0 -2px var(--text-secondary)!important;
+}
+[data-pi-registro-cadastro] > .pi-nav-cadastro-registro > button:focus-visible { outline:2px solid var(--text-secondary); outline-offset:1px; }
+[data-pi-registro-cadastro] .pi-cadastro-em-modal .pi-linha-registro {
+  grid-template-columns:minmax(0,13rem) minmax(0,10rem); justify-content:start; align-items:start;
+}
+[data-pi-registro-cadastro] .pi-cadastro-em-modal .pi-linha-registro[data-pi-registro-quantitativo] {
+  grid-template-columns:minmax(0,13rem) minmax(0,17rem);
+}
+[data-pi-registro-cadastro] .pi-cadastro-em-modal .pi-campos-registro { width:min(100%,28rem); }
+[data-pi-registro-cadastro] .pi-cadastro-em-modal .pi-campo-registro > :is(input,.pi-data-civil) { max-width:100%!important; }
+@media(max-width:480px) {
+  [data-pi-registro-cadastro] > .pi-nav-cadastro-registro { padding:6px 10px; gap:4px; }
+  [data-pi-registro-cadastro] > .pi-nav-cadastro-registro > button { padding:5px 8px; min-height:32px; font-size:12px; }
+  [data-pi-registro-cadastro] .pi-cadastro-em-modal .pi-linha-registro,
+  [data-pi-registro-cadastro] .pi-cadastro-em-modal .pi-linha-registro[data-pi-registro-quantitativo] { grid-template-columns:minmax(0,1fr); max-width:17rem; }
+  [data-tec08-modal] > [data-pi-registro-cadastro] > [data-tec08-corpo-modal] { padding:12px!important; }
+}
+/* O fundo e os espaçamentos do formulário de entregável pertencem ao mesmo box. */
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-pi-modal-neutro] > [data-tec08-corpo-modal]:has(> .pi-form-entregavel) {
+  padding:16px 20px!important; box-sizing:border-box; overflow-x:hidden;
+}
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-pi-modal-neutro] > [data-tec08-corpo-modal] > .pi-form-entregavel {
+  width:100%; max-width:100%; min-width:0; box-sizing:border-box;
+  background:color-mix(in srgb,var(--pi-form-superficie,var(--bg-primary)) 97%,var(--text-primary))!important;
+  padding:clamp(12px,1.6vw,20px)!important; border-radius:8px!important;
+}
+[data-tec08-modal] > [data-pi-modal-neutro] .pi-form-entregavel :is(fieldset,section,div,label) { min-width:0; max-width:100%; box-sizing:border-box; }
+[data-tec08-modal] > [data-pi-modal-neutro] .pi-form-entregavel :is(input,select,textarea,.pi-data-civil) { max-width:100%!important; box-sizing:border-box; }
+
+/* Acompanhamento: a mesma superfície, espaçamento e largura para os quatro registros. */
+.pi-lista-registros-contrato {
+  display:grid; grid-template-columns:minmax(0,1fr); gap:8px; width:100%; max-width:64rem; margin-inline:auto; padding:0; list-style:none;
+}
+.pi-lista-registros-contrato > li { min-width:0; list-style:none; }
+.pi-lista-registros-contrato > :is(.pi-cartao-registro-contrato,.pi-card-ocorrencia-v18),
+.pi-lista-registros-contrato > li:is(.pi-cartao-registro-contrato) ,
+.pi-lista-registros-contrato > li > [data-pi-card-compacto-v18] {
+  width:100%; min-width:0; max-width:none; min-height:84px; margin:0;
+  border:1px solid var(--pi-workspace-borda,rgb(148 163 184 / .28))!important;
+  border-radius:10px!important; background:var(--pi-workspace-superficie,var(--bg-primary))!important;
+  padding:10px 12px!important; box-shadow:none!important;
+}
+.pi-cartao-registro-contrato {display:grid;grid-template-columns:minmax(0,1fr) minmax(125px,30%);gap:10px 16px;align-items:center;}
+.pi-cartao-registro-contrato:is(button:hover,:focus-within),.pi-lista-registros-contrato > .pi-card-ocorrencia-v18:hover {background:color-mix(in srgb,var(--pi-workspace-superficie,var(--bg-primary)) 94%,var(--text-primary))!important;}
+.pi-registro-identidade,.pi-registro-meta {display:flex;min-width:0;flex-direction:column;gap:5px;}
+.pi-registro-cabecalho {display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;}
+.pi-registro-titulo {min-width:0;font-size:13px;font-weight:600;text-align:left;overflow-wrap:anywhere;color:var(--text-primary);}
+button.pi-registro-titulo:hover {text-decoration:underline;}
+.pi-registro-meta {align-items:flex-end;text-align:right;}
+.pi-registro-meta > p {max-width:100%;}
+.pi-registro-acoes {display:flex;justify-content:flex-end;flex-wrap:wrap;gap:6px;}
+@media(max-width:640px){.pi-cartao-registro-contrato{grid-template-columns:minmax(0,1fr);}.pi-registro-meta{align-items:flex-start;text-align:left;}.pi-registro-acoes{justify-content:flex-start;}}
+/* Anexos administrativos: ações neutras; aprovação/reabertura mantêm sua semântica. */
+button[data-pi-documento-acao][data-pi-acao="primaria"]:not(:disabled),
+.contrato-detalhe-documental button[data-pi-documento-acao][data-tec08-acao="anexar-documento"]:not(:disabled) {
+  background:#475569!important;border:1px solid #64748b!important;color:#fff!important;outline-color:#94a3b8!important;box-shadow:none!important;
+}
+button[data-pi-documento-acao][data-pi-acao="primaria"]:not(:disabled):hover,
+.contrato-detalhe-documental button[data-pi-documento-acao][data-tec08-acao="anexar-documento"]:not(:disabled):hover {background:#334155!important;}
+button[data-pi-documento-acao][data-pi-acao="secundaria"]:not(:disabled) {
+  background:transparent!important;border-color:var(--pi-workspace-borda,#94a3b8)!important;color:var(--text-primary)!important;box-shadow:none!important;outline-color:currentColor!important;
+}
+.pi-documentos-desktop [role="tablist"] {border-color:var(--pi-workspace-borda,#94a3b8)!important;}
+
+/* Consulta de etapas: navegação/filtros não representam o estado do contrato. */
+[data-pi-painel-contextual][data-tec08-estado] [data-pi-etapas-filtros][data-pi-abas-neutras].pi-abas-etapas-consulta[role="tablist"] {
+  display:flex; align-items:center; flex-wrap:wrap; gap:4px; padding:3px!important;
+  border:1px solid var(--pi-workspace-borda,#34414a)!important;
+  border-radius:9px!important; background:transparent!important;
+}
+[data-pi-painel-contextual][data-tec08-estado] [data-pi-etapas-filtros][data-pi-abas-neutras].pi-abas-etapas-consulta[role="tablist"] > button[role="tab"] {
+  display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  min-height:34px; padding:6px 10px!important; font-size:13px; font-weight:500;
+  border:1px solid transparent!important; border-radius:6px!important;
+  background:transparent!important; color:var(--text-secondary)!important; box-shadow:none!important;
+}
+[data-pi-painel-contextual][data-tec08-estado] [data-pi-etapas-filtros][data-pi-abas-neutras].pi-abas-etapas-consulta[role="tablist"] > button[role="tab"][aria-selected="true"] {
+  background:color-mix(in srgb,var(--text-primary) 8%,transparent)!important;
+  border-color:var(--pi-workspace-borda,#34414a)!important;
+  color:var(--text-primary)!important; font-weight:600;
+}
+[data-pi-painel-contextual][data-tec08-estado] [data-pi-etapas-filtros][data-pi-abas-neutras].pi-abas-etapas-consulta[role="tablist"] > button[role="tab"]:hover:not([aria-selected="true"]) {background:color-mix(in srgb,var(--text-primary) 5%,transparent)!important;color:var(--text-primary)!important;}
+[data-pi-painel-contextual][data-tec08-estado] [data-pi-controles-etapas] :is(input[type="search"],select.pi-filtro-tabela) {
+  min-height:36px; max-width:100%; border:1px solid var(--pi-workspace-borda,#34414a)!important;
+  border-radius:7px!important; background-color:var(--pi-workspace-superficie,var(--bg-primary))!important;
+  color:var(--text-primary)!important; box-shadow:none!important; font-size:13px;
+}
+[data-pi-painel-contextual][data-tec08-estado] [data-pi-controles-etapas] select.pi-filtro-tabela {width: min(100%, 16rem);padding:6px 30px 6px 10px;}
+[data-pi-painel-contextual][data-tec08-estado] [data-pi-controles-etapas] :is(input[type="search"],select.pi-filtro-tabela):focus-visible,
+[data-pi-painel-contextual][data-tec08-estado] [data-pi-etapas-filtros].pi-abas-etapas-consulta > button[role="tab"]:focus-visible {outline:2px solid var(--text-secondary)!important;outline-offset:2px;border-color:var(--text-secondary)!important;}
+.contrato-detalhe-documental[data-tec08-estado] [data-pi-workspace-contrato] .pi-nav-desktop button[aria-current="page"] {color:var(--text-primary)!important;border-bottom-color:var(--text-secondary)!important;background:transparent!important;}
+
+/* Informações e históricos compartilham uma ficha neutra de largura integral. */
+[data-pi-ficha-neutra].pi-identificacao-contrato {width:100%; min-width:0; background:transparent!important; border-color:var(--pi-workspace-borda,#34414a)!important; padding:12px 14px;}
+[data-pi-ficha-neutra].pi-identificacao-contrato :is(.pi-quadro-info,.pi-grade-informacoes-contrato,.pi-grade-informacoes-contrato > div) {background:transparent!important;}
+[data-pi-ficha-neutra].pi-identificacao-contrato .pi-grade-informacoes-contrato {column-gap:24px;}
+[data-pi-ficha-neutra].pi-identificacao-contrato .pi-grade-informacoes-contrato > div {padding:12px 0;border-top:0!important;border-bottom:1px solid var(--pi-workspace-borda,#34414a)!important;}
+[data-pi-ficha-neutra].pi-identificacao-contrato .pi-grade-informacoes-contrato > div:last-child {border-bottom:0!important;}
+[data-pi-ficha-neutra].pi-identificacao-contrato .pi-grade-informacoes-contrato dd {overflow-wrap:anywhere;}
+[data-pi-historico-neutro].pi-historico-compacto,
+[data-pi-historico-neutro].pi-historico-compacto[open],
+[data-pi-historico-neutro].pi-historico-compacto:has(>button[aria-expanded="true"]) {width:100%;max-width:none;padding:0!important;overflow:hidden;border-radius:8px;background:transparent!important;}
+[data-pi-historico-neutro].pi-historico-compacto > :is(button,summary).pi-historico-gatilho {display:flex;width:100%;min-height:42px;align-items:center;gap:8px;padding:10px 14px!important;box-sizing:border-box;border:0!important;border-radius:0!important;}
+[data-pi-historico-neutro].pi-historico-compacto > :is(button,summary).pi-historico-gatilho:focus-visible {outline-offset:-3px;}
+[data-pi-historico-neutro].pi-historico-compacto > .pi-historico-corpo {padding:12px 16px!important;margin:0!important;border-top:1px solid var(--pi-workspace-borda,#34414a)!important;}
+
+/* Cada cartão abre seu próprio registro. Download fica no detalhe da evidência. */
+.pi-lista-registros-contrato > li > button.pi-cartao-evidencia {
+  width:100%;min-width:0;min-height:84px; padding:10px 12px!important;
+  border:1px solid var(--pi-workspace-borda,#34414a)!important;border-radius:10px!important;
+  background:var(--pi-workspace-superficie,var(--bg-primary))!important;box-shadow:none!important;
+}
+.pi-lista-registros-contrato > li > button.pi-cartao-evidencia:hover {background:color-mix(in srgb,var(--pi-workspace-superficie,var(--bg-primary)) 94%,var(--text-primary))!important;}
+.pi-lista-registros-contrato > li > button.pi-cartao-evidencia:focus-visible {outline:2px solid var(--text-secondary)!important;outline-offset:2px;}
+
+/* Agenda inicial: ocupa o lugar da grade, não a lista de ocorrências. */
+.pi-workspace-calendario .pi-agenda-inicial-container { width:100%; min-width:0; }
+.pi-workspace-calendario .pi-agenda-grade.pi-agenda-inicial {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:10px; min-height:320px; padding:24px 16px; text-align:center;
+  border:1px dashed var(--pi-workspace-borda,#34414a)!important;
+  background:var(--pi-workspace-superficie,transparent)!important;
+  color:var(--text-primary)!important;
+}
+.pi-agenda-inicial > svg { color:var(--text-secondary); }
+.pi-agenda-inicial > button { max-width:100%; white-space:normal; }
+.pi-form-geracao-recorrente .pi-geracao-planejamento {
+  display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px 18px;
+  padding:14px; border:1px solid var(--pi-form-borda,#34414a); border-radius:10px;
+  background:var(--pi-form-superficie,transparent);
+}
+.pi-geracao-planejamento > div { min-width:0; }
+.pi-geracao-planejamento .pi-geracao-identificacao { grid-column:1/-1; }
+.pi-geracao-planejamento dt { font-size:12px; color:var(--text-secondary); }
+.pi-geracao-planejamento dd { margin-top:4px; font-size:14px; font-weight:600; overflow-wrap:anywhere; }
+.pi-form-geracao-recorrente .pi-geracao-meta { display:flex; flex-wrap:wrap; align-items:center; gap:12px 24px; }
+.pi-form-geracao-recorrente .pi-geracao-meta > label { display:grid!important; gap:5px; width:min(100%,14rem); }
+.pi-form-geracao-recorrente .pi-geracao-meta input { display:block; width:100%!important; max-width:100%; margin:0!important; }
+.pi-geracao-unidade { min-width:0; max-width:100%; align-self:center; }
+.pi-form-geracao-recorrente .pi-rodape-formulario { border-color:var(--pi-form-borda,#34414a)!important; }
+@container (min-width:650px) { .pi-form-geracao-recorrente .pi-geracao-planejamento { grid-template-columns:repeat(4,minmax(0,1fr)); } }

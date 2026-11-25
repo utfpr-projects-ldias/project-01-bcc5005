@@ -1,3 +1,5 @@
+import { PickType } from '@nestjs/mapped-types';
+import { UpdateAtividadeDto } from './update-atividade.dto.js';
 import {ParcelaAtividadeDto} from './parcela-atividade.dto.js';
 import { Type } from 'class-transformer';
 import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsDateString, IsNotEmpty,
@@ -7,11 +9,11 @@ import { MedicaoAtividadeDto } from './medicao-atividade.dto.js';
 
 export class VinculoContratoCompartilhadoDto {
   @IsUUID() contratoId!: string;
-  @IsArray() @ArrayMinSize(1) @ArrayUnique() @IsUUID('all', { each: true })
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @ArrayUnique() @IsUUID('all', { each: true })
   entregavelIds!: string[];
-  @ValidateIf((_obj, valor) => valor !== undefined) @IsArray() @ArrayUnique() @IsUUID('all', { each: true })
+  @ValidateIf((_obj, valor) => valor !== undefined) @IsArray() @ArrayMaxSize(100) @ArrayUnique() @IsUUID('all', { each: true })
   ocorrenciaIds?: string[];
-  @ValidateIf((_obj, valor) => valor !== undefined) @IsArray() @ArrayUnique((m: MedicaoAtividadeDto) => m?.ocorrenciaId)
+  @ValidateIf((_obj, valor) => valor !== undefined) @IsArray() @ArrayMaxSize(100) @ArrayUnique((m: MedicaoAtividadeDto) => m?.ocorrenciaId)
   @ValidateNested({ each: true }) @Type(() => MedicaoAtividadeDto)
   medicoes?: MedicaoAtividadeDto[];
   @ValidateIf((_obj, valor) => valor !== undefined) @IsArray() @ArrayMaxSize(30) @ArrayUnique((m:MedicaoDiretaAtividadeDto)=>m?.entregavelId)
@@ -42,6 +44,17 @@ export class CriarAtividadeCompartilhadaDto {
 
 export class AprovarCompartilhadaDto {
   /** Quando omitido, aprova todas as linhas pendentes às quais o usuário tem acesso. */
-  @ValidateIf((_obj, valor) => valor !== undefined) @IsArray() @ArrayMinSize(1) @ArrayUnique() @IsUUID('all', { each: true })
+  @ValidateIf((_obj, valor) => valor !== undefined) @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @ArrayUnique() @IsUUID('all', { each: true })
   contratoIds?: string[];
+}
+
+export class AdicionarContratosAtividadeDto {
+  @IsUUID() origemContratoId!:string;
+  @ValidateIf((_obj,v)=>v!==undefined) @IsUUID() responsavelId?:string;
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(20) @ArrayUnique((v:VinculoContratoCompartilhadoDto)=>v?.contratoId)
+  @ValidateNested({each:true}) @Type(()=>VinculoContratoCompartilhadoDto) vinculos!:VinculoContratoCompartilhadoDto[];
+}
+/** Metadados comuns, sem alterar vínculos, quantidade, data de execução ou decisões. */
+export class EditarMetadadosCompartilhadosDto extends PickType(UpdateAtividadeDto,['titulo','descricao','tipo','participantes','local','duracao','observacoes'] as const) {
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(20) @ArrayUnique() @IsUUID('all',{each:true}) contratoIds!:string[];
 }

@@ -1,3 +1,4 @@
+import { Usuario } from '../usuarios/usuario.entity.js';
 import { BadRequestException } from '@nestjs/common';
 import { jest } from '@jest/globals';
 import type { EntityManager, DataSource, Repository } from 'typeorm';
@@ -27,7 +28,7 @@ function montar() {
     findOne: jest.fn(async (entidade: unknown) => entidade === Contrato
       ? { status: 'EM_EXECUCAO', arquivadoEm: null }
       : entidade === Etapa ? { status: 'EM_ANDAMENTO', arquivadoEm: null, conclusaoSolicitadaEm: null, encerramentoSolicitadoEm: null } : null),
-    getRepository: (entidade: unknown) => entidade === Entregavel ? repo : ocorrenciaRepo,
+    getRepository: (entidade: unknown) => entidade === Usuario ? {findOne: async()=>({...ator,ativo:true})} : entidade === Entregavel ? repo : ocorrenciaRepo,
     count: jest.fn(async () => 0),
   } as unknown as EntityManager;
   const dataSource = { transaction: async (fn: (m: EntityManager) => Promise<unknown>) => fn(manager) } as unknown as DataSource;

@@ -19,7 +19,7 @@ import { solicitarConclusaoContrato, consultarElegibilidadeConclusao, arquivarCo
 import { useRepositorioConsultas } from '@/app/components/provedor-consultas';
 import { useParams } from 'next/navigation';
 import { useMeuPerfil } from '@/hooks/use-meu-perfil';
-import { useContrato, useAcessoContrato, useResponsaveis, useMutacoesContrato, usePendentesConclusao } from '@/hooks/use-contratos';
+import { useContrato, useAcessoContrato, useResponsaveis, useMutacoesContrato } from '@/hooks/use-contratos';
 import { useEtapas } from '@/hooks/use-etapas';
 import { useDocumentos } from '@/hooks/use-documentos';
 import { consultarHistoricoContrato } from '@/lib/contratos';
@@ -45,6 +45,8 @@ import { AgendaContrato } from '../components/agenda-contrato';
 import { EvidenciasConsolidadas } from '../components/evidencias-consolidadas';
 import { AtividadesVinculadas } from '../components/atividades-vinculadas';
 import { PainelOcorrencias } from '@/app/ocorrencias/components/painel-ocorrencias';
+import { estadoEdicaoContrato, prepararEdicaoContrato } from '@/lib/contratos';
+import { sincronizarContrato } from '@/lib/sincronizar-contrato';
 import { FormularioContrato } from '../components/formulario-contrato';
 import { ModalEtapa } from '../components/modal-etapa';
 import { MenuAcoesObjeto } from '@/app/components/menu-acoes-objeto';
@@ -225,12 +227,12 @@ export default function DetalheContratoPage() {
   const podeSuspender = Boolean(contrato && !contrato.conclusaoSolicitadaEm && !contrato.arquivadoEm && !suspenso && ['PLANEJAMENTO','EM_EXECUCAO','EM_ENCERRAMENTO'].includes(contrato.status) && (administrador || acessoQuery.dados?.permissoes?.suspenderContrato));
   const podeRetomar = Boolean(contrato && !contrato.arquivadoEm && suspenso && (administrador || acessoQuery.dados?.permissoes?.retomarContrato));
   const podeCancelarContrato = Boolean(contrato && !contrato.conclusaoSolicitadaEm && !contrato.arquivadoEm && !cancelado &&
-    ['PLANEJAMENTO', 'EM_EXECUCAO'].includes(contrato.status) &&
+    ['PLANEJAMENTO', 'EM_EXECUCAO', 'EM_ENCERRAMENTO'].includes(contrato.status) &&
     (administrador || acessoQuery.dados?.permissoes?.cancelarContrato));
   const podeReverterCancelamento = Boolean(contrato && !contrato.arquivadoEm && cancelado &&
     (administrador || acessoQuery.dados?.permissoes?.reverterCancelamentoContrato));
   const podeDeliberar = Boolean(administrador || acessoQuery.dados?.permissoes?.concluirContrato);
-  const pendenciasQuery = usePendentesConclusao(Boolean(perfil?.ativo && contrato));
+  const podeFinalizar = Boolean(podeDeliberar && elegibilidadeQuery.dados?.podeFinalizar);
   const pendenteConclusao = Boolean(contrato?.conclusaoSolicitadaEm && !contrato.arquivadoEm &&
     !contrato.reabertoEm && !['CONCLUIDO','FINALIZADO','ENCERRADO','SUSPENSO','CANCELADO'].includes(contrato.status));
   const estadoVisualContrato = estadoContextualContrato(contrato ?? undefined, pendenteConclusao);
@@ -241,12 +243,12 @@ export default function DetalheContratoPage() {
     elegibilidadeQuery.erro ? 'Falha ao verificar os requisitos da conclusão.' :
     elegibilidadeQuery.dados?.pendencias?.[0] ?? 'A conclusão não está disponível para este contrato.';
   const emRevisao = Boolean(contrato?.reabertoEm && !contrato.arquivadoEm && !suspenso && !cancelado && !encerrado && !pendenteConclusao);
-  const revisaoConcluivel = emRevisao && documentalmenteConcluido;
   const podeConcluir = pendenteConclusao;
   const pdfAptoParaDecisao = Boolean(contrato?.encerramentoSolicitado || contrato?.conclusaoParcialSolicitada || principalVerificado);
-  const podeFecharRevisao = revisaoConcluivel && Boolean(etapasDocumentais.dados?.filter(e => !e.arquivadoEm).every(e => !e.reabertoEm && e.status === 'CONCLUIDA'));
+  const podeFecharRevisao = emRevisao && Boolean(elegibilidadeQuery.dados?.apto);
   const bloqueioOperacional = concluido || encerrado || finalizado || cancelado || suspenso || pendenteConclusao;
   const podeArquivarContrato = Boolean(administrador && contrato && !contrato.arquivadoEm && !pendenteConclusao && !suspenso && !cancelado);
+  const encerramentoBloqueadoPorFilhos = elegibilidadeQuery.dados?.podeEncerrarAntecipadamente === false;
   const podeEncerrar = Boolean(contrato && !contrato.conclusaoSolicitadaEm && !contrato.arquivadoEm && !['CONCLUIDO', 'CONCLUIDO_PARCIALMENTE', 'ENCERRADO', 'FINALIZADO', 'SUSPENSO', 'CANCELADO'].includes(contrato.status) &&
     (administrador || acessoQuery.dados?.permissoes?.encerrarContrato));
   // A etapa pode ser reaberta enquanto o contrato aguarda conclusão explícita;
@@ -299,8 +301,8 @@ export default function DetalheContratoPage() {
         else if (acao === 'reverter-cancelamento' && podeReverterCancelamento) setConfirmarReversaoCancelamento(true);
         else if (acao === 'retomar' && podeRetomar) setConfirmarRetomada(true);
         else if (acao === 'reabrir' && contrato && ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','ENCERRADO'].includes(contrato.status) && (administrador || acessoQuery.dados?.permissoes?.reabrirContrato)) setConfirmarReabertura(true);
-        else if (acao === 'encerrar' && podeEncerrar) setAbrirEncerramento(true);
-        else if (acao === 'finalizar' && podeDeliberar && contrato && !contrato.conclusaoSolicitadaEm && !contrato.arquivadoEm && !['SUSPENSO','CANCELADO','CONCLUIDO','FINALIZADO','ENCERRADO'].includes(contrato.status)) setConfirmarFinalizacao(true);
+        else if (acao === 'encerrar' && podeEncerrar && !encerramentoBloqueadoPorFilhos) setAbrirEncerramento(true);
+        else if (acao === 'finalizar' && podeFinalizar) setConfirmarFinalizacao(true);
         else if (acao === 'solicitar-conclusao' && podeSolicitarConclusao) {setSolicitacaoParcial(false);setConfirmarSolicitacao(true);}
         else if (acao === 'solicitar-conclusao-parcial' && podeSolicitarParcial) {setSolicitacaoParcial(true);setConfirmarSolicitacao(true);}
         else if (acao === 'arquivar' && podeArquivarContrato) setConfirmarArquivo(true);
@@ -313,7 +315,7 @@ export default function DetalheContratoPage() {
   // Ações do modal contextual sempre usam a autorização e a situação atuais.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [painelInterno, id, podeAbrirEdicao, contrato?.id, contrato?.status, contrato?.arquivadoEm, editarAberto,
-      podeSuspender, podeCancelarContrato, podeReverterCancelamento, podeRetomar, podeEncerrar, podeArquivarContrato, podeDeliberar, podeSolicitarConclusao, podeSolicitarParcial, pendenteConclusao, administrador, acessoQuery.dados?.permissoes?.reabrirContrato, acessoQuery.dados?.permissoes?.configurarPesos]);
+      podeSuspender, podeCancelarContrato, podeReverterCancelamento, podeRetomar, podeEncerrar, encerramentoBloqueadoPorFilhos, podeArquivarContrato, podeDeliberar, podeFinalizar, podeSolicitarConclusao, podeSolicitarParcial, pendenteConclusao, administrador, acessoQuery.dados?.permissoes?.reabrirContrato, acessoQuery.dados?.permissoes?.configurarPesos]);
   useEffect(() => {
     if (!contrato?.id) return;
     let versao = 0; let controller: AbortController | undefined; let quadroInicial: number | undefined;
@@ -382,9 +384,9 @@ export default function DetalheContratoPage() {
     if (!contrato || !impactoVigenciaPendente || salvandoEdicao) return;
     setSalvandoEdicao(true); setErroEdicao('');
     try {
-      await mutacoes.editar(contrato.id, impactoVigenciaPendente.dados, impactoVigenciaPendente.impacto.confirmacao);
+      const atualizado = await mutacoes.editar(contrato.id, impactoVigenciaPendente.dados, impactoVigenciaPendente.impacto.confirmacao);
+      comunicarDecisaoContrato(atualizado, true);
       setImpactoVigenciaPendente(null);
-      registrarAtualizacaoHistorico();
       toastSucesso('Vigência atualizada, mantendo a rastreabilidade das ocorrências.');
       fecharEdicao();
     } catch (erro) {
@@ -392,12 +394,14 @@ export default function DetalheContratoPage() {
       setErroEdicao(erro instanceof Error ? erro.message : 'Não foi possível confirmar a vigência.');
     } finally { setSalvandoEdicao(false); }
   }
-  async function salvarEdicao(dados: DadosContrato) {
-    if (!contrato || !podeAbrirEdicao || salvandoEdicao) return;
+  async function salvarEdicao(dados: DadosContrato, base: import('@/lib/contratos').Contrato | undefined = contrato) {
+    if (!contrato || !base || !podeAbrirEdicao || salvandoEdicao) return;
     setSalvandoEdicao(true); setErroEdicao('');
     try {
+      if (estadoEdicaoContrato(base) !== estadoEdicaoContrato(contrato)) throw new Error('O contrato foi alterado após a abertura do formulário. Reabra a edição antes de salvar.');
       if (dados.status === 'ENCERRADO' && contrato.status !== 'ENCERRADO') {
         if (!podeEncerrar) throw new Error('Sem permissão de encerramento antecipado neste contrato.');
+        if (encerramentoBloqueadoPorFilhos) throw new Error('Decida as solicitações pendentes dos registros descendentes primeiro.');
         // A decisão nunca transporta mudanças cadastrais silenciosamente.
         const campos = ['numeroContrato', 'orgaoContratante', 'objeto', 'processoAdministrativo',
           'unidadeResponsavel', 'descricao', 'dataAssinatura', 'inicioVigencia', 'terminoVigencia',
@@ -462,26 +466,12 @@ export default function DetalheContratoPage() {
         // alterá-las, a revisão permanece aberta; não há confirmação extra.
         // Enviar apenas mudanças efetivas. O PATCH é parcial: não reenviar
         // valores legados acima dos novos limites nem apagar vínculos opcionais.
-        const campos = ['numeroContrato','processoAdministrativo','orgaoContratante',
-          'unidadeResponsavel','objeto','descricao','dataAssinatura','inicioVigencia',
-          'terminoVigencia','status','responsavelInternoId','fiscalGestor','modoCalculo','observacoes'] as const;
-        const alteracoes: Partial<DadosContrato> = {};
-        for (const campo of campos) {
-          const anterior = ['dataAssinatura','inicioVigencia','terminoVigencia'].includes(campo)
-            ? dataCivil(contrato[campo]) || null : contrato[campo];
-          if ((dados[campo] ?? null) !== (anterior ?? null)) {
-            (alteracoes as Record<string, unknown>)[campo] = dados[campo];
-          }
-        }
+        const alteracoes = prepararEdicaoContrato(base, dados);
         if (Object.keys(alteracoes).length === 0) {
           toastAviso('Nenhuma alteração identificada no contrato.');
         } else {
           const atualizado = await mutacoes.editar(contrato.id, alteracoes);
-          comunicarDecisaoContrato(atualizado);
-          registrarAtualizacaoHistorico();
-          // Refazer a consulta após persistência para os demais componentes
-          // (painel interno, cartões e editor) lerem o mesmo estado.
-          await contratoQuery.atualizar().catch(() => {});
+          comunicarDecisaoContrato(atualizado, true);
           toastSucesso('Contrato atualizado. Alteração preservada na rastreabilidade.');
         }
       }
@@ -516,9 +506,6 @@ export default function DetalheContratoPage() {
       cache.gravar(chaveTexto(['contratos','detalhe',contrato.id]), atualizado);
       comunicarDecisaoContrato(atualizado);
       setConfirmarSolicitacao(false);
-      cache.invalidar(['contratos','lista']); cache.invalidar(['contratos','pendentes']);
-      cache.invalidar(['contratos','elegibilidade-conclusao', contrato.id]);
-      await Promise.allSettled([contratoQuery.atualizar(), elegibilidadeQuery.atualizar()]);
       toastSucesso('Conclusão solicitada. Aguardando aprovação autorizada.');
     } catch (erro) { setErroArquivo(erro instanceof Error ? erro.message : 'Não foi possível solicitar conclusão.'); }
     finally { setAlterandoArquivo(false); }
@@ -532,25 +519,18 @@ export default function DetalheContratoPage() {
       cache.gravar(chaveTexto(['contratos', 'detalhe', contrato.id]), atualizado);
       comunicarDecisaoContrato(atualizado);
       setConfirmarConclusao(false);
-      cache.invalidar(['contratos', 'detalhe', contrato.id]); cache.invalidar(['execucao', contrato.id]);
-      cache.invalidar(['contratos', 'lista']);
-      cache.invalidar(['contratos', 'pendentes']);
-      cache.invalidar(['contratos', 'elegibilidade-conclusao', contrato.id]);
-      await Promise.allSettled([contratoQuery.atualizar(), principalQuery.atualizar(), elegibilidadeQuery.atualizar()]);
       toastSucesso(atualizado.status === 'ENCERRADO' ? 'Encerramento aprovado. Progresso físico preservado.' : 'Contrato concluído após confirmação autorizada.');
     } catch (erro) { setErroArquivo(erro instanceof Error ? erro.message : 'Não foi possível concluir o contrato.'); }
     finally { setAlterandoArquivo(false); }
   }
   async function executarFinalizacao() {
-    if (!contrato || contrato.conclusaoSolicitadaEm || !podeDeliberar || alterandoArquivo) return;
+    if (!contrato || contrato.conclusaoSolicitadaEm || !podeFinalizar || alterandoArquivo) return;
     setAlterandoArquivo(true); setErroArquivo('');
     try {
       const atualizado = await finalizarContrato(contrato.id, motivoFinalizacao.trim());
       cache.gravar(chaveTexto(['contratos','detalhe',contrato.id]), atualizado);
       comunicarDecisaoContrato(atualizado);
-      cache.invalidar(['execucao',contrato.id]);cache.invalidar(['contratos','lista']);cache.invalidar(['contratos','pendentes']);
       setConfirmarFinalizacao(false);setMotivoFinalizacao('');
-      await contratoQuery.atualizar();
       toastSucesso('Encerramento solicitado. Progresso físico preservado.');
     } catch (e) {setErroArquivo(e instanceof Error?e.message:'Não foi possível finalizar o contrato.');}
     finally {setAlterandoArquivo(false);}
@@ -564,10 +544,6 @@ export default function DetalheContratoPage() {
       cache.gravar(chaveTexto(['contratos', 'detalhe', contrato.id]), atualizado);
       comunicarDecisaoContrato(atualizado);
       setConfirmarSuspensao(false);
-      cache.invalidar(['contratos', 'detalhe', contrato.id]); cache.invalidar(['execucao', contrato.id]);
-      cache.invalidar(['contratos', 'lista']);
-      cache.invalidar(['contratos', 'pendentes']);
-      await contratoQuery.atualizar();
       toastAviso('Contrato suspenso. Prazos e progresso preservados.');
     } catch (e) { setErroArquivo(e instanceof Error ? e.message : 'Não foi possível suspender o contrato.'); }
     finally { setAlterandoArquivo(false); }
@@ -579,15 +555,13 @@ export default function DetalheContratoPage() {
       const atualizado = await retomarContrato(contrato.id, motivoDecisao.trim());
       cache.gravar(chaveTexto(['contratos', 'detalhe', contrato.id]), atualizado);
       comunicarDecisaoContrato(atualizado);
-      cache.invalidar(['contratos', 'detalhe', contrato.id]); cache.invalidar(['execucao', contrato.id]);
-      cache.invalidar(['contratos', 'lista']);
-      cache.invalidar(['contratos', 'pendentes']);
-      await Promise.allSettled([contratoQuery.atualizar(), acessoQuery.atualizar()]);
       setConfirmarRetomada(false); setMotivoDecisao(''); toastSucesso('Contrato retomado na situação anterior à suspensão.');
     } catch (e) { setErroArquivo(e instanceof Error ? e.message : 'Não foi possível retomar o contrato.'); }
     finally { setAlterandoArquivo(false); }
   }
-  function comunicarDecisaoContrato(atualizado: import('@/lib/contratos').Contrato) {
+  function comunicarDecisaoContrato(atualizado: import('@/lib/contratos').Contrato, jaSincronizado = false) {
+    if (!jaSincronizado) sincronizarContrato(cache, atualizado.id);
+    setVersaoHistorico(v => v + 1);
     if (painelInterno && window.parent !== window) {
       window.parent.postMessage({ tipo: 'pi:contrato-atualizado', contratoId: id, contrato: atualizado }, window.location.origin);
     }
@@ -604,28 +578,20 @@ export default function DetalheContratoPage() {
       cache.gravar(chaveTexto(['contratos', 'detalhe', contrato.id]), atualizado);
       comunicarDecisaoContrato(atualizado);
       setCancelamentoAberto(false); setConfirmarReversaoCancelamento(false); setMotivoCancelamento(''); setMotivoDecisao('');
-      cache.invalidar(['execucao', contrato.id]);
-      cache.invalidar(['contratos', 'lista']);
-      cache.invalidar(['contratos', 'pendentes']);
-      await Promise.allSettled([contratoQuery.atualizar(), pendenciasQuery.atualizar(), acessoQuery.atualizar()]);
-      (reverter ? toastSucesso : toastAviso)(reverter ? 'Cancelamento revertido. Contrato voltou a Planejamento.' :
+      (reverter ? toastSucesso : toastAviso)(reverter ? 'Cancelamento revertido. Situação anterior restaurada.' :
         'Contrato cancelado. Histórico preservado.');
     } catch (e) { setErroArquivo(e instanceof Error ? e.message : 'Falha na decisão de cancelamento.'); }
     finally { setAlterandoArquivo(false); }
   }
 
   async function executarEncerramento() {
-    if (!contrato || !podeEncerrar || alterandoArquivo || (motivoEncerramento.trim().length < 15 || motivoEncerramento.trim().length > 200)) return;
+    if (!contrato || !podeEncerrar || encerramentoBloqueadoPorFilhos || alterandoArquivo || (motivoEncerramento.trim().length < 15 || motivoEncerramento.trim().length > 200)) return;
     setAlterandoArquivo(true); setErroArquivo('');
     try {
       const atualizado = await encerrarContratoAntecipadamente(contrato.id, motivoEncerramento.trim());
       cache.gravar(chaveTexto(['contratos', 'detalhe', contrato.id]), atualizado);
       comunicarDecisaoContrato(atualizado);
       setAbrirEncerramento(false); setMotivoEncerramento('');
-      cache.invalidar(['contratos', 'detalhe', contrato.id]); cache.invalidar(['execucao', contrato.id]);
-      cache.invalidar(['contratos', 'lista']);
-      cache.invalidar(['contratos', 'pendentes']);
-      await contratoQuery.atualizar();
       toastAviso('Encerramento solicitado. Aguarda aprovação.');
     } catch (erro) { setErroArquivo(erro instanceof Error ? erro.message : 'Falha ao solicitar encerramento do contrato.'); }
     finally { setAlterandoArquivo(false); }
@@ -639,11 +605,6 @@ export default function DetalheContratoPage() {
       cache.gravar(chaveTexto(['contratos', 'detalhe', contrato.id]), atualizado);
       comunicarDecisaoContrato(atualizado);
       setConfirmarDevolucao(false);
-      cache.invalidar(['contratos', 'detalhe', contrato.id]); cache.invalidar(['execucao', contrato.id]);
-      cache.invalidar(['contratos', 'lista']);
-      cache.invalidar(['contratos', 'pendentes']);
-      cache.invalidar(['contratos', 'historico-revisao', contrato.id]);
-      await Promise.allSettled([contratoQuery.atualizar(), pendenciasQuery.atualizar()]);
       toastAviso(contrato.encerramentoSolicitado ? 'Encerramento devolvido para revisão. Decisão registrada no histórico.' : 'Conclusão devolvida para revisão. Decisão registrada no histórico.');
     } catch (erro) { setErroArquivo(erro instanceof Error ? erro.message : 'Não foi possível devolver o contrato para revisão.'); }
     finally { setAlterandoArquivo(false); }
@@ -656,11 +617,6 @@ export default function DetalheContratoPage() {
       cache.gravar(chaveTexto(['contratos', 'detalhe', contrato.id]), atualizado);
       comunicarDecisaoContrato(atualizado);
       setConfirmarFechamentoRevisao(false); setMotivoDecisao('');
-      cache.invalidar(['contratos', 'detalhe', contrato.id]); cache.invalidar(['execucao', contrato.id]);
-      cache.invalidar(['contratos', 'lista']);
-      cache.invalidar(['contratos', 'pendentes']);
-      cache.invalidar(['contratos', 'historico-revisao', contrato.id]);
-      await Promise.allSettled([contratoQuery.atualizar(), pendenciasQuery.atualizar()]);
       toastSucesso('Revisão encerrada. Solicite a conclusão quando todos os requisitos estiverem atendidos.');
     } catch (erro) { setErroArquivo(erro instanceof Error ? erro.message : 'Não foi possível encerrar a revisão.'); }
     finally { setAlterandoArquivo(false); }
@@ -673,13 +629,6 @@ export default function DetalheContratoPage() {
       cache.gravar(chaveTexto(['contratos', 'detalhe', contrato.id]), atualizado);
       comunicarDecisaoContrato(atualizado);
       setConfirmarReabertura(false); setMotivoDecisao('');
-      cache.invalidar(['contratos', 'detalhe', contrato.id]); cache.invalidar(['execucao', contrato.id]);
-      cache.invalidar(['contratos', 'lista']);
-      cache.invalidar(['contratos', 'pendentes']);
-      cache.invalidar(['entregaveis','contrato',contrato.id]);
-      cache.invalidar(['etapas','contrato',contrato.id]);
-      cache.invalidar(['ocorrencias',contrato.id]);
-      await Promise.allSettled([contratoQuery.atualizar(),acessoQuery.atualizar()]);
       toastSucesso('Contrato reaberto para edição.');
     } catch (erro) { setErroArquivo(erro instanceof Error ? erro.message : 'Não foi possível reabrir o contrato.'); }
     finally { setAlterandoArquivo(false); }
@@ -691,10 +640,6 @@ export default function DetalheContratoPage() {
       const atualizado = await arquivarContrato(contrato.id);
       cache.gravar(chaveTexto(['contratos', 'detalhe', contrato.id]), atualizado);
       comunicarDecisaoContrato(atualizado);
-      cache.invalidar(['contratos', 'lista']);
-      cache.invalidar(['contratos', 'pendentes']);
-      cache.invalidar(['contratos', 'detalhe', contrato.id]); cache.invalidar(['execucao', contrato.id]);
-      cache.invalidar(['contratos', 'acesso', contrato.id]);
       setConfirmarArquivo(false);
       {
         const marcador = marcadorEdicao.current;
@@ -702,7 +647,6 @@ export default function DetalheContratoPage() {
         setEditarAberto(false);
         if (marcador && window.history.state?.__editarContrato === marcador) window.history.back();
       }
-      await contratoQuery.atualizar();
       toastAviso('Contrato arquivado.');
     } catch (erro) {
       setErroArquivo(erro instanceof Error ? erro.message : 'Não foi possível atualizar o arquivamento.');
@@ -748,7 +692,8 @@ export default function DetalheContratoPage() {
           {!pendenteConclusao && !concluido && !finalizado && !encerrado && !suspenso && !cancelado && !contrato.arquivadoEm && <MenuAcoesObjeto rotulo="Fechar contrato" disabled={alterandoArquivo} pendenteConclusao={pendenteConclusao}>
            {podeSuspender && <BotaoAcaoModal intencao="suspender" disabled={alterandoArquivo} onClick={() => setConfirmarSuspensao(true)}>⏸ Suspender contrato</BotaoAcaoModal>}
            {podeCancelarContrato && <BotaoAcaoModal intencao="cancelar" disabled={alterandoArquivo} onClick={() => setCancelamentoAberto(true)}>✕ Cancelar contrato</BotaoAcaoModal>}
-           {podeEncerrar && <BotaoAcaoModal intencao="encerrar" disabled={alterandoArquivo} onClick={() => setAbrirEncerramento(true)}>Solicitar encerramento</BotaoAcaoModal>}
+           {podeEncerrar && <BotaoAcaoModal intencao="encerrar" disabled={alterandoArquivo || encerramentoBloqueadoPorFilhos} title={encerramentoBloqueadoPorFilhos ? 'Decida as solicitações pendentes dos registros descendentes primeiro.' : undefined} onClick={() => setAbrirEncerramento(true)}>Solicitar encerramento</BotaoAcaoModal>}
+          {podeFinalizar && <BotaoAcaoModal intencao="encerrar" disabled={alterandoArquivo} onClick={() => setConfirmarFinalizacao(true)}>Solicitar finalização administrativa</BotaoAcaoModal>}
           {!finalizado && !concluido && !encerrado && !cancelado && !suspenso && !contrato.arquivadoEm && !pendenteConclusao && (administrador || acessoQuery.dados?.permissoes?.editarContrato) &&
             <BotaoAcaoModal intencao="solicitar-conclusao" disabled={!podeSolicitarConclusao || alterandoArquivo} title={!podeSolicitarConclusao ? motivoIndisponibilidadeConclusao : 'Solicitar aprovação da conclusão integral'}
               onClick={() => {setSolicitacaoParcial(false);setConfirmarSolicitacao(true);}}>
@@ -841,7 +786,7 @@ export default function DetalheContratoPage() {
               {abaContrato==='visao'&&<><CalendarioRegistros abrirRegistroContrato={(alvo,gatilho)=>setRegistroAvulso({alvo,gatilho})} calendario={calendario} contratoId={contrato.id} contexto={contextoAgenda} permissoes={bloqueioOperacional?undefined:acessoQuery.dados?.permissoes} abrir={(eid,origem)=>abrirEntregavelRef.current(eid,origem)} abrirOcorrencia={setAbrirOcorrenciaGeral}/>
               {contextoAgenda==='ocorrencias'&&<AgendaContrato somenteLista calendario={calendario} contratoId={contrato.id} abrirOcorrencia={setAbrirOcorrenciaGeral}/>}
               {contextoAgenda==='atividades'&&<AtividadesVinculadas contratoId={contrato.id} estadoContextual={estadoVisualContrato} somenteLeitura={bloqueioOperacional} ocultarAcessoDiario ocultarCadastro listaCompacta onAbrirEntregavel={(eid,origem)=>abrirEntregavelRef.current(eid,origem)} onAbrirOcorrencia={setAbrirOcorrenciaGeral}/>}
-              {contextoAgenda==='evidencias'&&<EvidenciasConsolidadas abrirEvidencia={(entregavelId,id,gatilho)=>setRegistroAvulso({alvo:{tipo:'EVIDENCIA',entregavelId,id},gatilho})} listaCompacta contratoId={contrato.id} abrir={(eid,origem)=>abrirEntregavelRef.current(eid,origem)}/>}</>}
+              {contextoAgenda==='evidencias'&&<EvidenciasConsolidadas abrirEvidencia={(entregavelId,id,gatilho)=>setRegistroAvulso({alvo:{tipo:'EVIDENCIA',entregavelId,id},gatilho})} listaCompacta contratoId={contrato.id}/>}</>}
               {abaContrato==='visao'&&<HistoricoContrato contratoId={contrato.id} numeroContrato={contrato.numeroContrato} versao={`${contrato.status}:${contrato.reabertoEm??''}:${versaoHistorico}`}/>}
             </section>
 
@@ -856,7 +801,7 @@ export default function DetalheContratoPage() {
           </section>
           <section data-tec08-aba-contrato role="region" id="painel-documentos" aria-labelledby="tab-documentos" hidden={abaContrato !== 'documentos'} className={abaContrato !== 'documentos' ? 'hidden' : 'space-y-4'}>
             <h2 className="text-base font-semibold">Documentos contratuais</h2>
-            <PainelDocumentos key={`documentos:${contrato.id}`} contratoId={contrato.id} estadoContextual={estadoVisualContrato} onDocumentoAlterado={registrarAtualizacaoHistorico} habilitado={!!perfil?.ativo} somenteLeitura={Boolean(contrato.arquivadoEm || bloqueioOperacional)} permitirRegularizarPrincipal={Boolean(!pendenteConclusao && !contrato.arquivadoEm && !['CANCELADO','SUSPENSO','ENCERRADO','CONCLUIDO','FINALIZADO'].includes(contrato.status) && !principalVerificado)}
+            <PainelDocumentos key={`documentos:${contrato.id}`} contratoId={contrato.id} estadoContextual={estadoVisualContrato} onDocumentoAlterado={registrarAtualizacaoHistorico} habilitado={!!perfil?.ativo} somenteLeitura={Boolean(contrato.arquivadoEm || bloqueioOperacional)} permitirRegularizarPrincipal={Boolean(!pendenteConclusao && !contrato.arquivadoEm && !['CANCELADO','SUSPENSO','ENCERRADO','CONCLUIDO','FINALIZADO'].includes(contrato.status))}
               podeAnexar={Boolean((administrador || acessoQuery.dados?.permissoes?.anexarDocumentos))}
               podeEditarMetadados={Boolean((administrador || acessoQuery.dados?.permissoes?.editarDocumentos))}
               podeArquivarDocumentos={Boolean((administrador || acessoQuery.dados?.permissoes?.arquivarDocumentos))}
@@ -869,7 +814,6 @@ export default function DetalheContratoPage() {
               podeReabrirDocumentos={Boolean(administrador || acessoQuery.dados?.permissoes?.reabrirDocumentos)}
               podeVerificarPrincipal={Boolean(administrador || acessoQuery.dados?.permissoes?.verificarDocumentoPrincipal)}
               podeReabrirPrincipal={Boolean(administrador || acessoQuery.dados?.permissoes?.reabrirDocumentoPrincipal)} />
-            {abaContrato==='documentos'&&<div className="border-t border-slate-500/25 pt-4"><EvidenciasConsolidadas contratoId={contrato.id} abrir={(eid,origem)=>abrirEntregavelRef.current(eid,origem)}/></div>}
           </section>
         </div>
 
@@ -892,7 +836,7 @@ export default function DetalheContratoPage() {
         {administrador && responsaveisQuery.carregando && <p role="status" className="text-sm text-foreground/70">Carregando responsáveis...</p>}
         {Boolean(responsaveisQuery.erro) && <Aviso erro>Não foi possível consultar os responsáveis. Nenhuma atribuição será alterada automaticamente.</Aviso>}
         <FormularioContrato key={contrato.id} inicial={contrato} responsaveis={responsaveis}
-          onSalvar={salvarEdicao} onCancelar={fecharEdicao} salvando={salvandoEdicao}
+          onSalvar={salvarEdicao} onSalvarComBase={salvarEdicao} onCancelar={fecharEdicao} salvando={salvandoEdicao}
           podeDefinirResponsavel={administrador && !responsaveisQuery.erro}
           podeSuspender={podeSuspender} podeCancelar={podeCancelarContrato} podeReverter={podeReverterCancelamento} podeEncerrar={podeEncerrar}
           somenteSituacao={!podeEditar} />

@@ -13,7 +13,7 @@ export type RascunhoEntregavel = {
   evidenciasEsperadas: ItemChecklistFormulario[];
 };
 export type DadosPlanejamentoEntregavel = {
-  etapaId: string; nome: string; tipo: TipoEntregavel; codigo: string | null; descricao: string | null;
+  versaoPlanejamento?: string; etapaId: string; nome: string; tipo: TipoEntregavel; codigo: string | null; descricao: string | null;
   responsavelId: string | null; inicioPrevisto: string | null; terminoPrevisto: string | null;
   quantidadePrevista: string | null; unidadeMedida: string | null;
   periodicidade: PeriodicidadeEntregavel | null; configuracaoPeriodicidade: Entregavel['configuracaoPeriodicidade'] | null;
@@ -32,7 +32,7 @@ export const DESCRICOES_TIPO: Record<TipoEntregavel, string> = {
 };
 const opcional = (texto: string): string | null => texto.trim() || null;
 function dataValida(data: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) return false;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data) || data.startsWith('0000-')) return false;
   const d = new Date(`${data}T00:00:00.000Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === data;
 }
@@ -46,7 +46,7 @@ export function inicialEntregavel(etapaId: string, item?: Entregavel): RascunhoE
     tipo: item?.tipo ?? 'UNICO', responsavelId: item?.responsavelId ?? '',
     inicioPrevisto: item?.inicioPrevisto ?? '', terminoPrevisto: item?.terminoPrevisto ?? '',
     quantidadePrevista: item?.quantidadePrevista ?? '', unidadeMedida: item?.unidadeMedida ?? '',
-    periodicidade: item?.periodicidade ?? '', modoRecorrente: item ? item.configuracaoPeriodicidade?.modoRegistro : 'DESCRITIVO', peso: item?.peso == null ? '' : String(Number(item.peso)),
+    periodicidade: item?.periodicidade ?? '', modoRecorrente: item ? item.configuracaoPeriodicidade?.modoRegistro : 'DESCRITIVO', peso: item?.peso == null ? '' : normalizarDecimalPlanejamento(item.peso),
     criterioConclusao: item?.criterioConclusao ?? '', observacoes: item?.observacoes ?? '',
     evidenciasEsperadas: (item?.evidenciasEsperadas ?? []).map((e, indice) => ({ ...e, chave: `existente-${indice}-${e.id}` })),
   };
@@ -64,7 +64,7 @@ export function validarEntregavel(r: RascunhoEntregavel, inicial?: Entregavel): 
   else if ([...nome].length > 42 && nome !== inicial?.nome) erros.nome = 'O nome do entregável deve ter no máximo 42 caracteres.';
   for (const [campo, maximo] of [['codigo', 15], ['descricao', 200], ['unidadeMedida', 40], ['criterioConclusao', 200], ['observacoes', 100]] as const) {
     const t = r[campo];
-    if (t && (!t.trim() || (t.length > maximo && t !== (inicial?.[campo] ?? '')))) erros[campo] = `Revise o campo (até ${maximo} caracteres e sem valor somente com espaços).`;
+    if (t && (!t.trim() || ([...t].length > maximo && t !== (inicial?.[campo] ?? '')))) erros[campo] = `Revise o campo (até ${maximo} caracteres e sem valor somente com espaços).`;
   }
   if (!TIPOS.includes(r.tipo)) erros.tipo = 'Escolha um tipo de entregável válido.';
   if (r.responsavelId.trim() && !uuid4(r.responsavelId.trim())) erros.responsavelId = 'Selecione um funcionário ativo ou deixe em branco.';
@@ -73,13 +73,13 @@ export function validarEntregavel(r: RascunhoEntregavel, inicial?: Entregavel): 
   if (r.terminoPrevisto && !dataValida(r.terminoPrevisto)) erros.terminoPrevisto = 'Data civil inválida.';
   if (r.inicioPrevisto && r.terminoPrevisto && r.terminoPrevisto < r.inicioPrevisto) erros.terminoPrevisto = 'O término não pode anteceder o início.';
   if (r.tipo === 'QUANTITATIVO') {
-    if (!decimal(r.quantidadePrevista.trim(), 15, 3) || Number(r.quantidadePrevista) <= 0)
+    if (!decimal(r.quantidadePrevista.trim().replace(',', '.'), 15, 3) || normalizarDecimalPlanejamento(r.quantidadePrevista) === '0')
       erros.quantidadePrevista = 'Informe quantidade prevista positiva (até três casas).';
     if (!r.unidadeMedida.trim()) erros.unidadeMedida = 'Informe a unidade de medida.';
   }
   if (r.tipo === 'CONTINUO' && !r.terminoPrevisto) erros.terminoPrevisto = 'Informe o término previsto do serviço contínuo.';
   if (r.tipo === 'RECORRENTE') {
-    if (!r.modoRecorrente) erros.periodicidade = 'Defina a modalidade de medição recorrente.';
+    if (!r.modoRecorrente && !(inicial?.tipo === 'RECORRENTE' && inicial.configuracaoPeriodicidade?.modoRegistro === undefined && !mudouEstrutura(r,inicial))) erros.periodicidade = 'Defina a modalidade de medição recorrente.';
     if (r.modoRecorrente === 'QUANTITATIVO' && !r.unidadeMedida.trim()) erros.unidadeMedida = 'Informe a unidade de medida.';
     if (!r.periodicidade || !PERIODICIDADES.includes(r.periodicidade)) erros.periodicidade = 'Selecione uma periodicidade válida.';
     if (!r.inicioPrevisto || !r.terminoPrevisto)
@@ -88,9 +88,8 @@ export function validarEntregavel(r: RascunhoEntregavel, inicial?: Entregavel): 
   if (['CONTINUO', 'MARCO'].includes(r.tipo) && !r.criterioConclusao.trim()) {
     erros.criterioConclusao = 'O critério textual é obrigatório para Contínuo e Marco.';
   }
-  if (!r.peso.trim() || !decimal(r.peso.trim().replace(',', '.'), 3, 2) || Number(r.peso.trim().replace(',', '.')) > 100 ||
-      (Number(r.peso.trim().replace(',', '.')) <= 0 && !(inicial?.peso != null && Number(inicial.peso) === 0 && Number(r.peso.trim().replace(',', '.')) === 0))) {
-    erros.peso = 'Informe peso maior que zero e até 100%, com até duas casas decimais.';
+  if (!(inicial && inicial.peso == null && !r.peso.trim()) && (!r.peso.trim() || !decimal(r.peso.trim().replace(',', '.'), 3, 4) || Number(r.peso.trim().replace(',', '.')) > 100)) {
+    erros.peso = 'Informe peso entre zero e 100%, com até quatro casas decimais.';
   }
   if (r.evidenciasEsperadas.length > 10) erros.evidenciasEsperadas = 'Máximo de 10 itens.';
   r.evidenciasEsperadas.forEach((e, indice) => {
@@ -102,7 +101,7 @@ export function validarEntregavel(r: RascunhoEntregavel, inicial?: Entregavel): 
     etapaId: r.etapaId, nome, tipo: r.tipo, codigo: opcional(r.codigo), descricao: opcional(r.descricao),
     responsavelId: opcional(r.responsavelId), inicioPrevisto: opcional(r.inicioPrevisto),
     terminoPrevisto: opcional(r.terminoPrevisto),
-    quantidadePrevista: r.tipo === 'QUANTITATIVO' ? opcional(r.quantidadePrevista) : null,
+    quantidadePrevista: r.tipo === 'QUANTITATIVO' ? opcional(r.quantidadePrevista.replace(',', '.')) : null,
     unidadeMedida: ['QUANTITATIVO', 'RECORRENTE'].includes(r.tipo) ? opcional(r.unidadeMedida) : null,
     periodicidade: r.tipo === 'RECORRENTE' && r.periodicidade ? r.periodicidade as PeriodicidadeEntregavel : null,
     configuracaoPeriodicidade: r.tipo === 'RECORRENTE' && r.periodicidade ? { versao: 1, ...(r.modoRecorrente ? {modoRegistro:r.modoRecorrente} : {}) } : null,
@@ -111,4 +110,29 @@ export function validarEntregavel(r: RascunhoEntregavel, inicial?: Entregavel): 
       ...(e.id ? { id: e.id } : {}), tipoEvidencia: e.tipoEvidencia.trim(), descricao: opcional(e.descricao ?? ''), obrigatoria: e.obrigatoria,
     })),
   } };
+}
+
+/** Canonicalização textual sem perda de precisão, inclusive NUMERIC(18,3). */
+export function normalizarDecimalPlanejamento(valor: string): string {
+  const texto = valor.trim().replace(',', '.');
+  if (!/^\d+(?:\.\d+)?$/.test(texto)) return texto;
+  const [inteiro, fracao = ''] = texto.split('.');
+  const parte = fracao.replace(/0+$/, '');
+  return inteiro.replace(/^0+(?=\d)/, '') + (parte ? '.'+parte : '');
+}
+const CAMPOS_PLANEJAMENTO = ['etapaId','nome','tipo','codigo','descricao','responsavelId','inicioPrevisto','terminoPrevisto','quantidadePrevista','unidadeMedida','periodicidade','configuracaoPeriodicidade','peso','criterioConclusao','observacoes'] as const;
+export function prepararEdicaoEntregavel(base: Entregavel, dados: DadosPlanejamentoEntregavel, secao = 'completo'): Partial<DadosPlanejamentoEntregavel> {
+  const alteracoes: Partial<DadosPlanejamentoEntregavel> = {};
+  const permitidos = secao === 'informacoes' ? ['codigo','nome','responsavelId','descricao','observacoes'] : secao === 'planejamento' ? ['tipo','quantidadePrevista','unidadeMedida','inicioPrevisto','terminoPrevisto','peso','criterioConclusao','periodicidade','configuracaoPeriodicidade'] : CAMPOS_PLANEJAMENTO;
+  for (const campo of CAMPOS_PLANEJAMENTO) {
+    if (!(permitidos as readonly string[]).includes(campo)) continue;
+    const atual = base[campo], novo = dados[campo];
+    const config = (v: typeof base.configuracaoPeriodicidade | null) => v == null ? null : JSON.stringify([v.versao,v.modoRegistro ?? null]);
+    const igual = campo === 'configuracaoPeriodicidade' ? config(base.configuracaoPeriodicidade) === config(dados.configuracaoPeriodicidade)
+      : (campo === 'peso' || campo === 'quantidadePrevista') && typeof atual === 'string' && typeof novo === 'string'
+        ? normalizarDecimalPlanejamento(atual) === normalizarDecimalPlanejamento(novo) : (atual ?? null) === (novo ?? null);
+    if (!igual) (alteracoes as Record<string, unknown>)[campo] = novo;
+  }
+  if (Object.keys(alteracoes).length && base.versaoPlanejamento) alteracoes.versaoPlanejamento = base.versaoPlanejamento;
+  return alteracoes;
 }

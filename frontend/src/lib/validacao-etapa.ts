@@ -22,7 +22,7 @@ export function validarEtapa(valor: DadosEtapa, inicial?: Partial<DadosEtapa>):
   const codigo = valor.codigo?.trim() || null;
   const inicioPrevisto = valor.inicioPrevisto || null;
   const terminoPrevisto = valor.terminoPrevisto || null;
-  const statusValidos: StatusEtapa[] = ['PLANEJADA', 'EM_ANDAMENTO', 'CONCLUIDA', 'ENCERRADA'];
+  const statusValidos: StatusEtapa[] = ['PLANEJADA', 'EM_ANDAMENTO'];
   if (!nome) erros.nome = 'Informe o nome da etapa.';
   else if (nome.length > LIMITES_ETAPA.nome && nome !== inicial?.nome) erros.nome = `O nome deve ter no máximo ${LIMITES_ETAPA.nome} caracteres.`;
   if (codigo && codigo.length > LIMITES_ETAPA.codigo && codigo !== inicial?.codigo) erros.codigo = `O código deve ter no máximo ${LIMITES_ETAPA.codigo} caracteres.`;

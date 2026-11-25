@@ -2,6 +2,8 @@
 """Regressões mínimas para o executor oficial e as mudanças R11."""
 from pathlib import Path
 import unittest
+import re
+from collections import Counter
 
 RAIZ = Path(__file__).resolve().parents[2]
 
@@ -47,11 +49,11 @@ class TesteCentral(unittest.TestCase):
         # o primeiro seleciona diretamente a aba; o segundo usa um locator
         # validado e percorre o modal da etapa/entregável. Contar uma linha
         # literal duas vezes rejeitaria esse fluxo correto (regressão R20).
-        self.assertIn("page.get_by_role('tab', name='Etapas', exact=True).click()", hu)
-        self.assertIn("aba = page.get_by_role('tab', name='Etapas', exact=True)", hu)
+        self.assertIn("localizar_pagina(page, 'Etapas').click()", hu)
+        self.assertIn("aba = localizar_pagina(page, 'Etapas')", hu)
         self.assertIn("aba.click()", hu)
         self.assertIn('verificar_navegacao_leitor(page, painel, etapa, detalhe,', hu)
-        self.assertIn("get_by_role('list', name='Entregáveis planejados da etapa'", hu)
+        self.assertIn("get_by_role('table', name='Entregáveis planejados da etapa'", hu)
         ev=self.fonte('qa/evidencias-verificacao/validar_fluxo_real.py')
         card=self.fonte('qa/tec08-uiux-final/validar_card_evidencia_real.py')
         for trecho in [ev,card]:
@@ -60,18 +62,34 @@ class TesteCentral(unittest.TestCase):
         self.assertIn("get_by_role('button', name='Anexar comprovante').wait_for",card)
         self.assertIn("get_by_role('button', name='Substituir comprovante').wait_for",ev)
         tec=self.fonte('qa/tec08-03/validar_ui_real.py')
-        self.assertIn('li[data-tec08-item-clicavel] a[href=', tec)
+        self.assertIn('tr[data-entregavel-estado] a[href=', tec)
         self.assertIn("titulo_item.get_attribute('aria-label')", tec)
         self.assertIn('resposta_cadastro.status == 201', tec)
         self.assertIn('Entregável criado não ficou visível na aba ativa',tec)
 
+    def test_todas_as_suites_e2e_tem_execucao_unica(self):
+        runner = self.fonte('qa/central/executar.sh')
+        esperadas = {p.name.removesuffix('.e2e-spec.ts') for p in (RAIZ / 'backend/test').glob('*.e2e-spec.ts')}
+        http = re.findall(r'test/([a-z0-9-]+)\.e2e-spec\.ts', runner)
+        banco = re.findall(r"^\s*'([a-z0-9-]+)\|[A-Z0-9_]+\|[^']+'", runner, re.M)
+        self.assertTrue(esperadas)
+        self.assertEqual(Counter(http + banco), Counter({s: 1 for s in esperadas}))
+
+    def test_descoberta_python_abrange_os_dois_prefixos(self):
+        runner = self.fonte('qa/central/executar.sh')
+        self.assertIn("-name 'teste_*.py'", runner)
+        self.assertIn("-name 'test_*.py'", runner)
+        self.assertIn("-not -path '*/.local/*'", runner)
+        self.assertIn('if (( PULOU > 0 )); then exit 3;', runner)
+
     def test_configuracao_idempotente_sem_backup(self):
         script=self.fonte('qa/central/configurar.sh')
-        self.assertIn('if (( NOVO ))',script)
+        self.assertEqual(script.count('npm run migration:run'),1)
+        self.assertIn('--force-recreate --renew-anon-volumes --no-deps backend frontend',script)
         self.assertIn('INSTALAR-LOCAL.sh',script)
         self.assertNotIn('down -v',script)
         self.assertNotIn('reset --hard',script)
-        self.assertNotIn('backup',script.lower())
+        self.assertNotIn('pg_dump',script.lower())
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

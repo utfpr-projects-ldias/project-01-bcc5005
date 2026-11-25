@@ -1,5 +1,5 @@
 import {
-  BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Put,
+  BadRequestException, Body, Controller, DefaultValuePipe, ParseIntPipe, Get, HttpCode, HttpStatus, Param, Patch, Post, Put,
   Query, Req, UsePipes, ValidationPipe,
 } from '@nestjs/common';
 import { JustificativaDecisaoDto } from '../contratos/dto/justificativa-decisao.dto.js';
@@ -37,8 +37,8 @@ export class EntregaveisController {
 
   @Get('arquivados')
   @ExigirPoliticaOperacional('entregaveis:arquivados', { tipo: 'contrato', parametro: 'contratoId' })
-  arquivados(@Param('contratoId') contratoId: string, @Query() query: ListarEntregaveisDto) {
-    return this.service.listar(contratoId, query.etapaId, true);
+  arquivados(@Param('contratoId') contratoId: string, @Query() query: ListarEntregaveisDto, @Req() req: RequisicaoAutorizada) {
+    return this.service.listar(contratoId, query.etapaId, true, req.usuarioDominio!);
   }
 
   @Post()
@@ -77,8 +77,10 @@ export class EntregaveisController {
   @ExigirPoliticaOperacional('entregaveis:visualizar', {
     tipo: 'recurso', recurso: 'entregavel', parametro: 'entregavelId', parametroContratoPai: 'contratoId',
   })
-  historico(@Param('contratoId') contratoId: string, @Param('entregavelId') entregavelId: string, @Req() req: RequisicaoAutorizada) {
-    return this.service.historico(contratoId, entregavelId, req.usuarioDominio!);
+  historico(@Param('contratoId') contratoId: string, @Param('entregavelId') entregavelId: string, @Req() req: RequisicaoAutorizada,
+    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
+    @Query('limite', new DefaultValuePipe(100), ParseIntPipe) limite: number) {
+    return this.service.historico(contratoId, entregavelId, req.usuarioDominio!, offset, limite);
   }
 
   @Patch(':entregavelId')

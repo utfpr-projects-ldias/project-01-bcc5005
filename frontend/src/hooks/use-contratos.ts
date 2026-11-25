@@ -1,6 +1,7 @@
 'use client';
 import { useConsulta, useRepositorioConsultas } from '@/app/components/provedor-consultas';
 import { buscarContrato, consultarAcessoContrato, criarContrato, editarContrato, listarContratos, listarResponsaveis, consultarPendentesConclusao, type DadosContrato } from '@/lib/contratos';
+import { sincronizarContrato } from '@/lib/sincronizar-contrato';
 import { chaveTexto } from '@/lib/repositorio-consultas';
 export const CHAVES_CONTRATO = {
   lista: ['contratos', 'lista'] as const,
@@ -28,10 +29,7 @@ export function useMutacoesContrato() {
     editar: async (id: string, dados: Partial<DadosContrato>, confirmacaoVigencia?: string) => {
       const contrato = await editarContrato(id, dados, confirmacaoVigencia);
       cache.gravar(chaveTexto(CHAVES_CONTRATO.detalhe(id)), contrato);
-      cache.invalidar(['contratos', 'lista']);
-      cache.invalidar(CHAVES_CONTRATO.pendentes);
-      cache.invalidar(['admin', 'contratos']);
-      cache.invalidar(CHAVES_CONTRATO.acesso(id));
+      sincronizarContrato(cache, id);
       return contrato;
     },
   };

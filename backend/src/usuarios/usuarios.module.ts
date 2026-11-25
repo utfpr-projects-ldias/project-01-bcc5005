@@ -7,12 +7,14 @@ import { AdministracaoUsuariosService } from './administracao-usuarios.service.j
 import { AdministracaoUsuariosController } from './administracao-usuarios.controller.js';
 import { MinhaContaController } from './minha-conta.controller.js';
 import { MinhaContaService } from './minha-conta.service.js';
+import { HistoricoAdministrativoController } from './historico-administrativo.controller.js';
+import { HistoricoAdministrativoService } from './historico-administrativo.service.js';
 import { AuditoriaModule } from '../auditoria/auditoria.module.js';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Usuario]), AuditoriaModule],
-  controllers: [AdministracaoUsuariosController, MinhaContaController],
-  providers: [UsuariosService, IdentidadesFuncionariosService, AdministracaoUsuariosService, MinhaContaService],
+  controllers: [AdministracaoUsuariosController, MinhaContaController, HistoricoAdministrativoController],
+  providers: [UsuariosService, IdentidadesFuncionariosService, AdministracaoUsuariosService, MinhaContaService, HistoricoAdministrativoService],
   exports: [UsuariosService],
 })
 export class UsuariosModule {}

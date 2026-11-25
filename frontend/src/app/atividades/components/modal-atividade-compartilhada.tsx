@@ -76,7 +76,7 @@ export function ModalAtividadeCompartilhada({ contratoInicialId, onFechar, onSal
 }) {
   const consulta = useListaContratos();
   const contratos = useMemo(() => (consulta.dados ?? []).filter(c => !c.arquivadoEm &&
-    ['PLANEJAMENTO', 'EM_EXECUCAO'].includes(c.status)), [consulta.dados]);
+    ['PLANEJAMENTO','EM_EXECUCAO','EM_ENCERRAMENTO'].includes(c.status)), [consulta.dados]);
   const [vinculos, setVinculos] = useState<VinculoCompartilhado[]>(() => [vazio(contratoInicialId)]);
   const [titulo, setTitulo] = useState('');
   const [descricao, setDescricao] = useState('');

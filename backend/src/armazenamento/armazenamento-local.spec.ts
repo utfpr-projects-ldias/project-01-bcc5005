@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { ArmazenamentoLocal, ArmazenamentoIndisponivelError } from './armazenamento-local.js';
@@ -116,4 +116,18 @@ describe('TEC08-01: storage real no filesystem privado', () => {
     expect(() => validarArquivo('arquivo.txt', 'text/plain', Buffer.from('texto sem binário'), { maxArquivoBytes: 100, maxTotalBytes: 100 }))
       .not.toThrow();
   });
+});
+
+it('não atravessa subdiretório simbólico para ler nem remover blobs', async()=>{
+  const externo=path.join(pasta,'externo');await mkdir(externo);
+  const raiz=path.join(pasta,'privado');await mkdir(raiz);
+  const chave='a'.repeat(32);await writeFile(path.join(externo,`${chave}.bin`),pdf);
+  await symlink(externo,path.join(raiz,'aa'));
+  await expect(storage.ler(chave)).rejects.toBeInstanceOf(ArmazenamentoIndisponivelError);
+  await expect(storage.removerPersistido(chave)).rejects.toBeInstanceOf(ArmazenamentoIndisponivelError);
+});
+it('temporários sobreviventes ocupam a cota e impedem excedente', async()=>{
+  const tmp=path.join(pasta,'privado','.tmp');await mkdir(tmp,{recursive:true});
+  await writeFile(path.join(tmp,`${'a'.repeat(32)}.part`),Buffer.alloc(100));
+  await expect(salvar()).rejects.toBeInstanceOf(LimiteArmazenamentoError);
 });

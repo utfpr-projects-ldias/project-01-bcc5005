@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { ServiceUnavailableException } from '@nestjs/common';
 import { jest } from '@jest/globals';
 import {
   BadRequestException,
@@ -49,6 +51,8 @@ function cenario() {
     nomeOriginal: 'qa.txt',
     tipoMime: 'text/plain',
     tamanho: 7,
+    storageKey: 'a'.repeat(32),
+    sha256: createHash('sha256').update(Buffer.from('testeQA')).digest('hex'),
     descricao: null,
     criadoEm: new Date('2026-11-03T21:00:00Z'),
   } as ComprovanteEvidencia;
@@ -71,6 +75,7 @@ function cenario() {
     getOne: jest.fn(async () => ({ id: contratoId, arquivadoEm: null })),
   };
   const queryComprovante = {
+    addSelect: jest.fn().mockReturnThis(),
     setLock: jest.fn().mockReturnThis(),
     where: jest.fn().mockReturnThis(),
     orderBy: jest.fn().mockReturnThis(),
@@ -124,6 +129,7 @@ function cenario() {
       podeEditar: true,
     })),
   };
+  Object.assign(vinculos,{findOne:jest.fn(async()=>vinculos.findOneBy())});
   const eventos = {
     find: jest.fn(async () => [
       {
@@ -145,6 +151,7 @@ function cenario() {
     ]),
   };
   const usuarios = {
+    findOne:jest.fn(async (op:{where:{id:string}})=>({...(op.where.id===gestorId?gestor:autor),ativo:true})),
     find: jest.fn(async () => [
       {
         id: autorId,
@@ -189,7 +196,7 @@ function cenario() {
   const auditoria = { registrarNaTransacao: jest.fn(async () => undefined) };
   const storage = {
     salvar: jest.fn(),
-    ler: jest.fn(),
+    ler: jest.fn(async () => Buffer.from('testeQA')),
     confirmarPersistencia: jest.fn(),
     removerOrfao: jest.fn(),
   };
@@ -366,7 +373,7 @@ test('nova verificação preserva revisão e exige conclusão explícita em toda
 
 test('vínculo somente leitura não concede verificação ao gestor', async () => {
   const a = cenario();
-  a.vinculos.findOneBy.mockResolvedValueOnce({
+  a.vinculos.findOneBy.mockResolvedValue({
     contratoId,
     usuarioId: gestorId,
     podeEditar: false,
@@ -467,11 +474,12 @@ test('detalhe atribui autoria/consulta somente eventos da evidência corrente, s
   expect(resultado.podeVerificar).toBe(true);
   expect(a.eventos.find).toHaveBeenCalledWith(
     expect.objectContaining({
-      where: {
+      where: expect.objectContaining({
         contratoId,
         entidadeTipo: 'ENTREGAVEL',
         entidadeId: entregavelId,
-      },
+        id: expect.anything(),
+      }),
     }),
   );
 });
@@ -601,4 +609,19 @@ test('permite declarar percentual antes do arquivo, sem verificar ou reservar ex
   expect(a.esperadas.save).toHaveBeenCalledWith(expect.objectContaining({rascunhoEnvio:{percentualExecucao:'20'}}));
   expect(a.storage.salvar).not.toHaveBeenCalled();
   expect(a.comprovantes.save).not.toHaveBeenCalled();
+});
+
+// B09: não apagar o arquivo quando não se sabe se o COMMIT foi concluído.
+test('preserva blob se a confirmação transacional do comprovante for indeterminada', async()=>{
+  const a=cenario();
+  a.storage.salvar.mockResolvedValueOnce({chave:'a'.repeat(32),tokenCompensacao:'s'.repeat(64),nomeOriginal:'novo.txt',mimeEfetivo:'text/plain',tamanho:7,sha256:'b'.repeat(64)} as never);
+  a.db.transaction.mockRejectedValueOnce(new Error('conexão perdida no COMMIT'));
+  await expect(a.service.enviar(contratoId,entregavelId,esperadaId,{buffer:Buffer.from('novo QA'),size:7,originalname:'novo.txt',mimetype:'text/plain'},{},autor)).rejects.toBeInstanceOf(ServiceUnavailableException);
+  expect(a.storage.removerOrfao).not.toHaveBeenCalled();
+});
+test('não verifica evidência com hash divergente', async()=>{
+  const a=cenario();a.storage.ler.mockResolvedValueOnce(Buffer.from('alterad'));
+  await expect(a.service.verificar(contratoId,entregavelId,esperadaId,comprovanteId,autor)).rejects.toBeInstanceOf(ServiceUnavailableException);
+  expect(a.comprovantes.save).not.toHaveBeenCalled();
+  expect(a.auditoria.registrarNaTransacao).not.toHaveBeenCalled();
 });

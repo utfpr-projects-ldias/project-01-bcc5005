@@ -5,6 +5,7 @@ import { ExclusaoPlanejamentoService } from './exclusao-planejamento.service.js'
 it('B04: exclusão definitiva de etapa com histórico operacional falha sem DELETE nem limpeza física', async () => {
   const consultas: string[] = [];
   const manager = {
+    getRepository: () => ({findOne:async()=>({ativo:true,perfil:'ADMINISTRADOR',supertokensUserId:'qa'})}),
     query: jest.fn(async (sql: string) => {
       consultas.push(sql);
       if (sql.includes('SELECT id, status, arquivado_em, conclusao_solicitada_em FROM contratos')) return [{ id: 'contrato' }];
@@ -17,7 +18,7 @@ it('B04: exclusão definitiva de etapa com histórico operacional falha sem DELE
   const auditoria = { registrarNaTransacao: jest.fn(async () => undefined) };
   const armazenamento = { removerPersistido: jest.fn(async () => undefined) };
   const service = new ExclusaoPlanejamentoService(dataSource as never, auditoria as never, armazenamento as never);
-  await expect(service.excluir('etapa', 'contrato', 'etapa', { id: 'admin' } as never))
+  await expect(service.excluir('etapa', 'contrato', 'etapa', { id:'admin', perfil:'ADMINISTRADOR', supertokensUserId:'qa' } as never))
     .rejects.toBeInstanceOf(ConflictException);
   expect(consultas.some(q => q.includes('DELETE FROM'))).toBe(false);
   expect(auditoria.registrarNaTransacao).not.toHaveBeenCalled();

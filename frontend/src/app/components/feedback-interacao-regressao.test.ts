@@ -27,7 +27,7 @@ test('card oferece indicador central discreto sem spinner no menu e botões só 
   const diario = fonte('src/app/contratos/components/atividades-vinculadas.tsx');
   expect(css).toContain('[data-tec08-card-carregando="true"]::after');
   expect(css).toContain('opacity: .88 !important;');
-  expect(cartao).toContain('data-tec08-card-carregando');
+  expect(cartao).toContain('aria-busy={ocupado} disabled={ocupado}');
   expect(diario).toContain('ModalCadastroAtividade');
   expect(diario).not.toContain('href={origem}');
 });

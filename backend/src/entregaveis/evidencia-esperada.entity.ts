@@ -36,6 +36,9 @@ export class EvidenciaEsperada {
   @Column({ name: 'rascunho_envio', type: 'jsonb', nullable: true, select: false })
   rascunhoEnvio?: Record<string, string> | null;
 
+  @Column({ name: 'criado_em', type: 'timestamptz', nullable: true, default: () => 'now()' })
+  criadoEm?: Date | null;
+
   /** Reabertura documental explícita, independente do status operacional. */
   @Column({ name: 'reaberto_em', type: 'timestamptz', nullable: true })
   reabertoEm!: Date | null;

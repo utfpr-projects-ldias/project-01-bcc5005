@@ -1,19 +1,28 @@
 'use client';
+import { BarraTabela, ComprovacaoTabela } from './tabela-operacional';
+import type { MatrizDashboard } from '@/lib/dashboard';
 import { useProgresso } from '@/hooks/use-progresso';
 import { useEntregaveis, useResumoDocumentalContrato } from '@/hooks/use-entregaveis';
 import { useOcorrencias } from '@/hooks/use-ocorrencias';
 import { dataPlanejada, ROTULOS_TIPO } from '@/lib/entregaveis';
 import { rotuloEstadoEntregavel } from '@/lib/identidade-operacional';
 import { EtiquetaAtraso } from '@/app/components/etiqueta-atraso';
-const numero = (v:string|number|null|undefined) => v == null || !Number.isFinite(Number(v)) ? '—' : Number(v).toLocaleString('pt-BR',{maximumFractionDigits:3});
+const numero = (v:string|number|null|undefined) => {if(v==null)return '—';const texto=String(v);if(!/^\d+(?:\.\d+)?$/.test(texto))return '—';const [inteiro,decimal='']=texto.split('.');const fracao=decimal.replace(/0+$/,'');return inteiro.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+(fracao?`,${fracao}`:'');};
 export function MatrizAcompanhamento({contratoId,abrir}:{contratoId:string;abrir:(id:string,origem?:HTMLElement)=>void}){
  const {progresso,loading,erro}=useProgresso(contratoId);
  const entregaveis=useEntregaveis(contratoId);
  const documentos=useResumoDocumentalContrato(contratoId);
  const itens=progresso?.entregaveis??[];
  const porId=new Map((entregaveis.dados??[]).map(e=>[e.id,e]));
+ const linhas:MatrizDashboard[]=itens.map(e=>{const item=porId.get(e.entregavelId),doc=documentos.dados?.[e.entregavelId];return {...e,etapa:null,unidadeMedida:item?.unidadeMedida??null,comprovacao:doc?.situacaoComprovacao??null,exigenciasDocumentais:doc?{feitas:doc.exigenciasDocumentaisAtendidas??doc.verificadas,total:doc.exigenciasDocumentaisTotal??doc.obrigatorias}:null};});
+ if(loading)return <p role="status">Consultando matriz…</p>;
+ if(erro)return <p role="alert">{erro}</p>;
+ return <TabelaMatrizAcompanhamento itens={linhas} abrir={abrir}/>;
+}
+/** Apresentação compartilhada: o dashboard usa a projeção consolidada sem repetir requisições. */
+export function TabelaMatrizAcompanhamento({itens,abrir}:{itens:MatrizDashboard[];abrir?:(id:string,origem?:HTMLElement)=>void}){
  return <section aria-label="Matriz de execução" className="space-y-3">
- {loading?<p role="status">Consultando matriz…</p>:erro?<p role="alert">{erro}</p>:!itens.length?<p className="text-sm text-foreground/65">Nenhum entregável considerado na execução.</p>:<div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead className="text-foreground/65"><tr>{['Entregável','Previsto','Realizado','Avanço','Comprovação','Execução','Alertas'].map(t=><th key={t} scope="col" className="px-2 py-2 font-medium">{t}</th>)}</tr></thead><tbody className="divide-y divide-slate-500/20">{itens.map(e=>{const item=porId.get(e.entregavelId),doc=documentos.dados?.[e.entregavelId];const un=e.tipo==='QUANTITATIVO'?item?.unidadeMedida??'':e.tipo==='RECORRENTE'?'períodos':'';const comprovacao=doc?.situacaoComprovacao??item?.situacaoComprovacao;return <tr key={e.entregavelId}><th scope="row" className="min-w-36 px-2 py-3"><button type="button" className="text-left font-semibold hover:underline" onClick={ev=>abrir(e.entregavelId,ev.currentTarget)}>{e.nome}</button><p className="font-normal text-foreground/65">{ROTULOS_TIPO[e.tipo]}</p></th><td className="px-2 py-3">{e.previsto==null?'—':`${numero(e.previsto)} ${un}`}</td><td className="px-2 py-3">{e.realizado==null?'—':`${numero(e.realizado)} ${un}`}</td><td className="px-2 py-3 tabular-nums">{e.percentualExecucao==null?'—':`${numero(e.percentualExecucao)}%`}</td><td className="px-2 py-3">{comprovacao==='COMPROVADO'?'Comprovado':comprovacao==='EVIDENCIA_PARCIAL'?'Parcial':comprovacao==='SEM_EVIDENCIA'?'Sem evidência':'—'}</td><td className="px-2 py-3">{rotuloEstadoEntregavel(e.statusEntregavel,false,Boolean(e.reabertoEm),Boolean(e.regularizacaoDocumentalSolicitada))}</td><td className="px-2 py-3"><EtiquetaAtraso atrasado={e.atrasado} finalizadoComAtraso={e.finalizadoComAtraso}/>{!e.atrasado&&!e.finalizadoComAtraso?'—':null}</td></tr>;})}</tbody></table></div>}
+ {!itens.length?<p className="text-sm text-foreground/65">Nenhum entregável considerado na execução.</p>:<div className="pi-tabela-scroll"><table className="pi-tabela-operacional w-full text-left" aria-label="Matriz de execução"><thead><tr>{['Entregável','Previsto','Realizado','Avanço','Comprovação','Execução','Alertas'].map(t=><th key={t} scope="col">{t}</th>)}</tr></thead><tbody>{itens.map(e=>{const un=e.tipo==='QUANTITATIVO'?e.unidadeMedida??'':e.tipo==='RECORRENTE'?'períodos':'';const fracao=e.exigenciasDocumentais;return <tr key={e.entregavelId}><th scope="row" className="min-w-40 text-left">{abrir?<button type="button" className="text-left font-semibold hover:underline" onClick={ev=>abrir(e.entregavelId,ev.currentTarget)}>{e.nome}</button>:<strong>{e.nome}</strong>}<p className="text-xs font-normal text-foreground/65">{e.etapa?`${e.etapa} · `:''}{ROTULOS_TIPO[e.tipo]}</p></th><td>{e.previsto==null?'—':`${numero(e.previsto)} ${un}`}</td><td>{e.realizado==null?'—':`${numero(e.realizado)} ${un}`}</td><td><BarraTabela valor={e.percentualExecucao}/></td><td>{fracao?fracao.total?<ComprovacaoTabela fracao={fracao}/>:<span className="text-xs text-foreground/65">Sem exigências</span>:<span className="text-xs text-foreground/65">Indisponível</span>}</td><td>{rotuloEstadoEntregavel(e.statusEntregavel,false,Boolean(e.reabertoEm),Boolean(e.regularizacaoDocumentalSolicitada))}</td><td><EtiquetaAtraso atrasado={e.atrasado} finalizadoComAtraso={e.finalizadoComAtraso}/>{!e.atrasado&&!e.finalizadoComAtraso?'—':null}</td></tr>;})}</tbody></table></div>}
  </section>;
 }
 export function CronogramaContrato({contratoId,abrir,abrirOcorrencia}:{contratoId:string;abrir:(id:string,origem?:HTMLElement)=>void;abrirOcorrencia:(id:string)=>void}){

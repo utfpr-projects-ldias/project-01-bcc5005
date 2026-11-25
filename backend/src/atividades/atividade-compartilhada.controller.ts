@@ -1,8 +1,8 @@
-import { Body, Controller, Delete, Get, Param, Post, Req, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UsePipes, ValidationPipe } from '@nestjs/common';
 import { ExigirPolitica } from '../autorizacao/politica.decorator.js';
 import type { RequisicaoAutorizada } from '../autorizacao/usuario-autenticado.js';
 import { AtividadeCompartilhadaService } from './atividade-compartilhada.service.js';
-import { AprovarCompartilhadaDto, CriarAtividadeCompartilhadaDto } from './dto/atividade-compartilhada.dto.js';
+import { AprovarCompartilhadaDto, CriarAtividadeCompartilhadaDto, AdicionarContratosAtividadeDto, EditarMetadadosCompartilhadosDto } from './dto/atividade-compartilhada.dto.js';
 
 /** A política global identifica o usuário. O serviço valida CADA contrato persistido,
  * sem utilizar um contratoId do body como autorização do grupo. */
@@ -22,6 +22,14 @@ export class AtividadeCompartilhadaController {
   detalhar(@Param('id') id: string, @Req() req: RequisicaoAutorizada) {
     return this.service.resumo(id, req.usuarioDominio!);
   }
+
+  @Post(':id/contratos')
+  @ExigirPolitica('contratos:listar')
+  adicionar(@Param('id') id:string,@Body() dto:AdicionarContratosAtividadeDto,@Req() req:RequisicaoAutorizada){return this.service.adicionarContratos(id,dto,req.usuarioDominio!);}
+
+  @Patch(':id/metadados')
+  @ExigirPolitica('contratos:listar')
+  editarMetadados(@Param('id') id:string,@Body() dto:EditarMetadadosCompartilhadosDto,@Req() req:RequisicaoAutorizada){return this.service.editarMetadados(id,dto,req.usuarioDominio!);}
 
   @Delete(':id/contratos/:contratoId')
   @ExigirPolitica('contratos:listar')

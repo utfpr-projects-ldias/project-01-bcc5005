@@ -7,7 +7,7 @@ import { ResumoVinculosEntregavel } from '@/app/contratos/components/resumo-vinc
 import { useResumoDocumentalContrato } from '@/hooks/use-entregaveis';
 
 import { decimalDigitado, decimalExibicao, decimalParaApi } from '@/lib/campos-numericos';
-import { useId, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useAcessoContrato } from '@/hooks/use-contratos';
 import { useMeuPerfil } from '@/hooks/use-meu-perfil';
 import { useRepositorioConsultasOpcional } from '@/app/components/provedor-consultas';
@@ -257,18 +257,18 @@ export function ModalConfigurarExecucao({contratoId,numeroContrato,estadoContext
 function EditorPesos({dados,salvarPesos,alterarModo,onFechar,onOcupado,fecharRef,solicitarFechamento}:{solicitarFechamento:()=>void;dados:ProgressoContrato;salvarPesos:(versao:string,pesos:{entregavelId:string;peso:string}[])=>Promise<void>;alterarModo:(versao:string,modo:'SIMPLES'|'PONDERADO')=>Promise<void>;onFechar:()=>void;onOcupado:(v:boolean)=>void;fecharRef:{current:(()=>boolean)|null}}) {
   const [modo,setModo]=useState(dados.modoCalculo);
   const [pesos,setPesos]=useState<Record<string,string>>(()=>Object.fromEntries(dados.entregaveis.map(e=>[e.entregavelId,decimalExibicao(e.pesoOperacional,4)])));
-  const versao=useRef(dados.versaoPesos);const trava=useRef(false);
+  const [versao]=useState(dados.versaoPesos);const trava=useRef(false);
   const [ocupado,setOcupado]=useState(false),[erro,setErro]=useState('');
   const valores=dados.entregaveis.map(e=>pesos[e.entregavelId]??'');
   const distribuicao=calcularDistribuicaoPesos(valores);
   const mudou=dados.modoCalculo!==modo||(modo==='PONDERADO'&&dados.entregaveis.some(e=>Number(decimalParaApi(pesos[e.entregavelId]??''))!==Number(e.pesoOperacional??0)));
-  const desatualizado=versao.current!==dados.versaoPesos;
+  const desatualizado=versao!==dados.versaoPesos;
   const valido=modo==='SIMPLES'||(distribuicao.soma<=100&&valores.every(v=>!v.trim()||(/^\d{1,3}(?:[.,]\d{1,4})?$/.test(v.trim())&&Number(v.replace(',','.'))<=100)));
-  fecharRef.current=()=>!mudou;
+  useEffect(()=>{fecharRef.current=()=>!mudou;return()=>{fecharRef.current=null;};},[fecharRef,mudou]);
   async function salvar(evento:FormEvent<HTMLFormElement>){
     evento.preventDefault(); if(trava.current||!valido||desatualizado)return;
     trava.current=true;setOcupado(true);onOcupado(true);setErro('');
-    try{if(modo==='PONDERADO'&&dados.entregaveis.length)await salvarPesos(versao.current,dados.entregaveis.map(e=>({entregavelId:e.entregavelId,peso:decimalParaApi(pesos[e.entregavelId]??'')||'0'})));else if(modo==='PONDERADO')await alterarModo(versao.current,'PONDERADO');else if(dados.modoCalculo!=='SIMPLES')await alterarModo(versao.current,'SIMPLES');onFechar();}
+    try{if(modo==='PONDERADO'&&dados.entregaveis.length)await salvarPesos(versao,dados.entregaveis.map(e=>({entregavelId:e.entregavelId,peso:decimalParaApi(pesos[e.entregavelId]??'')||'0'})));else if(modo==='PONDERADO')await alterarModo(versao,'PONDERADO');else if(dados.modoCalculo!=='SIMPLES')await alterarModo(versao,'SIMPLES');onFechar();}
     catch(e){setErro(e instanceof Error?e.message:'Não foi possível salvar a configuração.');}finally{trava.current=false;setOcupado(false);onOcupado(false);}
   }
   return <form data-pi-formulario data-pi-editar-execucao className="min-w-0 space-y-4" onSubmit={e=>void salvar(e)}>

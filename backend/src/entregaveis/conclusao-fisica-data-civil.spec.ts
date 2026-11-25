@@ -8,7 +8,7 @@ const entregavel = {
   tipo: TipoEntregavel.CONTINUO,
   terminoPrevisto: '2026-11-23', percentualExecucao: '100',
 };
-const manager = { findBy: jest.fn(async () => [{ status:'CONCLUIDO' }]) };
+const manager = { findBy: jest.fn(async () => [{ status:'CONCLUIDO', modoRegistro:'DESCRITIVO', minimoAtividadesVerificadas:0 }]) };
 
 describe('conclusão contínua usa dia civil do contrato', () => {
   afterEach(() => jest.useRealTimers());

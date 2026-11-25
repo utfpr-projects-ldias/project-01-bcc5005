@@ -36,12 +36,13 @@ const transacao = jest.fn<(fn: (m: EntityManager) => Promise<unknown>) => Promis
 const svc = new AdministracaoUsuariosService(
   { findOneBy: buscarEmail, find: listar } as unknown as Repository<Usuario>,
   { criar: criarIdentidade, excluirCriacaoIncompleta: excluirIdentidade, alterarEmail, definirNovaSenha: definirSenha } as unknown as IdentidadesFuncionariosService,
-  { transaction: transacao } as unknown as DataSource,
+  { transaction: transacao, getRepository: () => repoTx } as unknown as DataSource,
   { registrarNaTransacao: auditar, executarComAuditoria: auditarExecucao } as unknown as AuditoriaService,
 );
 
 beforeEach(() => {
   jest.resetAllMocks();
+  admin.bloqueioSessoesId = null; usuario.bloqueioSessoesId = null; usuario.email = pedido.email;
   buscarEmail.mockResolvedValue(null);
   listar.mockResolvedValue([usuario]);
   criarIdentidade.mockResolvedValue('st-func');
@@ -124,10 +125,13 @@ describe('Credenciais administrativas', () => {
   });
   it('registra tentativa e confirmação sem segredo na redefinição', async () => {
     buscarEmail.mockImplementation(async (args) => (args as {id: string})?.id === ator.id ? admin : usuario);
+    findOne.mockImplementation(async consulta => (consulta as {where:{id:string}}).where.id === ator.id ? admin : usuario);
+    definirSenha.mockImplementation(async () => { expect(usuario.bloqueioSessoesId).toBeTruthy(); });
     await svc.redefinirSenha(usuario.id, 'NovaSenha!1234', ator);
+    expect(usuario.bloqueioSessoesId).toBeNull();
     expect(definirSenha).toHaveBeenCalledWith('st-func', 'NovaSenha!1234');
-    expect(auditarExecucao).toHaveBeenCalledTimes(2);
-    expect(JSON.stringify(auditarExecucao.mock.calls)).not.toContain('NovaSenha!1234');
+    expect(auditar).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(auditar.mock.calls)).not.toContain('NovaSenha!1234');
   });
 });
 
@@ -203,8 +207,8 @@ describe('B02 — resultados incertos entre SuperTokens e PostgreSQL', () => {
       if (where.id === usuario.id) return Object.assign(new Usuario(), usuario, { email: 'novo@example.com' });
       return null;
     });
-    findOne.mockImplementation(async (consulta) => (consulta as {where: {id: string}}).where.id === ator.id ? admin : Object.assign(new Usuario(), usuario));
-    transacao.mockImplementationOnce(async (callback) => { await callback(manager); throw new Error('COMMIT incerto'); });
+    findOne.mockImplementation(async (consulta) => (consulta as {where: {id: string}}).where.id === ator.id ? admin : usuario);
+    transacao.mockImplementationOnce(f => f(manager)).mockImplementationOnce(async (callback) => { await callback(manager); throw new Error('COMMIT incerto'); });
     const resultado = await svc.alterarEmail(usuario.id, 'novo@example.com', ator);
     expect(resultado.email).toBe('novo@example.com');
     expect(alterarEmail).toHaveBeenCalledTimes(1);
@@ -216,18 +220,20 @@ describe('B02 — resultados incertos entre SuperTokens e PostgreSQL', () => {
       if (where.id === usuario.id) { if (alterarEmail.mock.calls.length) throw new Error('reconciliação indisponível'); return usuario; }
       return null;
     });
-    findOne.mockImplementation(async (consulta) => (consulta as {where: {id: string}}).where.id === ator.id ? admin : Object.assign(new Usuario(), usuario));
-    transacao.mockImplementationOnce(async (callback) => { await callback(manager); throw new Error('COMMIT incerto'); });
+    findOne.mockImplementation(async (consulta) => (consulta as {where: {id: string}}).where.id === ator.id ? admin : usuario);
+    transacao.mockImplementationOnce(f => f(manager)).mockImplementationOnce(async (callback) => { await callback(manager); throw new Error('COMMIT incerto'); });
     await expect(svc.alterarEmail(usuario.id, 'novo@example.com', ator)).rejects.toThrow('confirmação indeterminada');
     expect(alterarEmail).toHaveBeenCalledTimes(1);
   });
   it('registra senha alterada com revogação pendente, sem registrar a senha', async () => {
     buscarEmail.mockImplementation(async (where) => (where as {id: string}).id === ator.id ? admin : usuario);
+    findOne.mockImplementation(async consulta => (consulta as {where:{id:string}}).where.id === ator.id ? admin : usuario);
     definirSenha.mockRejectedValueOnce(new RevogacaoSessoesPendenteError());
     await expect(svc.redefinirSenha(usuario.id, 'NovaSenha!1234', ator))
-      .rejects.toThrow('sessões anteriores podem continuar ativas');
-    expect(auditarExecucao).toHaveBeenCalledTimes(2);
-    const callback = auditarExecucao.mock.calls[1][1] as () => Promise<{ evento: { acao: string; dadosPosteriores: unknown } }>;
+      .rejects.toThrow('regularização de sessões');
+    expect(usuario.bloqueioSessoesId).toBeTruthy();
+    expect(auditarExecucao).toHaveBeenCalledTimes(1);
+    const callback = auditarExecucao.mock.calls[0][1] as () => Promise<{ evento: { acao: string; dadosPosteriores: unknown } }>;
     const evento = (await callback()).evento;
     expect(evento.acao).toBe(AcaoAuditoria.USUARIO_SENHA_REVOGACAO_PENDENTE);
     expect(evento.dadosPosteriores).toEqual({ situacao: 'SENHA_ALTERADA_SESSOES_PENDENTES' });

@@ -7,7 +7,7 @@ MODO="${1:-all}"
 case "$MODO" in back|front|all) ;; *) echo "Uso: ./back | ./front | ./testes-all | bash qa/central/executar.sh {back|front|all}" >&2; exit 2;; esac
 if ! docker info >/dev/null 2>&1; then echo "Docker indisponível. Inicie o serviço e execute ./configurar-testes." >&2; exit 2; fi
 cd "$RAIZ" || { echo "Projeto não encontrado: $RAIZ"; exit 2; }
-RUN="$(date +%Y%m%d-%H%M%S)"
+RUN="$(date +%Y%m%d-%H%M%S)-$$"
 D="$HOME/Downloads/TESTES-${MODO^^}-$RUN"
 mkdir -p "$D"
 RES="$D/00-RESUMO.txt"
@@ -41,6 +41,7 @@ run() {
     printf '\nFim %s\nEXIT_CODE=%s\n' "$(date -Is)" "$rc"
   } > "$D/$nome.txt" 2>&1
   if ((rc == 0)); then PASSOU=$((PASSOU+1)); echo "PASS: $nome" | tee -a "$RES";
+  elif ((rc == 77)); then PULOU=$((PULOU+1)); echo "SKIP: $nome (Jest com casos ignorados)" | tee -a "$RES";
   else FALHOU=$((FALHOU+1)); echo "FAIL($rc): $nome" | tee -a "$RES"; fi
 }
 skip() {
@@ -48,24 +49,54 @@ skip() {
   TOTAL=$((TOTAL+1)); PULOU=$((PULOU+1))
   printf 'SKIP: %s - %s\n' "$nome" "$motivo" | tee -a "$RES" "$D/$nome.txt"
 }
+# O JSON do Jest permite distinguir uma suíte vazia/ignorada de uma aprovação.
+jest_verificado() {
+  local servico="$1" variavel="$2"; shift 2
+  local -a ambiente=()
+  [[ -z "$variavel" ]] || ambiente=(-e "$variavel")
+  local script
+  script=$(cat <<'JEST_SH'
+set -eu
+relatorio=$(mktemp)
+trap 'rm -f "$relatorio"' EXIT
+npm "$@" --json --outputFile="$relatorio"
+node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
+  const {numTotalTests:t,numPassedTests:p,numPendingTests:s,numTodoTests:d,numFailedTests:f,numRuntimeErrorTestSuites:e}=r;
+  console.log(JSON.stringify({total:t,aprovados:p,ignorados:s,todo:d,falhas:f,errosSuite:e}));
+  if(!r.success || !Number.isInteger(t) || t===0 || f || e)process.exit(1);
+  if(s || d || r.numPendingTestSuites || p!==t)process.exit(77);' "$relatorio"
+JEST_SH
+  )
+  docker compose exec -T "${ambiente[@]}" "$servico" sh -c "$script" sh "$@"
+}
+verificar_migrations() {
+  local resultado
+  resultado=$(docker compose exec -T backend npm run migration:show) || return $?
+  printf '%s\n' "$resultado"
+  if grep -Eq '^[[:space:]]*\[[[:space:]]\]' <<< "$resultado"; then
+    echo 'Existem migrations pendentes. Execute ./configurar-testes antes do QA real.' >&2
+    return 1
+  fi
+  grep -Eq '^[[:space:]]*\[X\]' <<< "$resultado"
+}
 # O runner é portável para branches e clones novos; branch/HEAD são registrados no resumo.
-run 00-CONTAINERS-INICIAR docker compose up -d
+# Aguardar HTTP de verdade antes dos fluxos reais, inclusive o build inicial do Next.
+run 00-CONTAINERS-INICIAR docker compose up -d --wait --wait-timeout 120
+run 00-PRONTIDAO-HTTP python3 qa/central/aguardar_servicos.py
 run 01-DOCKER docker compose ps
+run 12-MIGRATIONS-STATUS verificar_migrations
 if [[ "$MODO" != front ]]; then
-  run 00-PREFLIGHT-TS docker compose exec -T backend npx tsc --noEmit
-  run 03-BACKEND-JEST-TODOS docker compose exec -T backend npm test -- --runInBand
-  run 04-BACKEND-E2E-HTTP-7 docker compose exec -T backend npm run test:e2e -- --runInBand --runTestsByPath \
+  run 03-BACKEND-JEST-TODOS jest_verificado backend "" test -- --runInBand
+  run 04-BACKEND-E2E-HTTP-7 jest_verificado backend "" run test:e2e -- --runInBand --runTestsByPath \
     test/admin-usuarios.e2e-spec.ts test/app.e2e-spec.ts test/atividades.e2e-spec.ts test/auth.e2e-spec.ts \
     test/cadastro-bloqueado.e2e-spec.ts test/contratos-api.e2e-spec.ts test/supertokens-signup-bloqueado.e2e-spec.ts
   run 05-BACKEND-OXLINT docker compose exec -T backend npm run lint:fast
   run 06-BACKEND-OXLINT-TIPOS docker compose exec -T backend npm run lint
   run 07-BACKEND-BUILD docker compose exec -T backend npm run build
   run 10-BACKEND-TSC docker compose exec -T backend npx tsc --noEmit
-  run 12-MIGRATIONS-STATUS docker compose exec -T backend npm run migration:show
 fi
 if [[ "$MODO" != back ]]; then
-  run 00-QA-TEC08-03 python3 qa/tec08-03/teste_validar_ui_real.py
-  run 02-FRONTEND-JEST-TODOS docker compose exec -T frontend npm test -- --runInBand
+  run 02-FRONTEND-JEST-TODOS jest_verificado frontend "" test -- --runInBand
   # Torna os warnings React parte do resultado oficial: não basta Jest retornar 0.
   run 02-FRONTEND-REACT-ACT-SEM-AVISOS python3 qa/central/verificar_react_act.py "$D/02-FRONTEND-JEST-TODOS.txt"
   run 08-FRONTEND-ESLINT docker compose exec -T frontend npm run lint
@@ -75,7 +106,7 @@ fi
 if [[ "$MODO" != front ]]; then
 # DBs de teste são novos (ou integrador_hu06_qa_test, nome fixo exigido
 # pelo teste). Nenhum comando cria backup, elimina DB ou modifica a base dev.
-DB_TAG="pi_$(date +%m%d%H%M%S)"
+DB_TAG="pi_$(date +%m%d%H%M%S)_$$"
 preparar_banco() {
   local nome="$1"
   [[ "$nome" =~ ^[a-z][a-z0-9_]{0,62}$ ]] || return 2
@@ -96,6 +127,7 @@ url_para_banco() {
 # Cada suíte que exige Postgres real tem sua própria URL e guarda de nome.
 # HU07-01 e HU07-05 usam o mesmo banco, mas schemas de teste independentes.
 E2E=(
+ 'b01-integridade-referencias|B01_TEST_DATABASE_URL|_b01_test'
  'contratos-migration|TEST_DATABASE_URL|_migration_test'
  'hu06-01-banco|HU06_TEST_DATABASE_URL|_hu06_test'
  'hu06-02-etapas-api|HU06_API_TEST_DATABASE_URL|_hu06_api_test'
@@ -118,7 +150,7 @@ for entrada in "${E2E[@]}"; do
   if [[ "$url" != postgresql://* && "$url" != postgres://* ]]; then
     skip "$id" 'DATABASE_URL inválida ou não disponível no container backend'; continue
   fi
-  run "$id" docker compose exec -T -e "$variavel=$url" backend npm run test:e2e -- --runInBand --runTestsByPath "test/${suite}.e2e-spec.ts"
+  run "$id" jest_verificado backend "$variavel=$url" run test:e2e -- --runInBand --runTestsByPath "test/${suite}.e2e-spec.ts"
 done
 
 
@@ -140,7 +172,7 @@ if [[ -d qa ]]; then
     nome="QA-PY-$(echo "$arquivo" | tr '/ ' '--' | tr -cd 'a-zA-Z0-9_.-')"
     if [[ -x qa/hu07-06/.local/venv/bin/python ]]; then interp='qa/hu07-06/.local/venv/bin/python'; else interp='python3'; fi
     run "$nome" "$interp" "$arquivo"
-  done < <(find qa -type f -name 'teste_*.py' -not -path '*/.local/*' -print0 | sort -z)
+  done < <(find qa -type f \( -name 'teste_*.py' -o -name 'test_*.py' \) -not -path '*/.local/*' -not -path '*/__pycache__/*' -print0 | sort -z)
 else
   skip QA-PY 'pasta qa/ não disponível; não confundir com testes aprovados'
 fi
@@ -155,7 +187,7 @@ with open(sys.argv[2],'w') as o:
  for arq in fontes:
   base=Path(arq).name
   if base.startswith(('LIMPAR','RESET','RECRIAR','RECOMECAR')): classe='MANUTENCAO/RESET (NÃO EXECUTAR COMO TESTE)'
-  elif base.startswith('teste_'):classe='UNITÁRIO/ESTÁTICO (EXECUTADO)'
+  elif base.startswith(('teste_','test_')):classe='UNITÁRIO/ESTÁTICO (EXECUTADO)'
   elif base in ('validar_fluxo_real.py','VALIDAR-CODIGO-REAL.py','validar_modal_real.py','validar_card_evidencia_real.py','validar_integracao_real.py','validar_ui_real.py','validar_arquivamento_real.py','provisionar_funcionarios.py','verificar_logins.py'):classe='REAL PLAYWRIGHT / API (TENTAR EXECUTAR)'
   else:classe='AUXILIAR/ORQUESTRADOR/DIAGNÓSTICO (VIDE LOGS)'
   o.write(classe+' | '+arq+'\n')
@@ -175,8 +207,8 @@ fi
 PY_QA="$RAIZ/qa/hu07-06/.local/venv/bin/python"
 export PLAYWRIGHT_BROWSERS_PATH="$RAIZ/qa/hu07-06/.local/browsers"
 export PYTHONDONTWRITEBYTECODE=1
-if [[ ! -x "$PY_QA" || ! -f qa/hu07-06/.local/credenciais.json || ! -d "$PLAYWRIGHT_BROWSERS_PATH" ]]; then
-  skip QA-REAL-BOOTSTRAP 'Falta Playwright/Chromium/credenciais DEV; veja QA-REAL-INSTALAR-AMBIENTE'
+if [[ ! -x "$PY_QA" || ! -f qa/hu07-06/.local/credenciais.json || ! -d "$PLAYWRIGHT_BROWSERS_PATH" ]] || ! grep -q '^EXIT_CODE=0$' "$D/00-PRONTIDAO-HTTP.txt" || ! grep -q '^EXIT_CODE=0$' "$D/12-MIGRATIONS-STATUS.txt"; then
+  skip QA-REAL-BOOTSTRAP 'Falta prontidão HTTP, migrations aplicadas ou ambiente Playwright; veja os logs de preflight'
   skip QA-REAL-CRIAR-CONTRATOS 'Sem sessão Administrador não há contrato QA real'
   skip QA-REAL-HU06-HU07 'Sem dois contratos QA reais'
   skip QA-REAL-HU08-HU09-TEC09 'Sem credenciais/Chromium para o teste real'
@@ -191,6 +223,7 @@ else
     skip QA-REAL-CRIAR-CONTRATOS 'Bootstrap real de funcionários falhou'
   fi
   if [[ -f "$D/QA-CONTRATOS-CRIADOS.json" ]] && grep -q '^EXIT_CODE=0$' "$D/QA-REAL-CRIAR-CONTRATOS.txt"; then
+    unset QA_CONTRATO_ID QA_OUTRO_CONTRATO_ID
     eval "$(python3 - "$D/QA-CONTRATOS-CRIADOS.json" <<'UUID_PY'
 import json,sys,re
 v=json.load(open(sys.argv[1])); a,b=v.get('contratoPrincipalId',''),v.get('outroContratoId','')
@@ -229,7 +262,6 @@ UUID_PY
   run QA-REAL-PERSISTENCIA-REINICIO "$PY_QA" qa/tec08-04-05/validar_persistencia_reinicio.py --executar --confirmar-reinicio
 fi
 run QA-ESTRUTURA-BD-HU08 bash qa/tec08-05-01/VERIFICAR-BD.sh
-run QA-PY-ROTEIROS-HISTORICOS python3 qa/tec08-04-05/testar_roteiros.py
 # Scripts de manutenção ou reset são catalogados, jamais executados nesta bateria.
 # O aceite funcional HU06 é verificado pelo Chromium, API e PostgreSQL no QA integrado.
 # A avaliação subjetiva e a aprovação/merge do PR não são etapas da regressão.
@@ -255,7 +287,7 @@ print('QA artefatos reais copiados:',n)
 ARTEFATOS_PY
 fi
 
-run 90-GIT-DIFF-CHECK git diff --check
+run 90-GIT-DIFF-CHECK git diff --check HEAD
 run 91-GIT-STATUS git status --short
 if (( FALHOU > 0 )); then exit 1; fi
 if (( PULOU > 0 )); then exit 3; fi

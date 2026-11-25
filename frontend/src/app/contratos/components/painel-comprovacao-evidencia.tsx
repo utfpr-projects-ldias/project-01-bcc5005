@@ -1,4 +1,5 @@
 'use client';
+import { sincronizarEvidenciaCompartilhada } from '@/lib/sincronizar-evidencia-compartilhada';
 import {CampoContribuicaoDisponivel} from './campo-contribuicao-disponivel';
 import type {TipoEntregavel} from '@/lib/entregaveis';
 import {EditorVinculosLocaisEvidencia} from './editor-vinculos-locais-evidencia';
@@ -37,9 +38,10 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
   const [revisaoCarregada,setRevisaoCarregada] = useState<number|null>(null);
   const [dadosConsultados, setDados] = useState<DetalheEvidencia | null>(null);
   // Só reutiliza uma resposta autoritativa da MESMA revisão e do mesmo objeto.
-  const dados = revisaoCarregada === revisaoConsulta ? dadosConsultados :
+  const dadosDaEvidencia = dadosConsultados?.id === esperadaId && dadosConsultados.contratoId === contratoId && dadosConsultados.entregavelId === entregavelId ? dadosConsultados : null;
+  const dados = revisaoCarregada === revisaoConsulta ? dadosDaEvidencia :
     detalheConfirmado?.id === esperadaId && detalheConfirmado.contratoId === contratoId && detalheConfirmado.entregavelId === entregavelId
-      ? detalheConfirmado : null;
+      ? detalheConfirmado : dadosDaEvidencia;
   const contextoPermiteAlterar = dados?.contextoPermiteAlterar !== false;
   const podeAnexar = podeEnviar && contextoPermiteAlterar && (!somenteLeitura || anexacaoDireta);
   const podeEditarMetadados = podeEditar && contextoPermiteAlterar && !somenteLeitura;
@@ -132,8 +134,10 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
   }, [contratoId, entregavelId, esperadaId, onIntegridadeDetalhe, onDetalheAtualizado, revisaoConsulta]);
   useEffect(() => {
     revisaoAtual.current = revisaoConsulta;
-    void recarregar().catch(() => {});
-    return () => { geracaoLeitura.current++; };
+    let ativo=true;
+    const controleGeracao=geracaoLeitura;
+    queueMicrotask(()=>{if(ativo)void recarregar().catch(()=>{});});
+    return () => { ativo=false; controleGeracao.current++; };
   }, [recarregar, revisaoConsulta]);
   async function executar(acao: () => Promise<unknown>, mensagem: string) {
     setOcupado(true); setErro('');
@@ -199,7 +203,8 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
     let uploadConfirmado = false;
     try {
       // O upload altera somente a versão atual deste requisito.
-      await enviarComprovante(contratoId, entregavelId, esperadaId, arquivoEdicao, '');
+      const enviado=await enviarComprovante(contratoId, entregavelId, esperadaId, arquivoEdicao, '');
+      if(enviado?.grupoCompartilhadoId||dados?.totalDestinosAguardandoEnvio)sincronizarEvidenciaCompartilhada(cache,contratoId);
       uploadConfirmado = true;
       setArquivoEdicao(null);
       const atualizado = await recarregar().catch(() => undefined);
@@ -223,7 +228,8 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
     }
     setOcupado(true); setErro('');
     try {
-      await enviarComprovante(contratoId, entregavelId, esperadaId, arquivoEdicao, '');
+      const enviado=await enviarComprovante(contratoId, entregavelId, esperadaId, arquivoEdicao, '');
+      if(enviado?.grupoCompartilhadoId||dados?.totalDestinosAguardandoEnvio)sincronizarEvidenciaCompartilhada(cache,contratoId);
       setArquivoEdicao(null); setAnexoInline(false);
       const atualizado = await recarregar().catch(() => { setErro('Arquivo recebido. Não foi possível atualizar a consulta.'); return undefined; }); onComprovanteAlterado?.(atualizado);
       toastSucesso('Comprovante anexado.');
@@ -321,10 +327,11 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
         <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v12h14V8M9 13h6"/></svg>
       </button>}
     </div>
+    {!ultima&&Boolean(dados.totalDestinosAguardandoEnvio)&&<p className="text-xs text-foreground/65">{dados.totalDestinosAguardandoEnvio} vínculo(s) adicional(is) aguardando envio do comprovante.</p>}
     <ContadoresVinculos itens={[{rotulo:"Contratos",total:new Set([contratoId,...(dados.compartilhamentos??[]).filter(v=>v.vigente).map(v=>v.contratoId)]).size},{rotulo:"Entregáveis",total:new Set([entregavelId,...(dados.compartilhamentos??[]).filter(v=>v.vigente).map(v=>v.entregavelId)]).size},{rotulo:"Ocorrências",total:dados.vinculosAtuais?.filter(v=>v.tipo==='ocorrencia').length??null},{rotulo:"Atividades",total:dados.vinculosAtuais?.filter(v=>v.tipo==='atividade').length??null}]}/>{Boolean(dados.vinculosAtuais?.length)&&<details className="text-sm"><summary className="cursor-pointer">Consultar vínculos</summary><ul className="mt-2 space-y-1">{dados.vinculosAtuais?.map(v=><li key={`${v.tipo}:${v.id}`} className="truncate" title={v.titulo}>{v.tipo==='ocorrencia'?'Ocorrência':'Atividade'}: {v.titulo}</li>)}</ul></details>}
     {cache&&podeEditarMetadados&&!arquivada&&dados.status!=='VERIFICADA'&&<button type="button" className="self-start rounded-md border border-current/20 px-3 py-1.5 text-xs" disabled={ocupado} onClick={()=>setEditarVinculos(true)}>Editar vínculos</button>}
     {editarVinculos&&cache&&podeEditarMetadados&&<EditorVinculosLocaisEvidencia dados={dados} fechar={()=>setEditarVinculos(false)} atualizar={async()=>{cache.invalidar(['execucao',contratoId]);cache.invalidar(['ocorrencias',contratoId]);cache.invalidar(['atividades',contratoId]);cache.invalidar(['entregaveis','contrato',contratoId]);const d=await recarregar();onComprovanteAlterado?.(d);}}/>}
-    {Boolean(dados.compartilhamentos?.length)&&<details className="rounded-lg border border-current/15 p-3 text-sm"><summary className="cursor-pointer font-medium">Verificações por destino</summary><div className="mt-2 divide-y divide-current/10">{dados.compartilhamentos?.map(v=><div key={v.comprovanteId} className="flex items-center gap-3 py-2"><div className="min-w-0 flex-1"><p className="truncate" title={v.entregavel}>{v.entregavel}</p><p className="text-xs text-foreground/65">Contrato {v.contrato} · {v.vigente?ROTULO_STATUS[v.status]:'Versão histórica'}</p></div>{v.podeVerificar&&v.comprovanteId!==dados.versoes[0]?.id&&!somenteLeitura&&<button type="button" disabled={ocupado} onClick={()=>setDestinoVerificar(v)} className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white">Verificar</button>}</div>)}</div></details>}
+    {Boolean(dados.compartilhamentos?.length)&&<details className="rounded-lg border border-current/15 p-3 text-sm"><summary className="cursor-pointer font-medium">Verificações por destino</summary><p className="mt-2 text-xs text-foreground/65">A verificação é independente em cada entregável.</p><div className="mt-2 divide-y divide-current/10">{dados.compartilhamentos?.map(v=><div key={v.comprovanteId} className="flex items-center gap-3 py-2"><div className="min-w-0 flex-1"><p className="truncate" title={v.entregavel}>{v.entregavel}</p><p className="text-xs text-foreground/65">Contrato {v.contrato} · {v.vigente?ROTULO_STATUS[v.status]:'Versão histórica'}</p></div>{v.podeVerificar&&v.comprovanteId!==dados.versoes[0]?.id&&!somenteLeitura&&<button type="button" disabled={ocupado} onClick={()=>setDestinoVerificar(v)} className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white">Verificar</button>}</div>)}</div></details>}
     {destinoVerificar&&<ConfirmacaoSimples titulo="Verificar evidência neste destino?" descricao={`Contrato ${destinoVerificar.contrato} · ${destinoVerificar.entregavel}. A decisão não altera a verificação nem a execução física de outros destinos.`} confirmar="Verificar" aprovarVerde ocupado={ocupado} onCancelar={()=>setDestinoVerificar(null)} onConfirmar={()=>{const v=destinoVerificar;setOcupado(true);setErro('');void verificarComprovante(v.contratoId,v.entregavelId,v.esperadaId,v.comprovanteId).then(async()=>{setDestinoVerificar(null);cache?.invalidar(['contratos']);cache?.invalidar(['execucao',v.contratoId]);cache?.invalidar(['ocorrencias',v.contratoId]);cache?.invalidar(['atividades',v.contratoId]);cache?.invalidar(['etapas','contrato',v.contratoId]);cache?.invalidar(['entregaveis','contrato',v.contratoId]);await recarregar();onComprovanteAlterado?.();toastSucesso('Evidência verificada neste destino.');}).catch(e=>{setDestinoVerificar(null);setErro(e instanceof Error?e.message:'Não foi possível verificar o destino.');}).finally(()=>setOcupado(false));}}/>}
     <div className="space-y-2 text-sm">
       <div className="flex items-center justify-between gap-2">
@@ -370,10 +377,10 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
       {(()=>{
         const origem=ultima??dados.declaracaoPreliminar;
         const percentual=origem?.percentualDeclarado!=null || (origem?.quantidadeDeclarada==null&&!dados.quantidadeMensuravel&&dados.tipoEntregavel!=='QUANTITATIVO');
-        const modalidadeDisponivel=percentual ? dados.tipoEntregavel==='UNICO'||Boolean(dados.ocorrenciasDescritivas?.length) : Boolean(dados.quantidadeMensuravel);
+        const modalidadeDisponivel=percentual ? dados.tipoEntregavel==='UNICO'||dados.percentualDiretoPermitido===true||Boolean(dados.ocorrenciasDescritivas?.length) : Boolean(dados.quantidadeMensuravel);
         const declarado=percentual?origem?.percentualDeclarado:origem?.quantidadeDeclarada;
         const ocorrenciaId=percentual?origem?.ocorrenciaPercentualId:origem?.ocorrenciaQuantidadeId;
-        const precisaDestino=percentual?dados.tipoEntregavel!=='UNICO':!dados.quantidadeDiretaPermitida;
+        const precisaDestino=percentual?dados.tipoEntregavel!=='UNICO'&&!dados.percentualDiretoPermitido:!dados.quantidadeDiretaPermitida;
         const podeAlterar=Boolean((modalidadeDisponivel||origem?.quantidadeDeclarada!=null||origem?.percentualDeclarado!=null)&&dados.podeEditarContribuicao&&!somenteLeitura&&!arquivada&&!origem?.referenciaPercentualId&&origem?.origemQuantidade!=='COMPROVACAO');
         const valor=declarado==null?'—':Number(declarado).toLocaleString('pt-BR',{maximumFractionDigits:percentual?2:3});
         const salvar=async()=>{
@@ -387,40 +394,15 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
             setValorInline(null);cache?.invalidar(['execucao',contratoId]);cache?.invalidar(['entregaveis','contrato',contratoId]);cache?.invalidar(['ocorrencias',contratoId]);const atualizado=await recarregar();onComprovanteAlterado?.(atualizado);
           }catch(e){setErro(e instanceof Error?e.message:'Não foi possível alterar a contribuição.');}finally{setSalvandoValor(false);}
         };
-        return <div className="grid grid-cols-1 gap-2 sm:grid-cols-2"><div className="min-w-0"><p className="text-xs text-foreground/65">{percentual?'Percentual executado':'Quantidade executada'}</p>{valorInline!==null?<div className="flex items-center gap-2">{cache?<div className="min-w-0 flex-1" onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void salvar();}if(e.key==='Escape')setValorInline(null);}}><CampoContribuicaoDisponivel inline item={{id:entregavelId,contratoId,tipo:(dados.tipoEntregavel??'UNICO') as TipoEntregavel,quantidadePrevista:dados.quantidadePrevista??null,quantidadeRealizada:null,unidadeMedida:dados.unidadeMedida??null}} ocorrenciaId={ocorrenciaId??undefined} modo={percentual?'percentual':'quantidade'} origem="EVIDENCIA" origemId={ultima?.id} valor={valorInline} onValor={setValorInline} onValidade={setSaldoInlineValido} disabled={salvandoValor}/></div>:<input autoFocus aria-label="Editar valor da contribuição" className="pi-edicao-valor-evidencia font-semibold" inputMode="decimal" placeholder={percentual?'0%':`Ex.: 2 ${dados.unidadeMedida??'unidades'}`} value={valorInline} onChange={e=>{if((percentual?/^\d{0,3}(?:[.,]\d{0,2})?$/:/^\d{0,15}(?:[.,]\d{0,3})?$/).test(e.target.value))setValorInline(e.target.value);}} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void salvar();}if(e.key==='Escape')setValorInline(null);}} disabled={salvandoValor}/>}<button type="button" aria-label="Salvar contribuição" disabled={salvandoValor||Boolean(cache&&!saldoInlineValido)} onClick={()=>void salvar()}>✓</button><button type="button" aria-label="Cancelar edição" disabled={salvandoValor} onClick={()=>setValorInline(null)}>×</button></div>:<div className="flex items-center gap-2"><strong>{valor}{declarado!=null?(percentual?'%':` ${dados.unidadeMedida??''}`):''}</strong>{podeAlterar&&<button type="button" aria-label="Editar contribuição" title="Editar contribuição" onClick={()=>{if(precisaDestino&&!ocorrenciaId)setEditarContribuicao(true);else {setSaldoInlineValido(false);setValorInline(declarado==null?'':Number(declarado).toLocaleString('pt-BR',{useGrouping:false,maximumFractionDigits:percentual?2:3}));}}}><svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m4 16-1 5 5-1L20 8l-4-4Z M14 6l4 4"/></svg></button>}</div>}</div>{!modalidadeDisponivel&&declarado==null?<p className="self-end text-xs text-foreground/60">Não há destino de execução compatível nesta configuração. A evidência pode comprovar documentalmente.</p>:!ultima&&<p className="self-end text-xs text-foreground/60">A contribuição será reconhecida somente após o envio e a verificação do comprovante.</p>}</div>;
+        return <div className="space-y-2"><p className="text-xs text-foreground/65">{percentual?'Percentual executado':'Quantidade executada'}</p><div className="flex items-center gap-2"><strong>{valor}{declarado!=null?(percentual?'%':` ${dados.unidadeMedida??''}`):''}</strong>{podeAlterar&&<button type="button" aria-label="Editar contribuição" title="Editar contribuição" onClick={()=>{if(precisaDestino&&!ocorrenciaId)setEditarContribuicao(true);else {setSaldoInlineValido(false);setValorInline(declarado==null?'':Number(declarado).toLocaleString('pt-BR',{useGrouping:false,maximumFractionDigits:percentual?2:3}));}}}><svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m4 16-1 5 5-1L20 8l-4-4Z M14 6l4 4"/></svg></button>}</div>{!modalidadeDisponivel&&declarado==null?<p className="text-xs text-foreground/60">Não há destino de execução compatível nesta configuração. A evidência pode comprovar documentalmente.</p>:!ultima&&<p className="text-xs text-foreground/60">Reconhecimento da execução após verificação.</p>}
+        {valorInline!==null&&createPortal(<ModalEtapa titulo="Editar contribuição" contexto="Execução da evidência" camada="edicao" larguraFormulario="contribuicao" ocupado={salvandoValor} onFechar={()=>setValorInline(null)}><div className="space-y-4 text-sm">{cache?<div className="min-w-0 flex-1" onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void salvar();}if(e.key==='Escape')setValorInline(null);}}><CampoContribuicaoDisponivel item={{id:entregavelId,contratoId,tipo:(dados.tipoEntregavel??'UNICO') as TipoEntregavel,quantidadePrevista:dados.quantidadePrevista??null,quantidadeRealizada:null,unidadeMedida:dados.unidadeMedida??null}} ocorrenciaId={ocorrenciaId??undefined} modo={percentual?'percentual':'quantidade'} origem="EVIDENCIA" origemId={ultima?.id} valor={valorInline} onValor={setValorInline} onValidade={setSaldoInlineValido} disabled={salvandoValor}/></div>:<input autoFocus aria-label="Editar valor da contribuição" className="w-full rounded-lg border border-current/25 bg-background p-2 font-semibold" inputMode="decimal" placeholder={percentual?'0%':`Ex.: 2 ${dados.unidadeMedida??'unidades'}`} value={valorInline} onChange={e=>{if((percentual?/^\d{0,3}(?:[.,]\d{0,2})?$/:/^\d{0,15}(?:[.,]\d{0,3})?$/).test(e.target.value))setValorInline(e.target.value);}} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void salvar();}if(e.key==='Escape')setValorInline(null);}} disabled={salvandoValor}/>}{erro&&<p role="alert" className="text-error-text">{erro}</p>}<div className="flex justify-end gap-2"><button type="button" className="rounded-lg border border-current/25 px-3 py-2" aria-label="Cancelar edição" disabled={salvandoValor} onClick={()=>setValorInline(null)}>Cancelar</button><button type="button" className="pi-vinculo-acao" aria-label="Salvar contribuição" disabled={salvandoValor||Boolean(cache&&!saldoInlineValido)} onClick={()=>void salvar()}>Salvar</button></div></div></ModalEtapa>,document.body)}</div>;
       })()}
     </section>}
     {editarContribuicao&&<EditorContribuicaoEvidencia dados={dados} fechar={()=>{setEditarContribuicao(false);registrarVoltaEdicao?.(null);}} atualizar={async()=>{cache?.invalidar(['contratos']);cache?.invalidar(['execucao']);cache?.invalidar(['ocorrencias']);cache?.invalidar(['entregaveis']);const d=await recarregar();onComprovanteAlterado?.(d);}}/>}
     {!editando && confirmacaoArquivo}
     {arquivada && <p role="status" className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-200">Evidência arquivada. Arquivos e histórico disponíveis para consulta.</p>}
-    <details data-tec08-secao-filho data-tec08-estado={estadoProprio} data-tec08-historico-evidencia data-pi-historico-neutro aria-label="Histórico da evidência" className="group rounded-xl border border-brand-green/20 bg-brand-darkgreen/5 p-3 sm:p-4">
-      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 focus-visible:outline-2 focus-visible:outline-brand-neon [&::-webkit-details-marker]:hidden">
-        <span className="inline-flex items-center gap-2 text-sm font-semibold text-foreground"><svg aria-hidden="true" className="h-4 w-4 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 5 7 7-7 7"/></svg>Rastreabilidade da evidência</span>
-        <span className="text-xs text-foreground/60">{dados.historico?.length ?? 0} eventos · expandir histórico</span>
-      </summary>
-      <div className="mt-3 border-t border-brand-green/15 pt-3">
-      {dados.historico?.length ? <ol className="space-y-2 border-l-2 border-brand-green/20 pl-3 text-xs">
-        {dados.historico.map(ev => <li key={ev.id} className="relative space-y-1 before:absolute before:-left-[18px] before:top-1.5 before:h-2 before:w-2 before:rounded-full before:bg-brand-green">
-          <p className="font-semibold">{ev.descricao}</p>
-          {ev.nomeAnterior && ev.nomeAtual && <p className="break-words text-foreground/80">Nome anterior: {ev.nomeAnterior} · Novo nome: {ev.nomeAtual}</p>}
-          {ev.nomeArquivo && <p className="break-all text-foreground/85">Arquivo: {ev.nomeArquivo}</p>}
-          {ev.justificativa && <p className="break-words text-foreground/80">Justificativa: {ev.justificativa}</p>}
-          <p className="text-foreground/65">{new Date(ev.ocorridoEm).toLocaleString('pt-BR')}
-            {ev.ator ? ` · ${ev.ator.nome} (${ev.ator.email})` : ' · usuário não identificado'}</p>
-        </li>)}
-      </ol> : <p className="text-xs text-foreground/65">Não existem eventos específicos disponíveis nesta consulta.</p>}
-      {dados.versoes.length > 1 && <details className="rounded-lg border border-brand-green/20 p-3">
-        <summary className="cursor-pointer text-sm font-semibold text-brand-neon">Versões anteriores preservadas · {dados.versoes.length - 1}</summary>
-        <ul className="mt-3 space-y-2">{dados.versoes.slice(1).map(v => <li key={v.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-brand-green/15 pt-2 text-xs">
-          <div className="min-w-0"><p className="break-all font-semibold">{nomeArquivoLegivel(v.nomeOriginal)}</p>
-            <p className="text-foreground/60">{new Date(v.criadoEm).toLocaleString('pt-BR')} · {ROTULO_STATUS[v.status]}</p></div>
-          <button data-pi-acao="secundaria" type="button" onClick={() => void baixar(v)} className="rounded-lg border border-brand-green/40 px-3 py-1.5">Baixar versão</button>
-        </li>)}</ul>
-      </details>}
-      </div>
-    </details>
     <section aria-label="Comprovação da evidência" className="space-y-2">
-      <div data-tec08-secao-filho data-tec08-estado={estadoProprio} className="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-brand-green/20 bg-brand-darkgreen/5 p-3">
+      <div data-tec08-secao-filho data-tec08-estado={estadoProprio} className="pi-anexo-evidencia flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-current/20 bg-background p-3">
         {anexoInline && arquivoEdicao && !ultima && podeAnexar && !arquivada ?
           <form data-tec08-formulario-contextual aria-label="Anexar comprovante" onSubmit={e => void enviarPrimeiroComprovante(e)}
             className="flex min-w-0 w-full flex-wrap items-center gap-2">
@@ -466,6 +448,33 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
           onChange={e => void alterarObrigatoriedade(e.target.checked)} /> Evidência obrigatória
       </label>}
     </section>
+    <details data-tec08-secao-filho data-tec08-estado={estadoProprio} data-tec08-historico-evidencia data-pi-historico-neutro aria-label="Histórico da evidência" className="group pi-historico-compacto pi-historico-evidencia">
+      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-start gap-3 focus-visible:outline-2 focus-visible:outline-current [&::-webkit-details-marker]:hidden">
+        <span className="inline-flex items-center gap-2 text-sm font-semibold text-foreground"><svg aria-hidden="true" className="h-4 w-4 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 5 7 7-7 7"/></svg>Histórico da evidência</span>
+        <span className="text-xs text-foreground/60">{dados.historico?.length ?? 0} eventos</span>
+      </summary>
+      <div className="mt-3 border-t border-brand-green/15 pt-3">
+      {dados.historico?.length ? <ol className="space-y-2 border-l-2 border-brand-green/20 pl-3 text-xs">
+        {dados.historico.map(ev => <li key={ev.id} className="relative space-y-1 before:absolute before:-left-[18px] before:top-1.5 before:h-2 before:w-2 before:rounded-full before:bg-brand-green">
+          <p className="font-semibold">{ev.descricao}</p>
+          {ev.nomeAnterior && ev.nomeAtual && <p className="break-words text-foreground/80">Nome anterior: {ev.nomeAnterior} · Novo nome: {ev.nomeAtual}</p>}
+          {ev.nomeArquivo && <p className="break-all text-foreground/85">Arquivo: {ev.nomeArquivo}</p>}
+          {ev.justificativa && <p className="break-words text-foreground/80">Justificativa: {ev.justificativa}</p>}
+          <p className="text-foreground/65">{new Date(ev.ocorridoEm).toLocaleString('pt-BR')}
+            {ev.ator ? ` · ${ev.ator.nome} (${ev.ator.email})` : ' · usuário não identificado'}</p>
+        </li>)}
+      </ol> : <p className="text-xs text-foreground/65">Não existem eventos específicos disponíveis nesta consulta.</p>}
+      {dados.versoes.length > 1 && <details className="rounded-lg border border-brand-green/20 p-3">
+        <summary className="cursor-pointer text-sm font-semibold text-brand-neon">Versões anteriores preservadas · {dados.versoes.length - 1}</summary>
+        <ul className="mt-3 space-y-2">{dados.versoes.slice(1).map(v => <li key={v.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-brand-green/15 pt-2 text-xs">
+          <div className="min-w-0"><p className="break-all font-semibold">{nomeArquivoLegivel(v.nomeOriginal)}</p>
+            <p className="text-foreground/60">{new Date(v.criadoEm).toLocaleString('pt-BR')} · {ROTULO_STATUS[v.status]}</p></div>
+          <button data-pi-acao="secundaria" type="button" onClick={() => void baixar(v)} className="rounded-lg border border-brand-green/40 px-3 py-1.5">Baixar versão</button>
+        </li>)}</ul>
+      </details>}
+      </div>
+    </details>
+
 
     {erro && <p role="alert" className="rounded-lg border border-red-500/35 p-3 text-sm text-error-text">{erro}</p>}
   </div>

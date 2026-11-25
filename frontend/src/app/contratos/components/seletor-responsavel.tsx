@@ -14,8 +14,15 @@ export function SeletorResponsavel({ valor, onChange, itens = [], pesquisar, sel
   const raiz=useRef<HTMLDivElement>(null);
   const [busca, setBusca] = useState('');
   const [aberta, setAberta] = useState(false);
+  const [acima, setAcima] = useState(false);
+  function abrirLista() {
+    const campo = raiz.current?.querySelector('input');
+    const area = raiz.current?.closest('[data-tec08-corpo-modal]');
+    if (campo) { const r = campo.getBoundingClientRect(); const limite = area?.getBoundingClientRect(); setAcima((limite?.bottom ?? window.innerHeight) - r.bottom < 190 && r.top - (limite?.top ?? 0) > 190); }
+    setAberta(true);
+  }
   const [remotos, setRemotos] = useState<OpcaoResponsavel[]>([]);
-  const [carregando, setCarregando] = useState(false);
+  const [termoEmConsulta, setTermoEmConsulta] = useState<string|null>(null);
   const [erroBusca, setErroBusca] = useState('');
   const [concluida, setConcluida] = useState<string | null>(null);
   const [destacado, setDestacado] = useState(-1);
@@ -23,24 +30,24 @@ export function SeletorResponsavel({ valor, onChange, itens = [], pesquisar, sel
   useEffect(()=>{if(!aberta)return;const fora=(e:PointerEvent)=>{if(!raiz.current?.contains(e.target as Node))setAberta(false);};document.addEventListener('pointerdown',fora);return()=>document.removeEventListener('pointerdown',fora);},[aberta]);
   const termo = busca.trim().toLocaleLowerCase('pt-BR');
   useEffect(() => {
-    if (!pesquisar || !aberta || termo.length === 1) { setCarregando(false); return; }
+    if (!pesquisar || !aberta || termo.length === 1) return;
     const controle = new AbortController();
-    setConcluida(null); setErroBusca(''); setDestacado(-1);
     const tempo = setTimeout(() => {
       void (async () => {
-        setCarregando(true);
+        setTermoEmConsulta(termo);
         try {
           const resposta = await pesquisar(termo, controle.signal);
           if (!controle.signal.aborted) { setRemotos(resposta.itens); setTotal(resposta.total); setConcluida(termo); setErroBusca(''); }
         } catch {
           if (!controle.signal.aborted) { setRemotos([]); setTotal(0); setConcluida(termo); setErroBusca('Não foi possível consultar os usuários.'); }
-        } finally { if (!controle.signal.aborted) setCarregando(false); }
+        } finally { if (!controle.signal.aborted) setTermoEmConsulta(null); }
       })();
     }, 280);
     return () => { clearTimeout(tempo); controle.abort(); };
   }, [termo, pesquisar, aberta]);
   const opcoes = useMemo(() => pesquisar ? (concluida === termo && termo.length !== 1 ? remotos : []) : itens.filter(u => `${u.nome ?? ''} ${u.email}`.toLocaleLowerCase('pt-BR').includes(termo)), [pesquisar, remotos, itens, termo, concluida]);
   const escolhido = (valor ? itens.find(u => u.id === valor) ?? (selecionado?.id === valor ? selecionado : null) : null);
+  const carregando = Boolean(pesquisar && aberta && termo.length!==1 && termoEmConsulta===termo);
   const aguardando = Boolean(pesquisar && aberta && termo.length !== 1 && concluida !== termo);
   function escolher(usuario: OpcaoResponsavel) {
     onChange(usuario.id, usuario); setBusca(''); setAberta(false); setDestacado(-1);
@@ -59,19 +66,19 @@ export function SeletorResponsavel({ valor, onChange, itens = [], pesquisar, sel
           aria-activedescendant={aberta && destacado >= 0 && opcoes[destacado] ? `${identificador}-opcao-${opcoes[destacado]?.id}` : undefined}
           aria-invalid={Boolean(erro)} disabled={desabilitado} value={semprePesquisar&&!aberta ? escolhido?.email ?? '' : busca} placeholder="Buscar por nome ou e-mail" maxLength={100}
           className="min-w-0 flex-1 rounded-l-lg bg-transparent px-3 py-2.5 text-sm text-foreground outline-none"
-          onFocus={() => { if(!aberta){setBusca('');setAberta(true);} }} onClick={() => {if(!aberta){setBusca('');setAberta(true);}}} onChange={e => { setBusca(e.target.value); setAberta(true); setDestacado(-1); }}
+          onFocus={() => { if(!aberta){setBusca('');abrirLista();} }} onClick={() => {if(!aberta){setBusca('');abrirLista();}}} onChange={e => { setBusca(e.target.value); if(!aberta)abrirLista(); setDestacado(-1); }}
           onKeyDown={e => {
             if (e.key === 'Escape' && aberta) { e.preventDefault(); e.stopPropagation(); setAberta(false); }
-            if (e.key === 'ArrowDown') { e.preventDefault(); setAberta(true); if (opcoes.length) setDestacado(i => (i + 1) % opcoes.length); }
-            if (e.key === 'ArrowUp') { e.preventDefault(); setAberta(true); if (opcoes.length) setDestacado(i => i <= 0 ? opcoes.length - 1 : i - 1); }
+            if (e.key === 'ArrowDown') { e.preventDefault(); if(!aberta)abrirLista(); if (opcoes.length) setDestacado(i => (i + 1) % opcoes.length); }
+            if (e.key === 'ArrowUp') { e.preventDefault(); if(!aberta)abrirLista(); if (opcoes.length) setDestacado(i => i <= 0 ? opcoes.length - 1 : i - 1); }
             if (e.key === 'Enter' && aberta && !aguardando && !carregando && (Boolean(opcoes[destacado]) || opcoes.length === 1)) { e.preventDefault(); escolher(opcoes[destacado] ?? opcoes[0]); }
           }} />
-        <button type="button" disabled={desabilitado} aria-label={aberta ? 'Fechar lista de responsáveis' : 'Abrir lista de responsáveis'} aria-haspopup="listbox" aria-expanded={aberta} aria-controls={`${identificador}-lista`} onClick={() => { if(!aberta)setBusca(''); setAberta(v => !v); setDestacado(-1); }} className="w-11 shrink-0 rounded-r-lg border-l border-current/20 text-foreground hover:bg-foreground/10 disabled:opacity-40">⌄</button>
+        <button type="button" disabled={desabilitado} aria-label={aberta ? 'Fechar lista de responsáveis' : 'Abrir lista de responsáveis'} aria-haspopup="listbox" aria-expanded={aberta} aria-controls={`${identificador}-lista`} onClick={() => { if(!aberta){setBusca('');abrirLista();}else setAberta(false); setDestacado(-1); }} className="w-11 shrink-0 rounded-r-lg border-l border-current/20 text-foreground hover:bg-foreground/10 disabled:opacity-40">⌄</button>
       </div>
-      {aberta && <div id={`${identificador}-lista`} role="listbox" aria-label="Responsáveis encontrados" className="pi-responsavel-opcoes mt-1 max-h-44 w-full overflow-y-auto rounded-lg border p-1">
+      {aberta && <div id={`${identificador}-lista`} role="listbox" aria-label="Responsáveis encontrados" data-acima={acima} className="pi-responsavel-opcoes max-h-44 w-full overflow-y-auto rounded-lg border p-1">
         {(carregando || aguardando) && <p role="status" className="px-3 py-2 text-xs text-foreground/65">Buscando responsáveis...</p>}
-        {erroBusca && <p role="alert" className="px-3 py-2 text-xs text-error-text">{erroBusca}</p>}
-        {!carregando && !aguardando && !erroBusca && !opcoes.length && <p className="px-3 py-2 text-xs text-foreground/65">{termo.length === 1 ? 'Digite mais um caractere para pesquisar.' : 'Nenhum usuário encontrado.'}</p>}
+        {concluida===termo && erroBusca && <p role="alert" className="px-3 py-2 text-xs text-error-text">{erroBusca}</p>}
+        {!carregando && !aguardando && !(concluida===termo&&erroBusca) && !opcoes.length && <p className="px-3 py-2 text-xs text-foreground/65">{termo.length === 1 ? 'Digite mais um caractere para pesquisar.' : 'Nenhum usuário encontrado.'}</p>}
         {!aguardando && opcoes.map((usuario,indice) => <button key={usuario.id} type="button" role="option" id={`${identificador}-opcao-${usuario.id}`} aria-selected={indice === destacado} onMouseDown={e => e.preventDefault()} onMouseEnter={() => setDestacado(indice)} onClick={() => escolher(usuario)} className={`block w-full truncate rounded-md px-3 py-2 text-left text-sm focus-visible:outline-2 focus-visible:outline-current ${indice === destacado ? 'bg-foreground/10' : ''}`}>{usuario.nome ? `${usuario.nome} — ${usuario.email}` : usuario.email}</button>)}
         {pesquisar && !aguardando && total > opcoes.length && <p className="border-t border-current/15 px-3 py-2 text-xs text-foreground/60">Refine a busca pelo nome ou e-mail para encontrar mais usuários.</p>}
       </div>}

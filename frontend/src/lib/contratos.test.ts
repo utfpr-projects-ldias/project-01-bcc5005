@@ -31,7 +31,7 @@ test('vigência inclusiva e fim de mês curto não homologado', () => {
 
 test('vigência pede confirmação pela UI sem abrir window.confirm nativo', async () => {
   const confirmNativo = jest.spyOn(window, 'confirm').mockImplementation(() => { throw new Error('Não usar confirmação nativa'); });
-  fetchMock.mockResolvedValueOnce({ ok: false, status: 409, json: async () => ({ message: 'Confirme o impacto da vigência na agenda recorrente.' }) });
+  fetchMock.mockResolvedValueOnce({ ok: false, status: 409, json: async () => ({ message: 'Confirme o impacto da vigência sobre o planejamento.' }) });
   fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ confirmacao: 'token-qa', total: 6, planos: 2, preservadasFora: 1, futurasFora: 0, bloqueado: false }) });
   await expect(editarContrato('c1', { inicioVigencia: '2026-09-01' })).rejects.toBeInstanceOf(ConfirmacaoVigenciaNecessaria);
   expect(confirmNativo).not.toHaveBeenCalled();

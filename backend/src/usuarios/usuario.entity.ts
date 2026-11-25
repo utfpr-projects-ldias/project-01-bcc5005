@@ -32,6 +32,10 @@ export class Usuario {
   @Column({ type: 'boolean', default: true })
   ativo!: boolean;
 
+  /** Operação de credencial pendente: nenhuma sessão pode usar o domínio até reconciliação. */
+  @Column({ name: 'bloqueio_sessoes_id', type: 'uuid', nullable: true })
+  bloqueioSessoesId!: string | null;
+
   @CreateDateColumn({ name: 'criado_em', type: 'timestamptz' })
   criadoEm!: Date;
 

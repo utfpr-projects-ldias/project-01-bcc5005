@@ -1,6 +1,7 @@
+import { FASES_OPERACIONAIS_CONTRATO } from '../contratos/fases-operacionais.js';
 import { tituloOcorrenciaRecorrente } from './titulo-recorrente.js';
 import { createHash } from 'node:crypto';
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import { Contrato } from '../contratos/contrato.entity.js';
 import { Entregavel } from '../entregaveis/entregavel.entity.js';
@@ -13,8 +14,9 @@ import { OrigemOcorrencia } from './origem-ocorrencia.enum.js';
 import { StatusOcorrencia } from './status-ocorrencia.enum.js';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
-import { PermissaoContrato } from '../autorizacao/permissao-contrato.entity.js';
-import { permissoesEfetivas } from '../autorizacao/permissoes-granulares.js';
+import { exigirPermissaoTransacional } from '../autorizacao/permissao-transacional.js';
+import { avaliarAgendaRecorrente } from './avaliar-agenda-recorrente.js';
+import { milesimos } from '../common/quantidade-exata.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
 import type { ReplanejarOcorrenciasDto } from './dto/replanejar-ocorrencias.dto.js';
 import { hojeCivil } from '../common/data-civil.js';
@@ -23,8 +25,8 @@ export { hojeCivil } from '../common/data-civil.js';
 const chave = (i: string | null, f: string | null) => `${i}/${f}`;
 const hash = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex');
 /** Concilia a agenda futura sem apagar o histórico nem reativar versões arquivadas.
- * O período concluído é preservado no seu intervalo original. Se ele intercepta
- * um novo período, esse período não recebe outra ocorrência automática.
+ * O período concluído é preservado no seu intervalo original; somente um
+ * intervalo exatamente igual pode representar a mesma obrigação.
  * Um período não pode contar mais de uma vez no cálculo físico.
  */
 export function planoDeRevisao(ocorrencias: Ocorrencia[], vinculadas: Set<string>, dto: ReplanejarOcorrenciasDto, hoje: string) {
@@ -50,6 +52,7 @@ export function planoDeRevisao(ocorrencias: Ocorrencia[], vinculadas: Set<string
   // Um período com início, lançamento ou atividade não pode desaparecer da
   // apuração física por substituição sem conciliação explícita.
   if (substituir.some(o => o.status !== StatusOcorrencia.NAO_INICIADO ||
+      (o.periodoInicio != null && o.periodoInicio < hoje) || Boolean(o.observacoes?.trim()) ||
       o.dataRealizada != null || o.quantidadeRealizada != null || o.quantidadeAprovada != null || vinculadas.has(o.id)))
     throw new ConflictException('O replanejamento substituiria período iniciado, medido ou com atividade. Preserve esse período e reprograme apenas o futuro ainda sem execução.');
   // Uma conclusão histórica cobre, no máximo, um espaço da nova agenda.
@@ -60,6 +63,9 @@ export function planoDeRevisao(ocorrencias: Ocorrencia[], vinculadas: Set<string
   }
   const novas = periodos.filter(p => !cobertos.has(chave(p.inicio, p.fim)) &&
     !manter.some(o => chave(o.periodoInicio,o.periodoFim) === chave(p.inicio,p.fim)));
+  const proposta = [...ativas.filter(o=>!substituir.includes(o)), ...novas.map(p=>({periodoInicio:p.inicio,periodoFim:p.fim,status:StatusOcorrencia.NAO_INICIADO}))];
+  if (!avaliarAgendaRecorrente(proposta,periodos,dto.inicioFuturo).completa)
+    throw new ConflictException('A agenda resultante possui lacunas, sobreposições, períodos extras ou excede 500 períodos.');
   return {
     substituir, novas, reativar: [] as Ocorrencia[], preservadas: anteriores.length + concluidas.length + manter.length,
     total: anteriores.length + periodos.length,
@@ -79,7 +85,7 @@ export function distribuirPesosFuturos(agenda: Ocorrencia[], plano: ReturnType<t
   if (total !== 1_000_000) throw new ConflictException('A série ponderada precisa totalizar 100% antes da revisão.');
   const fixas = ativas.filter(o => !plano.substituir.includes(o));
   const saldo = 1_000_000 - fixas.reduce((s,o)=>s+unidades(o.pesoPeriodo),0);
-  if (saldo < 0 || (plano.novas.length === 0 && saldo !== 0) || (plano.novas.length > 0 && saldo <= 0))
+  if (saldo < 0 || (plano.novas.length === 0 && saldo !== 0))
     throw new ConflictException('Não há peso disponível para os novos períodos; revise a distribuição antes de alterar a agenda.');
   if (!plano.novas.length) return [];
   const base = Math.floor(saldo / plano.novas.length);
@@ -91,28 +97,30 @@ export class ReplanejamentoService {
   constructor(private readonly ds: DataSource, private readonly auditoria: AuditoriaService) {}
   async executar(contratoId: string, entregavelId: string, dto: ReplanejarOcorrenciasDto, ator: UsuarioAutenticado) {
     return this.ds.transaction(async m => {
+      await exigirPermissaoTransacional(m,contratoId,ator,'configurarAgendaOcorrencias');
+      if (dto.metaQuantidade != null) await exigirPermissaoTransacional(m,contratoId,ator,'editarMetaOcorrencia');
       const c = await m.findOne(Contrato, { where: { id: contratoId }, lock: { mode: 'pessimistic_write' } });
-      if (!c || c.arquivadoEm || c.conclusaoSolicitadaEm || !['PLANEJAMENTO','EM_EXECUCAO'].includes(c.status)) throw new ConflictException('Contrato bloqueado');
-      if (ator.perfil !== 'ADMINISTRADOR') {
-        const v = await m.findOneBy(PermissaoContrato, { contratoId, usuarioId: ator.id });
-        const p = permissoesEfetivas(ator.perfil, Boolean(v?.podeEditar), v?.permissoesDetalhadas);
-        if (!v || !p.configurarAgendaOcorrencias) throw new ForbiddenException('Replanejar requer edição e geração');
-      }
+      if (!c || c.arquivadoEm || c.conclusaoSolicitadaEm || c.encerramentoSolicitado || !FASES_OPERACIONAIS_CONTRATO.includes(c.status)) throw new ConflictException('Contrato bloqueado');
       const e = await m.findOne(Entregavel, { where: { id: entregavelId, contratoId }, lock: { mode: 'pessimistic_write' } });
       if (!e || e.tipo !== 'RECORRENTE' || e.arquivadoEm) throw new NotFoundException('Entregável recorrente não encontrado');
       const etapa = await m.findOneBy(Etapa, { id: e.etapaId, contratoId });
       if (!etapa || etapa.arquivadoEm || e.regularizacaoDocumentalSolicitada || etapa.conclusaoSolicitadaEm || etapa.encerramentoSolicitadoEm ||
           ['CONCLUIDA','CONCLUIDO_PARCIALMENTE','ENCERRADA','FINALIZADA'].includes(etapa.status) ||
           ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? '')) throw new ConflictException('Reabra a hierarquia antes de replanejar');
-      if (!e.inicioPrevisto || !e.terminoPrevisto || dto.inicioFuturo < e.inicioPrevisto || dto.terminoPrevisto > e.terminoPrevisto || dto.inicioFuturo > dto.terminoPrevisto ||
+      const alteraPrazo = dto.terminoPrevisto !== e.terminoPrevisto;
+      if (alteraPrazo) {
+        if (!dto.alterarPrazo) throw new ConflictException('Confirme explicitamente a alteração do prazo da obrigação na prévia.');
+        await exigirPermissaoTransacional(m,contratoId,ator,'editarEntregaveis');
+      }
+      if (!e.inicioPrevisto || !e.terminoPrevisto || dto.inicioFuturo < e.inicioPrevisto || dto.inicioFuturo > dto.terminoPrevisto ||
           dto.inicioFuturo < c.inicioVigencia || dto.terminoPrevisto > c.terminoVigencia)
-        throw new BadRequestException('Período futuro deve estar contido na vigência atual deste entregável');
-      if (dto.unidadeMedida !== undefined && !dto.unidadeMedida.trim())
+        throw new BadRequestException('A revisão deve estar contida na vigência contratual e preservar o início da obrigação.');
+      if (dto.unidadeMedida !== undefined && !dto.unidadeMedida?.trim())
         throw new BadRequestException('Unidade de medida não pode ficar vazia');
       if (dto.unidadeMedida !== undefined && dto.unidadeMedida.trim() !== (e.unidadeMedida ?? ''))
         throw new ConflictException('A unidade pertence ao entregável e não pode ser alterada no replanejamento de ocorrências.');
       const agenda = await m.find(Ocorrencia, { where: { entregavelId, contratoId, origem: OrigemOcorrencia.RECORRENTE }, order: { id: 'ASC' } });
-      if (!agenda.length) throw new ConflictException('Gere a agenda inicial antes de replanejar');
+      if (!agenda.some(o=>!o.substituidaEm)) throw new ConflictException('Gere a agenda inicial antes de replanejar');
       const atividades = await m.find(AtividadeEntity, { where: { contratoId }, select: { ocorrenciaId: true } });
       const associacoes = await m.query(`SELECT DISTINCT v."ocorrenciaId" AS id FROM "atividade_ocorrencias" v
         WHERE v."contratoId" = $1`, [contratoId]) as { id: string }[];
@@ -120,7 +128,14 @@ export class ReplanejamentoService {
         ...atividades.flatMap(a => a.ocorrenciaId ? [a.ocorrenciaId] : []),
         ...associacoes.map(v => v.id),
       ]);
-      const plano = planoDeRevisao(agenda, vinculadas, dto, hojeCivil());
+      const hoje = hojeCivil();
+      const plano = planoDeRevisao(agenda, vinculadas, dto, hoje);
+      const grade = calcularPeriodosRecorrentes(dto.inicioFuturo,dto.terminoPrevisto,dto.periodicidade);
+      const proposta = [...agenda.filter(o=>!o.substituidaEm&&!plano.substituir.includes(o)), ...plano.novas.map(p=>({periodoInicio:p.inicio,periodoFim:p.fim,status:StatusOcorrencia.NAO_INICIADO}))];
+      if (!avaliarAgendaRecorrente(proposta,grade,dto.inicioFuturo,e.inicioPrevisto,dto.terminoPrevisto).completa)
+        throw new ConflictException('A agenda resultante não cobre integralmente a vigência do entregável.');
+      if (alteraPrazo && agenda.some(o => !o.substituidaEm && !plano.substituir.includes(o) && o.dataPrevista && o.dataPrevista > dto.terminoPrevisto))
+        throw new ConflictException('O novo término deixaria um prazo de ocorrência preservada fora da obrigação. Regularize esse prazo antes da revisão.');
       // Série recorrente não tem modelo de exigências próprio: usar um dos períodos
       // ativos já planejados. Configurações diferentes no trecho alterado exigem
       // regularização antes de substituir; nunca afrouxar critérios silenciosamente.
@@ -141,12 +156,14 @@ export class ReplanejamentoService {
       // Ao trocar a quantidade de períodos, não copiar o mesmo peso para cada
       // novo item. A prévia informa a redistribuição; o token confirma os pesos.
       const pesosNovos = distribuirPesosFuturos(agenda, plano);
+      if (pesosNovos.some(p=>p!=null) || plano.substituir.some(o=>o.pesoPeriodo!=null))
+        await exigirPermissaoTransacional(m,contratoId,ator,'editarPesoOcorrencia');
       const modoRegistro = dto.modoRegistro ?? fonte.modoRegistro ?? 'DESCRITIVO';
-      if(e.configuracaoPeriodicidade?.modoRegistro&&modoRegistro!==e.configuracaoPeriodicidade.modoRegistro)throw new ConflictException('A modalidade é definida no planejamento do entregável recorrente.');
+      if (modoRegistro !== (e.configuracaoPeriodicidade?.modoRegistro ?? fonte.modoRegistro ?? 'DESCRITIVO')) throw new ConflictException('A modalidade é definida no planejamento do entregável recorrente.');
       const metaQuantidade = modoRegistro === 'QUANTITATIVO'
         ? dto.metaQuantidade ?? (fonte.modoRegistro === 'QUANTITATIVO' ? fonte.metaQuantidade : null)
         : null;
-      if (modoRegistro === 'QUANTITATIVO' && !(Number(metaQuantidade) > 0))
+      if (modoRegistro === 'QUANTITATIVO' && (!metaQuantidade || !/^\d{1,15}(?:\.\d{1,3})?$/.test(metaQuantidade) || milesimos(metaQuantidade)<=0n))
         throw new BadRequestException('Replanejamento quantitativo exige meta positiva, informada ou herdada da série.');
       if (modoRegistro === 'DESCRITIVO' && dto.metaQuantidade != null)
         throw new BadRequestException('Registro descritivo não aceita meta quantitativa.');
@@ -155,9 +172,13 @@ export class ReplanejamentoService {
       // Períodos idênticos são preservados: uma nova meta enviada pela prévia
       // não pode ser silenciosamente ignorada nesses registros.
       const mantidas = ativas.filter(o => !plano.substituir.includes(o) && (o.periodoFim ?? '') >= dto.inicioFuturo && (o.periodoInicio ?? '') <= dto.terminoPrevisto);
-      if (dto.metaQuantidade != null && mantidas.some(o=>Number(o.metaQuantidade??0)!==Number(dto.metaQuantidade)))
+      if (dto.metaQuantidade != null && mantidas.some(o=>milesimos(o.metaQuantidade)!==milesimos(dto.metaQuantidade)))
         throw new ConflictException('A nova meta não altera períodos preservados. Edite a meta individualmente antes de replanejar.');
       const afetadas = plano.substituir.filter(o => o.origem === OrigemOcorrencia.RECORRENTE);
+      if (afetadas.some(o=>(o.modoRegistro ?? 'DESCRITIVO')!==modoRegistro))
+        throw new ConflictException('A revisão não pode alterar a modalidade dos períodos existentes. Regularize o planejamento.');
+      if (modoRegistro==='QUANTITATIVO' && dto.metaQuantidade==null && afetadas.some(o=>milesimos(o.metaQuantidade)!==milesimos(metaQuantidade)))
+        throw new ConflictException('Os períodos afetados possuem metas diferentes. Informe explicitamente a meta dos novos períodos.');
       if (afetadas.some(o => hash(criterios(o)) !== hash(criteriosHerdados)))
         throw new ConflictException('Períodos afetados têm exigências diferentes. Uniformize os critérios antes de replanejar para não perder obrigações.');
       // Todas as relações são históricas. As verificações também ocorrem na prévia,
@@ -169,6 +190,11 @@ export class ReplanejamentoService {
             OR EXISTS (SELECT 1 FROM ocorrencia_comprovantes c WHERE c.ocorrencia_id=o.id AND c.contrato_id=$2)
             OR EXISTS (SELECT 1 FROM atividade_ocorrencia_medicoes am WHERE am.ocorrencia_id=o.id)
             OR EXISTS (SELECT 1 FROM execucoes_entregavel ee WHERE ee.ocorrencia_id=o.id AND ee.contrato_id=$2)
+            OR EXISTS (SELECT 1 FROM eventos_auditoria ev WHERE ev.entidade_tipo='OCORRENCIA' AND ev.entidade_id=o.id::text AND ev.acao='OCORRENCIA_EDITADA' AND (
+              ev.dados_anteriores->'titulo' IS DISTINCT FROM ev.dados_posteriores->'titulo' OR
+              ev.dados_anteriores->'dataPrevista' IS DISTINCT FROM ev.dados_posteriores->'dataPrevista' OR
+              ev.dados_anteriores->'observacoes' IS DISTINCT FROM ev.dados_posteriores->'observacoes' OR
+              ev.dados_posteriores->>'operacao'='ALTERACAO_META_INDIVIDUAL'))
             -- Declarações sem arquivo podem apontar para a ocorrência, inclusive
             -- a partir de outro contrato compartilhado. Busca conservadora nos
             -- campos de vínculo validados na gravação, não no texto livre.
@@ -176,15 +202,17 @@ export class ReplanejamentoService {
               strpos(lower(concat_ws(',', ev.rascunho_envio->>'ocorrenciaQuantidadeId', ev.rascunho_envio->>'ocorrenciaExecucaoId',
                 ev.rascunho_envio->>'ocorrenciasVinculadas', ev.rascunho_envio->>'destinosCompartilhados')), o.id::text)>0)
           ) LIMIT 1`, [plano.substituir.map(o=>o.id),contratoId]) as Array<{id:string}>;
-        if (dependencias.length) throw new ConflictException('Há lançamentos, medições, comprovantes ou declarações preliminares em períodos substituídos. Preserve a execução já registrada e reprograme apenas períodos livres.');
+        if (dependencias.length) throw new ConflictException('Há lançamentos, medições, alterações históricas, comprovantes ou declarações preliminares em períodos substituídos. Preserve a execução já registrada e reprograme apenas períodos livres.');
       }
       const configuracaoAnterior = await m.findOneBy(ConfiguracaoOcorrencias, { entregavelId, contratoId });
-      const antes = { inicioPrevisto: configuracaoAnterior?.inicioPrevisto ?? e.inicioPrevisto,
-        terminoPrevisto: configuracaoAnterior?.terminoPrevisto ?? e.terminoPrevisto,
+      const antes = { inicioPrevisto: e.inicioPrevisto, terminoPrevisto: e.terminoPrevisto,
+        inicioAgenda: configuracaoAnterior?.inicioPrevisto ?? e.agendaInicioFuturo ?? e.inicioPrevisto,
+        terminoAgenda: configuracaoAnterior?.terminoPrevisto ?? e.terminoPrevisto,
         periodicidade: e.periodicidade, agendaInicioFuturo: e.agendaInicioFuturo };
-      const confirmacao = hash([contratoId, entregavelId, c.inicioVigencia, c.terminoVigencia, antes, dto.inicioFuturo, dto.terminoPrevisto, dto.periodicidade, modoRegistro, metaQuantidade, dto.unidadeMedida, pesosNovos,
-        agenda.map(o => [o.id,o.periodoInicio,o.periodoFim,o.status,o.dataRealizada,o.dataPrevista,o.quantidadeRealizada,o.observacoes,o.substituidaEm,vinculadas.has(o.id),o.pesoPeriodo,o.modoRegistro,o.metaQuantidade,criterios(o)]), hojeCivil()]);
-      const impacto = { confirmacao, substituir: plano.substituir.map(o => ({ id:o.id, inicio:o.periodoInicio, fim:o.periodoFim,
+      const prazoAlterado = { anterior: e.terminoPrevisto, novo: dto.terminoPrevisto };
+      const confirmacao = hash([contratoId, entregavelId, c.inicioVigencia, c.terminoVigencia, e.nome, e.etapaId, e.unidadeMedida, e.configuracaoPeriodicidade, antes, dto.alterarPrazo ?? false, dto.inicioFuturo, dto.terminoPrevisto, dto.periodicidade, modoRegistro, metaQuantidade, dto.unidadeMedida, pesosNovos,
+        agenda.map(o => [o.id,o.periodoInicio,o.periodoFim,o.status,o.dataRealizada,o.dataPrevista,o.quantidadeRealizada,o.quantidadeAprovada,o.observacoes,o.substituidaEm,vinculadas.has(o.id),o.pesoPeriodo,o.modoRegistro,o.metaQuantidade,criterios(o)]), hoje]);
+      const impacto = { confirmacao, prazoAlterado, substituir: plano.substituir.map(o => ({ id:o.id, inicio:o.periodoInicio, fim:o.periodoFim,
         possuiAtividades: vinculadas.has(o.id) })),
         novas: plano.novas.map((p,i) => ({...p,pesoPeriodo:pesosNovos[i]})),
         criteriosHerdados: { ...criteriosHerdados, pesoPeriodo: pesosNovos[0] ?? null },
@@ -192,6 +220,9 @@ export class ReplanejamentoService {
         reativar: plano.reativar.length, preservadas: plano.preservadas, total: plano.total };
       if (dto.confirmacao === undefined) return { ...impacto, aplicado: false };
       if (dto.confirmacao !== confirmacao) throw new ConflictException('Agenda mudou: solicite novo impacto antes de confirmar');
+      if (!alteraPrazo && !plano.novas.length && !plano.substituir.length &&
+          dto.inicioFuturo === antes.inicioAgenda && dto.periodicidade === e.periodicidade && dto.terminoPrevisto === antes.terminoAgenda && e.configuracaoPeriodicidade?.modoRegistro === modoRegistro && (!e.agendaInicioFuturo || configuracaoAnterior?.terminoPrevisto === dto.terminoPrevisto))
+        return { ...impacto, aplicado: true };
       for (const o of plano.substituir) { o.substituidaEm = new Date(); await m.save(Ocorrencia,o); await this.auditar(m,ator,o,{ substituidaEm:null }); }
       for (const p of plano.novas) {
         const o = await m.save(Ocorrencia,m.create(Ocorrencia,{ contratoId, entregavelId, origem:OrigemOcorrencia.RECORRENTE, status:StatusOcorrencia.NAO_INICIADO, titulo:tituloOcorrenciaRecorrente(e.nome, p.titulo),
@@ -202,10 +233,10 @@ export class ReplanejamentoService {
       }
       if (dto.unidadeMedida !== undefined) e.unidadeMedida = dto.unidadeMedida.trim();
       e.agendaInicioFuturo = dto.inicioFuturo;
-      // As datas-pai do entregável delimitam a obrigação e nunca são
-      // encurtadas por uma alteração da agenda de ocorrências.
+      // A mudança formal do prazo é confirmada e autorizada na mesma transação.
+      e.terminoPrevisto = dto.terminoPrevisto;
       e.periodicidade = dto.periodicidade;
-      if(e.configuracaoPeriodicidade?.modoRegistro) e.configuracaoPeriodicidade = {versao:1,modoRegistro};
+      e.configuracaoPeriodicidade = {versao:1,modoRegistro};
       await m.save(Entregavel,e);
       await m.getRepository(ConfiguracaoOcorrencias).upsert({
         entregavelId: e.id, contratoId: e.contratoId, tipoOperacional: e.tipo,
@@ -213,7 +244,7 @@ export class ReplanejamentoService {
         periodicidade: e.periodicidade, inicioPrevisto: dto.inicioFuturo,
         terminoPrevisto: dto.terminoPrevisto, modoVisualizacao: 'CALENDARIO', atualizadoEm: new Date(),
       }, ['entregavelId']);
-      await this.auditoria.registrarNaTransacao(m,ator,{ acao:AcaoAuditoria.ENTREGAVEL_PRAZO_ALTERADO, entidadeTipo:'ENTREGAVEL', entidadeId:e.id, dadosAnteriores:antes, dadosPosteriores:{ inicioPrevisto:dto.inicioFuturo, terminoPrevisto:dto.terminoPrevisto, periodicidade:e.periodicidade, agendaInicioFuturo:e.agendaInicioFuturo, substituidas:plano.substituir.length, preservadas:plano.preservadas, novas:plano.novas.length } });
+      await this.auditoria.registrarNaTransacao(m,ator,{ acao:AcaoAuditoria.ENTREGAVEL_PRAZO_ALTERADO, entidadeTipo:'ENTREGAVEL', entidadeId:e.id, dadosAnteriores:antes, dadosPosteriores:{ inicioPrevisto:e.inicioPrevisto, inicioAgenda:dto.inicioFuturo, terminoAgenda:dto.terminoPrevisto, terminoPrevisto:e.terminoPrevisto, periodicidade:e.periodicidade, agendaInicioFuturo:e.agendaInicioFuturo, substituidas:plano.substituir.length, preservadas:plano.preservadas, novas:plano.novas.length } });
       return { ...impacto, aplicado: true };
     });
   }

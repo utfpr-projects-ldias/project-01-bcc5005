@@ -35,8 +35,10 @@ function Campo({ titulo, id, obrigatorio = false, ajuda, erro, contador, childre
   </div>;
 }
 
-export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando = false, podeDefinirResponsavel = true, podeSuspender = false, podeCancelar = false, podeReverter = false, podeEncerrar = false, somenteSituacao = false, onCancelar }:
-  { inicial?: Contrato; responsaveis: UsuarioPublico[]; onSalvar: (dados: DadosContrato) => Promise<void>; salvando?: boolean; podeDefinirResponsavel?: boolean; podeSuspender?: boolean; podeCancelar?: boolean; podeReverter?: boolean; podeEncerrar?: boolean; somenteSituacao?: boolean; onCancelar?: () => void }) {
+export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando = false, podeDefinirResponsavel = true, podeSuspender = false, podeCancelar = false, podeReverter = false, podeEncerrar = false, somenteSituacao = false, onCancelar, onSalvarComBase }:
+  { inicial?: Contrato; responsaveis: UsuarioPublico[]; onSalvar: (dados: DadosContrato) => Promise<void>; salvando?: boolean; podeDefinirResponsavel?: boolean; podeSuspender?: boolean; podeCancelar?: boolean; podeReverter?: boolean; podeEncerrar?: boolean; somenteSituacao?: boolean; onCancelar?: () => void; onSalvarComBase?: (dados: DadosContrato, base: Contrato) => Promise<void> }) {
+  const [baseEdicao] = useState(() => inicial);
+  const salvar = (dados: DadosContrato) => baseEdicao && onSalvarComBase ? onSalvarComBase(dados, baseEdicao) : onSalvar(dados);
   const [form, setForm] = useState<DadosContrato>(() => {
     if (!inicial) return { ...dadosIniciais };
     // O identificador público é somente leitura: jamais compõe um PATCH.
@@ -46,7 +48,7 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
     return { ...dados, dataAssinatura: dataCivil(inicial.dataAssinatura) || null,
       inicioVigencia: dataCivil(inicial.inicioVigencia), terminoVigencia: dataCivil(inicial.terminoVigencia) };
   });
-  const emRevisao = Boolean(inicial?.reabertoEm && ['PLANEJAMENTO', 'EM_EXECUCAO'].includes(inicial.status));
+  const emRevisao = Boolean(inicial?.reabertoEm && ['PLANEJAMENTO', 'EM_EXECUCAO', 'EM_ENCERRAMENTO'].includes(inicial.status));
   // A fase operacional é independente da revisão. O seletor mostra a fase
   // persistida e nunca encerra a revisão; Fechar novamente é ação própria.
   const valorSelectStatus = form.status;
@@ -66,7 +68,7 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
     : inicial.status === 'CANCELADO'
       ? (podeReverter ? ['CANCELADO', 'PLANEJAMENTO'] : ['CANCELADO'])
       : [
-          ...(somenteSituacao ? [inicial.status] : (['PLANEJAMENTO', 'EM_EXECUCAO'] as StatusContrato[])),
+          ...(somenteSituacao ? [inicial.status] : (['PLANEJAMENTO', 'EM_EXECUCAO', ...(inicial.status === 'EM_ENCERRAMENTO' ? ['EM_ENCERRAMENTO'] : [])] as StatusContrato[])),
           ...(podeSuspender ? ['SUSPENSO' as const] : []),
           ...(podeEncerrar ? ['ENCERRADO' as const] : []),
           ...(podeCancelar ? ['CANCELADO' as const] : []),
@@ -100,7 +102,7 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
     // solicita justificativa e audita. Não enviar ENCERRADO pelo PATCH comum.
     if (inicial && form.status === 'ENCERRADO' && inicial.status !== 'ENCERRADO' && podeEncerrar) {
       setErros({}); setErroGeral('');
-      await onSalvar({ ...form, terminoVigencia: termino });
+      await salvar({ ...form, terminoVigencia: termino });
       return;
     }
     // Uma decisão isolada usa endpoint próprio; não reprovar dados legados
@@ -111,17 +113,17 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
         return;
       }
       setErros({}); setErroGeral('');
-      await onSalvar({ ...form, terminoVigencia: termino });
+      await salvar({ ...form, terminoVigencia: termino });
       return;
     }
-    const validacao = validarContrato({ ...form, terminoVigencia: termino }, inicial);
+    const validacao = validarContrato({ ...form, terminoVigencia: termino }, baseEdicao);
     if (!validacao.sucesso || Object.keys(errosExtras).length) {
       setErros({ ...(!validacao.sucesso ? validacao.erros : {}), ...errosExtras });
       setErroGeral('Confira os campos destacados antes de continuar.');
       return;
     }
     setErros({}); setErroGeral('');
-    await onSalvar(validacao.dados);
+    await salvar(validacao.dados);
   }
   if (somenteSituacao && inicial) return <form noValidate onSubmit={e => void enviar(e)} className="space-y-4" aria-label="Alterar situação do contrato">
     <p className="text-sm text-foreground/75">Você tem autorização para uma mudança de situação, mas não para editar os demais dados contratuais.</p>
@@ -191,6 +193,7 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
 
 </div>
 
+    <p className="text-xs text-foreground/65">O modo de cálculo físico é configurado em Editar execução, após o cadastro.</p>
     <details open={Boolean(erroDo('processoAdministrativo')||erroDo('unidadeResponsavel')||erroDo('dataAssinatura')||erroDo('fiscalGestor')||erroDo('responsavelInternoId')||erroDo('descricao')||erroDo('observacoes')) || undefined} className="pi-grupo-formulario pi-contrato-complementares group">
       <summary className="pi-titulo-formulario cursor-pointer focus-visible:outline-2 focus-visible:outline-brand-green">Informações complementares <span className="text-xs font-normal text-foreground/60">(opcionais)</span></summary>
       <div className="mt-3 space-y-3">
@@ -209,14 +212,14 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
         </div>
         <div className="grid gap-3 md:grid-cols-2"><Campo titulo="Descrição" id="descricao" erro={erroDo('descricao')} contador={{ valor: (form.descricao ?? '').length, max: LIMITES_CONTRATO.descricao }}>
           <textarea id="descricao" rows={4} className={input} maxLength={LIMITES_CONTRATO.descricao} value={form.descricao ?? ''} onChange={e => atualizar('descricao', e.target.value || null)} {...acessibilidade('descricao', 'descricao', true)} /></Campo>
-        <Campo titulo="Observações" id="observacoes" erro={erroDo('observacoes')} contador={{ valor: (form.observacoes ?? '').length, max: LIMITES_CONTRATO.observacoes }}>
+        <Campo titulo="Observações" id="observacoes" ajuda="Anotações administrativas complementares." erro={erroDo('observacoes')} contador={{ valor: (form.observacoes ?? '').length, max: LIMITES_CONTRATO.observacoes }}>
           <textarea id="observacoes" rows={4} className={input} maxLength={LIMITES_CONTRATO.observacoes} value={form.observacoes ?? ''} onChange={e => atualizar('observacoes', e.target.value || null)} {...acessibilidade('observacoes', 'observacoes')} /></Campo></div>
       </div>
     </details>
     {erroGeral && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-error-text">{erroGeral}</p>}
     <div className="pi-rodape-formulario flex flex-wrap items-center justify-end gap-2 border-t border-current/15 pt-3">
       {onCancelar ? <button type="button" onClick={onCancelar} disabled={salvando} className="inline-flex min-h-9 cursor-pointer items-center rounded-lg border border-brand-green/35 px-3 py-2 text-sm font-medium text-foreground transition-colors hover:border-brand-green/65 hover:bg-brand-green/10 focus-visible:outline-2 focus-visible:outline-brand-neon disabled:cursor-not-allowed disabled:opacity-50">Cancelar</button> :
-        <Link href={inicial ? `/contratos/${encodeURIComponent(inicial.id)}` : '/contratos'} className="inline-flex min-h-9 cursor-pointer items-center rounded-lg border border-brand-green/35 px-3 py-2 text-sm font-medium text-foreground transition-colors hover:border-brand-green/65 hover:bg-brand-green/10 focus-visible:outline-2 focus-visible:outline-brand-neon">Cancelar</Link>}
+        <Link href="/contratos" className="inline-flex min-h-9 cursor-pointer items-center rounded-lg border border-brand-green/35 px-3 py-2 text-sm font-medium text-foreground transition-colors hover:border-brand-green/65 hover:bg-brand-green/10 focus-visible:outline-2 focus-visible:outline-brand-neon">Cancelar</Link>}
       <button type="submit" data-tec08-salvar-contextual aria-busy={salvando} disabled={salvando} className="inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border border-brand-green/70 bg-brand-green px-3 py-2 text-sm font-semibold text-on-brand-green transition-[filter,transform,box-shadow] hover:brightness-110 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-brand-neon disabled:cursor-not-allowed disabled:opacity-50">
         {salvando ? 'Salvando...' : inicial ? 'Salvar alterações' : 'Cadastrar contrato'}
       </button>

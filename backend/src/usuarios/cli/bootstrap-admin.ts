@@ -8,6 +8,8 @@ import 'reflect-metadata';
 import supertokens from 'supertokens-node';
 import EmailPassword from 'supertokens-node/recipe/emailpassword';
 import { DataSource } from 'typeorm';
+import { opcoesBanco } from '../../database/opcoes-banco.js';
+import { verificarSchema } from '../../database/prontidao.js';
 
 import { superTokensConfig } from '../../auth/supertokens.config.js';
 import {
@@ -128,9 +130,6 @@ async function lerCredenciaisInterativas(email: string, modo: ModoBootstrap): Pr
 }
 
 async function main(): Promise<void> {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error('DATABASE_URL não configurada');
-
   const argumentos = process.argv.slice(2);
   const interativo = argumentos[0] === '--interativo';
   let email = '';
@@ -148,14 +147,13 @@ async function main(): Promise<void> {
 
   supertokens.init(superTokensConfig);
   const conexao = new DataSource({
-    type: 'postgres',
-    url,
+    ...opcoesBanco(),
     entities: [Usuario],
-    synchronize: false,
   });
 
   await conexao.initialize();
   try {
+    if (!await verificarSchema(conexao)) throw new Error('Schema incompatível. Execute as migrations antes do bootstrap.');
     let credenciais: CredenciaisBootstrap;
     if (interativo) {
       const existentes = await conexao.getRepository(Usuario).countBy({ perfil: PerfilUsuario.ADMINISTRADOR });

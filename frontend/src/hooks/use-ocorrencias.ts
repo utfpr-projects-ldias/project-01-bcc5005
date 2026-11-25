@@ -15,7 +15,7 @@ export type Ocorrencia = {
   status: StatusOcorrencia; motivoEncerramento?: string | null; origem: OrigemOcorrencia; modoRegistro?: 'QUANTITATIVO' | 'DESCRITIVO';
   exigeAtividade?: boolean; minimoAtividadesVerificadas?:number; minimoEvidenciasVerificadas?:number; minimoFotos?:number|null; minimoRelatorios?:number|null; minimoEvidenciasLivres?:number|null; pesoPeriodo?:string|null; evidenciaExigida?: 'NENHUMA'|'FOTO'|'RELATORIO'|'AMBOS'; permiteEncerramentoExcepcional?: boolean;
   quantidadeManual?: number; quantidadeAtividadesRegistrada?: number; quantidadeAtividadesVerificada?: number;
-  quantidadeRegistrada?: number; quantidadeRestante?: number | null; progressoPercentual?: number | null;
+  quantidadeExecutadaExata?: string; quantidadeRegistradaExata?: string; quantidadeRegistrada?: number; quantidadeRestante?: number | null; quantidadeDisponivel?: number | null; quantidadeDisponivelExata?:string|null; progressoPercentual?: number | null;
   atividadesVerificadas?: number; atividadesPendentes?: number; evidenciasFoto?: number; evidenciasRelatorio?: number; evidenciasOutras?: number;
   criteriosOperacionaisAtendidos?: boolean; documentacaoAtendida?: boolean; registrosExecucaoPendentes?: boolean;
   requisitosAtendidos?: boolean; metaAtingida?: boolean; situacaoComprovacao?: 'NAO_EXIGIDA'|'PARCIAL'|'APRESENTADA';
@@ -34,14 +34,17 @@ export type ConfiguracaoOcorrencias = {
 };
 export type EdicaoOcorrencia = Partial<Pick<Ocorrencia, 'titulo' | 'dataPrevista' | 'dataRealizada' | 'status' | 'quantidadeRealizada' | 'observacoes' | 'exigeAtividade' | 'minimoAtividadesVerificadas' | 'minimoEvidenciasVerificadas' | 'minimoFotos' | 'minimoRelatorios' | 'minimoEvidenciasLivres' | 'pesoPeriodo' | 'evidenciaExigida' | 'permiteEncerramentoExcepcional'>>;
 
-export type LancamentoOcorrencia = {id:string;quantidade:string;justificativa:string|null;criadoEm:string;criadoPor:string;alteradoEm:string|null;alteradoPor:string|null;bloqueadoEm:string|null;bloqueadoPor:string|null;situacao?:'APROVADO'|'PENDENTE'|'REJEITADO';dataExecucao?:string;observacao?:string|null};
+export type LancamentoOcorrencia = {id:string;versao?:string;quantidade:string;justificativa:string|null;criadoEm:string;criadoPor:string;alteradoEm:string|null;alteradoPor:string|null;bloqueadoEm:string|null;bloqueadoPor:string|null;situacao?:'APROVADO'|'PENDENTE'|'REJEITADO';dataExecucao?:string;observacao?:string|null};
 export type ComprovanteOcorrencia = {id:string;esperadaId?:string;criadoEm?:string;nomeOriginal:string;tipoEvidencia:string;status:string;vinculado:boolean};
-export type EventoHistoricoOcorrencia = {id:string;acao:string;registradoEm:string;ator:string;autorNome?:string|null;dadosAnteriores:Record<string,unknown>|null;dadosPosteriores:Record<string,unknown>|null};
+export type EventoHistoricoOcorrencia = {id:string;acao:string;registradoEm:string;ator?:string|null;autorNome?:string|null;dadosAnteriores:Record<string,unknown>|null;dadosPosteriores:Record<string,unknown>|null};
 const rotaOcorrencia=(contratoId:string,ocorrenciaId:string)=>`${API}/contratos/${encodeURIComponent(contratoId)}/ocorrencias/${encodeURIComponent(ocorrenciaId)}`;
+export class ErroOperacaoOcorrencia extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
+}
 async function chamadaJson<T>(url:string,init?:RequestInit):Promise<T>{
   const r=await fetch(url,{credentials:'include',cache:'no-store',...init,
     headers:{Accept:'application/json',...(init?.body?{'Content-Type':'application/json'}:{}),...init?.headers}});
-  if(!r.ok)throw new Error(await mensagemErro(r,'Não foi possível atualizar a ocorrência.'));
+  if(!r.ok)throw new ErroOperacaoOcorrencia(await mensagemErro(r,'Não foi possível atualizar a ocorrência.'), r.status);
   return await r.json() as T;
 }
 export const editarExigenciasOcorrencia=(c:string,o:string,dados:EdicaoOcorrencia)=>
@@ -52,11 +55,11 @@ export const editarPesoOcorrencia=(c:string,o:string,pesoPeriodo:string|null)=>
   chamadaJson<Ocorrencia>(`${rotaOcorrencia(c,o)}/peso`,{method:'PATCH',body:JSON.stringify({pesoPeriodo})});
 export const listarLancamentosOcorrencia=(c:string,o:string)=>chamadaJson<LancamentoOcorrencia[]>(`${rotaOcorrencia(c,o)}/lancamentos`);
 export const criarLancamentoOcorrencia=(c:string,o:string,id:string,quantidade:string,justificativa='',dados?:{data:string;observacao:string})=>
-  chamadaJson<{id:string;quantidadeExecutada:number}>(`${rotaOcorrencia(c,o)}/lancamentos`,{method:'POST',body:JSON.stringify({id,quantidade,justificativa,...dados})});
-export const corrigirLancamentoOcorrencia=(c:string,o:string,id:string,quantidade:string,justificativa:string,dados?:{data:string;observacao:string})=>
+  chamadaJson<{id:string;quantidadeExecutada?:number;repetido?:boolean;excluido?:boolean}>(`${rotaOcorrencia(c,o)}/lancamentos`,{method:'POST',body:JSON.stringify({id,quantidade,justificativa,...dados})});
+export const corrigirLancamentoOcorrencia=(c:string,o:string,id:string,quantidade:string,justificativa:string,dados?:{data:string;observacao:string;versaoEsperada?:string})=>
   chamadaJson<{id:string;quantidade:string}>(`${rotaOcorrencia(c,o)}/lancamentos/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({quantidade,justificativa,...dados})});
-export const decidirLancamentoOcorrencia=(c:string,o:string,id:string,decisao:'APROVADO'|'REJEITADO',motivo?:string)=>
-  chamadaJson<{id:string;situacao:string}>(`${rotaOcorrencia(c,o)}/lancamentos/${encodeURIComponent(id)}/decidir`,{method:'POST',body:JSON.stringify({decisao,motivo})});
+export const decidirLancamentoOcorrencia=(c:string,o:string,id:string,decisao:'APROVADO'|'REJEITADO',motivo?:string,versaoEsperada?:string)=>
+  chamadaJson<{id:string;situacao:string}>(`${rotaOcorrencia(c,o)}/lancamentos/${encodeURIComponent(id)}/decidir`,{method:'POST',body:JSON.stringify({decisao,motivo,versaoEsperada})});
 export const bloquearLancamentoOcorrencia=(c:string,o:string,id:string,bloqueado:boolean)=>
   chamadaJson<{id:string;bloqueado:boolean}>(`${rotaOcorrencia(c,o)}/lancamentos/${encodeURIComponent(id)}/bloqueio`,{method:'PATCH',body:JSON.stringify({bloqueado})});
 export const excluirLancamentoOcorrencia=(c:string,o:string,id:string,justificativa:string)=>
@@ -65,9 +68,10 @@ export const listarComprovantesOcorrencia=(c:string,o:string)=>chamadaJson<{vinc
 export const vincularComprovanteOcorrencia=(c:string,o:string,comprovanteId:string)=>chamadaJson<{vinculado:boolean}>(`${rotaOcorrencia(c,o)}/evidencias`,{method:'POST',body:JSON.stringify({comprovanteId})});
 export const desvincularComprovanteOcorrencia=(c:string,o:string,comprovanteId:string)=>chamadaJson<{desvinculado:boolean}>(`${rotaOcorrencia(c,o)}/evidencias/${encodeURIComponent(comprovanteId)}`,{method:'DELETE'});
 export const listarHistoricoOcorrencia=(c:string,o:string)=>chamadaJson<EventoHistoricoOcorrencia[]>(`${rotaOcorrencia(c,o)}/historico`);
-export type Replanejamento = { inicioFuturo: string; terminoPrevisto: string; periodicidade: string; modoRegistro?: 'DESCRITIVO'|'QUANTITATIVO'; metaQuantidade?: string; unidadeMedida?: string; confirmacao?: string };
+export type Replanejamento = { inicioFuturo: string; terminoPrevisto: string; periodicidade: string; modoRegistro?: 'DESCRITIVO'|'QUANTITATIVO'; metaQuantidade?: string; unidadeMedida?: string; alterarPrazo?: boolean; confirmacao?: string };
 export type ImpactoAgenda = {
   confirmacao: string;
+  prazoAlterado?: {anterior: string | null; novo: string};
   substituir: {id: string; inicio: string; fim: string; possuiAtividades?: boolean}[];
   novas: {inicio: string; fim: string; pesoPeriodo?: string | null}[];
   criteriosHerdados?: {exigeAtividade: boolean; minimoAtividadesVerificadas: number;
@@ -151,10 +155,10 @@ export function useOcorrencias(contratoId: string, habilitada = true) {
       return criada;
     },
     gerarOcorrenciasRecorrentes: async (entregavelId: string, requisitos?: {
-      minimoAtividadesVerificadas: number; minimoEvidenciasVerificadas: number;
+      recuperarFaltantes?: boolean; minimoAtividadesVerificadas?: number; minimoEvidenciasVerificadas?: number;
       minimoFotos?:number; minimoRelatorios?:number; minimoEvidenciasLivres?:number;
       modoRegistro?:'DESCRITIVO'|'QUANTITATIVO'; metaQuantidade?:string;
-      evidenciaExigida: 'NENHUMA'|'FOTO'|'RELATORIO'|'AMBOS'; permiteEncerramentoExcepcional: boolean;
+      evidenciaExigida?: 'NENHUMA'|'FOTO'|'RELATORIO'|'AMBOS'; permiteEncerramentoExcepcional?: boolean;
     }): Promise<number> => {
       if (!contratoId || !entregavelId) throw new Error('Selecione um contrato e um entregável recorrente.');
       const url = `${API}/contratos/${encodeURIComponent(contratoId)}/entregaveis/${encodeURIComponent(entregavelId)}/ocorrencias/gerar`;

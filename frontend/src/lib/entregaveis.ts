@@ -18,6 +18,7 @@ export type EvidenciaEsperada = {
 export type Entregavel = {
   id: string; contratoId: string; etapaId: string; codigoPublico?: number; codigo: string | null;
   nome: string; descricao: string | null; tipo: TipoEntregavel;
+  versaoPlanejamento?: string; etapaArquivada?: boolean;
   responsavelId: string | null;
   responsavel?: { nome: string | null; email: string } | null;
   inicioPrevisto: string | null; terminoPrevisto: string | null; criadoEm?: string | null; agendaInicioFuturo?: string | null;
@@ -125,9 +126,10 @@ async function alterarEntregavel<T>(caminho: string, metodo: 'POST' | 'PATCH', d
       403: 'Você não tem permissão de planejamento neste contrato.',
       404: 'Contrato, etapa ou entregável não encontrado neste vínculo.',
       409: 'Não foi possível alterar o entregável no estado atual. Confira se o contrato ou a etapa precisam ser reabertos.',
+      503: 'Serviço temporariamente indisponível. Confira o resultado antes de reenviar.',
     };
     let descricao = mensagens[resposta.status] ?? 'Falha ao salvar o planejamento. Tente novamente.';
-    if (resposta.status === 400 || resposta.status === 409) {
+    if (resposta.status === 400 || resposta.status === 409 || resposta.status === 503) {
       let corpo: unknown = null;
       try { if (typeof resposta.json === 'function') corpo = await resposta.json(); } catch { /* Respostas HTTP sem JSON não mascaram o status original. */ }
       const mensagem = corpo && typeof corpo === 'object' && 'message' in corpo

@@ -1,3 +1,5 @@
+import { mensagemErroDominioHttp } from './erro-dominio-http';
+import { chaveUpload } from './idempotencia-upload';
 /** Comprovantes de execução: separados dos documentos administrativos do contrato. */
 export type StatusComprovante = 'SEM_ENVIO' | 'PENDENTE_VERIFICACAO' | 'VERIFICADA' | 'REJEITADA';
 export type DestinoCompartilhamento = { entregavelId:string; esperadaId:string|null; quantidadeExecutada?:string; percentualExecucao?:string; ocorrenciaId?:string; ocorrenciaIds?:string[] };
@@ -24,9 +26,11 @@ export type DeclaracaoPreliminar = Pick<VersaoComprovante,'quantidadeDeclarada'|
 export type RascunhoEnvioEvidencia = {quantidadeExecutada?:string;ocorrenciaQuantidadeId?:string;origemQuantidade?:'NOVA_EXECUCAO'|'COMPROVACAO';referenciaExecucao?:string;percentualExecucao?:string;ocorrenciaExecucaoId?:string;comprovaExecucaoId?:string;ocorrenciasVinculadas?:string;atividadesVinculadas?:string;destinosCompartilhados?:string};
 export type DetalheEvidencia = {
   declaracaoPreliminar?:DeclaracaoPreliminar|null;
+  totalDestinosAguardandoEnvio?:number;
   id: string; codigoPublico?: number; contratoId: string; entregavelId: string; tipoEvidencia: string;
   descricao: string | null; obrigatoria: boolean;
   status: StatusComprovante; versoes: VersaoComprovante[]; podeVerificar: boolean; contextoPermiteAlterar?: boolean; podeEditarContribuicao?: boolean;
+  percentualDiretoPermitido?:boolean;
   tipoEntregavel?:string; quantidadePrevista?:string|null; ocorrenciasDescritivas?:{id:string;titulo:string;status:string}[];
   unidadeMedida?: string | null; quantidadeMensuravel?: boolean; quantidadeDiretaPermitida?:boolean;
   execucoesQuantitativas?: { ocorrenciaId: string; referencia: string; rotulo: string; quantidade: string }[];
@@ -95,20 +99,9 @@ async function respostaValida(resposta: Response) {
     404: 'Evidência não encontrada ou sem acesso.',
     409: 'Esta evidência foi alterada, arquivada ou já está verificada. Atualize e tente novamente.',
     413: 'O arquivo excede o tamanho permitido.',
-    503: 'O serviço de arquivos está indisponível. Tente novamente mais tarde.',
+    503: 'O serviço de arquivos está indisponível. Confira o resultado antes de reenviar.',
   };
-  // Conflito: informar a condição de negócio que o servidor retornou.
-  // Nunca aceitar HTML nem objeto arbitrário; outros status mantêm mensagens estáveis.
-  if (resposta.status === 409) {
-    const detalhe: unknown = await resposta.json().catch(() => null);
-    if (detalhe && typeof detalhe === 'object' && 'message' in detalhe) {
-      const mensagem = (detalhe as { message: unknown }).message;
-      if (typeof mensagem === 'string' && mensagem.length <= 260 && mensagem.trim()) {
-        throw new ErroComprovacao(409, mensagem);
-      }
-    }
-  }
-  throw new ErroComprovacao(resposta.status, avisos[resposta.status] ?? 'A operação não pôde ser concluída.');
+  throw new ErroComprovacao(resposta.status, await mensagemErroDominioHttp(resposta, avisos[resposta.status] ?? 'A operação não pôde ser concluída.'));
 }
 async function pedir<T>(path: string, init?: RequestInit): Promise<T> {
   let resposta: Response;
@@ -149,9 +142,13 @@ export async function enviarComprovante(contrato: string, entregavel: string, es
   if (contribuicao?.ocorrenciasVinculadas?.length) dados.append('ocorrenciasVinculadas', contribuicao.ocorrenciasVinculadas.join(','));
   if (contribuicao?.atividadesVinculadas?.length) dados.append('atividadesVinculadas', contribuicao.atividadesVinculadas.join(','));
   if (contribuicao?.destinosCompartilhados?.length) dados.append('destinosCompartilhados',JSON.stringify(contribuicao.destinosCompartilhados.map(d=>({...d,ocorrenciaId:d.quantidadeExecutada||d.percentualExecucao?d.ocorrenciaId:undefined}))));
-  return pedir<VersaoComprovante>(`${base(contrato, entregavel, esperada)}/comprovantes`, {
-    method: 'POST', body: dados,
+  const caminho = `${base(contrato, entregavel, esperada)}/comprovantes`;
+  const op = chaveUpload(arquivo,caminho,dados);
+  const item = await pedir<VersaoComprovante>(caminho, {
+    method: 'POST', headers:{'Idempotency-Key':op.chave}, body: dados,
   });
+  op.concluir();
+  return item;
 }
 export const reabrirEvidencia = (c: string, e: string, id: string, motivo: string) => pedir<VersaoComprovante>(`${base(c,e,id)}/reabrir`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ motivo }) });
 export const verificarComprovante = (contrato: string, entregavel: string, esperada: string, id: string, quantidadeAprovada?: string, percentualAprovado?: string) =>
@@ -201,7 +198,7 @@ export function excluirEvidenciaArquivada(c: string, e: string, id: string) {
   return pedir<{ id: string; excluido: boolean; limpezaPendente?: number }>(`${base(c, e, id)}/excluir`, { method: 'POST' });
 }
 
-export type EvidenciaConsolidada = {arquivadoEm?:string|null; id:string; entregavelId:string; entregavel:string; etapa:string; tipoEvidencia:string; descricao:string|null; obrigatoria:boolean; status:StatusComprovante; comprovanteId:string|null; nomeOriginal:string|null; criadoEm:string|null; tamanho:number|null; atividades:string[]; ocorrencias:string[] };
+export type EvidenciaConsolidada = {arquivadoEm?:string|null; id:string; entregavelId:string; entregavel:string; etapa:string; tipoEvidencia:string; descricao:string|null; obrigatoria:boolean; status:StatusComprovante; comprovanteId:string|null; nomeOriginal:string|null; criadoEm:string|null; criadoEmCadastro?:string|null; enviadoEm?:string|null; tamanho:number|null; atividades:string[]; ocorrencias:string[] };
 export function consultarEvidenciasConsolidadas(contratoId:string,filtros:Record<string,string>,signal?:AbortSignal) {
   const params=new URLSearchParams(Object.entries(filtros).filter(([,valor])=>Boolean(valor)));
   return pedir<{data:EvidenciaConsolidada[];meta:{total:number;page:number;limit:number}}>(`/contratos/${encodeURIComponent(contratoId)}/entregaveis/evidencias-consolidadas?${params}`,{signal});

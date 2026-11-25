@@ -17,3 +17,10 @@ export const CORES_COMPROVACAO = {
   neutro: 'text-foreground/60', insuficiente: 'text-red-700 dark:text-red-300',
   parcial: 'text-amber-700 dark:text-amber-300', completo: 'text-emerald-700 dark:text-emerald-400',
 } as const;
+
+/** A precisão visual não pode converter uma execução parcial em integral. */
+export function formatarPercentualSemAnteciparConclusao(valor: number, casas = 2): string {
+  if (!Number.isFinite(valor)) return '—';
+  const exibido = valor >= 100 ? 100 : Math.max(0, Math.min(valor, 100 - 10 ** -casas));
+  return `${exibido.toLocaleString('pt-BR', { maximumFractionDigits: casas })}%`;
+}

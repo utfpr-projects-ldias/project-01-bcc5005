@@ -1,3 +1,6 @@
+import { operacaoUpload, recuperarUpload, registrarUpload } from '../armazenamento/idempotencia-upload.js';
+import { bloquearIdentidadeEAcl, exigirPermissaoTransacional } from '../autorizacao/permissao-transacional.js';
+import { lerArquivoIntegro } from '../armazenamento/integridade-arquivo.js';
 import { normalizarNomeArquivo } from '../armazenamento/nome-arquivo.js';
 import { createHash } from 'node:crypto';
 import {
@@ -118,7 +121,7 @@ export class DocumentosService implements OnModuleInit {
     const contrato = await manager.getRepository(Contrato).findOne({ where: { id: contratoId },
       select: { id: true, status: true, arquivadoEm: true, conclusaoSolicitadaEm: true } });
     if (!contrato) throw new NotFoundException('Contrato não encontrado');
-    if (contrato.arquivadoEm || contrato.conclusaoSolicitadaEm || ['CONCLUIDO', 'CONCLUIDO_PARCIALMENTE', 'FINALIZADO', 'ENCERRADO', 'SUSPENSO', 'CANCELADO'].includes(contrato.status))
+    if (contrato.arquivadoEm || contrato.conclusaoSolicitadaEm || ['CONCLUIDO', 'FINALIZADO', 'ENCERRADO', 'SUSPENSO', 'CANCELADO'].includes(contrato.status) || (contrato.status === 'CONCLUIDO_PARCIALMENTE' && (documento.categoria !== CategoriaDocumento.CONTRATO_PRINCIPAL || operacao === 'excluir')))
       throw new ConflictException('Reative, retome, reverta o cancelamento ou reabra o contrato antes de alterar documentos');
     if (ator.perfil === PerfilUsuario.ADMINISTRADOR) return;
     const vinculo = await manager.getRepository(PermissaoContrato).findOneBy({ contratoId, usuarioId: ator.id });
@@ -140,7 +143,7 @@ export class DocumentosService implements OnModuleInit {
     const contrato = await manager.getRepository(Contrato).findOne({ where: { id: contratoId },
       select: { id: true, status: true, arquivadoEm: true, conclusaoSolicitadaEm: true } });
     if (!contrato) throw new NotFoundException('Contrato não encontrado');
-    if (contrato.arquivadoEm || contrato.conclusaoSolicitadaEm || ['CONCLUIDO', 'FINALIZADO', 'ENCERRADO', 'SUSPENSO', 'CANCELADO'].includes(contrato.status))
+    if (contrato.arquivadoEm || contrato.conclusaoSolicitadaEm || ['CONCLUIDO', 'FINALIZADO', 'ENCERRADO', 'SUSPENSO', 'CANCELADO'].includes(contrato.status) || (contrato.status === 'CONCLUIDO_PARCIALMENTE' && documento.categoria !== CategoriaDocumento.CONTRATO_PRINCIPAL))
       throw new ConflictException('Reative, retome, reverta o cancelamento ou reabra o contrato antes de verificar documentos');
     if (ator.perfil === PerfilUsuario.ADMINISTRADOR) return;
     const vinculo = await manager.getRepository(PermissaoContrato).findOneBy({ contratoId, usuarioId: ator.id });
@@ -155,13 +158,21 @@ export class DocumentosService implements OnModuleInit {
 
   async verificar(contratoId: string, id: string, ator: UsuarioAutenticado) {
     return this.dataSource.transaction(async manager => {
+      await bloquearIdentidadeEAcl(manager, contratoId, ator);
       await this.exigirContratoMutavel(manager, contratoId, true);
       const repo = manager.getRepository(DocumentoContratual);
-      const documento = await repo.findOne({ where: { contratoId, id }, lock: { mode: 'pessimistic_write' } });
+      const documento = await repo.findOne({ where: { contratoId, id }, lock: { mode: 'pessimistic_write' },
+        select: {
+          id: true, contratoId: true, autorId: true, categoria: true, descricao: true,
+          nomeOriginal: true, tipoMime: true, tamanho: true, sha256: true, storageKey: true,
+          arquivadoEm: true, verificadoEm: true, verificadoPor: true, reabertoEm: true,
+          criadoEm: true,
+        } });
       if (!documento) throw new NotFoundException('Documento não encontrado');
       if (documento.arquivadoEm) throw new ConflictException('Reative antes de verificar um documento arquivado');
       await this.exigirVerificador(manager, contratoId, ator, documento, 'verificar');
       if (documento.verificadoEm && !documento.reabertoEm) throw new ConflictException('Documento já verificado');
+      await lerArquivoIntegro(this.armazenamento, documento);
       const anterior = { situacao: documento.reabertoEm ? 'EM_REVISAO' : 'PENDENTE_VERIFICACAO' };
       documento.verificadoEm = new Date();
       documento.verificadoPor = ator.id;
@@ -177,6 +188,7 @@ export class DocumentosService implements OnModuleInit {
 
   async reabrir(contratoId: string, id: string, ator: UsuarioAutenticado, motivo?: string) {
     return this.dataSource.transaction(async manager => {
+      await bloquearIdentidadeEAcl(manager, contratoId, ator);
       await this.exigirContratoMutavel(manager, contratoId, true);
       const repo = manager.getRepository(DocumentoContratual);
       const documento = await repo.findOne({ where: { contratoId, id }, lock: { mode: 'pessimistic_write' } });
@@ -200,6 +212,7 @@ export class DocumentosService implements OnModuleInit {
   /** Apenas metadados de anexos administrativos não principais. O blob nunca é sobrescrito. */
   async editar(contratoId: string, id: string, dto: EditarDocumentoDto, ator: UsuarioAutenticado) {
     return this.dataSource.transaction(async manager => {
+      await exigirPermissaoTransacional(manager, contratoId, ator, 'editarDocumentos');
       await this.exigirContratoMutavel(manager, contratoId);
       const repo = manager.getRepository(DocumentoContratual);
       const documento = await repo.findOne({ where: { contratoId, id }, relations: { autor: true } });
@@ -213,6 +226,7 @@ export class DocumentosService implements OnModuleInit {
       if (dto.descricao !== undefined) documento.descricao = dto.descricao?.trim() || null;
       if (antes.categoria === documento.categoria && antes.descricao === documento.descricao) return publico(documento);
       const verificadoAntes = Boolean(documento.verificadoEm);
+      if (verificadoAntes) await this.exigirVerificador(manager, contratoId, ator, documento, 'reabrir');
       if (verificadoAntes) { documento.verificadoEm = null; documento.verificadoPor = null; documento.reabertoEm = new Date(); }
       await repo.save(documento);
       await this.auditoria.registrarNaTransacao(manager, ator, {
@@ -226,16 +240,13 @@ export class DocumentosService implements OnModuleInit {
 
   async arquivar(contratoId: string, id: string, ator: UsuarioAutenticado) {
     return this.dataSource.transaction(async manager => {
-      await this.exigirContratoMutavel(manager, contratoId);
+      await bloquearIdentidadeEAcl(manager, contratoId, ator);
+      await this.exigirContratoMutavel(manager, contratoId, true);
       const repo = manager.getRepository(DocumentoContratual);
       const documento = await repo.findOne({ where: { contratoId, id }, relations: { autor: true } });
       if (!documento) throw new NotFoundException('Documento não encontrado');
       if (documento.arquivadoEm) throw new ConflictException('Documento já está arquivado');
       if (documento.verificadoEm) throw new ConflictException('Reabra o documento verificado antes de arquivar');
-      // A raiz já está bloqueada desde o começo da transação; serializa o limite histórico.
-      if (documento.categoria !== CategoriaDocumento.CONTRATO_PRINCIPAL &&
-          await repo.count({ where: { contratoId, arquivadoEm: Not(IsNull()), categoria: Not(CategoriaDocumento.CONTRATO_PRINCIPAL) } }) >= 10)
-        throw new ConflictException('Limite de 10 anexos arquivados por contrato');
       await this.exigirAcaoDocumento(manager, contratoId, ator, documento, 'arquivar');
       documento.arquivadoEm = new Date();
       await repo.save(documento);
@@ -251,7 +262,8 @@ export class DocumentosService implements OnModuleInit {
   /** Arquivado conserva o arquivo consultável. Reativação não altera bytes nem versões. */
   async reativar(contratoId: string, id: string, ator: UsuarioAutenticado, motivo?: string) {
     return this.dataSource.transaction(async manager => {
-      await this.exigirContratoMutavel(manager, contratoId);
+      await bloquearIdentidadeEAcl(manager, contratoId, ator);
+      await this.exigirContratoMutavel(manager, contratoId, true);
       const repo = manager.getRepository(DocumentoContratual);
       const documento = await repo.findOne({ where: { contratoId, id }, lock: { mode: 'pessimistic_write' } });
       if (!documento) throw new NotFoundException('Documento não encontrado');
@@ -262,6 +274,8 @@ export class DocumentosService implements OnModuleInit {
           throw new ConflictException('Já existe documento principal ativo neste contrato');
       }
       await this.exigirAcaoDocumento(manager, contratoId, ator, documento, 'reativar');
+      if (await repo.count({ where: { contratoId, arquivadoEm: IsNull() } }) >= 20)
+        throw new ConflictException('Limite de 20 documentos ativos por contrato');
       const anterior = documento.arquivadoEm.toISOString();
       documento.arquivadoEm = null;
       await repo.save(documento);
@@ -279,13 +293,29 @@ export class DocumentosService implements OnModuleInit {
     throw new ConflictException('Documentos contratuais são preservados no histórico; utilize arquivamento lógico');
   }
 
-  async anexar(contratoId: string, dto: CriarDocumentoDto, arquivo: ArquivoRecebido | undefined, ator: UsuarioAutenticado) {
+  async anexar(contratoId: string, dto: CriarDocumentoDto, arquivo: ArquivoRecebido | undefined, ator: UsuarioAutenticado, chaveEnvio?: string | string[]) {
     if (!arquivo || !Buffer.isBuffer(arquivo.buffer) || arquivo.size !== arquivo.buffer.length) {
       throw new BadRequestException('Arquivo obrigatório ou inválido');
     }
     if (dto.categoria === CategoriaDocumento.CONTRATO_PRINCIPAL && arquivo.mimetype !== 'application/pdf') {
       throw new BadRequestException('Documento principal deve ser um arquivo PDF');
     }
+    const op = operacaoUpload(chaveEnvio, `documento:${contratoId}`, ator.id, arquivo, dto);
+    const recuperar = async (m: EntityManager) => {
+      const id = await recuperarUpload(m,op);
+      if (!id) return null;
+      const item = await m.getRepository(DocumentoContratual).findOne({where:{id,contratoId,autorId:ator.id},relations:{autor:true}});
+      if (!item) throw new ServiceUnavailableException('Registro do envio precisa de reconciliação');
+      return item;
+    };
+    if (op) {
+      const anterior = await this.dataSource.transaction(async m => {
+        await exigirPermissaoTransacional(m,contratoId,ator,'anexarDocumentos');
+        return recuperar(m);
+      });
+      if (anterior) return publico(anterior);
+    }
+    let repetido = false;
     let pendente: Awaited<ReturnType<ArmazenamentoArquivos['salvar']>>;
     try {
       pendente = await this.armazenamento.salvar({
@@ -298,20 +328,24 @@ export class DocumentosService implements OnModuleInit {
     }
 
     let documento: DocumentoContratual;
+    let callbackConcluido = false;
     try {
       documento = await this.dataSource.transaction(async (manager) => {
-        // Serializar uploads concorrentes pelo contrato. O limite inclui arquivados.
+        await exigirPermissaoTransacional(manager, contratoId, ator, 'anexarDocumentos');
+        // Serializar uploads concorrentes pelo contrato. O histórico não consome vagas ativas.
         const contrato = await manager.getRepository(Contrato).createQueryBuilder('contrato')
           .where('contrato.id = :contratoId', { contratoId }).setLock('pessimistic_write').getOne();
         if (!contrato) throw new NotFoundException('Contrato não encontrado');
-        if (contrato.arquivadoEm || contrato.conclusaoSolicitadaEm || ['CONCLUIDO','FINALIZADO','ENCERRADO','SUSPENSO','CANCELADO'].includes(contrato.status))
+        const anterior = await recuperar(manager);
+        if (anterior) { repetido = true; callbackConcluido = true; return anterior; }
+        if (contrato.arquivadoEm || contrato.conclusaoSolicitadaEm || ['CONCLUIDO','FINALIZADO','ENCERRADO','SUSPENSO','CANCELADO'].includes(contrato.status) || (contrato.status === 'CONCLUIDO_PARCIALMENTE' && dto.categoria !== CategoriaDocumento.CONTRATO_PRINCIPAL))
           throw new ConflictException('Contrato não permite novos anexos sem reabertura, retomada ou reativação');
         const repositorio = manager.getRepository(DocumentoContratual);
         if (dto.categoria === CategoriaDocumento.CONTRATO_PRINCIPAL &&
           await repositorio.count({ where: { contratoId, categoria: CategoriaDocumento.CONTRATO_PRINCIPAL, arquivadoEm: IsNull() } }) > 0)
           throw new ConflictException('Já existe documento principal ativo neste contrato; arquive-o antes de anexar outro');
-        if (await repositorio.count({ where: { contratoId } }) >= 20)
-          throw new ConflictException('Limite de 20 documentos por contrato atingido, incluindo arquivados');
+        if (await repositorio.count({ where: { contratoId, arquivadoEm: IsNull() } }) >= 20)
+          throw new ConflictException('Limite de 20 documentos ativos por contrato atingido');
         const novo = repositorio.create({
           contratoId,
           autorId: ator.id,
@@ -336,17 +370,19 @@ export class DocumentosService implements OnModuleInit {
             tamanho: salvo.tamanho,
           },
         });
+        await registrarUpload(manager,op,salvo.id);
+        callbackConcluido = true;
         return salvo;
       });
     } catch (erro) {
       // Uma exceção genérica na confirmação da transação pode ter ocorrido DEPOIS
       // do COMMIT no PostgreSQL. Nunca apagar o blob nessa situação ambígua:
       // o registro e a auditoria podem já estar persistidos.
-      const falhaDeRegraConhecida = erro instanceof ConflictException || erro instanceof NotFoundException;
+      const falhaDeRegraConhecida = erro instanceof ConflictException || erro instanceof NotFoundException || erro instanceof ForbiddenException || erro instanceof BadRequestException;
       const codigoSql = erro instanceof QueryFailedError
         ? (erro.driverError as { code?: string } | undefined)?.code : undefined;
       const falhaSqlDeterministica = codigoSql === '23503' || codigoSql === '23505';
-      if (!falhaDeRegraConhecida && !falhaSqlDeterministica) {
+      if (callbackConcluido || (!falhaDeRegraConhecida && !falhaSqlDeterministica)) {
         this.logger.error('Resultado transacional documental ambíguo; manter blob para reconciliação segura');
         throw new ServiceUnavailableException('Envio com confirmação pendente; verifique a lista antes de reenviar');
       }
@@ -364,10 +400,11 @@ export class DocumentosService implements OnModuleInit {
 
     // Somente DEPOIS do commit; nunca remover o blob caso o commit tenha sido bem-sucedido.
     try {
-      this.armazenamento.confirmarPersistencia(pendente);
+      if (repetido) await this.armazenamento.removerOrfao(pendente);
+      else this.armazenamento.confirmarPersistencia(pendente);
     } catch {
       this.logger.error('Documento confirmado no banco, mas confirmação local do blob falhou');
-      throw new ServiceUnavailableException('Documento registrado, verificação de storage pendente');
+      // O COMMIT foi confirmado. Não reportar falha de envio nem remover o arquivo.
     }
     return { ...publico(documento), autorNome: ator.nome ?? null };
   }

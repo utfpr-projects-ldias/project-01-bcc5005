@@ -36,6 +36,7 @@ export async function criarAdministradorInicial(
   }
 
   let criadaNestaTentativa: string | undefined;
+  let callbackConcluido = false;
   try {
     return await conexao.transaction(async (manager) => {
     // Chave fixada neste utilitário; lock transacional liberado no commit/rollback.
@@ -53,14 +54,27 @@ export async function criarAdministradorInicial(
     if (credenciais.modo === 'novo') criadaNestaTentativa = supertokensUserId;
 
     const usuario = new UsuariosService(repositorio);
-    return usuario.criarProvisionado({
+    const provisionado = await usuario.criarProvisionado({
       supertokensUserId,
       email,
       perfil: PerfilUsuario.ADMINISTRADOR,
     });
+    callbackConcluido = true;
+    return provisionado;
     });
   } catch (erro: unknown) {
     if (criadaNestaTentativa) {
+      if (callbackConcluido) {
+        // COMMIT pode ter sido confirmado pelo servidor mesmo com resposta perdida.
+        // Na dúvida preservar a identidade externa, nunca apagar uma conta válida.
+        let persistido: Usuario | null;
+        try { persistido = await conexao.getRepository(Usuario).findOneBy({ supertokensUserId: criadaNestaTentativa }); }
+        catch { throw new Error('Confirmação de bootstrap indeterminada; reconciliação manual necessária'); }
+        if (persistido) {
+          if (persistido.email === email && persistido.perfil === PerfilUsuario.ADMINISTRADOR && persistido.ativo) return persistido;
+          throw new Error('Identidade persistida divergente; reconciliação manual necessária');
+        }
+      }
       if (!identidades.excluirCriacaoIncompleta) {
         throw new Error('Bootstrap falhou após criar identidade; reconciliar manualmente pelo modo existente');
       }

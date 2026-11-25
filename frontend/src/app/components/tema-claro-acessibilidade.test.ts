@@ -37,7 +37,8 @@ test('suspensão e arquivamento não compartilham a mesma cor de texto', () => {
   expect(css).toContain('--ui-arquivado: #854d0e;');
   expect(css).toContain('.contrato-card-documental[data-situacao="suspensos"] .contrato-card-titulo');
   expect(css).toContain('.contrato-card-documental[data-situacao="arquivados"] .contrato-card-titulo');
-  expect(listaContratos).toContain("'text-foreground/75'");
+  const tabela = readFileSync(path.join(app, 'contratos/components/tabela-operacional.tsx'), 'utf8');
+  expect(tabela).toContain('data-situacao={estado}');
 });
 
 test('o cadastro abre a visão geral e o anexo principal fica disponível sob demanda', () => {

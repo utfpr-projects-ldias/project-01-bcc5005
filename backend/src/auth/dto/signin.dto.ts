@@ -1,7 +1,10 @@
 import { IsEmail, IsString, MaxLength, MinLength } from "class-validator";
 
+import { Transform } from 'class-transformer';
+
 export class SigninDto {
-  // vai ser util so mais pra frente.
+  @Transform(({value}: {value:unknown}) => typeof value === 'string' ? value.trim().toLowerCase() : value)
+  @MaxLength(254)
   @IsEmail({}, { message: "E-mail inválido" })
   email!: string;
 
