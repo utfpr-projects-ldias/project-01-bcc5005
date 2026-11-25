@@ -197,3 +197,23 @@ test('exclusão definitiva de contratos é exclusiva do ADMIN e exige UUID váli
   expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR), { acao: 'contratos:excluir' }, CONTRATO_ID)).toBe(false);
   expect(await politica.permitido(usuario(PerfilUsuario.ADMINISTRADOR), { acao: 'contratos:excluir' }, 'id-errado')).toBe(false);
 });
+
+describe('B02 — falha fechada para mutações sem mapeamento granular', () => {
+  const escopo = { tipo: 'recurso', recurso: 'evidencia', parametro: 'id' } as const;
+  it('nega operação sem mapeamento para todos os perfis, inclusive ADMIN', async () => {
+    busca.mockResolvedValue({ podeEditar: true } as PermissaoContrato);
+    for (const perfil of [PerfilUsuario.ADMINISTRADOR, PerfilUsuario.GESTOR, PerfilUsuario.COLABORADOR]) {
+      expect(await politica.permitido(usuario(perfil), { acao: 'evidencias:arquivar', escopoOperacional: escopo }, CONTRATO_ID))
+        .toBe(false);
+    }
+  });
+  it('preserva leitura contratual e delegação explicitamente mapeada', async () => {
+    busca.mockResolvedValue({ podeEditar: false, permissoesDetalhadas: { enviarComprovantes: true } } as PermissaoContrato);
+    expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR), {
+      acao: 'evidencias:anexar', escopoOperacional: { tipo: 'contrato', parametro: 'contratoId' },
+    }, CONTRATO_ID)).toBe(true);
+    expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR), {
+      acao: 'evidencias:listar', escopoOperacional: { tipo: 'contrato', parametro: 'contratoId' },
+    }, CONTRATO_ID)).toBe(true);
+  });
+});

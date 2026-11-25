@@ -25,8 +25,8 @@ export function useMutacoesContrato() {
       cache.invalidar(['admin', 'contratos']);
       return contrato;
     },
-    editar: async (id: string, dados: Partial<DadosContrato>) => {
-      const contrato = await editarContrato(id, dados);
+    editar: async (id: string, dados: Partial<DadosContrato>, confirmacaoVigencia?: string) => {
+      const contrato = await editarContrato(id, dados, confirmacaoVigencia);
       cache.gravar(chaveTexto(CHAVES_CONTRATO.detalhe(id)), contrato);
       cache.invalidar(['contratos', 'lista']);
       cache.invalidar(CHAVES_CONTRATO.pendentes);

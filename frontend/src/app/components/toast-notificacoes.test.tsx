@@ -25,3 +25,10 @@ test('notificações repetidas se consolidam e o painel é compacto sem ocupar o
   expect(screen.getByRole('status')).toHaveClass('backdrop-blur-lg');
   expect(screen.getByLabelText('Notificações')).toHaveClass('pointer-events-none');
 });
+
+test('R42: reabrir uma evidência não anuncia conclusão',()=>{
+  render(<ToastNotificacoes/>);
+  act(()=>toastSucesso('A evidência foi encaminhada para nova verificação.','Evidência reaberta'));
+  expect(screen.getByRole('status')).toHaveTextContent('Evidência reaberta');
+  expect(screen.getByRole('status')).not.toHaveTextContent('Concluído');
+});

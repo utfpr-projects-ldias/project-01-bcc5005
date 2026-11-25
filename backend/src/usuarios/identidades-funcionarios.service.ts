@@ -3,6 +3,14 @@ import EmailPassword from 'supertokens-node/recipe/emailpassword';
 import supertokens from 'supertokens-node';
 import Session from 'supertokens-node/recipe/session';
 
+/** A senha já foi atualizada; a revogação de sessões ainda NÃO foi confirmada. */
+export class RevogacaoSessoesPendenteError extends Error {
+  constructor() {
+    super('Senha alterada, mas não foi possível confirmar a revogação das sessões anteriores');
+    this.name = 'RevogacaoSessoesPendenteError';
+  }
+}
+
 /** Adaptador isolado para testar falhas/compensação sem chamar o Core nos testes. */
 @Injectable()
 export class IdentidadesFuncionariosService {
@@ -34,8 +42,22 @@ export class IdentidadesFuncionariosService {
       throw new ConflictException('Nova senha não atende à política de segurança');
     }
     if (resultado.status !== 'OK') throw new InternalServerErrorException('Não foi possível definir a nova senha');
-    // Definir nova senha invalida sessões existentes; o usuário fará login novamente.
-    await Session.revokeAllSessionsForUser(userId);
+    // A troca de senha no Core já foi efetivada: falhas da etapa seguinte não podem
+    // ser reportadas como se a senha estivesse inalterada.
+    await this.revogarSessoes(userId);
+  }
+
+  /** Recuperação idempotente: pode ser repetida pelo serviço sem alterar a senha. */
+  async revogarSessoes(userId: string): Promise<void> {
+    for (let tentativa = 0; tentativa < 3; tentativa++) {
+      try {
+        await Session.revokeAllSessionsForUser(userId);
+        return;
+      } catch {
+        // Sem log de credenciais, ID externo ou token. Tenta novamente no Core.
+      }
+    }
+    throw new RevogacaoSessoesPendenteError();
   }
 
   /** Só é chamado para identidade recém-criada por ESTA tentativa de provisionamento. */

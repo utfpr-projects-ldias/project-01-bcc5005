@@ -160,6 +160,7 @@ export default function LoginPage() {
             <input 
               type="email" 
               id="email-login"
+              maxLength={320}
               name="email"
               aria-invalid={!!errors.email}
               aria-describedby={errors.email ? "erro-login-email" : undefined}
@@ -178,6 +179,7 @@ export default function LoginPage() {
             <input 
               type="password" 
               id="senha-login"
+              maxLength={256}
               name="password"
               aria-invalid={!!errors.password}
               aria-describedby={errors.password ? "erro-login-senha" : undefined}

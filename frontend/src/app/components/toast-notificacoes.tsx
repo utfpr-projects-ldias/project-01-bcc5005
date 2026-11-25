@@ -2,17 +2,17 @@
 import { useCallback, useEffect, useState } from 'react';
 
 type TipoToast = 'sucesso' | 'erro' | 'aviso' | 'conclusao';
-type EntradaToast = { id: number; mensagem: string; tipo: TipoToast };
+type EntradaToast = { id: number; mensagem: string; tipo: TipoToast; titulo?: string };
 const CANAL = 'sgc:toast';
 let proximoId = 0;
 
-function emitir(tipo: TipoToast, mensagem: string) {
+function emitir(tipo: TipoToast, mensagem: string, titulo?: string) {
   if (typeof window === 'undefined' || !mensagem.trim()) return;
   window.dispatchEvent(new CustomEvent<EntradaToast>(CANAL, {
-    detail: { id: ++proximoId, tipo, mensagem: mensagem.trim() },
+    detail: { id: ++proximoId, tipo, mensagem: mensagem.trim(), ...(titulo ? {titulo} : {}) },
   }));
 }
-export const toastSucesso = (mensagem: string) => emitir('sucesso', mensagem);
+export const toastSucesso = (mensagem: string, titulo?: string) => emitir('sucesso', mensagem, titulo);
 export const toastErro = (mensagem: string) => emitir('erro', mensagem);
 export const toastAviso = (mensagem: string) => emitir('aviso', mensagem);
 export const toastConclusao = (mensagem: string) => emitir('conclusao', mensagem);
@@ -45,7 +45,7 @@ function ToastItem({ toast, dispensar }: { toast: EntradaToast; dispensar: (id: 
   const estilo = toast.tipo === 'conclusao'
     ? { borda: 'border-violet-400/55', fundo: 'bg-[#201529]/95', cor: 'text-violet-200', faixa: 'bg-violet-400', nome: 'Comprovação concluída' }
     : toast.tipo === 'sucesso'
-    ? { borda: 'border-emerald-500/35', fundo: 'bg-[#101e18]/95', cor: 'text-emerald-300', faixa: 'bg-emerald-400', nome: 'Concluído' }
+    ? { borda: 'border-emerald-500/35', fundo: 'bg-[#101e18]/95', cor: 'text-emerald-300', faixa: 'bg-emerald-400', nome: 'Operação realizada' }
     : toast.tipo === 'erro'
       ? { borda: 'border-rose-400/45', fundo: 'bg-[#24171b]/95', cor: 'text-rose-300', faixa: 'bg-rose-400', nome: 'Não concluído' }
       : { borda: 'border-amber-400/45', fundo: 'bg-[#211e15]/95', cor: 'text-amber-300', faixa: 'bg-amber-300', nome: 'Atenção' };
@@ -59,7 +59,7 @@ function ToastItem({ toast, dispensar }: { toast: EntradaToast; dispensar: (id: 
             : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4"><path d="M12 3 2 21h20L12 3Z"/><path d="M12 9v5m0 3h.01"/></svg>}
       </span>
       <div className="min-w-0 flex-1">
-        <p className={`text-[10px] font-semibold uppercase tracking-[0.13em] ${estilo.cor}`}>{estilo.nome}</p>
+        <p className={`text-[10px] font-semibold uppercase tracking-[0.13em] ${estilo.cor}`}>{toast.titulo ?? estilo.nome}</p>
         <p className="mt-0.5 break-words text-xs leading-relaxed text-slate-100 sm:text-[13px]">{toast.mensagem}</p>
       </div>
       <button type="button" aria-label="Fechar notificação" title="Dispensar" onClick={() => dispensar(toast.id)}

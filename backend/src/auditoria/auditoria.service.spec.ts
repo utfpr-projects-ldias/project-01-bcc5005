@@ -1,3 +1,6 @@
+import { snapshotParcela, snapshotMedicoesDiretas, snapshotDeclaracoesPercentuais } from '../execucao/snapshot-parcela.js';
+import { ExecucaoLancamento } from '../execucao/execucao-lancamento.entity.js';
+import { ParcelaAtividadeDto } from '../atividades/dto/parcela-atividade.dto.js';
 import { jest } from '@jest/globals';
 import type { DataSource, EntityManager, Repository } from 'typeorm';
 import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
@@ -127,4 +130,17 @@ describe('TEC07-03 - auditoria inicial', () => {
     }))).rejects.toThrow('tamanho permitido');
     expect(a.salvar).not.toHaveBeenCalled();
   });
+});
+
+it('aceita snapshots de contribuições sem aceitar instâncias DTO ou TypeORM brutas', async () => {
+  const a=ambiente();
+  const id='00000000-0000-4000-8000-000000000002';
+  a.auditoria.registrarResolvedorContexto('ATIVIDADE',async()=>id);
+  const dto=Object.assign(new ParcelaAtividadeDto(),{entregavelId:id,percentual:'15'});
+  class Medicao { entregavelId=id; quantidade='2'; }
+  const parcela=Object.assign(new ExecucaoLancamento(),{id,entregavelId:id,centesimos:1500,origem:'ATIVIDADE',criadoEm:new Date('2026-11-24T12:00:00Z')});
+  const base={acao:AcaoAuditoria.ATIVIDADE_CRIADA,entidadeTipo:'ATIVIDADE' as const,entidadeId:id};
+  await expect(a.auditoria.registrarNaTransacao(a.manager,ator,{...base,dadosPosteriores:{parcelas:[dto]}})).rejects.toThrow('Tipo não suportado');
+  await a.auditoria.registrarNaTransacao(a.manager,ator,{...base,dadosPosteriores:{medicoesDiretas:snapshotMedicoesDiretas([new Medicao()]),parcelasPercentuais:snapshotDeclaracoesPercentuais([dto]),parcelaExecucao:snapshotParcela(parcela)}});
+  expect(a.objetos[0].dadosPosteriores).toMatchObject({medicoesDiretas:[{entregavelId:id,quantidade:'2'}],parcelasPercentuais:[{entregavelId:id,percentual:'15'}],parcelaExecucao:{centesimos:1500,criadoEm:'2026-11-24T12:00:00.000Z'}});
 });

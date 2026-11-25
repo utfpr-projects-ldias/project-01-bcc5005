@@ -1,5 +1,5 @@
 import {
-  Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Req,
+  Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post, Query, Req,
   UsePipes, ValidationPipe,
 } from '@nestjs/common';
 
@@ -57,13 +57,13 @@ export class ContratosController {
 
   @Get(':id/historico')
   @ExigirPolitica('contratos:visualizar', 'id')
-  historico(@Param('id') id: string, @Req() req: RequisicaoAutorizada) {
-    return this.contratos.historico(id, req.usuarioDominio!);
+  historico(@Param('id') id: string, @Req() req: RequisicaoAutorizada, @Query('antes') antes?: string) {
+    return this.contratos.historico(id, req.usuarioDominio!, antes);
   }
 
   @Get(':id')
   @ExigirPolitica('contratos:visualizar', 'id')
-  detalhar(@Param('id') id: string) {
+  detalhar(@Param('id', new ParseUUIDPipe({ errorHttpStatusCode: HttpStatus.NOT_FOUND })) id: string) {
     return this.contratos.detalhar(id);
   }
 
@@ -72,6 +72,11 @@ export class ContratosController {
   acesso(@Param('id') id: string, @Req() req: RequisicaoAutorizada) {
     return this.contratos.consultarAcesso(id, req.usuarioDominio!);
   }
+
+  @Post(':id/impacto-vigencia')
+  @ExigirPolitica('contratos:editar', 'id')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
+  impacto(@Param('id') id: string, @Body() dto: AtualizarContratoDto) { return this.contratos.consultarImpactoVigencia(id, dto); }
 
   @Patch(':id')
   @ExigirPolitica('contratos:editar', 'id')
@@ -90,10 +95,35 @@ export class ContratosController {
     return this.contratos.alterarBloqueioOrdem(id, dto.bloqueada, req.usuarioDominio!);
   }
 
+  @Get(':id/elegibilidade-conclusao')
+  @ExigirPolitica('contratos:visualizar', 'id')
+  elegibilidadeConclusao(@Param('id') id: string) {
+    return this.contratos.consultarElegibilidadeConclusao(id);
+  }
+
+  @Patch(':id/solicitar-conclusao')
+  @ExigirPolitica('contratos:solicitar-conclusao', 'id')
+  solicitarConclusao(@Param('id') id: string, @Req() req: RequisicaoAutorizada) {
+    return this.contratos.solicitarConclusao(id, req.usuarioDominio!);
+  }
+
+  @Patch(':id/solicitar-conclusao-parcial')
+  @ExigirPolitica('contratos:editar', 'id')
+  solicitarConclusaoParcial(@Param('id') id: string, @Req() req: RequisicaoAutorizada) {
+    return this.contratos.solicitarConclusao(id, req.usuarioDominio!,true);
+  }
+
   @Patch(':id/concluir')
   @ExigirPolitica('contratos:concluir', 'id')
   concluir(@Param('id') id: string, @Req() req: RequisicaoAutorizada) {
     return this.contratos.concluir(id, req.usuarioDominio!);
+  }
+
+  @Patch(':id/finalizar')
+  @ExigirPolitica('contratos:concluir', 'id')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
+  finalizar(@Param('id') id: string, @Body() dto: JustificativaDecisaoDto, @Req() req: RequisicaoAutorizada) {
+    return this.contratos.finalizar(id, dto.motivo, req.usuarioDominio!);
   }
 
   /** Encerramento excepcional com pendências preservadas e justificativa auditável. */
@@ -125,7 +155,14 @@ export class ContratosController {
     return this.contratos.alterarSuspensao(id, false, req.usuarioDominio!, dto.motivo);
   }
 
-  @Patch(':id/encerrar-antecipadamente')
+  /** Prepara o encerramento, sem declarar que houve conclusão integral. */
+  @Patch(':id/iniciar-encerramento')
+  @ExigirPolitica('contratos:editar', 'id')
+  iniciarEncerramento(@Param('id') id: string, @Req() req: RequisicaoAutorizada) {
+    return this.contratos.iniciarEncerramento(id, req.usuarioDominio!);
+  }
+
+  @Patch([':id/solicitar-encerramento', ':id/encerrar-antecipadamente'])
   @ExigirPolitica('contratos:encerrar', 'id')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
   encerrarAntecipadamente(@Param('id') id: string, @Body() dto: EncerrarContratoDto, @Req() req: RequisicaoAutorizada) {

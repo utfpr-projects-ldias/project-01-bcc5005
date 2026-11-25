@@ -10,14 +10,13 @@ describe('fechamento documental sem presumir estado operacional', () => {
   test('uma evidência pendente impede conclusão', async () => {
     expect(await documentacaoVerificada(manager({...pronta, verificadas:1}), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')).toBe(false);
   });
-  test('sem itens ou com filhos vazios jamais fecha por 0/0', async () => {
+  test('sem filhos não fecha; ausência legítima de exigência não impede conclusão', async () => {
     expect(await documentacaoVerificada(manager({...pronta, etapas:0, entregaveis:0,evidencias:0,verificadas:0}), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')).toBe(false);
-    expect(await documentacaoVerificada(manager({...pronta, entregaveis_sem_evidencia:1}), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')).toBe(false);
+    expect(await documentacaoVerificada(manager({...pronta, evidencias:0, verificadas:0}), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')).toBe(true);
   });
 });
 
 import { filhosPendentesDeConclusao, concluirEtapaAposFilhos } from './conclusao-documental.js';
-import { Etapa } from '../etapas/etapa.entity.js';
 import { StatusEtapa } from '../etapas/status-etapa.enum.js';
 
 describe('cascata segura e auditável', () => {
@@ -25,7 +24,7 @@ describe('cascata segura e auditável', () => {
   const idEtapa = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
   function cenario(pendentes: boolean, verificada = true) {
     const etapa = { id: idEtapa, contratoId: contrato, status: StatusEtapa.EM_ANDAMENTO,
-      arquivadoEm: null, reabertoEm: new Date('2026-11-06T12:00:00Z') };
+      arquivadoEm: null, reabertoEm: null as Date | null, conclusaoSolicitadaEm: null as Date | null, conclusaoSolicitadaPor: null as string | null };
     const salvar = jest.fn(async (e: unknown) => e);
     const query = jest.fn(async (sql: string) => sql.includes('AS pendentes')
       ? [{ pendentes }] : [{...pronta, verificadas: verificada ? 2 : 1}]);
@@ -40,14 +39,21 @@ describe('cascata segura e auditável', () => {
     expect(a.salvar).not.toHaveBeenCalled();
     expect(auditoria).not.toHaveBeenCalled();
   });
-  test('último filho reconcluído encerra a etapa reaberta, com auditoria, sem tocar no contrato', async () => {
+  test('primeira elegibilidade gera solicitação pendente, sem fechar a etapa', async () => {
     const a = cenario(false);
     const auditoria = jest.fn(async () => {});
     expect(await concluirEtapaAposFilhos(a.m, contrato, idEtapa, auditoria)).toBe(true);
-    expect(a.etapa.status).toBe(StatusEtapa.CONCLUIDA);
-    expect(a.etapa.reabertoEm).toBeNull();
+    expect(a.etapa.status).toBe(StatusEtapa.EM_ANDAMENTO);
+    expect(a.etapa.conclusaoSolicitadaEm).toBeInstanceOf(Date);
     expect(a.salvar).toHaveBeenCalledTimes(1);
     expect(auditoria).toHaveBeenCalledTimes(1);
+  });
+  test('etapa explicitamente reaberta não solicita conclusão automática', async () => {
+    const a = cenario(false);
+    a.etapa.reabertoEm = new Date('2026-11-06T12:00:00Z');
+    const auditoria = jest.fn(async () => {});
+    expect(await concluirEtapaAposFilhos(a.m, contrato, idEtapa, auditoria)).toBe(false);
+    expect(a.salvar).not.toHaveBeenCalled();
   });
   test('um comprovante ainda pendente impede a cascata', async () => {
     const a = cenario(false, false);
@@ -61,5 +67,6 @@ test('SQL de conclusão ignora opcionais, preserva obrigatórias e não conclui 
   const sql: string[] = [];
   const m = { query: async (q: string) => { sql.push(q); return [{ etapas:1, entregaveis:1, evidencias:1, verificadas:1, etapas_sem_entregavel:0, entregaveis_sem_evidencia:0 }]; } } as unknown as EntityManager;
   expect(await documentacaoVerificada(m, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')).toBe(true);
-  expect(sql[0]).toContain('ev.obrigatoria IS TRUE');
+  expect(sql[0]).toContain('vw_comprovacao_entregavel_r40');
+  expect(sql[0]).toContain('v.obrigatorias+v.ocorrencias_exigidas');
 });

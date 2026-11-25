@@ -11,6 +11,8 @@ import { Contrato } from '../contratos/contrato.entity.js';
 import { Entregavel } from '../entregaveis/entregavel.entity.js';
 import { Etapa } from '../etapas/etapa.entity.js';
 import { CreateAtividadeDto } from './dto/create-atividade.dto.js';
+import { UpdateAtividadeDto } from './dto/update-atividade.dto.js';
+import { AprovarCompartilhadaDto } from './dto/atividade-compartilhada.dto.js';
 
 const contratoId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const outroContrato = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -24,6 +26,9 @@ describe('HU08-01/02 — API autorizada e DTO', () => {
     for (const [metodo, acao, escopo] of [
       ['criar', 'atividades:registrar', 'contrato'], ['listar', 'atividades:listar', 'contrato'],
       ['detalhar', 'atividades:visualizar', 'recurso'], ['editar', 'atividades:editar', 'recurso'],
+      ['solicitarConclusao', 'atividades:editar', 'recurso'],
+      ['cancelarSolicitacao', 'atividades:editar', 'recurso'],
+      ['aprovarConclusao', 'atividades:verificar', 'recurso'],
       ['verificar', 'atividades:verificar', 'recurso'], ['reabrir', 'atividades:reabrir', 'recurso'],
       ['arquivar', 'atividades:arquivar', 'recurso'], ['reativar', 'atividades:reativar', 'recurso'],
       ['excluir', 'atividades:excluir', 'recurso'],
@@ -40,8 +45,9 @@ describe('HU08-01/02 — API autorizada e DTO', () => {
     expect(await validate(plainToInstance(CreateAtividadeDto, vazio))).not.toHaveLength(0);
     const duplicado = { ...exemplo(), entregavelIds: [itemId, itemId] };
     expect(await validate(plainToInstance(CreateAtividadeDto, duplicado))).not.toHaveLength(0);
-    const ocorrenciaPrematura = { ...exemplo(), ocorrenciaId: itemId };
-    expect(await validate(plainToInstance(CreateAtividadeDto, ocorrenciaPrematura), { whitelist: true, forbidNonWhitelisted: true })).not.toHaveLength(0);
+    const ocorrenciaOpcional = { ...exemplo(), ocorrenciaId: itemId };
+    expect(await validate(plainToInstance(CreateAtividadeDto, ocorrenciaOpcional), { whitelist: true, forbidNonWhitelisted: true })).toHaveLength(0);
+    expect(await validate(plainToInstance(CreateAtividadeDto, { ...exemplo(), ocorrenciaId: 'invalido' }))).not.toHaveLength(0);
   });
   it('não aceita contrato do corpo divergente mesmo quando a rota está autorizada', async () => {
     const repo = {};
@@ -64,10 +70,10 @@ describe('HU08 — consulta por etapa e vínculo N:N sem recortar os entregávei
   const executar = jest.fn(async () => [[], 0]);
   const query = {
     leftJoinAndSelect: jest.fn(), where: jest.fn(), andWhere: jest.fn(),
-    orderBy: jest.fn(), addOrderBy: jest.fn(), skip: jest.fn(), take: jest.fn(),
+    addSelect: jest.fn(), orderBy: jest.fn(), addOrderBy: jest.fn(), skip: jest.fn(), take: jest.fn(),
     getManyAndCount: executar,
   };
-  for (const key of ['leftJoinAndSelect','where','andWhere','orderBy','addOrderBy','skip','take'] as const) {
+  for (const key of ['leftJoinAndSelect','where','andWhere','addSelect','orderBy','addOrderBy','skip','take'] as const) {
     query[key].mockReturnValue(query);
   }
   const repository = { createQueryBuilder: jest.fn(() => query) };
@@ -78,11 +84,10 @@ describe('HU08 — consulta por etapa e vínculo N:N sem recortar os entregávei
     expect(query.leftJoinAndSelect).toHaveBeenCalledWith('atividade.entregaveis', 'entregaveis');
     expect(query.orderBy).toHaveBeenCalledWith('atividade.dataHora', 'DESC');
   });
-  it('ATIVAS inclui Registrada e Verificada com paginação no banco, não Arquivada', async () => {
+  it('ATIVAS inclui somente Registrada; pendentes de conclusão possuem filtro separado', async () => {
     query.andWhere.mockClear();
     await service.findAllPaginated(contratoId, { status: 'ATIVAS', page: '2', limit: '5' });
-    expect(query.andWhere).toHaveBeenCalledWith('atividade.status IN (:...statusAtivos)',
-      { statusAtivos: ['REGISTRADA', 'VERIFICADA'] });
+    expect(query.andWhere).toHaveBeenCalledWith('atividade.status = :statusAtivo', { statusAtivo: 'REGISTRADA' });
     expect(query.skip).toHaveBeenCalledWith(5);
     expect(query.take).toHaveBeenCalledWith(5);
   });
@@ -90,6 +95,27 @@ describe('HU08 — consulta por etapa e vínculo N:N sem recortar os entregávei
     query.andWhere.mockClear();
     await service.findAllPaginated(contratoId, { status: 'REGISTRADA' });
     expect(query.andWhere).toHaveBeenCalledWith('atividade.status = :status', { status: 'REGISTRADA' });
+  });
+  it('diário consulta todas as situações não arquivadas e pesquisa antes de paginar', async () => {
+    await service.findAllPaginated(contratoId,{status:'TODAS_ATUAIS',busca:'25%_test',tipo:'Reunião',page:'2',limit:'5',ordem:'antigas'});
+    expect(query.andWhere).toHaveBeenCalledWith(expect.stringContaining('strpos(lower(atividade.titulo)'),{busca:'25%_test'});
+    expect(query.andWhere).toHaveBeenCalledWith('atividade.status != :arquivada',{arquivada:'ARQUIVADA'});
+    expect(query.orderBy).toHaveBeenCalledWith('atividade.dataHora','ASC');expect(query.skip).toHaveBeenCalledWith(5);
+  });
+  it('ordena duração numérica no banco antes da paginação',async()=>{
+    await service.findAllPaginated(contratoId,{ordem:'duracao-desc'});
+    expect(query.addSelect).toHaveBeenCalledWith(expect.stringContaining('::numeric'),'duracao_minutos');
+    expect(query.orderBy).toHaveBeenCalledWith('duracao_minutos','DESC','NULLS LAST');
+    await expect(service.findAllPaginated(contratoId,{ordem:'invalida'})).rejects.toBeInstanceOf(BadRequestException);
+  });
+  it('filtra presença de comprovantes e contribuição independente antes de paginar', async () => {
+    query.andWhere.mockClear();
+    await service.findAllPaginated(contratoId,{responsavel:'Ana%_',comEvidencias:'sim',comExecucao:'nao',page:'2',limit:'5'});
+    expect(query.andWhere).toHaveBeenCalledWith(expect.stringContaining('strpos(lower(COALESCE(atividade.responsavel'), {responsavel:'Ana%_'});
+    expect(query.andWhere).toHaveBeenCalledWith(expect.stringContaining('EXISTS (SELECT 1 FROM atividade_comprovantes'));
+    expect(query.andWhere).toHaveBeenCalledWith(expect.stringContaining('NOT ((EXISTS (SELECT 1 FROM execucoes_entregavel'));
+    expect(query.skip).toHaveBeenCalledWith(5);
+    await expect(service.findAllPaginated(contratoId,{comExecucao:'invalido'})).rejects.toBeInstanceOf(BadRequestException);
   });
   it('continua rejeitando filtros de situação desconhecidos', async () => {
     await expect(service.findAllPaginated(contratoId, { status: 'INVALIDA' })).rejects.toBeInstanceOf(BadRequestException);
@@ -130,12 +156,30 @@ describe('HU08 — registro somente em contrato, etapa e entregável abertos', (
     const { service } = montar({ contrato: { status, arquivadoEm } });
     await expect(service.create(contratoId, exemplo(), ator)).rejects.toBeInstanceOf(ConflictException);
   });
-  it.each(['CONCLUIDA', 'ENCERRADA'])('bloqueia etapa %s', async status => {
+  it.each(['CONCLUIDA', 'CONCLUIDO_PARCIALMENTE', 'ENCERRADA'])('bloqueia etapa %s', async status => {
     const { service } = montar({ etapa: { status } });
     await expect(service.create(contratoId, exemplo(), ator)).rejects.toBeInstanceOf(ConflictException);
   });
   it('bloqueia entregável concluído', async () => {
     const { service } = montar({ entregavel: { statusExecucao: 'CONCLUIDO' } });
     await expect(service.create(contratoId, exemplo(), ator)).rejects.toBeInstanceOf(ConflictException);
+  });
+});
+
+
+describe('Regularização — validação de entrada das atividades', () => {
+  it.each([{titulo:null},{descricao:'   '},{dataHora:null},{local:null},{medicoes:null},{entregavelIds:null}])('rejeita PATCH inválido %j', async payload => {
+    expect(await validate(plainToInstance(UpdateAtividadeDto,payload))).not.toHaveLength(0);
+  });
+  it('preserva a operação explícita de limpar a ocorrência e quantidade legada', async () => {
+    expect(await validate(plainToInstance(UpdateAtividadeDto,{ocorrenciaId:null,quantidadeExecucao:null}))).toHaveLength(0);
+  });
+  it('recusa título composto apenas por espaços e medições nulas no cadastro', async () => {
+    expect(await validate(plainToInstance(CreateAtividadeDto,{...exemplo(),titulo:'   '}))).not.toHaveLength(0);
+    expect(await validate(plainToInstance(CreateAtividadeDto,{...exemplo(),medicoes:null}))).not.toHaveLength(0);
+  });
+  it('não confunde lista vazia de contratos com decisão em lote sem seleção', async () => {
+    expect(await validate(plainToInstance(AprovarCompartilhadaDto,{contratoIds:[]}))).not.toHaveLength(0);
+    expect(await validate(plainToInstance(AprovarCompartilhadaDto,{}))).toHaveLength(0);
   });
 });

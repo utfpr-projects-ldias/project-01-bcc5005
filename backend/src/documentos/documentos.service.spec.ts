@@ -48,7 +48,7 @@ const metadata = {
   verificadoPor: null,
   reabertoEm: null,
   arquivadoEm: null,
-} as DocumentoContratual;
+};
 
 function ambiente() {
   const repoSalvo = {
@@ -369,7 +369,7 @@ describe('TEC08-02: documentos privados (serviço)', () => {
     expect(e.storage.removerOrfao).not.toHaveBeenCalled();
   });
 
-  it.each(['SUSPENSO', 'CANCELADO'] as const)(
+  it.each(['SUSPENSO', 'CANCELADO', 'CONCLUIDO', 'FINALIZADO', 'ENCERRADO'] as const)(
     'bloqueia arquivamento e verificação documental em contrato %s, inclusive para ADMIN',
     async (status) => {
       const e = ambiente();
@@ -387,6 +387,16 @@ describe('TEC08-02: documentos privados (serviço)', () => {
       expect(e.repoSalvo.save).not.toHaveBeenCalled();
     },
   );
+
+  it('impede edição e anexo após FINALIZADO, inclusive para ADMIN', async () => {
+    const e = ambiente();
+    e.contratoRepo.findOne.mockResolvedValue({ id: contratoId, status: 'FINALIZADO', arquivadoEm: null });
+    await expect(e.service.editar(contratoId, documentoId,
+      { descricao: 'Alteração indevida' }, ator)).rejects.toBeInstanceOf(ConflictException);
+    e.contratoQb.getOne.mockResolvedValue({ id: contratoId, status: 'FINALIZADO', arquivadoEm: null } as never);
+    await expect(e.service.anexar(contratoId, dto, arquivo, ator)).rejects.toBeInstanceOf(ConflictException);
+    expect(e.repoSalvo.save).not.toHaveBeenCalled();
+  });
 
   it('retorna metadados filtrados, sem storageKey, inclusive no detalhe', async () => {
     const e = ambiente();

@@ -8,11 +8,11 @@ export const CHAVES_ENTREGAVEIS = {
 };
 export function useEntregaveis(contratoId: string, habilitada = true) {
   return useConsulta(CHAVES_ENTREGAVEIS.contrato(contratoId),
-    (signal) => listarEntregaveis(contratoId, signal), { habilitada: habilitada && !!contratoId });
+    (signal) => listarEntregaveis(contratoId, signal), { habilitada: habilitada && !!contratoId, validadeMs: 10000 });
 }
 export function useDetalheEntregavel(contratoId: string, id: string, habilitada = true) {
   return useConsulta(CHAVES_ENTREGAVEIS.detalhe(contratoId, id),
-    (signal) => detalharEntregavel(contratoId, id, signal), { habilitada: habilitada && !!contratoId && !!id });
+    (signal) => detalharEntregavel(contratoId, id, signal), { habilitada: habilitada && !!contratoId && !!id, validadeMs: 10000 });
 }
 
 /** Estatística documental de todos os entregáveis do contrato, consultada em uma única chamada. */

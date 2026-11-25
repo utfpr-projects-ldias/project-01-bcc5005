@@ -1,0 +1,1 @@
+export function valorContribuicaoValido(valor:string,quantitativo:boolean,saldo:number) {const v=valor.replace(',','.');return (quantitativo?/^\d{1,15}(?:\.\d{1,3})?$/:/^\d{1,3}(?:\.\d{1,2})?$/).test(v)&&Number(v)>0&&(quantitativo||(Number(v)<=100&&Math.round(Number(v)*100)<=saldo));}

@@ -30,11 +30,34 @@ export type OperacaoPermissao =
   'criarEntregaveis' | 'editarEntregaveis' | 'arquivarEntregaveis' | 'reativarEntregaveis' | 'reabrirEntregaveis' | 'concluirEntregaveis' | 'excluirEntregaveisArquivados' |
   'criarEvidencias' | 'editarEvidencias' | 'arquivarEvidencias' | 'reativarEvidencias' | 'reabrirEvidencias' | 'excluirEvidenciasArquivadas' |
   'alterarObrigatoriedade' | 'enviarComprovantes' | 'verificarComprovantes' |
+  'criarOcorrencias' | 'editarOcorrencias' | 'editarMetaOcorrencia' | 'vincularAtividadesOcorrencia' | 'vincularEvidenciasOcorrencia' | 'editarExigenciasOcorrencia' | 'editarPesoOcorrencia' | 'registrarExecucaoOcorrencia' | 'aprovarExecucaoManual' | 'corrigirExecucaoOcorrencia' | 'bloquearExecucaoOcorrencia' | 'excluirExecucaoOcorrencia' | 'concluirOcorrencias' | 'reabrirOcorrencias' | 'configurarAgendaOcorrencias' | 'editarExecucaoFisica' | 'configurarPesos' |
+  'criarMetasMarco' | 'editarMetasMarco' | 'vincularMetasMarco' | 'aprovarVinculosMetasMarco' |
   'registrarAtividades' | 'editarAtividades' | 'verificarAtividades' | 'reabrirAtividades' | 'arquivarAtividades' | 'reativarAtividades' | 'excluirAtividadesArquivadas' |
   'editarContrato' | 'concluirContrato' | 'encerrarContrato' | 'reabrirContrato' | 'cancelarContrato' | 'reverterCancelamentoContrato' | 'suspenderContrato' | 'retomarContrato' | 'verificarDocumentos' | 'reabrirDocumentos' | 'verificarDocumentoPrincipal' | 'reabrirDocumentoPrincipal' | 'anexarDocumentos' | 'editarDocumentos' | 'arquivarDocumentos' | 'reativarDocumentos' | 'excluirDocumentosArquivados' | 'arquivarDocumentoPrincipal' | 'reativarDocumentoPrincipal' | 'excluirDocumentoPrincipal';
 export type PermissaoFuncionario = { contratoId: string; podeEditar: boolean;
   permissoesDetalhadas?: Partial<Record<OperacaoPermissao, boolean>> | null };
 export const OPERACOES_CONTRATO: ReadonlyArray<{ chave: OperacaoPermissao; rotulo: string }> = [
+  { chave: 'criarOcorrencias', rotulo: 'Cadastrar ocorrências' },
+  { chave: 'editarOcorrencias', rotulo: 'Editar ocorrências abertas' },
+  { chave: 'editarMetaOcorrencia', rotulo: 'Alterar meta individual de uma ocorrência (especial)' },
+  { chave: 'vincularAtividadesOcorrencia', rotulo: 'Vincular e desvincular atividades de ocorrências' },
+  { chave: 'vincularEvidenciasOcorrencia', rotulo: 'Vincular e desvincular comprovantes de ocorrências' },
+  { chave: 'editarExigenciasOcorrencia', rotulo: 'Editar mínimos de atividades e evidências por ocorrência' },
+  { chave: 'editarPesoOcorrencia', rotulo: 'Editar peso de uma ocorrência da série' },
+  { chave: 'registrarExecucaoOcorrencia', rotulo: 'Registrar execução manual em ocorrência' },
+  { chave: 'aprovarExecucaoManual', rotulo: 'Aprovar ou rejeitar registros de execução manual' },
+  { chave: 'corrigirExecucaoOcorrencia', rotulo: 'Corrigir lançamento de execução manual' },
+  { chave: 'bloquearExecucaoOcorrencia', rotulo: 'Bloquear/desbloquear lançamento manual (especial)' },
+  { chave: 'excluirExecucaoOcorrencia', rotulo: 'Excluir logicamente lançamento manual (especial)' },
+  { chave: 'concluirOcorrencias', rotulo: 'Aprovar conclusão de ocorrências (especial)' },
+  { chave: 'reabrirOcorrencias', rotulo: 'Reabrir ocorrências aprovadas ou pendentes (especial)' },
+  { chave: 'configurarAgendaOcorrencias', rotulo: 'Gerar e replanejar agenda recorrente' },
+  { chave: 'editarExecucaoFisica', rotulo: 'Editar valores de execução física' },
+  { chave: 'configurarPesos', rotulo: 'Configurar pesos operacionais' },
+  { chave: 'criarMetasMarco', rotulo: 'Cadastrar metas preparatórias de entregáveis Marco' },
+  { chave: 'editarMetasMarco', rotulo: 'Editar metas preparatórias do Marco' },
+  { chave: 'vincularMetasMarco', rotulo: 'Solicitar vínculos com metas de Marco' },
+  { chave: 'aprovarVinculosMetasMarco', rotulo: 'Aprovar ou rejeitar vínculos de Marco' },
   { chave: 'registrarAtividades', rotulo: 'Registrar atividades no diário' },
   { chave: 'editarAtividades', rotulo: 'Editar atividades registradas' },
   { chave: 'verificarAtividades', rotulo: 'Verificar atividades (especial)' },
@@ -69,8 +92,8 @@ export const OPERACOES_CONTRATO: ReadonlyArray<{ chave: OperacaoPermissao; rotul
   { chave: 'alterarObrigatoriedade', rotulo: 'Alterar obrigatoriedade de evidências' },
   { chave: 'enviarComprovantes', rotulo: 'Enviar comprovantes' },
   { chave: 'verificarComprovantes', rotulo: 'Verificar comprovantes' },
-  { chave: 'concluirContrato', rotulo: 'Aprovar conclusão com requisitos verificados' },
-  { chave: 'encerrarContrato', rotulo: 'Encerrar antecipadamente com justificativa (independente da conclusão)' },
+  { chave: 'concluirContrato', rotulo: 'Aprovar conclusão ou encerramento solicitado' },
+  { chave: 'encerrarContrato', rotulo: 'Solicitar encerramento administrativo com justificativa' },
   { chave: 'reabrirContrato', rotulo: 'Reabrir contrato concluído (especial)' },
   { chave: 'cancelarContrato', rotulo: 'Cancelar contrato (decisão independente)' },
   { chave: 'reverterCancelamentoContrato', rotulo: 'Reverter cancelamento de contrato (especial)' },
@@ -94,7 +117,7 @@ export function obterPermissoesIniciais(perfil: PerfilFuncionario, vinculo: Perm
   const resultado = {} as Record<OperacaoPermissao, boolean>;
   for (const { chave } of OPERACOES_CONTRATO) {
     resultado[chave] = vinculo.permissoesDetalhadas?.[chave] ?? (
-      (chave.startsWith('concluir') || chave === 'encerrarContrato' || chave === 'encerrarEtapas' || chave === 'suspenderContrato' || chave === 'retomarContrato' || chave === 'cancelarContrato' || chave === 'reverterCancelamentoContrato' || chave === 'alterarObrigatoriedade' || chave === 'verificarAtividades' || chave === 'arquivarAtividades' || chave === 'verificarDocumentos' || chave === 'reabrirDocumentos' || chave.endsWith('DocumentoPrincipal') || chave === 'bloquearOrdemEtapas' || chave === 'arquivarEtapas' || chave.startsWith('reativar') || chave.startsWith('reabrir') || chave.startsWith('excluir')) ? false :
+      (['aprovarExecucaoManual', 'criarMetasMarco', 'editarMetasMarco', 'vincularMetasMarco', 'aprovarVinculosMetasMarco'].includes(chave) || chave.startsWith('concluir') || chave === 'encerrarContrato' || chave === 'encerrarEtapas' || chave === 'suspenderContrato' || chave === 'retomarContrato' || chave === 'cancelarContrato' || chave === 'reverterCancelamentoContrato' || chave === 'editarMetaOcorrencia' || chave === 'vincularAtividadesOcorrencia' || chave === 'vincularEvidenciasOcorrencia' || chave === 'alterarObrigatoriedade' || chave === 'verificarAtividades' || chave === 'arquivarAtividades' || chave === 'verificarDocumentos' || chave === 'reabrirDocumentos' || chave.endsWith('DocumentoPrincipal') || chave === 'bloquearOrdemEtapas' || chave === 'bloquearExecucaoOcorrencia' || chave === 'arquivarEtapas' || chave.startsWith('reativar') || chave.startsWith('reabrir') || chave.startsWith('excluir')) ? false :
       chave === 'registrarAtividades' || chave === 'editarAtividades' ? vinculo.podeEditar :
       chave === 'enviarComprovantes' || chave === 'verificarComprovantes' ? true :
       perfil === 'GESTOR' && vinculo.podeEditar);
@@ -118,6 +141,7 @@ export function permissoesPadraoVinculo(
   // Acesso de edição padrão: planejar, ordenar e arquivar. Reativação, exclusão,
   // bloqueio da ordem e gestão do documento principal requerem delegação especial.
   const operacoesBasicas: OperacaoPermissao[] = [
+    'criarOcorrencias', 'editarOcorrencias', 'editarExigenciasOcorrencia', 'editarPesoOcorrencia', 'registrarExecucaoOcorrencia', 'corrigirExecucaoOcorrencia', 'configurarAgendaOcorrencias', 'editarExecucaoFisica',
     'registrarAtividades', 'editarAtividades',
     'criarEtapas', 'editarEtapas', 'reordenarEtapas', 'arquivarEtapas',
     'criarEntregaveis', 'editarEntregaveis', 'arquivarEntregaveis',

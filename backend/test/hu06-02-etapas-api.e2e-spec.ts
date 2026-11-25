@@ -1,5 +1,5 @@
+import { migrationsCompletas } from './migrations-completas.fixture.js';
 import 'reflect-metadata';
-import { ArquivamentoLogicoContratos1794000000000 } from '../src/database/migrations/1794000000000-ArquivamentoLogicoContratos.js';
 
 import { randomUUID } from 'node:crypto';
 import { UnauthorizedException, type INestApplication } from '@nestjs/common';
@@ -8,15 +8,6 @@ import { Reflector } from '@nestjs/core';
 import { DataSource } from 'typeorm';
 import request from 'supertest';
 
-import { CriarUsuarios1792540000000 } from '../src/database/migrations/1792540000000-CriarUsuarios.js';
-import { CriarPermissoesContrato1793000000000 } from '../src/database/migrations/1793000000000-CriarPermissoesContrato.js';
-import { CriarEventosAuditoria1793100000000 } from '../src/database/migrations/1793100000000-CriarEventosAuditoria.js';
-import { CriarContratos1793200000000 } from '../src/database/migrations/1793200000000-CriarContratos.js';
-import { AdicionarNomeUsuarios1793300000000 } from '../src/database/migrations/1793300000000-AdicionarNomeUsuarios.js';
-import { FkPermissaoContrato1793400000000 } from '../src/database/migrations/1793400000000-FkPermissaoContrato.js';
-import { CriarEtapas1793500000000 } from '../src/database/migrations/1793500000000-CriarEtapas.js';
-import { ContextoAuditoriaOperacional1793600000000 } from '../src/database/migrations/1793600000000-ContextoAuditoriaOperacional.js';
-import { CodigoPublicoContratos1793800000000 } from '../src/database/migrations/1793800000000-CodigoPublicoContratos.js';
 import { codigoPublicoLivreParaTeste } from './codigo-publico-fixture.js';
 import { Contrato } from '../src/contratos/contrato.entity.js';
 import { Usuario } from '../src/usuarios/usuario.entity.js';
@@ -32,6 +23,7 @@ import type { RequisicaoAutorizada } from '../src/autorizacao/usuario-autenticad
 import { AuditoriaService } from '../src/auditoria/auditoria.service.js';
 import { EtapasService } from '../src/etapas/etapas.service.js';
 import { EtapasController } from '../src/etapas/etapas.controller.js';
+import { ExclusaoPlanejamentoService } from '../src/entregaveis/exclusao-planejamento.service.js';
 
 /** API DE PRODUÇÃO real, guard real, banco PostgreSQL real; sessão SuperTokens simulada. */
 const url = process.env.HU06_API_TEST_DATABASE_URL;
@@ -63,14 +55,7 @@ suite('HU06-02 — API real e ordenação transacional PostgreSQL isolado', () =
     db = await new DataSource({
       type: 'postgres', url, synchronize: false,
       entities: [Contrato, Usuario, Etapa, PermissaoContrato, EventoAuditoria],
-      migrations: [
-        CriarUsuarios1792540000000, CriarPermissoesContrato1793000000000,
-        CriarEventosAuditoria1793100000000, CriarContratos1793200000000,
-        AdicionarNomeUsuarios1793300000000, FkPermissaoContrato1793400000000,
-        CriarEtapas1793500000000, ContextoAuditoriaOperacional1793600000000,
-        CodigoPublicoContratos1793800000000,
-        ArquivamentoLogicoContratos1794000000000,
-      ],
+      migrations: migrationsCompletas,
     }).initialize();
     await db.runMigrations();
     const criarContrato = async (sufixo: string) => {
@@ -102,7 +87,8 @@ suite('HU06-02 — API real e ordenação transacional PostgreSQL isolado', () =
     const svc = new EtapasService(db.getRepository(Etapa), db.getRepository(Contrato), db, auditoria);
     const modulo = await Test.createTestingModule({
       controllers: [EtapasController],
-      providers: [{ provide: EtapasService, useValue: svc }],
+      providers: [{ provide: EtapasService, useValue: svc },
+        { provide: ExclusaoPlanejamentoService, useValue: { excluir: () => { throw new Error('Exclusão fora do escopo da suíte'); } } }],
     }).compile();
     const sessoes = {
       identificar: async (req: RequisicaoAutorizada) => {

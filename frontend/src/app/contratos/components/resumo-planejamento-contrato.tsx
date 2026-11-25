@@ -1,22 +1,22 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type Ref } from 'react';
 import { useEtapas } from '@/hooks/use-etapas';
 import { useEntregaveis, useResumoDocumentalContrato } from '@/hooks/use-entregaveis';
 import { calcularIndicadoresContrato } from '@/lib/indicadores-contrato';
+import { apresentarFracao, CORES_COMPROVACAO, tomComprovacao } from '@/lib/apresentacao-indicadores';
 
-function Progresso({ total, feitos, rotulo, amplo = false, arquivado = false, suspenso = false, revisao = false, encerrado = false, concluido = false, cancelado = false }: {
-  total: number; feitos: number; rotulo: string; amplo?: boolean; arquivado?: boolean; suspenso?: boolean; revisao?: boolean; encerrado?: boolean; concluido?: boolean; cancelado?: boolean;
-}) {
-  const taxa = total > 0 ? Math.min(100, Math.max(0, feitos / total * 100)) : 0;
-  const fundo = encerrado ? 'bg-slate-600/25' : arquivado ? 'bg-amber-500/20' : cancelado ? 'bg-red-500/20' : suspenso ? 'bg-amber-500/15' : concluido ? 'bg-violet-500/20' : revisao ? 'bg-teal-900/30' : 'bg-brand-green/15';
-  const cor = encerrado ? 'bg-slate-400' : arquivado ? 'bg-amber-400' : cancelado ? 'bg-red-500' : suspenso ? 'bg-amber-500' : concluido ? 'bg-violet-500' : revisao ? 'bg-teal-600' : 'bg-brand-green';
-  return <div role="img" aria-label={rotulo} className={`h-[7px] max-w-full overflow-hidden rounded-full ${amplo ? 'w-full' : 'w-full'} ${fundo}`}>
-    <div className={`h-full rounded-full transition-[width] duration-300 ${cor}`} style={{ width: `${taxa}%` }} />
-  </div>;
+export function useIndicadoresPlanejamentoContrato(contratoId: string, habilitado = true) {
+  const etapas = useEtapas(contratoId, habilitado);
+  const entregaveis = useEntregaveis(contratoId, habilitado);
+  const documental = useResumoDocumentalContrato(contratoId, habilitado);
+  const erro = etapas.erro || entregaveis.erro || documental.erro;
+  const pronto = habilitado && !erro && Array.isArray(etapas.dados) && Array.isArray(entregaveis.dados) && Boolean(documental.dados);
+  const indicadores = pronto ? calcularIndicadoresContrato(contratoId, etapas.dados!, entregaveis.dados!, documental.dados!) : null;
+  return { indicadores, erro };
 }
 
-export function ResumoPlanejamentoContrato({ contratoId, variante = 'carteira', compactoNaLista = false, contratoArquivado = false, contratoSuspenso = false, contratoEmRevisao = false, contratoEncerrado = false, contratoConcluido = false, contratoCancelado = false }: {
-  contratoId: string; variante?: 'carteira' | 'detalhe'; compactoNaLista?: boolean; contratoArquivado?: boolean; contratoSuspenso?: boolean; contratoEmRevisao?: boolean; contratoEncerrado?: boolean; contratoConcluido?: boolean; contratoCancelado?: boolean;
+export function ResumoPlanejamentoContrato({ contratoId, variante = 'carteira', compactoNaLista = false }: {
+  contratoId: string; variante?: 'carteira' | 'detalhe' | 'lateral'; compactoNaLista?: boolean; contratoArquivado?: boolean; contratoSuspenso?: boolean; contratoEmRevisao?: boolean; contratoEncerrado?: boolean; contratoConcluido?: boolean; contratoCancelado?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [visivel, setVisivel] = useState(false);
@@ -30,53 +30,38 @@ export function ResumoPlanejamentoContrato({ contratoId, variante = 'carteira', 
     return () => observar.disconnect();
   }, []);
   const habilitado = visivel || typeof IntersectionObserver === 'undefined';
-  const etapas = useEtapas(contratoId, habilitado);
-  const entregaveis = useEntregaveis(contratoId, habilitado);
-  const documental = useResumoDocumentalContrato(contratoId, habilitado);
-  const erro = etapas.erro || entregaveis.erro || documental.erro;
-  const pronto = habilitado && !erro && Array.isArray(etapas.dados) && Array.isArray(entregaveis.dados) && Boolean(documental.dados);
-  const indicadores = pronto ? calcularIndicadoresContrato(contratoId, etapas.dados!, entregaveis.dados!, documental.dados!) : null;
-  const evidenciaAtiva = pronto ? entregaveis.dados!.filter(e => e.contratoId === contratoId && !e.arquivadoEm && etapas.dados!.some(et => et.id === e.etapaId && !et.arquivadoEm)) : [];
-  const evidenciasEsperadas = evidenciaAtiva.reduce((s, e) => s + e.evidenciasEsperadas.filter(ev => !ev.arquivadoEm && ev.obrigatoria !== false).length, 0);
-  const evidenciasVerificadas = evidenciaAtiva.reduce((s, e) => s + (documental.dados?.[e.id]?.verificadas ?? 0), 0);
-  const detalhe = variante === 'detalhe';
-  const progresso = [
-    { nome: 'Etapas', valor: indicadores?.etapas.concluidas ?? 0, total: indicadores?.etapas.total ?? 0, rotulo: `${indicadores?.etapas.concluidas ?? 0} de ${indicadores?.etapas.total ?? 0} etapas concluídas e comprovadas` },
-    { nome: 'Entregáveis', valor: indicadores?.entregaveis.concluidos ?? 0, total: indicadores?.entregaveis.total ?? 0, rotulo: `${indicadores?.entregaveis.concluidos ?? 0} de ${indicadores?.entregaveis.total ?? 0} entregáveis documentalmente comprovados` },
-    { nome: 'Evidências', valor: evidenciasVerificadas, total: evidenciasEsperadas, rotulo: `${evidenciasVerificadas} de ${evidenciasEsperadas} evidências obrigatórias verificadas` },
-  ];
-  const borda = contratoArquivado ? 'border-amber-500/35' : contratoCancelado ? 'border-red-500/45' : contratoSuspenso ? 'border-amber-500/45' : contratoEncerrado ? 'border-slate-500/45' : contratoConcluido ? 'border-violet-500/45' : contratoEmRevisao ? 'border-teal-700/45' : 'border-brand-green/25';
-  const cor = contratoArquivado ? '#fbbf24' : contratoCancelado ? '#ef4444' : contratoSuspenso ? '#ca8a04' : contratoEncerrado ? '#94a3b8' : contratoConcluido ? '#a78bfa' : contratoEmRevisao ? '#0d9488' : '#5fd34a';
-  const donut = (valor: number, total: number, tamanho = 'h-[76px] w-[76px]') => {
-    const percentual = total > 0 ? Math.min(100, Math.max(0, valor / total * 100)) : 0;
-    return <div aria-hidden="true" className={`relative flex ${tamanho} shrink-0 items-center justify-center rounded-full`}
-      style={{ background: `conic-gradient(${cor} ${percentual}%, rgba(148,163,184,.14) ${percentual}% 100%)` }}>
-      <div className="flex h-[72%] w-[72%] items-center justify-center rounded-full bg-background">
-        <strong className="text-xs font-semibold tabular-nums text-foreground sm:text-sm">{valor}/{total}</strong>
-      </div>
-    </div>;
-  };
-  return <div ref={ref} data-testid="resumo-planejamento-contrato"
+  const { indicadores, erro } = useIndicadoresPlanejamentoContrato(contratoId, habilitado);
+  return <IndicadoresPlanejamento observadorRef={ref} indicadores={indicadores} erro={Boolean(erro)} variante={variante} compactoNaLista={compactoNaLista} />;
+}
+
+/** Mesma apresentação no painel e na carteira; a comprovação lateral passa para a execução. */
+export function IndicadoresPlanejamento({ indicadores, erro = false, variante = 'carteira', compactoNaLista = false, observadorRef }: { observadorRef?: Ref<HTMLDivElement>; indicadores: ReturnType<typeof calcularIndicadoresContrato> | null; erro?: boolean; variante?: 'carteira' | 'detalhe' | 'lateral'; compactoNaLista?: boolean }) {
+  const progresso = indicadores ? [
+    { nome: 'Etapas', valor: indicadores.etapas.concluidas, total: indicadores.etapas.total, descricao: 'etapas finalizadas' },
+    { nome: 'Entregáveis', valor: indicadores.entregaveis.concluidos, total: indicadores.entregaveis.total, descricao: 'entregáveis finalizados' },
+    { nome: 'Evidências', valor: indicadores.evidencias.feitas, total: indicadores.evidencias.total, descricao: 'evidências verificadas' },
+    { nome: 'Comprovação', valor: indicadores.comprovacao.feitas, total: indicadores.comprovacao.total, descricao: 'exigências obrigatórias atendidas' },
+  ].filter(item => variante !== 'lateral' || item.nome !== 'Comprovação') : [];
+  return <div ref={observadorRef} data-testid="resumo-planejamento-contrato"
     data-documental-completo={indicadores?.documentacaoCompleta ? 'true' : 'false'}
-    className={detalhe ? 'grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3' :
-      `mt-3 grid w-full max-w-[740px] min-w-0 grid-cols-3 items-start justify-start gap-2 border-t border-brand-green/15 pt-3 text-xs sm:gap-3 ${compactoNaLista ? 'lg:max-w-[650px]' : ''}`}>
+    className={`grid min-w-0 items-start gap-2 text-center ${variante === 'lateral' ? 'pi-planejamento-lateral grid-cols-3' : variante === 'carteira' ? `grid-cols-4 w-full ${compactoNaLista ? 'max-w-[22rem]' : 'max-w-[24rem]'}` : 'grid-cols-4 py-1'}`}>
     {erro ? <p role="status" className="col-span-full text-foreground/65">Indicadores indisponíveis.</p> :
-    !indicadores ? <p role="status" className="col-span-full text-foreground/60">Consultando planejamento...</p> : detalhe ? <>
-      <section aria-label="Resumo de etapas" className={`min-w-0 space-y-3 rounded-xl border bg-background p-4 ${borda}`}>
-        <div className="flex flex-wrap items-center gap-2"><strong className="text-xs font-semibold uppercase tracking-wide text-foreground/80">Etapas</strong><span className="text-lg font-bold tabular-nums text-foreground">{progresso[0].valor}/{progresso[0].total}</span></div>
-        <Progresso total={progresso[0].total} feitos={progresso[0].valor} rotulo={progresso[0].rotulo} amplo arquivado={contratoArquivado} suspenso={contratoSuspenso} revisao={contratoEmRevisao} encerrado={contratoEncerrado} concluido={contratoConcluido} cancelado={contratoCancelado}/>
-      </section>
-      {progresso.slice(1).map(item => <section key={item.nome} aria-label={`Resumo de ${item.nome.toLowerCase()}`} className={`flex min-w-0 items-center gap-3 rounded-xl border bg-background p-4 ${borda}`}>
-        <div role="img" aria-label={item.rotulo}>{donut(item.valor, item.total)}</div>
-        <p className="min-w-0 text-sm font-semibold text-foreground">{item.nome}</p>
-      </section>)}
-    </> : progresso.map(item => <section key={item.nome} aria-label={`Resumo de ${item.nome.toLowerCase()}`} className="min-w-0 text-left">
-      <div className="mb-2 text-[10px] font-semibold text-foreground sm:text-xs">{item.nome}</div>
-      <div className="flex justify-center sm:hidden">{donut(item.valor, item.total, 'h-[66px] w-[66px]')}<span className="sr-only">{item.nome}: {item.valor}/{item.total}</span></div>
-      <div className="hidden space-y-2 sm:block">
-        <strong className="block tabular-nums text-xs font-medium text-foreground/80">{item.valor}/{item.total}</strong>
-        <Progresso total={item.total} feitos={item.valor} rotulo={item.rotulo} arquivado={contratoArquivado} suspenso={contratoSuspenso} revisao={contratoEmRevisao} encerrado={contratoEncerrado} concluido={contratoConcluido} cancelado={contratoCancelado}/>
-      </div>
-    </section>)}
+    !indicadores ? <p role="status" className="col-span-full text-foreground/60">Consultando planejamento...</p> : progresso.map(item => {
+      const documental = item.nome === 'Evidências' || item.nome === 'Comprovação';
+      const fracao = documental && !indicadores.documentacaoDisponivel ? apresentarFracao() : apresentarFracao(item.valor,item.total);
+      const taxa = fracao.percentual ?? 0;
+      const semDestaque = fracao.estado !== 'aplicavel';
+      const corComprovacao = CORES_COMPROVACAO[tomComprovacao(item.valor,item.total)];
+      return <section key={item.nome} aria-label={`Resumo de ${item.nome.toLowerCase()}`} data-pi-contagem={fracao.estado} className="flex min-w-0 flex-col items-center gap-1">
+        <h4 className={`max-w-full text-[clamp(.6rem,.72vw,.75rem)] font-semibold leading-tight [overflow-wrap:normal] ${semDestaque ? 'text-foreground/60' : 'text-foreground'}`}>{item.nome}</h4>
+        <div role="img" aria-label={fracao.estado === 'indisponivel' ? `${item.nome}: indisponível` : `${item.valor} de ${item.total} ${item.descricao}`} className="aspect-square w-full max-w-[60px]" data-percentual={fracao.percentual ?? undefined}>
+          <svg aria-hidden="true" viewBox="0 0 64 64" className="h-full w-full">
+            <circle cx="32" cy="32" r="27" fill="none" stroke="currentColor" strokeOpacity=".15" strokeWidth="6" className="text-foreground" />
+            {taxa > 0 && <circle cx="32" cy="32" r="27" fill="none" stroke="currentColor" strokeWidth="6" pathLength="100" strokeDasharray={`${taxa} 100`} transform="rotate(-90 32 32)" strokeLinecap="round" className={item.nome === 'Etapas' || item.nome === 'Entregáveis' ? 'text-violet-600 dark:text-violet-400' : item.nome === 'Evidências' ? 'text-teal-600 dark:text-teal-400' : corComprovacao} />}
+            <text x="32" y="32" dominantBaseline="central" textAnchor="middle" fontSize={item.total >= 100 ? 11 : 14} fontWeight="600" fill="currentColor" className={`tabular-nums ${semDestaque ? 'text-foreground/60' : item.nome === 'Comprovação' ? corComprovacao : 'text-foreground'}`}>{fracao.texto}</text>
+          </svg>
+        </div>
+      </section>;
+    })}
   </div>;
 }

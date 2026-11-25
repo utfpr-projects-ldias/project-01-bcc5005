@@ -1,6 +1,5 @@
 import 'reflect-metadata';
 import { jest } from '@jest/globals';
-import { ConflictException } from '@nestjs/common';
 import { AtividadesService } from '../atividades/atividades.service.js';
 import { AtividadeEntity } from '../atividades/atividade.entity.js';
 import { Entregavel } from './entregavel.entity.js';
@@ -20,11 +19,11 @@ function cenario({ outraAtividade = false, documentoPronto = true }: {
   outraAtividade?: boolean; documentoPronto?: boolean } = {}) {
   const contrato = { id: contratoId, status: 'EM_EXECUCAO', arquivadoEm: null };
   const etapa = { id: etapaId, contratoId, status: 'EM_ANDAMENTO', arquivadoEm: null, reabertoEm: new Date() };
-  const entregavel = { id: entregavelId, contratoId, etapaId, statusExecucao: 'EM_ANDAMENTO',
+  const entregavel = { id: entregavelId, contratoId, etapaId, statusExecucao: 'EM_ANDAMENTO', tipo: 'UNICO', percentualExecucao: 100,
     arquivadoEm: null, reabertoEm: new Date() };
   const atividade = Object.assign(new AtividadeEntity(), {
     id: atividadeId, contratoId, titulo: 'Reunião', dataHora: new Date('2026-11-09T15:00:00Z'),
-    tipo: 'Reunião', descricao: 'Trabalho realizado', responsavel: 'QA', status: 'REGISTRADA',
+    tipo: 'Reunião', descricao: 'Trabalho realizado', responsavel: 'QA', status: 'PENDENTE_CONCLUSAO',
     entregaveis: [entregavel], verificadaEm: null, arquivadaEm: null, excluidaEm: null,
   });
   const repoEntregavel = { findOneBy: jest.fn(async () => entregavel), save: jest.fn(async () => entregavel) };
@@ -33,7 +32,7 @@ function cenario({ outraAtividade = false, documentoPronto = true }: {
     if (sql.includes('COUNT(DISTINCT')) return [{ etapas: 1, entregaveis: 1,
       evidencias: 2, verificadas: documentoPronto ? 2 : 1,
       etapas_sem_entregavel: 0, entregaveis_sem_evidencia: 0 }];
-    return [{ pendentes: sql.includes("at.status = 'REGISTRADA'") && outraAtividade }];
+    return [{ pendentes: sql.includes("at.status IN ('REGISTRADA', 'PENDENTE_CONCLUSAO')") && outraAtividade }];
   });
   const manager = {
     findOne: jest.fn(async (entidade: unknown) => entidade === AtividadeEntity ? atividade : entidade === Contrato ? contrato : null),
@@ -41,6 +40,7 @@ function cenario({ outraAtividade = false, documentoPronto = true }: {
     query,
     find: jest.fn(async (entidade: unknown) => entidade === Entregavel ? [entregavel] : entidade === Etapa ? [etapa] : []),
     save: jest.fn(async (_entidade: unknown, registro: unknown) => registro),
+    findBy: jest.fn(async () => []),
   };
   const acoes: AcaoAuditoria[] = [];
   const auditoria = {
@@ -62,22 +62,30 @@ function cenario({ outraAtividade = false, documentoPronto = true }: {
 }
 
 describe('HU08 — verificação da última atividade e fechamento auditável', () => {
-  it('conclui entregável e etapa quando a última atividade é verificada e os arquivos já estão verificados', async () => {
+  it('atividade verificada não autoriza conclusão automática de entregável nem etapa reaberta', async () => {
     const c = cenario();
     await c.service.verificar(contratoId, atividadeId, ator, '');
     expect(c.atividade.status).toBe('VERIFICADA');
-    expect(c.entregavel.statusExecucao).toBe('CONCLUIDO');
-    expect(c.entregavel.reabertoEm).toBeNull();
-    expect(c.etapa.status).toBe('CONCLUIDA');
-    expect(c.acoes).toEqual([
-      AcaoAuditoria.ATIVIDADE_VERIFICADA, AcaoAuditoria.ENTREGAVEL_STATUS_ALTERADO,
-      AcaoAuditoria.ETAPA_STATUS_ALTERADO,
-    ]);
+    expect(c.entregavel.statusExecucao).toBe('EM_ANDAMENTO');
+    expect(c.entregavel.reabertoEm).toBeInstanceOf(Date);
+    expect(c.etapa.status).toBe('EM_ANDAMENTO');
+    expect(c.etapa.reabertoEm).toBeInstanceOf(Date);
+    expect(c.acoes).toEqual([AcaoAuditoria.ATIVIDADE_VERIFICADA]);
+    expect(c.repoEntregavel.save).not.toHaveBeenCalled();
+    expect(c.repoEtapa.save).not.toHaveBeenCalled();
     // A conclusão do contrato segue exigindo confirmação própria.
     expect(c.manager.getRepository).not.toHaveBeenCalledWith(Contrato);
-    // Para reabrir a atividade, primeiro é obrigatório reabrir o contexto.
-    await expect(c.service.reabrir(contratoId, atividadeId, ator, 'Correção posterior necessária'))
-      .rejects.toBeInstanceOf(ConflictException);
+    // O aceite deve ocorrer por solicitação e decisão próprias, nunca por atividade.
+    expect(c.entregavel.statusExecucao).not.toBe('CONCLUIDO');
+  });
+  it('não fecha entregável após verificar atividade se execução física estiver incompleta', async () => {
+    const c = cenario();
+    c.entregavel.percentualExecucao = 60;
+    await c.service.verificar(contratoId, atividadeId, ator, '');
+    expect(c.atividade.status).toBe('VERIFICADA');
+    expect(c.entregavel.statusExecucao).toBe('EM_ANDAMENTO');
+    expect(c.repoEtapa.save).not.toHaveBeenCalled();
+    expect(c.acoes).toEqual([AcaoAuditoria.ATIVIDADE_VERIFICADA]);
   });
   it('não conclui se outra atividade ainda está REGISTRADA', async () => {
     const c = cenario({ outraAtividade: true });

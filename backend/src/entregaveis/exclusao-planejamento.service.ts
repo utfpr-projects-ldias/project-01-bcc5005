@@ -25,12 +25,39 @@ export class ExclusaoPlanejamentoService {
     return registros[0];
   }
   private async contrato(m: EntityManager, contratoId: string) {
-    const resultado = await m.query('SELECT id FROM contratos WHERE id = $1 FOR UPDATE', [contratoId]) as Array<{id:string}>;
+    const resultado = await m.query('SELECT id, status, arquivado_em, conclusao_solicitada_em FROM contratos WHERE id = $1 FOR UPDATE', [contratoId]) as Array<{id:string;status:string;arquivado_em:Date|null;conclusao_solicitada_em:Date|null}>;
     if (!resultado.length) throw new NotFoundException('Contrato não encontrado');
+    const c=resultado[0];
+    if(c.arquivado_em || c.conclusao_solicitada_em || ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','ENCERRADO','SUSPENSO','CANCELADO'].includes(c.status))
+      throw new ConflictException('Resolva a situação do contrato antes de excluir itens do planejamento');
   }
+  /** FKs RESTRICT devem permanecer: não apagar histórico para liberar um DELETE.
+   * Detecta antes do primeiro DELETE as referências operacionais ao planejamento.
+   * O lock do contrato serializa estas consultas com os fluxos operacionais normais.
+   */
+  private async exigirAusenciaDeHistoricoOperacional(m: EntityManager, contratoId: string,
+    id: string, tipo: 'etapa' | 'entregavel'): Promise<void> {
+    const rows = await m.query(`SELECT EXISTS (
+      SELECT 1 FROM entregaveis e
+      WHERE e.contrato_id = $1 AND ${tipo === 'etapa' ? 'e.etapa_id' : 'e.id'} = $2
+        AND (
+          EXISTS (SELECT 1 FROM ocorrencias o WHERE o.entregavel_id = e.id AND o.contrato_id = $1)
+          OR EXISTS (SELECT 1 FROM configuracoes_ocorrencias cfg WHERE cfg.entregavel_id = e.id AND cfg.contrato_id = $1)
+          OR EXISTS (SELECT 1 FROM execucoes_entregavel l WHERE l.entregavel_id=e.id AND l.contrato_id=$1)
+          OR EXISTS (SELECT 1 FROM evidencias_esperadas ev WHERE ev.entregavel_id=e.id AND (ev.rascunho_envio IS NOT NULL OR EXISTS (SELECT 1 FROM comprovantes_evidencia c WHERE c.evidencia_esperada_id=ev.id) OR EXISTS(SELECT 1 FROM eventos_auditoria a WHERE a.contrato_id=$1 AND a.entidade_id=e.id::text AND (a.dados_anteriores->>'itemId'=ev.id::text OR a.dados_posteriores->>'itemId'=ev.id::text) AND (a.dados_anteriores ? 'declaracaoPreliminar' OR a.dados_posteriores ? 'declaracaoPreliminar' OR a.dados_posteriores->>'operacao'='EDITAR_VINCULOS'))))
+          OR EXISTS (SELECT 1 FROM execucoes_quantitativas_diretas md WHERE md.entregavel_id=e.id AND md.contrato_id=$1)
+          OR EXISTS (SELECT 1 FROM metas_marco mm WHERE mm.entregavel_id = e.id AND mm.contrato_id = $1)
+          OR EXISTS (SELECT 1 FROM atividade_entregaveis ae WHERE ae."entregavelId" = e.id AND ae."contratoId" = $1)
+        )
+    ) AS possui`, [contratoId, id]) as Array<{ possui: boolean }>;
+    if (rows[0]?.possui) throw new ConflictException('Há ocorrências, atividades, configurações ou metas vinculadas. Preserve o histórico; não é possível excluir definitivamente');
+  }
+
   async excluir(tipo: TipoAlvo, contratoId: string, id: string, ator: UsuarioAutenticado,
     entregavelId?: string) {
-    const resultado = await this.db.transaction(async m => {
+    let resultado: { chaves: string[]; totalEvidencias: number; totalEntregaveis: number };
+    try {
+      resultado = await this.db.transaction(async m => {
       // Todas as operações têm a raiz bloqueada: exclusões e criações não podem
       // observar uma sequência parcialmente compactada.
       await this.contrato(m, contratoId);
@@ -40,7 +67,7 @@ export class ExclusaoPlanejamentoService {
       let sequenciaRemovida: number | null = null;
       let totalEntregaveis = 0;
       let totalEvidencias = 0;
-      let rows: ComprovanteApagado[] = [];
+      const rows: ComprovanteApagado[] = [];
       if (tipo === 'evidencia') {
         if (!entregavelId) throw new NotFoundException('Entregável não encontrado');
         const entregavel = await m.query('SELECT id FROM entregaveis WHERE id=$1 AND contrato_id=$2', [entregavelId, contratoId]) as unknown[];
@@ -48,6 +75,8 @@ export class ExclusaoPlanejamentoService {
         const encontrados = await m.query('SELECT id, codigo_publico, arquivado_em FROM evidencias_esperadas WHERE id=$1 AND entregavel_id=$2 FOR UPDATE', [id, entregavelId]) as Array<{ codigo_publico: number; arquivado_em: Date | null }>;
         if (!encontrados.length) throw new NotFoundException('Evidência não encontrada neste entregável');
         if (!encontrados[0].arquivado_em) throw new ConflictException('Arquive a evidência antes de excluí-la');
+        const [historico] = await m.query(`SELECT EXISTS(SELECT 1 FROM evidencias_esperadas ev WHERE ev.id=$1 AND ev.entregavel_id=$2 AND (ev.rascunho_envio IS NOT NULL OR EXISTS(SELECT 1 FROM comprovantes_evidencia c WHERE c.evidencia_esperada_id=ev.id) OR EXISTS(SELECT 1 FROM eventos_auditoria a WHERE a.contrato_id=$3 AND a.entidade_id=$2::uuid::text AND (a.dados_anteriores->>'itemId'=ev.id::text OR a.dados_posteriores->>'itemId'=ev.id::text) AND (a.dados_anteriores ? 'declaracaoPreliminar' OR a.dados_posteriores ? 'declaracaoPreliminar' OR a.dados_posteriores->>'operacao'='EDITAR_VINCULOS')))) AS possui`,[id,entregavelId,contratoId]);
+        if (historico?.possui) throw new ConflictException('Evidência com declaração ou comprovantes: preserve o histórico através do arquivamento.');
         codigo = encontrados[0].codigo_publico;
         acao = AcaoAuditoria.ENTREGAVEL_EVIDENCIA_ESPERADA_EXCLUIDA;
         entidadeId = entregavelId;
@@ -62,6 +91,10 @@ export class ExclusaoPlanejamentoService {
         acao = AcaoAuditoria.ETAPA_EXCLUIDA;
       }
 
+      if (tipo === 'etapa' || tipo === 'entregavel') {
+        await this.exigirAusenciaDeHistoricoOperacional(m, contratoId, id, tipo);
+      }
+
       // REGRA CRÍTICA: a auditoria encontra o contrato pela entidade no banco.
       // Registrar somente depois do DELETE faz a resolução de ETAPA/ENTREGAVEL
       // falhar e provoca rollback. Como tudo ocorre na mesma transação, o evento
@@ -73,18 +106,14 @@ export class ExclusaoPlanejamentoService {
       });
 
       if (tipo === 'evidencia') {
-        rows = await m.query('DELETE FROM comprovantes_evidencia WHERE evidencia_esperada_id=$1 RETURNING storage_key', [id]) as ComprovanteApagado[];
         await m.query('DELETE FROM evidencias_esperadas WHERE id=$1 AND entregavel_id=$2', [id, entregavelId]);
         totalEvidencias = 1;
       } else if (tipo === 'entregavel') {
-        rows = await m.query('DELETE FROM comprovantes_evidencia WHERE entregavel_id=$1 RETURNING storage_key', [id]) as ComprovanteApagado[];
         const removidas = await m.query('DELETE FROM evidencias_esperadas WHERE entregavel_id=$1 RETURNING id', [id]) as unknown[];
         await m.query('DELETE FROM entregaveis WHERE id=$1 AND contrato_id=$2', [id, contratoId]);
         totalEvidencias = removidas.length;
         totalEntregaveis = 1;
       } else {
-        rows = await m.query(`DELETE FROM comprovantes_evidencia WHERE contrato_id=$1 AND entregavel_id IN
-          (SELECT id FROM entregaveis WHERE etapa_id=$2 AND contrato_id=$1) RETURNING storage_key`, [contratoId, id]) as ComprovanteApagado[];
         const removidas = await m.query(`DELETE FROM evidencias_esperadas WHERE entregavel_id IN
           (SELECT id FROM entregaveis WHERE etapa_id=$1 AND contrato_id=$2) RETURNING id`, [id, contratoId]) as unknown[];
         const excluidos = await m.query('DELETE FROM entregaveis WHERE etapa_id=$1 AND contrato_id=$2 RETURNING id', [id, contratoId]) as unknown[];
@@ -100,7 +129,15 @@ export class ExclusaoPlanejamentoService {
         totalEvidencias = removidas.length;
       }
       return { chaves: rows.map(r => r.storage_key), totalEvidencias, totalEntregaveis };
-    });
+      });
+    } catch (erro: unknown) {
+      // Uma dependência criada concorrentemente ou não coberta pela pré-consulta
+      // continua protegida pela FK. Traduzir a violação sem vazar SQL ao cliente.
+      if (erro && typeof erro === 'object' && 'driverError' in erro &&
+          (erro.driverError as { code?: string } | undefined)?.code === '23503')
+        throw new ConflictException('O item ainda possui vínculos dependentes e não pode ser excluído definitivamente');
+      throw erro;
+    }
 
     let limpezaPendente = 0;
     // SQL confirmado. Falha física não transforma um DELETE COMMITADO em

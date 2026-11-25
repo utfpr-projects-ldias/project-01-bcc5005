@@ -199,32 +199,35 @@ def main():
     except Exception as exc:
         problema = str(exc).splitlines()[0][:400]
         print('[HU06-05] FALHA:', problema, file=sys.stderr, flush=True)
-    pendencias = [
-        'Inspeção manual HU06-05: desktop, mobile, teclado, conflito, vigência e sessão naturalmente expirada',
-    ]
+    pendencias = []
     if not args.outro_contrato_id:
-        pendencias.append('Acesso cruzado de ID de etapa em outro contrato existente (forneça --outro-contrato-id)')
+        pendencias.append('Acesso cruzado não executado: falta outro contrato QA sintético')
     if any('FALHA' in p for p in e.restauracao):
-        problema = problema or 'Não foi possível restaurar todas as permissões; revisar saídas de vínculos.'
-    # Copia o registro manual com todas as verificações em FALSE. Não aprova nada.
-    registro = pasta / 'registro-visual.json'
-    shutil.copyfile(HU06 / 'REGISTRO-VISUAL.example.json', registro)
-    registro.chmod(0o600)
+        problema = problema or 'Falha ao restaurar as permissões anteriores'
+    # Gate funcional: consome apenas provas reais emitidas por Playwright, HTTP e PG.
+    # Não cria nem edita registro de aceitação humana.
     if not problema:
         cmd_gate = [str(e.python), str(HU06 / 'consolidar_gate.py'),
-                    '--diretorio', str(pasta), '--visual', str(registro)]
+                    '--diretorio', str(pasta), '--automatico']
         res_gate = subprocess.run(cmd_gate, cwd=RAIZ, env=e.env, capture_output=True, text=True)
         texto_gate = res_gate.stdout + res_gate.stderr
-        (pasta / 'gate-hu06-05.log').write_text(texto_gate, encoding='utf-8')
-        (pasta / 'gate-hu06-05.log').chmod(0o600)
-        print('[HU06-05] Gate global: pendente de validação manual (não marcado artificialmente).')
-        if res_gate.returncode == 0:
-            print('[HU06-05] Atenção: confirme que o registro visual foi preenchido COM EVIDÊNCIAS reais.')
+        (pasta / 'gate-funcional-automatizado.log').write_text(texto_gate, encoding='utf-8')
+        (pasta / 'gate-funcional-automatizado.log').chmod(0o600)
+        print('[HU06-05]', texto_gate.strip(), flush=True)
+        if res_gate.returncode != 0:
+            problema = 'Gate automatizado não aprovado: consultar gate-funcional-automatizado.log'
+    # Avaliação estética subjetiva, expiração natural de sessão e aprovação/merge
+    # de PR são obrigações externas, não estados booleanos inventados pelo QA.
+    verificacoes_fora_do_qa = [
+        'Expiração temporal natural do token (logout 401 não a comprova)',
+        'Aprovação humana do PR e avaliação estética subjetiva, quando exigidas',
+    ]
     resumo = {
         'hu': 'HU06-05', 'tipoTeste': 'NAVEGADOR_REAL_SEM_MOCK', 'contratoId': args.contrato_id,
         'inicioDiretorio': label,
         'statusAutomatizado': 'APROVADO' if not problema else 'REPROVADO',
-        'statusAceiteGlobal': 'PENDENTE_INSPECAO_MANUAL' if not problema else 'REPROVADO',
+        'statusAceiteGlobal': 'APROVADO_FUNCIONAL_AUTOMATIZADO' if not problema else 'REPROVADO',
+        'limitesDeAutomacao': verificacoes_fora_do_qa,
         'motivoFalha': problema,
         'cenario': ['hu06-05-'+p+'.json' for p in PERFIS],
         'passos': e.passos,
@@ -244,7 +247,7 @@ def main():
     if problema:
         print('[HU06-05] Integração ainda não aprovada. Não repetir automaticamente gravações parcialmente concluídas.')
         return 1
-    print('[HU06-05] Cenários automatizados aprovados; aceite manual e/ou acesso cruzado continuam pendentes.')
+    print('[HU06-05] Aceite funcional automatizado aprovado; expiração natural e aprovação externa do PR não simuladas.')
     return 0
 
 

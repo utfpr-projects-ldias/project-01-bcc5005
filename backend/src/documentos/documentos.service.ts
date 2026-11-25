@@ -98,15 +98,27 @@ export class DocumentosService implements OnModuleInit {
     return publico(documento);
   }
 
+  /** Lock da raiz antes de qualquer mutação documental. Garante que uma
+   * decisão final concorrente não seja seguida de mudança no dossiê. */
+  private async exigirContratoMutavel(manager: EntityManager, contratoId: string, regularizacao = false): Promise<Contrato> {
+    const contrato = await manager.getRepository(Contrato).findOne({
+      where: { id: contratoId }, lock: { mode: 'pessimistic_write' },
+    });
+    if (!contrato) throw new NotFoundException('Contrato não encontrado');
+    if (contrato.arquivadoEm || contrato.conclusaoSolicitadaEm || ['CONCLUIDO', 'FINALIZADO', 'ENCERRADO', 'SUSPENSO', 'CANCELADO'].includes(contrato.status) || (contrato.status === 'CONCLUIDO_PARCIALMENTE' && !regularizacao))
+      throw new ConflictException('Reative, retome, reverta o cancelamento ou reabra o contrato antes de alterar documentos');
+    return contrato;
+  }
+
   /** Decisão baseada na categoria persistida, nunca na categoria enviada pelo cliente.
    * A permissão legada `administrarDocumentoPrincipal` NÃO autoriza qualquer ação. */
   private async exigirAcaoDocumento(manager: EntityManager, contratoId: string,
     ator: UsuarioAutenticado, documento: DocumentoContratual,
     operacao: 'arquivar' | 'reativar' | 'excluir'): Promise<void> {
     const contrato = await manager.getRepository(Contrato).findOne({ where: { id: contratoId },
-      select: { id: true, status: true, arquivadoEm: true } });
+      select: { id: true, status: true, arquivadoEm: true, conclusaoSolicitadaEm: true } });
     if (!contrato) throw new NotFoundException('Contrato não encontrado');
-    if (contrato.arquivadoEm || ['CONCLUIDO', 'ENCERRADO', 'SUSPENSO', 'CANCELADO'].includes(contrato.status))
+    if (contrato.arquivadoEm || contrato.conclusaoSolicitadaEm || ['CONCLUIDO', 'CONCLUIDO_PARCIALMENTE', 'FINALIZADO', 'ENCERRADO', 'SUSPENSO', 'CANCELADO'].includes(contrato.status))
       throw new ConflictException('Reative, retome, reverta o cancelamento ou reabra o contrato antes de alterar documentos');
     if (ator.perfil === PerfilUsuario.ADMINISTRADOR) return;
     const vinculo = await manager.getRepository(PermissaoContrato).findOneBy({ contratoId, usuarioId: ator.id });
@@ -126,9 +138,9 @@ export class DocumentosService implements OnModuleInit {
   private async exigirVerificador(manager: EntityManager, contratoId: string,
     ator: UsuarioAutenticado, documento: DocumentoContratual, operacao: 'verificar' | 'reabrir') {
     const contrato = await manager.getRepository(Contrato).findOne({ where: { id: contratoId },
-      select: { id: true, status: true, arquivadoEm: true } });
+      select: { id: true, status: true, arquivadoEm: true, conclusaoSolicitadaEm: true } });
     if (!contrato) throw new NotFoundException('Contrato não encontrado');
-    if (contrato.arquivadoEm || ['CONCLUIDO', 'ENCERRADO', 'SUSPENSO', 'CANCELADO'].includes(contrato.status))
+    if (contrato.arquivadoEm || contrato.conclusaoSolicitadaEm || ['CONCLUIDO', 'FINALIZADO', 'ENCERRADO', 'SUSPENSO', 'CANCELADO'].includes(contrato.status))
       throw new ConflictException('Reative, retome, reverta o cancelamento ou reabra o contrato antes de verificar documentos');
     if (ator.perfil === PerfilUsuario.ADMINISTRADOR) return;
     const vinculo = await manager.getRepository(PermissaoContrato).findOneBy({ contratoId, usuarioId: ator.id });
@@ -143,6 +155,7 @@ export class DocumentosService implements OnModuleInit {
 
   async verificar(contratoId: string, id: string, ator: UsuarioAutenticado) {
     return this.dataSource.transaction(async manager => {
+      await this.exigirContratoMutavel(manager, contratoId, true);
       const repo = manager.getRepository(DocumentoContratual);
       const documento = await repo.findOne({ where: { contratoId, id }, lock: { mode: 'pessimistic_write' } });
       if (!documento) throw new NotFoundException('Documento não encontrado');
@@ -164,6 +177,7 @@ export class DocumentosService implements OnModuleInit {
 
   async reabrir(contratoId: string, id: string, ator: UsuarioAutenticado, motivo?: string) {
     return this.dataSource.transaction(async manager => {
+      await this.exigirContratoMutavel(manager, contratoId, true);
       const repo = manager.getRepository(DocumentoContratual);
       const documento = await repo.findOne({ where: { contratoId, id }, lock: { mode: 'pessimistic_write' } });
       if (!documento) throw new NotFoundException('Documento não encontrado');
@@ -186,6 +200,7 @@ export class DocumentosService implements OnModuleInit {
   /** Apenas metadados de anexos administrativos não principais. O blob nunca é sobrescrito. */
   async editar(contratoId: string, id: string, dto: EditarDocumentoDto, ator: UsuarioAutenticado) {
     return this.dataSource.transaction(async manager => {
+      await this.exigirContratoMutavel(manager, contratoId);
       const repo = manager.getRepository(DocumentoContratual);
       const documento = await repo.findOne({ where: { contratoId, id }, relations: { autor: true } });
       if (!documento) throw new NotFoundException('Documento não encontrado');
@@ -211,15 +226,13 @@ export class DocumentosService implements OnModuleInit {
 
   async arquivar(contratoId: string, id: string, ator: UsuarioAutenticado) {
     return this.dataSource.transaction(async manager => {
+      await this.exigirContratoMutavel(manager, contratoId);
       const repo = manager.getRepository(DocumentoContratual);
       const documento = await repo.findOne({ where: { contratoId, id }, relations: { autor: true } });
       if (!documento) throw new NotFoundException('Documento não encontrado');
       if (documento.arquivadoEm) throw new ConflictException('Documento já está arquivado');
       if (documento.verificadoEm) throw new ConflictException('Reabra o documento verificado antes de arquivar');
-      // Serializa arquivamentos simultâneos para impedir ultrapassar 10 itens no histórico.
-      const contratoBloqueado = await manager.getRepository(Contrato).createQueryBuilder('contrato')
-        .where('contrato.id = :contratoId', { contratoId }).setLock('pessimistic_write').getOne();
-      if (!contratoBloqueado) throw new NotFoundException('Contrato não encontrado');
+      // A raiz já está bloqueada desde o começo da transação; serializa o limite histórico.
       if (documento.categoria !== CategoriaDocumento.CONTRATO_PRINCIPAL &&
           await repo.count({ where: { contratoId, arquivadoEm: Not(IsNull()), categoria: Not(CategoriaDocumento.CONTRATO_PRINCIPAL) } }) >= 10)
         throw new ConflictException('Limite de 10 anexos arquivados por contrato');
@@ -238,6 +251,7 @@ export class DocumentosService implements OnModuleInit {
   /** Arquivado conserva o arquivo consultável. Reativação não altera bytes nem versões. */
   async reativar(contratoId: string, id: string, ator: UsuarioAutenticado, motivo?: string) {
     return this.dataSource.transaction(async manager => {
+      await this.exigirContratoMutavel(manager, contratoId);
       const repo = manager.getRepository(DocumentoContratual);
       const documento = await repo.findOne({ where: { contratoId, id }, lock: { mode: 'pessimistic_write' } });
       if (!documento) throw new NotFoundException('Documento não encontrado');
@@ -260,7 +274,7 @@ export class DocumentosService implements OnModuleInit {
   }
 
   /** Operação legada mantida apenas por compatibilidade de rota; nenhuma exclusão física é admitida. */
-  async excluirArquivado(contratoId: string, id: string, ator: UsuarioAutenticado) {
+  async excluirArquivado(_contratoId: string, _id: string, _ator: UsuarioAutenticado) {
     // Regra documental TEC08-03: histórico imutável. Não eliminar arquivos anexados.
     throw new ConflictException('Documentos contratuais são preservados no histórico; utilize arquivamento lógico');
   }
@@ -290,6 +304,8 @@ export class DocumentosService implements OnModuleInit {
         const contrato = await manager.getRepository(Contrato).createQueryBuilder('contrato')
           .where('contrato.id = :contratoId', { contratoId }).setLock('pessimistic_write').getOne();
         if (!contrato) throw new NotFoundException('Contrato não encontrado');
+        if (contrato.arquivadoEm || contrato.conclusaoSolicitadaEm || ['CONCLUIDO','FINALIZADO','ENCERRADO','SUSPENSO','CANCELADO'].includes(contrato.status))
+          throw new ConflictException('Contrato não permite novos anexos sem reabertura, retomada ou reativação');
         const repositorio = manager.getRepository(DocumentoContratual);
         if (dto.categoria === CategoriaDocumento.CONTRATO_PRINCIPAL &&
           await repositorio.count({ where: { contratoId, categoria: CategoriaDocumento.CONTRATO_PRINCIPAL, arquivadoEm: IsNull() } }) > 0)

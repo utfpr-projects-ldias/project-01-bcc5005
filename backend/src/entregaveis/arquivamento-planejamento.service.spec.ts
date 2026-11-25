@@ -65,6 +65,7 @@ function base() {
     save: jest.fn(async (e: unknown) => e),
   };
   const m = {
+    findBy: jest.fn(async () => []),
     query: jest.fn(async (_sql: string): Promise<unknown[]> => [
       {
         etapas: 1,
@@ -231,11 +232,12 @@ test('consulta histórica mostra filhos preservados sob entregável arquivado se
   expect(a.repoEvidencia.save).not.toHaveBeenCalled();
 });
 
-test('arquivar a última evidência pendente (1/2 → 1/1) conclui filho e etapa como efeito derivado auditado', async () => {
+test('arquivar requisito não aprova automaticamente filho e etapa nem simula progresso', async () => {
   const a = base();
   Object.assign(a.entregue, {
     etapaId: 'etapa-qa',
     statusExecucao: 'NAO_INICIADO',
+    tipo: 'UNICO', percentualExecucao: 100,
     reabertoEm: null,
   });
   // A primeira consulta conta 1/1 verificada; a consulta EXISTS diz que
@@ -262,27 +264,26 @@ test('arquivar a última evidência pendente (1/2 → 1/1) conclui filho e etapa
     true,
     ator,
   );
-  expect(resultado.conclusoes).toEqual(['entregável', 'etapa']);
-  expect((a.entregue as Entregavel).statusExecucao).toBe('CONCLUIDO');
-  expect(a.repoEntregavel.save).toHaveBeenCalled();
-  expect(a.repoEtapa.save).toHaveBeenCalled();
+  expect(resultado.conclusoes).toEqual([]);
+  expect((a.entregue as Entregavel).statusExecucao).not.toBe('CONCLUIDO');
+  expect(a.repoEntregavel.save).not.toHaveBeenCalled();
+  expect(a.repoEtapa.save).not.toHaveBeenCalled();
   expect(a.auditoria.registrarNaTransacao).toHaveBeenCalledWith(
     expect.anything(),
     ator,
     expect.objectContaining({
-      acao: AcaoAuditoria.ENTREGAVEL_STATUS_ALTERADO,
-      dadosPosteriores: expect.objectContaining({
-        motivo: 'COMPROVACAO_COMPLETA_APOS_ARQUIVAMENTO',
-      }),
+      acao: AcaoAuditoria.ENTREGAVEL_EVIDENCIA_ESPERADA_ARQUIVADA,
+      dadosPosteriores: expect.objectContaining({ arquivadoEm: expect.any(Date) }),
     }),
   );
 });
 
-test('arquivamento autorizado pode causar conclusão DERIVADA, mas não concede permissão de conclusão manual', async () => {
+test('arquivamento de colaborador não concede permissão para aprovar conclusão operacional', async () => {
   const a = base();
   Object.assign(a.entregue, {
     etapaId: 'etapa-qa',
     statusExecucao: 'EM_ANDAMENTO',
+    tipo: 'UNICO', percentualExecucao: 100,
     reabertoEm: null,
   });
   a.m.query.mockImplementation(async (sql: string) =>
@@ -308,10 +309,10 @@ test('arquivamento autorizado pode causar conclusão DERIVADA, mas não concede 
     true,
     colaborador,
   );
-  expect(resultado.conclusoes).toEqual(['entregável', 'etapa']);
-  expect((a.entregue as Entregavel).statusExecucao).toBe('CONCLUIDO');
-  expect(a.repoEntregavel.save).toHaveBeenCalled();
-  expect(a.repoEtapa.save).toHaveBeenCalled();
+  expect(resultado.conclusoes).toEqual([]);
+  expect((a.entregue as Entregavel).statusExecucao).not.toBe('CONCLUIDO');
+  expect(a.repoEntregavel.save).not.toHaveBeenCalled();
+  expect(a.repoEtapa.save).not.toHaveBeenCalled();
   expect(a.auditoria.registrarNaTransacao).toHaveBeenCalledWith(
     expect.anything(),
     colaborador,

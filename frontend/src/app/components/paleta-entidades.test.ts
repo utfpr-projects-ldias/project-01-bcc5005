@@ -72,7 +72,7 @@ test('Patch 26: superfícies e ações usam tokens do próprio contexto, incluin
   expect(css).toContain('[data-pi-painel-contextual]');
   expect(css).toContain('[data-pi-acao="secundaria"]');
   expect(css).toContain('[data-pi-acao="primaria"]');
-  expect(css).toContain('--pi-acao-bg: #486129');
+  expect(css).toContain('--pi-acao-bg: #166534');
   expect(css).toContain('background-color: var(--pi-acao-bg) !important');
 });
 
@@ -81,4 +81,12 @@ test('Patch 27: barra de filtros das etapas usa tokens de contexto', () => {
   expect(css).toContain('[data-pi-painel-contextual][data-tec08-estado] [data-pi-etapas-filtros][role="tablist"]');
   expect(css).toContain('border-color: color-mix(in srgb, var(--pi-cor-propria) 48%, transparent) !important');
   expect(css).toContain('[data-pi-etapas-filtros][role="tablist"] > button[role="tab"][aria-selected="true"]');
+});
+
+test('botões de aprovação, conclusão e fechamento têm precedência explícita', () => {
+  expect(css).toContain('button[data-tec08-confirmar][data-tec08-acao-aprovar]:not(:disabled)');
+  expect(css).toContain('button[data-tec08-confirmar][data-tec08-acao-roxa]:not(:disabled)');
+  expect(css).toContain('header button[data-tec08-fechar-modal]:not(:disabled)');
+  expect(css).toContain('button[data-tec08-confirmar][data-tec08-acao-perigosa]:not(:disabled)');
+  expect(css).toContain('[data-tec08-corpo-modal] :where(p, li, dt, dd');
 });

@@ -1,3 +1,4 @@
+jest.mock('@/hooks/use-progresso', () => ({ useProgresso: () => ({ progresso: null, loading: false, erro: null, atualizar: jest.fn() }) }));
 jest.mock('@/hooks/use-entregaveis', () => ({
   useEntregaveis: () => ({ dados: [], carregando: false, erro: undefined, atualizar: jest.fn().mockResolvedValue([]) }),
   useResumoDocumentalContrato: () => ({ dados: {}, carregando: false, erro: undefined, atualizar: jest.fn().mockResolvedValue({}) }),
@@ -95,7 +96,6 @@ describe('HU06-04 — estados e acessibilidade do painel (React com mocks)', () 
     const botoes = [
       screen.getByRole('button', { name: 'Descer etapa Planejamento' }),
       screen.getByRole('button', { name: 'Subir etapa Execução' }),
-      screen.getByRole('button', { name: 'Editar etapa Planejamento' }),
     ];
     for (const botao of botoes) {
       expect(botao).toHaveAttribute('type', 'button');

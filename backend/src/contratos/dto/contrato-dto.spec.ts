@@ -7,7 +7,7 @@ import { ModoCalculo } from '../modo-calculo.enum.js';
 import { StatusContrato } from '../status-contrato.enum.js';
 
 const base = {
-  numeroContrato: '2026/001',
+  numeroContrato: '2026001',
   orgaoContratante: 'UTFPR',
   objeto: 'Prestação de serviços',
   inicioVigencia: '2026-10-17',
@@ -83,3 +83,9 @@ describe('DTOs de contratos — validação de entrada', () => {
     expect(validarAtualizacao({ senha: 'invasao' }).length).toBeGreaterThan(0);
   });
 });
+
+  test('limites 32 de processo administrativo e unidade responsável, sem truncar valores', () => {
+    expect(validarCriacao({ ...base, processoAdministrativo: 'P'.repeat(32), unidadeResponsavel: 'U'.repeat(32) })).toHaveLength(0);
+    expect(validarCriacao({ ...base, processoAdministrativo: 'P'.repeat(33) }).length).toBeGreaterThan(0);
+    expect(validarAtualizacao({ unidadeResponsavel: 'U'.repeat(33) }).length).toBeGreaterThan(0);
+  });

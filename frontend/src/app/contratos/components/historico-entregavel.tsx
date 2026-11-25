@@ -19,15 +19,15 @@ export function HistoricoEntregavel({ contratoId, entregavelId, versao, ocultarT
   const atual = consulta?.chave === chave ? consulta : null;
   const eventos = atual?.eventos ?? [];
   const visiveis = expandido ? eventos : eventos.slice(0, 5);
-  return <section aria-label="Histórico do entregável" className="space-y-3 border-t border-brand-green/20 pt-4">
-    <div className={`flex flex-wrap items-center gap-2 ${ocultarTitulo ? 'justify-end' : 'justify-between'}`}>
-      {!ocultarTitulo && <h2 className="text-sm font-semibold text-brand-neon">Rastreabilidade do entregável</h2>}
+  return <section data-pi-historico-neutro aria-label="Histórico do entregável" className={`space-y-3 ${ocultarTitulo ? "pt-2" : "border-t border-current/20 pt-4"}`}>
+    <div className={`flex flex-wrap items-center gap-2 ${ocultarTitulo ? 'justify-start' : 'justify-between'}`}>
+      {!ocultarTitulo && <h2 className="text-sm font-semibold text-foreground">Rastreabilidade do entregável</h2>}
       <span className="text-xs text-foreground/60">{atual ? `${eventos.length}${eventos.length === 100 ? '+' : ''} eventos consultados` : 'Carregando histórico…'}</span>
     </div>
     {atual?.erro ? <p role="status" className="text-xs text-foreground/70">{atual.erro}</p> :
       atual && eventos.length === 0 ? <p className="text-xs text-foreground/70">Nenhum evento disponível.</p> : null}
-    {visiveis.length > 0 && <ol className="space-y-2 border-l border-brand-green/25 pl-4">
-      {visiveis.map(ev => <li key={ev.id} className="relative min-w-0 space-y-0.5 text-xs before:absolute before:-left-[19px] before:top-1.5 before:h-2 before:w-2 before:rounded-full before:bg-brand-green">
+    {visiveis.length > 0 && <ol className="space-y-2 border-l border-current/20 pl-4">
+      {visiveis.map(ev => <li key={ev.id} className="relative min-w-0 space-y-0.5 text-xs before:absolute before:-left-[19px] before:top-1.5 before:h-2 before:w-2 before:rounded-full before:bg-slate-400">
         <p className="font-semibold text-foreground">{ev.descricao}</p>
         {ev.evidenciaNome && <p className="break-words text-foreground/75">Evidência: {ev.evidenciaNome}</p>}
         {ev.nomeAnterior && ev.nomeAtual && <p className="break-words text-foreground/80">
@@ -36,11 +36,11 @@ export function HistoricoEntregavel({ contratoId, entregavelId, versao, ocultarT
         {ev.nomeArquivo && <p className="break-all text-foreground/80">Arquivo: {ev.nomeArquivo}</p>}
         {ev.justificativa && <p className="break-words text-foreground/80">Justificativa: {ev.justificativa}</p>}
         <p className="text-foreground/60"><time dateTime={ev.ocorridoEm}>{new Date(ev.ocorridoEm).toLocaleString('pt-BR')}</time>
-          {ev.ator ? ` · ${ev.ator.nome} (${ev.ator.email})` : ' · autor não disponível'}</p>
+          {ev.ator ? ` · ${ev.ator.email}` : ' · autor não disponível'}</p>
       </li>)}
     </ol>}
     {eventos.length > 5 && <button type="button" onClick={() => setExpandido(v => !v)}
-      aria-expanded={expandido} className="rounded-lg border border-brand-green/30 px-3 py-1.5 text-xs hover:bg-brand-green/10">
+      aria-expanded={expandido} className="rounded-lg border border-current/20 px-3 py-1.5 text-xs hover:bg-current/5">
       {expandido ? 'Mostrar somente recentes' : `Ver todos os ${eventos.length}${eventos.length === 100 ? '+' : ''} eventos`}
     </button>}
     {eventos.length === 100 && <p className="text-xs text-foreground/60">Exibidos os 100 eventos mais recentes; a consulta completa será disponibilizada pelo módulo de auditoria.</p>}

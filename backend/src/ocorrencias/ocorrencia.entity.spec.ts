@@ -117,10 +117,11 @@ describe('HU09-01 — entidade Ocorrencia', () => {
     });
   });
 
-  it('diferencia origem recorrente e manual quantitativa', () => {
+  it('diferencia origem recorrente, manual quantitativa e manual descritiva', () => {
     expect(Object.values(OrigemOcorrencia)).toEqual([
       'RECORRENTE',
       'MANUAL_QUANTITATIVA',
+      'MANUAL_DESCRITIVA',
     ]);
 
     expect(
@@ -135,7 +136,11 @@ describe('HU09-01 — entidade Ocorrencia', () => {
     expect(Object.values(StatusOcorrencia)).toEqual([
       'NAO_INICIADO',
       'EM_ANDAMENTO',
+      'PENDENTE_CONCLUSAO',
+      'EM_REVISAO',
       'CONCLUIDO',
+      'PENDENTE_ENCERRAMENTO',
+      'ENCERRADA',
     ]);
 
     expect(
@@ -159,7 +164,7 @@ describe('HU09-01 — entidade Ocorrencia', () => {
 
     expect(indice).toMatchObject({
       unique: true,
-      where: `"origem" = 'RECORRENTE'`,
+      where: `"origem" = 'RECORRENTE' AND "substituida_em" IS NULL`,
     });
 
     expect(indice?.columns).toEqual([

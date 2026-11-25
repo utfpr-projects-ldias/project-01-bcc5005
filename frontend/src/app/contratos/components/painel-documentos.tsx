@@ -6,6 +6,8 @@ import { toastAviso, toastSucesso } from '@/app/components/toast-notificacoes';
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type FormEvent, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { ModalEtapa } from './modal-etapa';
+import { IconeStatus } from '@/app/components/icones-status';
+import { BotaoEditarModal, BotaoAcaoModal } from '@/app/components/botoes-modal';
 import { ajustarRestauracaoHistorico } from '@/lib/historico-modal-scroll';
 import {
   CATEGORIAS_DOCUMENTO, EXTENSOES_PROVISORIAS, ErroDocumento,
@@ -15,6 +17,7 @@ import {
 import { useDocumentos, useEnviarDocumento } from '@/hooks/use-documentos';
 import { IndicadorCarregamento } from '@/app/components/indicador-carregamento';
 import { ConfirmacaoSimples } from '@/app/components/confirmacao-simples';
+import { MenuAcoesObjeto } from '@/app/components/menu-acoes-objeto';
 import { arquivarDocumento, reativarDocumento, editarDocumento, verificarDocumento, reabrirDocumento, type DocumentoContratual } from '@/lib/documentos';
 
 const categorias = Object.entries(CATEGORIAS_DOCUMENTO) as [CategoriaDocumento, string][];
@@ -207,8 +210,14 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
     if (somenteLeitura || !documentoEdicao || !podeEditarRegistro || documentoEdicao.categoria === 'CONTRATO_PRINCIPAL' || salvandoMetadados) return;
     setSalvandoMetadados(true); setErroMetadados('');
     try {
-      await editarDocumento(contratoId, documentoEdicao.id, { categoria: categoriaEdicao, descricao: descricaoEdicao });
-      void Promise.allSettled([consulta.atualizar(), principais.atualizar(), totalAtivos.atualizar(), totalArquivados.atualizar()]);
+      if (descricaoEdicao !== (documentoEdicao.descricao ?? '') && descricaoEdicao.length > 70) {
+        throw new Error('Descrição nova ou alterada: máximo de 70 caracteres. O texto antigo será preservado até ser editado.');
+      }
+      await editarDocumento(contratoId, documentoEdicao.id, {
+        categoria: categoriaEdicao,
+        ...(descricaoEdicao !== (documentoEdicao.descricao ?? '') ? { descricao: descricaoEdicao } : {}),
+      });
+      await Promise.allSettled([consulta.atualizar(), principais.atualizar(), totalAtivos.atualizar(), totalArquivados.atualizar()]);
       setDocumentoEdicao(null);
       onDocumentoAlterado?.();
       toastSucesso('Documento atualizado.');
@@ -220,7 +229,8 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
     if (!documento || salvandoMetadados || (somenteLeitura && !(permitirRegularizarPrincipal && documento.categoria === 'CONTRATO_PRINCIPAL')) || !permiteVerificar(documento)) return;
     setSalvandoMetadados(true); setErroMetadados('');
     try {
-      await verificarDocumento(contratoId, documento.id);
+      const verificado = await verificarDocumento(contratoId, documento.id);
+      setDocumentoDetalhe(atual => atual?.id === documento.id ? verificado : atual);
       setDocumentoVerificar(null); onDocumentoAlterado?.(); toastSucesso('Documento verificado.');
       await Promise.allSettled([consulta.atualizar(), principais.atualizar(), totalAtivos.atualizar()]);
     } catch (e) { setDocumentoVerificar(null); setErroMetadados(erroMensagem(e, 'Não foi possível verificar o documento.')); }
@@ -231,10 +241,11 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
     if (!documento || salvandoMetadados || somenteLeitura || !permiteReabrir(documento)) return;
     setSalvandoMetadados(true); setErroMetadados('');
     try {
-      await reabrirDocumento(contratoId, documento.id, motivoDocumento.trim());
+      const reaberto = await reabrirDocumento(contratoId, documento.id, motivoDocumento.trim());
+      setDocumentoDetalhe(atual => atual?.id === documento.id ? reaberto : atual);
       setDocumentoReabrir(null); setMotivoDocumento(''); onDocumentoAlterado?.(); toastAviso('Documento em revisão: nova verificação necessária.');
       await Promise.allSettled([consulta.atualizar(), principais.atualizar(), totalAtivos.atualizar()]);
-    } catch (e) { setDocumentoReabrir(null); setErroMetadados(erroMensagem(e, 'Não foi possível reabrir o documento.')); }
+    } catch (e) { setErroMetadados(erroMensagem(e, 'Não foi possível reabrir o documento.')); }
     finally { setSalvandoMetadados(false); }
   }
   async function confirmarArquivamento() {
@@ -258,6 +269,9 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
       await reativarDocumento(contratoId, documento.id, motivoDocumento.trim());
       setOcultos(anteriores => { const novo = new Set(anteriores); novo.delete(`ativos:${documento.id}`); novo.add(`arquivados:${documento.id}`); return novo; });
       setDocumentoDetalhe(null); setDocumentoReativar(null); setMotivoDocumento('');
+      // A nova condição precisa aparecer imediatamente na aba Ativos,
+      // inclusive quando a sessão anterior estava filtrada por Arquivados.
+      atualizarFiltros({ ...filtrosAtivos, situacao: 'ATIVOS', arquivados: false, pagina: 1, busca: '' });
       onDocumentoAlterado?.();
       toastSucesso('Documento reativado.');
       await Promise.allSettled([consulta.atualizar(), principais.atualizar(), totalAtivos.atualizar(), totalArquivados.atualizar()]);
@@ -272,8 +286,8 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
     setErroFormulario('');
     const invalido = validarSelecaoDocumento(arquivo, categoriaEnvio);
     if (invalido) { setErroFormulario(invalido); return; }
-    if (descricao.length > 140 || (descricao.trim() === '' && descricao.length > 0)) {
-      setErroFormulario('Descrição inválida (máximo de 140 caracteres, sem espaços isolados).'); return;
+    if (descricao.length > 70 || (descricao.trim() === '' && descricao.length > 0)) {
+      setErroFormulario('Descrição inválida (máximo de 70 caracteres, sem espaços isolados).'); return;
     }
     enviandoRef.current = true;
     setEnviando(true);
@@ -315,7 +329,7 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
     }
   }
 
-  return <section data-pi-painel-contextual data-tec08-contexto-operacional data-tec08-estado={estadoContextual} id="documentos-contratuais" aria-labelledby="titulo-documentos" className="min-w-0 space-y-4 rounded-2xl border border-brand-green/25 bg-brand-darkgreen/10 p-4 md:p-6">
+  return <section data-pi-painel-contextual data-tec08-contexto-operacional data-tec08-estado={estadoContextual} id="documentos-contratuais" aria-labelledby="titulo-documentos" className="pi-documentos-desktop min-w-0 space-y-3">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0 space-y-1">
         <div className="flex flex-wrap items-center gap-3">
@@ -326,9 +340,9 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
               .map(([opcao, rotulo]) => <button type="button" role="tab" key={opcao}
               aria-label={opcao === 'ATIVOS' ? 'Documentos ativos' : opcao === 'ARQUIVADO' ? 'Documentos arquivados' : `Documentos: ${rotulo}`} aria-selected={filtrosAtivos.situacao === opcao}
               onClick={() => atualizarFiltros({ ...filtrosAtivos, situacao: opcao, arquivados: opcao === 'ARQUIVADO', pagina: 1, busca: '' })}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${filtrosAtivos.situacao === opcao
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${filtrosAtivos.situacao === opcao
                 ? opcao === 'ARQUIVADO' ? 'bg-amber-500/20 text-amber-200' : 'bg-slate-700 text-white' : 'text-foreground/65 hover:bg-slate-700/30 hover:text-foreground'}`}>
-              {opcao === 'ARQUIVADO' ? <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v12h14V8M9 13h6"/></svg> : rotulo}
+              {opcao === 'ARQUIVADO' ? <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v12h14V8M9 13h6"/></svg> : <><IconeStatus tipo={opcao === 'ATIVOS' ? 'ativas' : opcao === 'EM_REVISAO' ? 'revisao' : opcao === 'PENDENTE_VERIFICACAO' ? 'pendentes' : 'concluidas'}/>{rotulo}</>}
             </button>)}
           </div></AbasRolaveis>
         </div>
@@ -352,12 +366,12 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
     {totalRegistrados !== null && totalRegistrados >= 18 && <p className="text-xs text-amber-200" aria-label="Limite de documentos">{20 - totalRegistrados} arquivo(s) disponíveis.</p>}
     {limiteAtingido && <p role="alert" className="rounded-lg bg-amber-500/10 p-2 text-xs text-amber-200">Limite de 20 documentos atingido. Arquivar não libera vagas.</p>}
     <p className="text-xs text-foreground/55">Máximo de 20 documentos por contrato (inclusive arquivados) e 10 anexos arquivados. Arquivar não permite apagar o histórico.</p>
-    {podeEscrever && formularioAberto && preparado && createPortal(<ModalEtapa estadoContextual={estadoContextual}
-      titulo="Anexar documento contratual" contexto="Documentos do contrato" rotuloFechar="Fechar anexo de documento"
+    {podeEscrever && formularioAberto && preparado && createPortal(<ModalEtapa estadoContextual="normal"
+      titulo="Anexar documento contratual" larguraFormulario="evidencia" contexto="Documentos do contrato" rotuloFechar="Fechar anexo de documento"
       ocupado={enviando} focoRetorno={gatilhoModal} onFechar={() => fecharModal()}>
       <div id="formulario-documento">
         <form data-pi-formulario onSubmit={evento => void anexar(evento)} className="space-y-4" aria-label="Anexar documento contratual" noValidate>
-          <p className="text-sm text-foreground/70">Selecione um arquivo para guardar neste contrato. Evidências das atividades são cadastradas em outra área.</p>
+          <p className="text-sm text-foreground/70">Selecione a categoria e o arquivo do documento contratual.</p>
           {solicitarPrincipal && <p className="rounded-lg border border-brand-green/30 p-3 text-sm">O cadastro do contrato está concluído. O PDF principal pode ser anexado agora ou posteriormente.</p>}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1">
@@ -369,7 +383,7 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
             </div>
             <div className="space-y-1">
               <label htmlFor="arquivo-documento-envio" className="block text-sm font-medium">Arquivo *</label>
-              <div data-pi-superficie className="flex min-w-0 flex-wrap items-center gap-3 rounded-lg border border-brand-green/40 bg-background px-2 py-1.5">
+              <div data-pi-superficie className="pi-anexo-documento flex min-w-0 items-center gap-2 rounded-lg border bg-background p-1.5">
                 {/* Input nativo permanece acessível e controlado pelo Playwright, mas não exibe
                     rótulos em inglês como Browse / No file selected ao usuário final. */}
                 <input ref={inputArquivo} id="arquivo-documento-envio" type="file" className="sr-only"
@@ -377,11 +391,11 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
                   disabled={enviando} aria-describedby="ajuda-arquivo-documento arquivo-documento-nome"
                   onChange={e => { setArquivo(e.target.files?.[0] ?? null); setErroFormulario(''); }} />
                 <button data-pi-acao="secundaria" type="button" disabled={enviando} onClick={() => inputArquivo.current?.click()}
-                  className="rounded-md border border-brand-green/45 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-brand-green/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-neon disabled:opacity-50">
-                  Escolher arquivo
+                  className="pi-anexo-escolher inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-current/10 disabled:opacity-50">
+                  <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="m21 11-9 9a5 5 0 0 1-7-7l10-10a3 3 0 0 1 4 4L9 17a1 1 0 0 1-2-2l9-9"/></svg> {arquivo?'Substituir':'Selecionar arquivo'}
                 </button>
-                <span id="arquivo-documento-nome" aria-live="polite" className="min-w-0 flex-1 break-all text-sm text-foreground/70">
-                  {arquivo?.name ?? 'Nenhum arquivo selecionado'}
+                <span id="arquivo-documento-nome" aria-live="polite" title={arquivo?.name} className="min-w-0 flex-1 truncate text-xs text-foreground/70">
+                  {arquivo?.name ?? 'Nenhum arquivo'}
                 </span>
               </div>
             </div>
@@ -391,12 +405,12 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
               ? 'Documento principal: selecione um PDF de até aproximadamente 16 MB.'
               : 'Arquivos aceitos: PDF, PNG, JPG, WebP e TXT. Tamanho máximo: aproximadamente 16 MB por arquivo.'}
           </p>
-          {arquivo && <p className="min-w-0 break-all text-xs text-foreground/70">Selecionado: {arquivo.name} ({formatarTamanhoDocumento(arquivo.size)})</p>}
+          {arquivo && <div className="pi-anexo-selecionado flex items-center gap-2 text-xs"><span className="min-w-0 flex-1 truncate" title={arquivo.name}>{arquivo.name}</span><span className="shrink-0 text-foreground/65">{formatarTamanhoDocumento(arquivo.size)}</span><button type="button" className="pi-acao-tabela shrink-0" disabled={enviando} onClick={()=>{setArquivo(null);if(inputArquivo.current)inputArquivo.current.value='';setErroFormulario('');}}>Remover</button></div>}
           <div className="space-y-1">
             <label htmlFor="descricao-documento-envio" className="block text-sm font-medium">Descrição (opcional)</label>
-            <textarea id="descricao-documento-envio" rows={2} maxLength={140} className={campos} value={descricao} disabled={enviando}
+            <textarea id="descricao-documento-envio" rows={2} maxLength={70} className={campos} value={descricao} disabled={enviando}
               onChange={e => { setDescricao(e.target.value); setErroFormulario(''); }} />
-            <p className="text-xs text-foreground/55">{descricao.length}/140 caracteres</p>
+            <p className="text-xs text-foreground/55">{descricao.length}/70 caracteres</p>
           </div>
           {erroFormulario && <p role="alert" className="break-words text-sm text-error-text">{erroFormulario}</p>}
           {enviando && <div role="progressbar" aria-label="Envio em andamento" aria-valuetext="Enviando e verificando arquivo" className="rounded-lg border border-brand-green/30 p-3 text-sm">
@@ -415,7 +429,7 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
     </ModalEtapa>, document.body)}
     {erroMetadados && !documentoEdicao && !documentoArquivar && <p role="alert" className="text-sm text-error-text">{erroMetadados}</p>}
     {(podeEditarRegistro || podeArquivarRegistro) && documentoEdicao && createPortal(<ModalEtapa titulo={`${documentoEdicao.categoria === 'CONTRATO_PRINCIPAL' ? 'Documento principal' : 'Documento'} · ${documentoEdicao.nomeOriginal}`}
-      contexto="Metadados documentais" estadoContextual={documentoEdicao.arquivadoEm ? 'arquivado' : documentoEdicao.reabertoEm ? 'revisao' : documentoEdicao.verificadoEm ? 'concluido' : 'pendente'} compacto ocupado={salvandoMetadados} onFechar={() => setDocumentoEdicao(null)}>
+      contexto="Metadados documentais" larguraFormulario="evidencia" estadoContextual={documentoEdicao.arquivadoEm ? 'arquivado' : documentoEdicao.reabertoEm ? 'revisao' : documentoEdicao.verificadoEm ? 'concluido' : 'pendente'} compacto ocupado={salvandoMetadados} onFechar={() => setDocumentoEdicao(null)}>
       <form data-pi-formulario data-tec08-formulario-contextual onSubmit={evento => void salvarMetadados(evento)} className="space-y-4" aria-label="Editar metadados do documento">
         {documentoEdicao.categoria !== 'CONTRATO_PRINCIPAL' && podeEditarRegistro && <>
         <label className="block text-sm">Categoria
@@ -424,7 +438,7 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
           </select>
         </label>
         <label className="block text-sm">Descrição
-          <textarea className={`${campos} mt-1`} rows={2} maxLength={140} value={descricaoEdicao} onChange={e => setDescricaoEdicao(e.target.value)} />
+          <textarea className={`${campos} mt-1`} rows={2} maxLength={Math.max(70, documentoEdicao?.descricao?.length ?? 0)} value={descricaoEdicao} onChange={e => setDescricaoEdicao(e.target.value)} />
         </label>
         </>}
         {erroMetadados && <p role="alert" className="text-xs text-error-text">{erroMetadados}</p>}
@@ -439,9 +453,26 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
       confirmar="Arquivar documento" perigoso ocupado={salvandoMetadados}
       onCancelar={() => { setDocumentoArquivar(null); setErroMetadados(''); }} onConfirmar={() => void confirmarArquivamento()} /></div>, document.body)}
 
-    {documentoDetalhe && createPortal(<ModalEtapa titulo={documentoDetalhe.nomeOriginal} contexto="Documento contratual" estadoContextual={documentoDetalhe.arquivadoEm ? 'arquivado' : documentoDetalhe.reabertoEm ? 'revisao' : documentoDetalhe.verificadoEm ? 'concluido' : 'pendente'} compacto ocupado={!!baixandoId} onFechar={() => setDocumentoDetalhe(null)}>
+    {documentoDetalhe && createPortal(<ModalEtapa titulo={documentoDetalhe.nomeOriginal} contexto="Documento contratual" acoes={<>
+      {podeEditarRegistro && !somenteLeitura && !documentoDetalhe.arquivadoEm && !documentoDetalhe.verificadoEm && documentoDetalhe.categoria !== 'CONTRATO_PRINCIPAL' && <BotaoEditarModal rotulo="Editar metadados do documento" onClick={() => { setDocumentoEdicao(documentoDetalhe); setCategoriaEdicao(documentoDetalhe.categoria); setDescricaoEdicao(documentoDetalhe.descricao ?? ''); setErroMetadados(''); }} />}
+      <MenuAcoesObjeto rotulo={documentoDetalhe.arquivadoEm || !!documentoDetalhe.verificadoEm ? 'Reabrir' : 'Fechar'} disabled={somenteLeitura || salvandoMetadados}
+        acaoDireta={documentoDetalhe.arquivadoEm && permiteReativar(documentoDetalhe) ? () => setDocumentoReativar(documentoDetalhe)
+          : !documentoDetalhe.arquivadoEm && !!documentoDetalhe.verificadoEm && permiteReabrir(documentoDetalhe) ? () => setDocumentoReabrir(documentoDetalhe) : undefined}>
+        {!documentoDetalhe.arquivadoEm && !documentoDetalhe.verificadoEm && permiteArquivar(documentoDetalhe) &&
+          <BotaoAcaoModal intencao="arquivar" disabled={somenteLeitura || salvandoMetadados} onClick={() => { setDocumentoArquivar(documentoDetalhe); setErroMetadados(''); }}>Arquivar</BotaoAcaoModal>}
+        {!!documentoDetalhe.arquivadoEm && permiteReativar(documentoDetalhe) &&
+          <BotaoAcaoModal intencao="reativar" disabled={somenteLeitura || salvandoMetadados} onClick={() => setDocumentoReativar(documentoDetalhe)}>⟳ Reativar</BotaoAcaoModal>}
+      </MenuAcoesObjeto>
+    </>} estadoContextual={documentoDetalhe.arquivadoEm ? 'arquivado' : documentoDetalhe.reabertoEm ? 'revisao' : documentoDetalhe.verificadoEm ? 'concluido' : 'pendente'} compacto ocupado={!!baixandoId} onFechar={() => setDocumentoDetalhe(null)}>
       <div className="space-y-3" aria-label="Detalhes do documento contratual">
-        <dl data-pi-superficie className="grid gap-3 rounded-xl border border-brand-green/20 p-4 text-sm sm:grid-cols-2">
+        {(!documentoDetalhe.arquivadoEm && !documentoDetalhe.verificadoEm && permiteVerificar(documentoDetalhe)) &&
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm text-amber-200">Pendente de verificação</span>
+            <button type="button" disabled={salvandoMetadados || (somenteLeitura && !(permitirRegularizarPrincipal && documentoDetalhe.categoria === 'CONTRATO_PRINCIPAL'))}
+              onClick={() => setDocumentoVerificar(documentoDetalhe)}
+              className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-40">✓ Verificar</button>
+          </div>}
+        <dl data-pi-superficie className={`grid gap-3 rounded-xl border p-4 text-sm sm:grid-cols-2 ${documentoDetalhe.arquivadoEm ? 'border-amber-500/40' : documentoDetalhe.reabertoEm ? 'border-teal-500/40' : documentoDetalhe.verificadoEm ? 'border-violet-500/40' : 'border-amber-500/40'}`}>
           {([['Situação', documentoDetalhe.arquivadoEm ? 'Arquivado' : documentoDetalhe.reabertoEm ? 'Em revisão' : documentoDetalhe.verificadoEm ? 'Verificado' : 'Pendente de verificação'],
              ['Categoria', CATEGORIAS_DOCUMENTO[documentoDetalhe.categoria]],
              ['Arquivo', documentoDetalhe.nomeOriginal],
@@ -453,12 +484,12 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
             <div key={rotulo} className="min-w-0"><dt className="text-xs text-foreground/60">{rotulo}</dt><dd className="mt-1 break-words">{valor}</dd></div>)}
         </dl>
         <button data-pi-acao="secundaria" type="button" onClick={() => void baixar(documentoDetalhe.id, documentoDetalhe.nomeOriginal)} disabled={!!baixandoId}
-          className="rounded-lg border border-brand-green/40 px-4 py-2 text-sm font-semibold text-brand-neon hover:bg-brand-green/10 disabled:opacity-50">Baixar arquivo</button>
+          className="rounded-lg border border-current/30 px-4 py-2 text-sm font-semibold text-foreground/80 hover:bg-foreground/10 disabled:opacity-50">Baixar arquivo</button>
       </div>
     </ModalEtapa>, document.body)}
     {documentoVerificar && createPortal(<div className="relative z-[160]"><ConfirmacaoSimples
       titulo="Verificar documento?" descricao={`Confirme a conferência de “${documentoVerificar.nomeOriginal}”. Esta decisão será auditada.`}
-      confirmar="Verificar documento" ocupado={salvandoMetadados}
+      estadoContextual="concluido" preservarCorOrigem confirmacaoRoxa confirmar="Verificar documento" ocupado={salvandoMetadados}
       onCancelar={() => setDocumentoVerificar(null)} onConfirmar={() => void confirmarVerificacao()}/></div>, document.body)}
     {documentoReabrir && createPortal(<div className="relative z-[160]"><ConfirmacaoSimples
       titulo="Reabrir verificação?" descricao={`“${documentoReabrir.nomeOriginal}” voltará à revisão e precisará de nova verificação.`}
@@ -488,60 +519,30 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
     </div>
     <div ref={resultadosRef} data-testid="regiao-resultados-documentos" aria-busy={consulta.carregando || !preparado} className="min-w-0 space-y-3">
     {consulta.carregando || !preparado ? <div role="status" data-testid="resultados-estaveis-carregando"
-      className="min-h-40 rounded-lg border border-brand-green/20 bg-background/25 p-3 text-xs text-foreground/60">
+      data-pi-aviso-neutro className="min-h-40 rounded-lg border border-current/20 p-3 text-xs text-foreground/60">
       Atualizando documentos desta categoria...
     </div> : consulta.erro ? <div className="space-y-2">
       <p role="alert" className="text-sm text-error-text">{erroMensagem(consulta.erro, 'Falha ao consultar documentos.')}</p>
       <button type="button" onClick={() => void consulta.atualizar().catch(() => {})} className="rounded-lg border border-brand-green/40 px-3 py-2 text-sm">Tentar novamente</button>
     </div> : documentos ? <>
       {documentos.total > 0 && <p className="text-xs text-foreground/60">{documentos.total} documento(s) · Página {documentos.pagina} de {documentos.totalPaginas}</p>}
-      {documentos.total === 0 ? <p role="status" className="rounded-lg border border-brand-green/25 p-3 text-sm">{filtrosAtivos.arquivados ? 'Nenhum documento arquivado.' : 'Nenhum documento anexado ao contrato nesta categoria.'}</p> : itens.length === 0 ?
-        <p role="status" className="rounded-lg border border-brand-green/25 p-3 text-sm">Nenhum nome correspondente nesta página. Limpe a busca ou navegue pelas páginas.</p> :
-        <ul aria-label="Documentos contratuais" className="space-y-2">{itens.map(documento => <li key={documento.id} data-pi-documento data-tec08-contexto-operacional data-tec08-estado={documento.arquivadoEm ? 'arquivado' : documento.reabertoEm ? 'revisao' : documento.verificadoEm ? 'concluido' : 'pendente'}
-          className={`min-w-0 rounded-xl border bg-background px-3 py-3 ${documento.arquivadoEm ? 'border-amber-500/60' : documento.reabertoEm ? 'border-teal-600/60' : documento.verificadoEm ? 'border-violet-400/60' : 'border-brand-green/25'}`}>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="min-w-0 flex-1">
+      {documentos.total === 0 ? <p data-pi-aviso-neutro role="status" data-tec08-contexto-operacional data-tec08-estado={estadoContextual} className="rounded-lg border bg-background/40 p-3 text-sm text-foreground/75" style={{ borderColor: 'var(--tec08-status-border, currentColor)', backgroundColor: 'color-mix(in srgb, var(--tec08-status-border, currentColor) 5%, transparent)' }}>{filtrosAtivos.arquivados ? 'Nenhum documento arquivado.' : 'Nenhum documento anexado ao contrato nesta categoria.'}</p> : itens.length === 0 ?
+        <p data-pi-aviso-neutro role="status" className="rounded-lg border border-current/20 p-3 text-sm">Nenhum nome correspondente nesta página. Limpe a busca ou navegue pelas páginas.</p> :
+        <ul aria-label="Documentos contratuais" className="space-y-2">{itens.map(documento => <li key={documento.id} onClick={event => {
+            if (event.target instanceof Element && event.target.closest('button, a, input, select, textarea')) return;
+            setDocumentoDetalhe(documento);
+          }} data-pi-documento data-tec08-contexto-operacional data-tec08-estado={documento.arquivadoEm ? 'arquivado' : documento.reabertoEm ? 'revisao' : documento.verificadoEm ? 'concluido' : 'pendente'}
+          className={`min-w-0 cursor-pointer rounded-xl border bg-background px-3 py-3 transition-colors hover:bg-slate-500/10 ${documento.arquivadoEm ? 'border-amber-500/60' : documento.reabertoEm ? 'border-teal-600/60' : documento.verificadoEm ? 'border-violet-400/60' : 'border-brand-green/25'}`}>
+          <div className="pi-documento-linha">
+            <div className="min-w-0">
               <button type="button" onClick={() => setDocumentoDetalhe(documento)} aria-haspopup="dialog" data-pi-titulo aria-label={`Ver detalhes de ${documento.nomeOriginal}`}
-                className="break-all text-left text-sm font-semibold underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-amber-300">
+                title={documento.nomeOriginal} className="block max-w-full truncate text-left text-sm font-semibold underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-amber-300">
                 {documento.nomeOriginal}
               </button>
-              <p className="mt-1 text-xs text-foreground/65">{CATEGORIAS_DOCUMENTO[documento.categoria]} · {formatarTamanhoDocumento(documento.tamanho)} · {formatarDataDocumento(documento.criadoEm)} · {documento.autorNome?.trim() || 'Autor registrado'}</p>
+              <p className="mt-1 text-xs text-foreground/65">{CATEGORIAS_DOCUMENTO[documento.categoria]} · {formatarTamanhoDocumento(documento.tamanho)}</p>
               {documento.descricao && <p className="mt-1 break-words text-xs text-foreground/60">{documento.descricao}</p>}
-              <span className={`mt-1 inline-block rounded-full border px-2 py-0.5 text-xs ${documento.arquivadoEm ? 'border-amber-500/50 text-amber-200' : documento.reabertoEm ? 'border-teal-500/50 text-teal-200' : documento.verificadoEm ? 'border-violet-500/50 text-violet-200' : 'border-yellow-500/50 text-yellow-700 dark:text-yellow-200'}`}>
+            </div><div className="min-w-0 text-xs text-foreground/65"><span className="block">{formatarDataDocumento(documento.criadoEm)}</span><span className="block truncate" title={documento.autorNome ?? undefined}>{documento.autorNome?.trim() || 'Autor registrado'}</span></div><div className="min-w-0"><span className={`inline-block whitespace-nowrap text-xs font-semibold ${documento.arquivadoEm ? 'border-amber-500/50 text-amber-200' : documento.reabertoEm ? 'border-teal-500/50 text-teal-200' : documento.verificadoEm ? 'border-violet-500/50 text-violet-200' : 'border-yellow-500/50 text-yellow-700 dark:text-yellow-200'}`}>
                 {documento.arquivadoEm ? 'Arquivado' : documento.reabertoEm ? 'Em revisão' : documento.verificadoEm ? 'Verificado' : 'Pendente de verificação'}</span>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              <button type="button" disabled={!!baixandoId} onClick={() => void baixar(documento.id, documento.nomeOriginal)}
-                data-pi-acao="secundaria" aria-label={`Baixar ${documento.nomeOriginal}`} title={`Baixar ${documento.nomeOriginal}`}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-brand-green/35 text-foreground hover:bg-brand-green/10 disabled:opacity-50">
-                <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 17v3h14v-3"/></svg>
-              </button>
-              {podeEditarRegistro && !documento.arquivadoEm && documento.categoria !== 'CONTRATO_PRINCIPAL' &&
-                <button type="button" aria-label={`Editar ${documento.nomeOriginal}`}
-                title={`Editar ${documento.nomeOriginal}`} disabled={somenteLeitura} onClick={() => {
-                setDocumentoEdicao(documento); setCategoriaEdicao(documento.categoria);
-                setDescricaoEdicao(documento.descricao ?? ''); setErroMetadados('');
-              }} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-brand-green/35 text-foreground hover:bg-brand-green/10">
-                <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m15 5 4 4M4 20l4.5-1 11-11a2 2 0 0 0-3-3l-11 11L4 20Z"/></svg>
-              </button>}
-              {!documento.arquivadoEm && !documento.verificadoEm && permiteVerificar(documento) && <button
-                type="button" aria-label={`Verificar ${documento.nomeOriginal}`} disabled={(somenteLeitura && !(permitirRegularizarPrincipal && documento.categoria === 'CONTRATO_PRINCIPAL')) || salvandoMetadados}
-                onClick={() => setDocumentoVerificar(documento)}
-                className="rounded-lg border border-violet-500/50 px-3 py-2 text-xs font-semibold text-violet-200 disabled:opacity-50">✓ Verificar</button>}
-              {!documento.arquivadoEm && !!documento.verificadoEm && permiteReabrir(documento) && <button
-                type="button" aria-label={`Reabrir ${documento.nomeOriginal}`} disabled={somenteLeitura || salvandoMetadados}
-                onClick={() => setDocumentoReabrir(documento)}
-                className="rounded-lg border border-teal-500/50 px-3 py-2 text-xs font-semibold text-teal-200 disabled:opacity-50">⟳ Reabrir</button>}
-              {!documento.arquivadoEm && !documento.verificadoEm && permiteArquivar(documento) && <button type="button"
-                title={`Arquivar ${documento.nomeOriginal}`} aria-label={`Arquivar ${documento.nomeOriginal}`} disabled={somenteLeitura || salvandoMetadados}
-                onClick={() => { setDocumentoArquivar(documento); setErroMetadados(''); }}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-amber-500/40 text-amber-200 hover:bg-amber-500/15 disabled:opacity-50">
-                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v12h14V8M9 13h6"/></svg>
-              </button>}
-              {documento.arquivadoEm && permiteReativar(documento) && <button type="button"
-                disabled={somenteLeitura || salvandoMetadados} aria-label={`Reativar ${documento.nomeOriginal}`} onClick={() => setDocumentoReativar(documento)}
-                className="rounded-lg border border-amber-400/55 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-900 dark:text-amber-100 hover:bg-amber-500/20 disabled:opacity-50">Reativar</button>}
-
             </div>
           </div>
         </li>)}</ul>}

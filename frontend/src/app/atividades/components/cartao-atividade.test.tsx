@@ -2,25 +2,30 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { CartaoAtividade } from './cartao-atividade';
 import type { Atividade } from '@/hooks/use-atividades';
 
-jest.mock('@/app/components/provedor-consultas', () => ({ useRepositorioConsultasOpcional: () => null }));
+jest.mock('@/app/components/provedor-consultas', () => ({ useRepositorioConsultasOpcional: () => null, useConsulta: () => ({dados: [], carregando:false, erro:null}) }));
 jest.mock('@/hooks/use-entregaveis', () => ({ useEntregaveis: () => ({ dados: [], carregando: false, erro: null }) }));
+jest.mock('@/hooks/use-ocorrencias', () => ({ useOcorrencias: () => ({ ocorrencias: [], loading: false, erro: null }) }));
 const atividade: Atividade = { id: 'b'.repeat(36), contratoId: 'a'.repeat(36), titulo: 'Reunião semanal', tipo: 'Reunião',
   descricao: 'Relato da equipe', dataHora: '2026-11-09T15:00:00.000Z', responsavel: 'Equipe', participantes: [],
   local: null, duracao: null, observacoes: null, entregaveis: [], status: 'REGISTRADA', verificadaEm: null, arquivadaEm: null };
 
-test('mesmo cartão oferece verificar sem justificativa, somente a quem tem permissão', () => {
-  render(<CartaoAtividade atividade={atividade} contratoId={atividade.contratoId} permissoes={{ verificarAtividades: true }} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Verificar' }));
-  expect(screen.getByRole('dialog', { name: 'Verificar atividade' })).toBeInTheDocument();
+test('solicitação de conclusão fica no detalhe, não no cartão, e dispensa justificativa', () => {
+  render(<CartaoAtividade atividade={atividade} contratoId={atividade.contratoId} permissoes={{ editarAtividades: true }} />);
+  expect(screen.queryByRole('button', { name: 'Solicitar conclusão atividade' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da atividade/ }));
+  fireEvent.click(screen.getByRole('button', { name: /Fechar: escolher ação/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Solicitar conclusão atividade' }));
+  expect(screen.getByRole('dialog', { name: 'Solicitar conclusão atividade' })).toBeInTheDocument();
   expect(screen.queryByLabelText('Justificativa *')).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'Excluir' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Excluir atividade' })).not.toBeInTheDocument();
 });
 test('somente arquivada pode mostrar excluir, com autorização explícita', () => {
   const props = { atividade: { ...atividade, status: 'ARQUIVADA' as const }, contratoId: atividade.contratoId };
   const { rerender } = render(<CartaoAtividade {...props} permissoes={{ excluirAtividadesArquivadas: false }} />);
-  expect(screen.queryByRole('button', { name: 'Excluir' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Excluir atividade' })).not.toBeInTheDocument();
   rerender(<CartaoAtividade {...props} permissoes={{ excluirAtividadesArquivadas: true }} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Excluir' }));
+  fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da atividade/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Excluir atividade arquivada' }));
   expect(screen.getByLabelText('Justificativa *')).toBeRequired();
 });
 
@@ -29,7 +34,8 @@ test('o cartão abre detalhe contextual em modal, sem mudar de rota', () => {
   render(<CartaoAtividade atividade={atividade} contratoId={atividade.contratoId} />);
   fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da atividade Reunião semanal/ }));
   expect(screen.getByRole('dialog', { name: 'Reunião semanal' })).toBeInTheDocument();
-  expect(screen.getAllByText('Relato da equipe').length).toBeGreaterThan(1);
+  expect(screen.getAllByText('Relato da equipe')).toHaveLength(1);
+  expect(within(screen.getByRole('dialog', { name: 'Reunião semanal' })).getByText('Relato da equipe')).toBeInTheDocument();
   expect(within(screen.getByRole('dialog', { name: 'Reunião semanal' })).queryByRole('button', { name: /Ver contrato|Editar registro/ })).not.toBeInTheDocument();
 });
 
@@ -51,36 +57,32 @@ test('o próprio cartão, além de Ver detalhes, abre o diálogo da atividade', 
 });
 
 
-test('edição permanece apenas no cartão, não no modal de detalhes da atividade', () => {
+test('edição é oferecida no cabeçalho do modal para quem tem permissão', () => {
   const onEditar = jest.fn();
   render(<CartaoAtividade atividade={atividade} contratoId={atividade.contratoId}
     permissoes={{ editarAtividades: true }} onEditar={onEditar} />);
-  const editar = screen.getByRole('button', { name: 'Editar' });
-  expect(editar).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Ver detalhes' }));
+  expect(screen.queryByRole('button', { name: 'Editar atividade' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da atividade/ }));
   const modal = screen.getByRole('dialog', { name: atividade.titulo });
-  expect(within(modal).queryByRole('button', { name: /Editar|Ver contrato/ })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Fechar detalhes da atividade' }));
+  const editar = within(modal).getByRole('button', { name: 'Editar atividade' });
   fireEvent.click(editar);
   expect(onEditar).toHaveBeenCalledTimes(1);
 });
 
-test('cartão mostra até dois vínculos truncados e reticências para os outros, sem links', () => {
+test('cartão mostra contadores de vínculos, sem nomes nem descrição', () => {
   const exemplo = { ...atividade, entregaveis: [
-    { id: 'ent-1', nome: 'Entregável de nome muito longo que não deve extrapolar o espaço do cartão' },
-    { id: 'ent-2', nome: 'Relatório semanal' },
+    { id: 'ent-1', nome: 'Primeiro entregável' },
+    { id: 'ent-2', nome: 'Segundo entregável' },
     { id: 'ent-3', nome: 'Terceiro entregável' },
     { id: 'ent-4', nome: 'Quarto entregável' },
   ] };
   render(<CartaoAtividade atividade={exemplo} contratoId={atividade.contratoId} />);
-  const grupo = screen.getByLabelText('Entregáveis vinculados à atividade');
-  expect(within(grupo).getByText(/Entregável de nome muito longo/)).toHaveClass('truncate');
-  expect(within(grupo).getByText('Relatório semanal')).toBeInTheDocument();
-  expect(within(grupo).queryByText('Terceiro entregável')).not.toBeInTheDocument();
-  expect(within(grupo).queryByText('Quarto entregável')).not.toBeInTheDocument();
-  expect(within(grupo).getByLabelText('2 entregáveis adicionais')).toHaveTextContent('…');
-  expect(within(grupo).queryByRole('link')).not.toBeInTheDocument();
-  expect(within(grupo).queryByRole('button')).not.toBeInTheDocument();
+  const grupo = screen.getByLabelText('Vínculos do registro');
+  expect(within(grupo).getByLabelText('Contratos: 1')).toHaveTextContent('1');
+  expect(within(grupo).getByLabelText('Entregáveis: 4')).toHaveTextContent('4');
+  expect(within(grupo).getByLabelText('Ocorrências: 0')).toHaveTextContent('0');
+  expect(screen.queryByText('Primeiro entregável')).not.toBeInTheDocument();
+  expect(screen.queryByText('Relato da equipe')).not.toBeInTheDocument();
 });
 
 test('Ver entregáveis abre lista completa em segundo modal, fecha por X e fora', () => {
@@ -90,27 +92,30 @@ test('Ver entregáveis abre lista completa em segundo modal, fecha por X e fora'
     { id: 'ent-3', nome: 'Terceiro entregável' },
   ] };
   render(<CartaoAtividade atividade={exemplo} contratoId={atividade.contratoId} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Ver detalhes' }));
-  fireEvent.click(screen.getByRole('button', { name: /Ver entregáveis/ }));
-  const lista = screen.getByRole('dialog', { name: 'Entregáveis vinculados' });
+  fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da atividade/ }));
+  fireEvent.click(screen.getByRole('button', { name: /Vínculos/ }));
+  const lista = screen.getByRole('dialog', { name: 'Vínculos da atividade' });
+  fireEvent.click(within(lista).getByRole('button', {name:'Entregáveis'}));
   expect(within(lista).getByText('Primeiro entregável')).toBeInTheDocument();
   expect(within(lista).getByText('Segundo entregável')).toBeInTheDocument();
   expect(within(lista).getByText('Terceiro entregável')).toBeInTheDocument();
   expect(within(lista).queryByRole('button', { name: /Abrir|Editar|Ver contrato/ })).not.toBeInTheDocument();
-  fireEvent.click(within(lista).getByRole('button', { name: 'Fechar lista de entregáveis' }));
-  expect(screen.queryByRole('dialog', { name: 'Entregáveis vinculados' })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: /Ver entregáveis/ }));
-  const fundo = screen.getByRole('dialog', { name: 'Entregáveis vinculados' }).parentElement;
+  fireEvent.click(within(lista).getByRole('button', { name: 'Fechar vínculos' }));
+  expect(screen.queryByRole('dialog', { name: 'Vínculos da atividade' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /Vínculos/ }));
+  const fundo = screen.getByRole('dialog', { name: 'Vínculos da atividade' }).parentElement;
   expect(fundo).not.toBeNull();
   fireEvent.mouseDown(fundo!);
-  expect(screen.queryByRole('dialog', { name: 'Entregáveis vinculados' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('dialog', { name: 'Vínculos da atividade' })).not.toBeInTheDocument();
 });
 
 
 test('justificativa obrigatória mostra mínimo e máximo com contador e acessibilidade', () => {
   const exemplo = { ...atividade, status: 'VERIFICADA' as const };
   render(<CartaoAtividade atividade={exemplo} contratoId={exemplo.contratoId} permissoes={{ arquivarAtividades: true }} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Arquivar' }));
+  fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da atividade/ }));
+  fireEvent.click(screen.getByRole('button', { name: /Reabrir: escolher ação/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Arquivar atividade' }));
   const modal = screen.getByRole('dialog', { name: 'Arquivar atividade' });
   expect(within(modal).getByText('Obrigatória: mínimo de 15 e máximo de 200 caracteres.')).toBeInTheDocument();
   const justificativa = within(modal).getByRole('textbox', { name: 'Justificativa *' });
@@ -124,17 +129,19 @@ test('justificativa obrigatória mostra mínimo e máximo com contador e acessib
   expect(justificativa).toHaveAttribute('aria-invalid', 'false');
 });
 
-test('lista de entregáveis substitui o detalhe da atividade e devolve ao detalhe ao fechar', () => {
+test('lista de vínculos mantém detalhe montado e bloqueado ao fundo', () => {
   const exemplo = { ...atividade, entregaveis: [{ id: 'e1', nome: 'Primeiro entregável' }] };
   render(<CartaoAtividade atividade={exemplo} contratoId={exemplo.contratoId} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Ver detalhes' }));
+  fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da atividade/ }));
   const titulo = screen.getByRole('dialog', { name: exemplo.titulo });
   expect(titulo).toBeInTheDocument();
-  fireEvent.click(within(titulo).getByRole('button', { name: /Ver entregáveis/ }));
-  expect(screen.getByRole('dialog', { name: 'Entregáveis vinculados' })).toBeInTheDocument();
+  fireEvent.click(within(titulo).getByRole('button', { name: /Vínculos/ }));
+  expect(screen.getByRole('dialog', { name: 'Vínculos da atividade' })).toBeInTheDocument();
+  expect(titulo).toBeInTheDocument();
+  expect(titulo).toHaveAttribute('aria-hidden', 'true');
   expect(screen.queryByRole('dialog', { name: exemplo.titulo })).not.toBeInTheDocument();
   expect(screen.getAllByRole('dialog')).toHaveLength(1);
-  fireEvent.click(screen.getByRole('button', { name: 'Fechar lista de entregáveis' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Fechar vínculos' }));
   expect(screen.getByRole('dialog', { name: exemplo.titulo })).toBeInTheDocument();
   expect(screen.getAllByRole('dialog')).toHaveLength(1);
 });
@@ -142,7 +149,7 @@ test('lista de entregáveis substitui o detalhe da atividade e devolve ao detalh
 
 test('fechar modal clicando fora não reabre o cartão via bubbling de portal', () => {
   render(<CartaoAtividade atividade={atividade} contratoId={atividade.contratoId} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Ver detalhes' }));
+  fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da atividade/ }));
   const modal = screen.getByRole('dialog', { name: atividade.titulo });
   fireEvent.mouseDown(modal.parentElement!);
   fireEvent.click(modal.parentElement!);
@@ -150,13 +157,12 @@ test('fechar modal clicando fora não reabre o cartão via bubbling de portal', 
 });
 
 
-test('ícone de vínculo é uma caixa SVG, sem símbolo tipográfico no card', () => {
+test('vínculos do cartão utilizam contagem, sem ícones ou nomes duplicados', () => {
   const exemplo = { ...atividade, entregaveis: [{ id: 'e1', nome: 'Entregável de teste' }] };
-  const { container } = render(<CartaoAtividade atividade={exemplo} contratoId={exemplo.contratoId} />);
-  expect(container.querySelector('[aria-label="Entregáveis vinculados à atividade"] [data-tec08-icone-entregavel]')).toBeInTheDocument();
-  expect(container.querySelector('[aria-label="Entregáveis vinculados à atividade"]')?.textContent).not.toContain('▣');
+  render(<CartaoAtividade atividade={exemplo} contratoId={exemplo.contratoId} />);
+  expect(screen.getByLabelText('Entregáveis: 1')).toHaveTextContent('1');
+  expect(screen.queryByText('Entregável de teste')).not.toBeInTheDocument();
 });
-
 
 test('verificada usa paleta própria no cartão, modal, link de detalhes e vínculo', () => {
   const verificada = { ...atividade, status: 'VERIFICADA' as const,
@@ -165,13 +171,16 @@ test('verificada usa paleta própria no cartão, modal, link de detalhes e vínc
     estadosEntregaveis={{ entregavel1: 'revisao' }} />);
   const cartao = container.querySelector('[data-atividade-estado="VERIFICADA"]');
   expect(cartao).toHaveClass('border-violet-400/50');
-  expect(within(cartao as HTMLElement).getByRole('button', { name: 'Ver detalhes' })).toHaveClass('text-violet-300');
+  expect(within(cartao as HTMLElement).getByRole('button', { name: /Ver detalhes da atividade/ })).toHaveClass('text-violet-300');
   fireEvent.click(screen.getByRole('button', { name: /Abrir cartão da atividade/ }));
   expect(screen.getByRole('dialog', { name: verificada.titulo })).toHaveAttribute('data-tec08-estado', 'concluido');
-  fireEvent.click(screen.getByRole('button', { name: /Ver entregáveis/ }));
-  expect(screen.getByRole('dialog', { name: 'Entregáveis vinculados' })).toHaveAttribute('data-tec08-estado', 'concluido');
+  fireEvent.click(screen.getByRole('button', { name: /Vínculos/ }));
+  expect(screen.getByRole('dialog', { name: 'Vínculos da atividade' })).toHaveAttribute('data-tec08-estado', 'normal');
   expect(container.querySelector('[data-entregavel-estado="revisao"]')).not.toBeInTheDocument(); // modal fica em portal
-  expect(document.querySelector('[data-entregavel-estado="revisao"]')).toHaveClass('border-teal-500/45');
+  const vinculos=screen.getByRole('dialog',{name:'Vínculos da atividade'});
+  fireEvent.click(within(vinculos).getByRole('button',{name:'Entregáveis'}));
+  expect(within(vinculos).getByText('Entregável validado')).toBeInTheDocument();
+  expect(within(vinculos).getByText('Verificada')).toBeInTheDocument();
 });
 
 test('arquivada mantém paleta própria e abre pelo teclado', () => {
@@ -185,20 +194,60 @@ test('arquivada mantém paleta própria e abre pelo teclado', () => {
 test('edição no cartão da aba do entregável abre modal, não navega para /atividades', () => {
   render(<CartaoAtividade atividade={atividade} contratoId={atividade.contratoId}
     dentroEntregavel permissoes={{ editarAtividades: true }} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+  fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da atividade/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Editar atividade' }));
   const modal = screen.getByRole('dialog', { name: 'Editar atividade' });
   expect(modal).toBeInTheDocument();
   expect(within(modal).getByRole('form', { name: 'Formulário de edição da atividade' })).toBeInTheDocument();
-  expect(within(modal).getByRole('textbox', { name: 'Descrição *' })).toHaveValue('Relato da equipe');
+  expect(within(modal).getByRole('textbox', { name: /Descrição/ })).toHaveValue('Relato da equipe');
   expect(screen.queryByRole('link', { name: 'Editar' })).not.toBeInTheDocument();
 });
 
 
 test('área de abertura sobreposta cobre o cartão mas não captura botões de ação', () => {
-  render(<CartaoAtividade atividade={atividade} contratoId={atividade.contratoId} permissoes={{ verificarAtividades: true }} />);
+  render(<CartaoAtividade atividade={atividade} contratoId={atividade.contratoId} permissoes={{ editarAtividades: true }} />);
   fireEvent.click(screen.getByRole('button', { name: 'Abrir cartão da atividade Reunião semanal' }));
   expect(screen.getByRole('dialog', { name: 'Reunião semanal' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Fechar detalhes da atividade' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Verificar' }));
-  expect(screen.getByRole('dialog', { name: 'Verificar atividade' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da atividade/ }));
+  fireEvent.click(screen.getByRole('button', { name: /Fechar: escolher ação/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Solicitar conclusão atividade' }));
+  expect(screen.getByRole('dialog', { name: 'Solicitar conclusão atividade' })).toBeInTheDocument();
+});
+
+
+test('atividade pendente exige decisão: solicita aprovação separada e não pode solicitar de novo', () => {
+  const pendente = { ...atividade, status: 'PENDENTE_CONCLUSAO' as const };
+  render(<CartaoAtividade atividade={pendente} contratoId={pendente.contratoId}
+    permissoes={{ editarAtividades: true, verificarAtividades: true }} />);
+  fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da atividade/ }));
+  expect(screen.getByRole('button', { name: 'Aprovar' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Cancelar' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Solicitar conclusão atividade' })).not.toBeInTheDocument();
+});
+
+
+test('aprovação abre confirmação compacta acima do detalhe da atividade', () => {
+  const item = { ...atividade, status: 'PENDENTE_CONCLUSAO' as const };
+  render(<CartaoAtividade atividade={item} contratoId={item.contratoId} permissoes={{ editarAtividades: true, verificarAtividades: true }} />);
+  fireEvent.click(screen.getByRole('button', { name: /Ver detalhes da atividade/ }));
+  const detalhe = screen.getByRole('dialog', { name: item.titulo });
+  fireEvent.click(within(detalhe).getByRole('button', { name: 'Aprovar' }));
+  const confirmacao = screen.getByRole('dialog', { name: 'Aprovar atividade' });
+  expect(confirmacao).toHaveAttribute('data-pi-formulario-modal', 'registro');
+  expect(confirmacao.parentElement).toHaveAttribute('data-tec08-camada', 'edicao');
+  expect(detalhe).toHaveAttribute('aria-hidden', 'true');
+  fireEvent.click(within(confirmacao).getByRole('button', { name: 'Cancelar' }));
+  expect(detalhe).not.toHaveAttribute('aria-hidden');
+  expect(screen.queryByRole('dialog', { name: 'Aprovar atividade' })).not.toBeInTheDocument();
+});
+
+test('vínculos possuem quatro abas e contratos não usam filtro de verificação',()=>{
+ render(<CartaoAtividade atividade={atividade} contratoId={atividade.contratoId}/>);
+ fireEvent.click(screen.getByRole('button',{name:/Ver detalhes da atividade/}));
+ fireEvent.click(screen.getByRole('button',{name:/Vínculos/}));
+ const lista=screen.getByRole('dialog',{name:'Vínculos da atividade'});
+ expect(within(lista).queryByLabelText('Filtrar vínculos')).not.toBeInTheDocument();
+ fireEvent.click(within(lista).getByRole('button',{name:'Evidências'}));
+ expect(within(lista).getByLabelText('Filtrar vínculos')).toBeInTheDocument();
 });

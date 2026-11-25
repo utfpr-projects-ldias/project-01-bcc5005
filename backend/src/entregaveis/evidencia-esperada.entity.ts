@@ -32,6 +32,10 @@ export class EvidenciaEsperada {
   @Column({ type: 'boolean', default: true })
   obrigatoria!: boolean;
 
+  /** Intenção de envio: não constitui prova nem reserva/reconhecimento de execução. */
+  @Column({ name: 'rascunho_envio', type: 'jsonb', nullable: true, select: false })
+  rascunhoEnvio?: Record<string, string> | null;
+
   /** Reabertura documental explícita, independente do status operacional. */
   @Column({ name: 'reaberto_em', type: 'timestamptz', nullable: true })
   reabertoEm!: Date | null;

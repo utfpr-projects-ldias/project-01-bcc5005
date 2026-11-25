@@ -1,3 +1,4 @@
+import { mensagemErroDominioHttp } from './erro-dominio-http';
 import type { DadosPlanejamentoEntregavel } from './validacao-entregavel';
 
 /** HU07-03/HU07-04 — leitura e escrita do planejamento real da API HU07-02. */
@@ -19,13 +20,15 @@ export type Entregavel = {
   nome: string; descricao: string | null; tipo: TipoEntregavel;
   responsavelId: string | null;
   responsavel?: { nome: string | null; email: string } | null;
-  inicioPrevisto: string | null; terminoPrevisto: string | null;
-  quantidadePrevista: string | null; quantidadeRealizada: string | null;
+  inicioPrevisto: string | null; terminoPrevisto: string | null; criadoEm?: string | null; agendaInicioFuturo?: string | null;
+  quantidadePrevista: string | null; quantidadeRealizada: string | null; quantidadeDiretaIntegrada?:boolean;
   unidadeMedida: string | null; periodicidade: PeriodicidadeEntregavel | null;
-  configuracaoPeriodicidade: { versao: 1 } | null;
+  configuracaoPeriodicidade: { versao: 1; modoRegistro?: 'DESCRITIVO' | 'QUANTITATIVO' } | null;
   peso: string | null; criterioConclusao: string | null;
-  statusExecucao: 'NAO_INICIADO' | 'EM_ANDAMENTO' | 'CONCLUIDO' | null;
-  percentualExecucao: string | null;
+  regularizacaoDocumentalSolicitada?: boolean;
+  atrasado?: boolean; finalizadoComAtraso?: boolean;
+  statusExecucao: 'NAO_INICIADO' | 'EM_ANDAMENTO' | 'PENDENTE_CONCLUSAO' | 'PENDENTE_CONCLUSAO_PARCIAL' | 'PENDENTE_ENCERRAMENTO' | 'CONCLUIDO' | 'CONCLUIDO_PARCIALMENTE' | 'FINALIZADO' | null;
+  motivoFinalizacao?: string | null; percentualExecucao: string | null;
   situacaoComprovacao: 'SEM_EVIDENCIA' | 'EVIDENCIA_PARCIAL' | 'COMPROVADO' | null;
   observacoes: string | null; arquivadoEm?: string | null; reabertoEm?: string | null; evidenciasEsperadas: EvidenciaEsperada[];
 };
@@ -63,8 +66,15 @@ export const listarEntregaveis = (contratoId: string, signal?: AbortSignal) =>
 export const detalharEntregavel = (contratoId: string, entregavelId: string, signal?: AbortSignal) =>
   consultar<Entregavel>(`${base(contratoId)}/${encodeURIComponent(entregavelId)}`, signal);
 
+export type ElegibilidadeConclusaoEntregavel = {
+  podeSolicitarConclusao: boolean; podeSolicitarParcial: boolean; podeAprovar: boolean; podeSolicitarEncerramento: boolean; podeAprovarEncerramento?: boolean;
+  impedimentos: string[]; pendencias: string[]; documentacaoCompleta: boolean; semExigencias: boolean; aptidaoFisica: boolean; situacaoComprovacao?: Entregavel['situacaoComprovacao'];
+};
+export const consultarElegibilidadeEntregavel = (contratoId: string, id: string, signal?: AbortSignal) =>
+  consultar<ElegibilidadeConclusaoEntregavel>(`${base(contratoId)}/${encodeURIComponent(id)}/elegibilidade-conclusao`, signal);
+
 /** Contador de evidências obrigatórias verificadas: NÃO é avanço físico. */
-export type ResumoDocumentalEntregavel = { obrigatorias: number; verificadas: number; total?: number; verificadasTotal?: number };
+export type ResumoDocumentalEntregavel = { obrigatorias: number; verificadas: number; total?: number; verificadasTotal?: number; ocorrenciasExigidas?: number; ocorrenciasAtendidas?: number; situacaoComprovacao?: string; ocorrenciasTotal?: number; ocorrenciasFinalizadas?: number; atividadesTotal?: number; atividadesVerificadas?: number; atividadesIds?: string[]; atividadesIdsVerificadas?: string[]; exigenciasDocumentaisTotal?: number; exigenciasDocumentaisAtendidas?: number };
 export const resumoDocumentalContrato = (contratoId: string, signal?: AbortSignal) =>
   consultar<Record<string, ResumoDocumentalEntregavel>>(`${base(contratoId)}/resumo-documental`, signal);
 
@@ -114,9 +124,24 @@ async function alterarEntregavel<T>(caminho: string, metodo: 'POST' | 'PATCH', d
       401: 'Sua sessão expirou. Entre novamente.',
       403: 'Você não tem permissão de planejamento neste contrato.',
       404: 'Contrato, etapa ou entregável não encontrado neste vínculo.',
-      409: 'Conflito de replanejamento: há ocorrências vinculadas ou dados concorrentes. Nenhum registro foi apagado. Atualize antes de tentar novamente.',
+      409: 'Não foi possível alterar o entregável no estado atual. Confira se o contrato ou a etapa precisam ser reabertos.',
     };
-    throw new ErroEntregavel(resposta.status, mensagens[resposta.status] ?? 'Falha ao salvar o planejamento. Tente novamente.');
+    let descricao = mensagens[resposta.status] ?? 'Falha ao salvar o planejamento. Tente novamente.';
+    if (resposta.status === 400 || resposta.status === 409) {
+      let corpo: unknown = null;
+      try { if (typeof resposta.json === 'function') corpo = await resposta.json(); } catch { /* Respostas HTTP sem JSON não mascaram o status original. */ }
+      const mensagem = corpo && typeof corpo === 'object' && 'message' in corpo
+        ? (corpo as { message?: unknown }).message : null;
+      const texto = typeof mensagem === 'string' ? mensagem
+        : Array.isArray(mensagem) ? mensagem.filter((v): v is string => typeof v === 'string').join(' ') : '';
+      // Repassar apenas mensagens curtas de domínio. Nunca exibir SQL, stack,
+      // nomes internos de tabelas, caminhos ou conteúdo HTML da API.
+      if (texto.length > 0 && texto.length <= 240 && !/[<>\r\n]/.test(texto) &&
+          !/sql|select |insert |update |delete |stack|query:|postgres|password|typeorm|constraint | at /i.test(texto))
+        descricao = texto;
+      else if (resposta.status === 400) descricao = 'Revise os campos alterados, pesos e permissões do responsável.';
+    }
+    throw new ErroEntregavel(resposta.status, descricao);
   }
   return await resposta.json() as T;
 }
@@ -126,6 +151,25 @@ export const editarEntregavel = (contratoId: string, id: string, dados: Partial<
   alterarEntregavel<Entregavel>(`${base(contratoId)}/${encodeURIComponent(id)}`, 'PATCH', dados);
 
 /** Conclusão explícita de entregável, validada pelo backend e auditada na transação. */
+/** Solicitação e aprovação de encerramento administrativo não alteram o avanço físico. */
+export async function transicaoAdministrativaEntregavel(c: string, id: string,
+  acao: 'solicitar-conclusao' | 'solicitar-conclusao-parcial' | 'solicitar-encerramento' | 'aprovar-encerramento' | 'devolver-solicitacao', motivo?: string): Promise<Entregavel> {
+  let resposta: Response;
+  try {
+    resposta = await fetch(`${API}${base(c)}/${encodeURIComponent(id)}/${acao}`, {
+      method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(motivo ? { motivo } : {}),
+    });
+  } catch {
+    throw new ErroEntregavel(0, 'Falha de conexão ao alterar a situação do entregável. Tente novamente.');
+  }
+  if (!resposta.ok) {
+    throw new ErroEntregavel(resposta.status, await mensagemErroDominioHttp(resposta,
+      'A operação não foi autorizada ou os requisitos ainda não foram cumpridos.'));
+  }
+  return await resposta.json() as Entregavel;
+}
+
 export async function concluirEntregavel(contratoId: string, id: string): Promise<Entregavel> {
   let resposta: Response;
   try {
@@ -142,24 +186,44 @@ export async function concluirEntregavel(contratoId: string, id: string): Promis
       404: 'Contrato ou entregável não encontrado ou não autorizado.',
       409: 'O entregável ainda possui pendências ou foi alterado. Atualize os dados antes de concluir.',
     };
-    throw new ErroEntregavel(resposta.status, mensagens[resposta.status] ?? 'Não foi possível concluir o entregável.');
+    throw new ErroEntregavel(resposta.status, await mensagemErroDominioHttp(resposta,
+      mensagens[resposta.status] ?? 'Não foi possível concluir o entregável.'));
   }
   return await resposta.json() as Entregavel;
 }
 
 /** Reabertura de conclusão física, sujeita à permissão especial no backend. */
 export async function reabrirEntregavel(contratoId: string, id: string, motivo: string) {
-  const r = await fetch(`${API}${base(contratoId)}/${encodeURIComponent(id)}/reabrir`, {
-    method: 'PATCH', credentials: 'include', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ motivo }),
-  });
-  if (!r.ok) throw new ErroEntregavel(r.status, r.status === 403 ? 'Você não tem permissão para reabrir este entregável.' : 'Não foi possível reabrir o entregável.');
+  let r: Response;
+  try {
+    r = await fetch(`${API}${base(contratoId)}/${encodeURIComponent(id)}/reabrir`, {
+      method: 'PATCH', credentials: 'include', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ motivo }),
+    });
+  } catch {
+    throw new ErroEntregavel(0, 'Falha de conexão ao reabrir o entregável. Tente novamente.');
+  }
+  if (!r.ok) {
+    const body: unknown = await r.json().catch(() => null);
+    const mensagem = body && typeof body === 'object' && 'message' in body ? (body as {message?:unknown}).message : null;
+    const detalhe = typeof mensagem === 'string' && mensagem.length <= 240 &&
+      !/[<>\r\n]/.test(mensagem) && !/sql|stack|postgres|query|constraint/i.test(mensagem) ? mensagem : null;
+    throw new ErroEntregavel(r.status, detalhe ?? (r.status === 403
+      ? 'Você não tem permissão para reabrir este entregável.'
+      : 'Não foi possível reabrir. Se a etapa ou o contrato estiver finalizado, reabra o objeto-pai primeiro.'));
+  }
   return await r.json() as Entregavel;
 }
 
 /** Ações reversíveis e auditadas; jamais removem o entregável ou seus comprovantes. */
 export async function alterarArquivoEntregavel(contratoId: string, id: string, acao: 'arquivar' | 'reativar', motivo?: string) {
-  const r = await fetch(`${API}${base(contratoId)}/${encodeURIComponent(id)}/${acao}`, { method: 'PATCH', credentials: 'include', cache: 'no-store', ...(acao === 'reativar' ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ motivo }) } : {}) });
-  if (!r.ok) throw new ErroEntregavel(r.status, r.status === 403 ? 'Sem permissão para arquivar ou reativar.' : 'Não foi possível alterar o arquivamento do entregável.');
+  let r: Response;
+  try {
+    r = await fetch(`${API}${base(contratoId)}/${encodeURIComponent(id)}/${acao}`, { method: 'PATCH', credentials: 'include', cache: 'no-store', ...(acao === 'reativar' ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ motivo }) } : {}) });
+  } catch {
+    throw new ErroEntregavel(0, 'Falha de conexão ao alterar o arquivamento do entregável. Tente novamente.');
+  }
+  if (!r.ok) throw new ErroEntregavel(r.status, await mensagemErroDominioHttp(r,
+    r.status === 403 ? 'Sem permissão para arquivar ou reativar.' : 'Não foi possível alterar o arquivamento do entregável.'));
   return await r.json() as { id: string; arquivadoEm: string | null };
 }
 export const listarEntregaveisArquivados = (contratoId: string, etapaId: string) =>

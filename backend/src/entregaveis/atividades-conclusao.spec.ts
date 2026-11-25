@@ -9,7 +9,7 @@ describe('HU08 — conclusão depende de atividades registradas verificadas', ()
     const query = jest.fn(async (_sql: string, _params?: unknown[]) => [{ pendentes: false }]);
     expect(await atividadesPendentesDeVerificacao({ query } as never, contratoId, etapaId, entregavelId)).toBe(false);
     const chamada = query.mock.calls[0];
-    expect(chamada?.[0]).toContain("at.status = 'REGISTRADA'");
+    expect(chamada?.[0]).toContain("at.status IN ('REGISTRADA', 'PENDENTE_CONCLUSAO')");
     expect(chamada?.[0]).toContain('at."excluidaEm" IS NULL');
     expect(chamada?.[0]).toContain('en.etapa_id = $2');
     expect(chamada?.[1]).toEqual([contratoId, etapaId, entregavelId]);
@@ -21,6 +21,6 @@ describe('HU08 — conclusão depende de atividades registradas verificadas', ()
   it('a conclusão de etapa considera também atividades registradas', async () => {
     const query = jest.fn(async (_sql: string, _params?: unknown[]) => [{ pendentes: true }]);
     expect(await filhosPendentesDeConclusao({ query } as never, contratoId, etapaId)).toBe(true);
-    expect(query.mock.calls[0]?.[0]).toContain("at.status = 'REGISTRADA'");
+    expect(query.mock.calls[0]?.[0]).toContain("at.status IN ('REGISTRADA', 'PENDENTE_CONCLUSAO')");
   });
 });

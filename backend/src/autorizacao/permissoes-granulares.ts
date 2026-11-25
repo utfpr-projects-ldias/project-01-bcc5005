@@ -8,6 +8,8 @@ export const CHAVES_PERMISSOES = [
   'criarEntregaveis', 'editarEntregaveis', 'arquivarEntregaveis', 'reativarEntregaveis', 'reabrirEntregaveis', 'excluirEntregaveisArquivados',
   'criarEvidencias', 'editarEvidencias', 'arquivarEvidencias', 'reativarEvidencias', 'reabrirEvidencias', 'excluirEvidenciasArquivadas',
   'alterarObrigatoriedade', 'enviarComprovantes', 'verificarComprovantes',
+  'criarOcorrencias', 'editarOcorrencias', 'editarMetaOcorrencia', 'vincularAtividadesOcorrencia', 'vincularEvidenciasOcorrencia', 'editarExigenciasOcorrencia', 'editarPesoOcorrencia', 'registrarExecucaoOcorrencia', 'aprovarExecucaoManual', 'corrigirExecucaoOcorrencia', 'bloquearExecucaoOcorrencia', 'excluirExecucaoOcorrencia', 'concluirOcorrencias', 'reabrirOcorrencias', 'configurarAgendaOcorrencias', 'editarExecucaoFisica', 'configurarPesos',
+  'criarMetasMarco', 'editarMetasMarco', 'vincularMetasMarco', 'aprovarVinculosMetasMarco',
   'registrarAtividades', 'editarAtividades', 'verificarAtividades', 'reabrirAtividades', 'arquivarAtividades', 'reativarAtividades', 'excluirAtividadesArquivadas',
   'editarContrato', 'concluirContrato', 'encerrarContrato', 'reabrirContrato', 'cancelarContrato', 'reverterCancelamentoContrato', 'suspenderContrato', 'retomarContrato', 'verificarDocumentos', 'reabrirDocumentos', 'concluirEtapas', 'concluirEntregaveis', 'anexarDocumentos', 'editarDocumentos', 'arquivarDocumentos', 'reativarDocumentos', 'excluirDocumentosArquivados', 'verificarDocumentoPrincipal', 'reabrirDocumentoPrincipal', 'arquivarDocumentoPrincipal', 'reativarDocumentoPrincipal', 'excluirDocumentoPrincipal', 'administrarDocumentoPrincipal',
 ] as const;
@@ -15,7 +17,16 @@ export type ChavePermissao = typeof CHAVES_PERMISSOES[number];
 export type PermissoesGranulares = Partial<Record<ChavePermissao, boolean>>;
 
 export const ACAO_PERMISSAO: Readonly<Record<string, ChavePermissao>> = {
-  'etapas:criar': 'criarEtapas', 'etapas:editar': 'editarEtapas',
+  'ocorrencias:gerar': 'configurarAgendaOcorrencias', 'ocorrencias:replanejar': 'configurarAgendaOcorrencias',
+  'ocorrencias:criar': 'criarOcorrencias', 'ocorrencias:solicitar-conclusao': 'editarOcorrencias', 'ocorrencias:editar': 'editarOcorrencias',
+  'ocorrencias:iniciar-previstas': 'editarOcorrencias', 'ocorrencias:editar-meta': 'editarMetaOcorrencia',
+  'ocorrencias:registrar': 'registrarExecucaoOcorrencia', 'ocorrencias:decidir-lancamento': 'aprovarExecucaoManual', 'execucao:decidir-lancamento': 'aprovarExecucaoManual', 'ocorrencias:vincular-evidencia': 'vincularEvidenciasOcorrencia', 'ocorrencias:concluir': 'concluirOcorrencias',
+  'ocorrencias:reabrir': 'reabrirOcorrencias',
+  'metas-marco:criar': 'criarMetasMarco', 'metas-marco:editar': 'editarMetasMarco',
+  'metas-marco:vincular': 'vincularMetasMarco', 'metas-marco:decidir': 'aprovarVinculosMetasMarco',
+  'pesos:atualizar': 'configurarPesos',
+  'execucao:atualizar': 'editarExecucaoFisica',
+  'etapas:criar': 'criarEtapas', 'etapas:solicitar-conclusao': 'editarEtapas', 'etapas:editar': 'editarEtapas',
   'etapas:reordenar': 'reordenarEtapas',
   'etapas:bloquear-ordem': 'bloquearOrdemEtapas',
   'etapas:arquivar': 'arquivarEtapas',
@@ -25,7 +36,7 @@ export const ACAO_PERMISSAO: Readonly<Record<string, ChavePermissao>> = {
   'etapas:encerrar': 'encerrarEtapas',
   'etapas:concluir': 'concluirEtapas',
   'etapas:excluir': 'excluirEtapasArquivadas',
-  'entregaveis:criar': 'criarEntregaveis', 'entregaveis:editar': 'editarEntregaveis',
+  'entregaveis:criar': 'criarEntregaveis', 'entregaveis:solicitar-conclusao': 'editarEntregaveis', 'entregaveis:editar': 'editarEntregaveis',
   'entregaveis:arquivar': 'arquivarEntregaveis',
   'entregaveis:reativar': 'reativarEntregaveis',
   'entregaveis:reabrir': 'reabrirEntregaveis',
@@ -66,7 +77,7 @@ export function permissoesEfetivas(perfil: PerfilUsuario | string, podeEditar: b
   const gestorEditor = perfil === 'GESTOR' && podeEditar;
   const base = {} as Record<ChavePermissao, boolean>;
   for (const chave of CHAVES_PERMISSOES) {
-    const padrao = (chave === 'verificarAtividades' || chave === 'arquivarAtividades' || chave === 'verificarDocumentos' || chave === 'reabrirDocumentos' || chave === 'alterarObrigatoriedade' || chave === 'encerrarContrato' || chave === 'encerrarEtapas' || chave === 'cancelarContrato' || chave === 'reverterCancelamentoContrato' || chave === 'suspenderContrato' || chave === 'retomarContrato' || chave === 'administrarDocumentoPrincipal' || chave.endsWith('DocumentoPrincipal') || chave === 'bloquearOrdemEtapas' || chave.startsWith('excluir') || chave.startsWith('reativar') || chave.startsWith('reabrir') || chave === 'arquivarEtapas' || chave.startsWith('concluir')) ? false
+    const padrao = (chave === 'aprovarExecucaoManual' || chave === 'criarMetasMarco' || chave === 'editarMetasMarco' || chave === 'vincularMetasMarco' || chave === 'aprovarVinculosMetasMarco' || chave === 'concluirOcorrencias' || chave === 'reabrirOcorrencias' || chave === 'verificarAtividades' || chave === 'arquivarAtividades' || chave === 'verificarDocumentos' || chave === 'reabrirDocumentos' || chave === 'alterarObrigatoriedade' || chave === 'editarMetaOcorrencia' || chave === 'vincularAtividadesOcorrencia' || chave === 'vincularEvidenciasOcorrencia' || chave === 'editarExigenciasOcorrencia' || chave === 'editarPesoOcorrencia' || chave === 'corrigirExecucaoOcorrencia' || chave === 'bloquearExecucaoOcorrencia' || chave === 'encerrarContrato' || chave === 'encerrarEtapas' || chave === 'cancelarContrato' || chave === 'reverterCancelamentoContrato' || chave === 'suspenderContrato' || chave === 'retomarContrato' || chave === 'administrarDocumentoPrincipal' || chave.endsWith('DocumentoPrincipal') || chave === 'bloquearOrdemEtapas' || chave.startsWith('excluir') || chave.startsWith('reativar') || chave.startsWith('reabrir') || chave === 'arquivarEtapas' || chave.startsWith('concluir')) ? false
       : chave === 'registrarAtividades' || chave === 'editarAtividades' ? podeEditar
       : chave === 'enviarComprovantes' ? true
       : chave === 'verificarComprovantes' ? true // serviço exige verificador distinto e autorizado

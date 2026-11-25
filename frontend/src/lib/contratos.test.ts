@@ -1,4 +1,4 @@
-import { criarContrato, editarContrato, listarContratos, terminoPorMeses, ErroContrato } from './contratos';
+import { criarContrato, editarContrato, listarContratos, terminoPorMeses, ErroContrato, ConfirmacaoVigenciaNecessaria } from './contratos';
 const fetchMock = jest.fn();
 beforeEach(() => { fetchMock.mockReset(); global.fetch = fetchMock as typeof fetch; });
 
@@ -27,4 +27,16 @@ test('vigência inclusiva e fim de mês curto não homologado', () => {
   expect(terminoPorMeses('2026-01-31', 1)).toBeNull();
   expect(terminoPorMeses('2024-02-29', 12)).toBeNull();
   expect(terminoPorMeses('2026-01-01', 0)).toBeNull();
+});
+
+test('vigência pede confirmação pela UI sem abrir window.confirm nativo', async () => {
+  const confirmNativo = jest.spyOn(window, 'confirm').mockImplementation(() => { throw new Error('Não usar confirmação nativa'); });
+  fetchMock.mockResolvedValueOnce({ ok: false, status: 409, json: async () => ({ message: 'Confirme o impacto da vigência na agenda recorrente.' }) });
+  fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ confirmacao: 'token-qa', total: 6, planos: 2, preservadasFora: 1, futurasFora: 0, bloqueado: false }) });
+  await expect(editarContrato('c1', { inicioVigencia: '2026-09-01' })).rejects.toBeInstanceOf(ConfirmacaoVigenciaNecessaria);
+  expect(confirmNativo).not.toHaveBeenCalled();
+  fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 'c1' }) });
+  await editarContrato('c1', { inicioVigencia: '2026-09-01' }, 'token-qa');
+  expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toMatchObject({ confirmacaoVigencia: 'token-qa' });
+  confirmNativo.mockRestore();
 });

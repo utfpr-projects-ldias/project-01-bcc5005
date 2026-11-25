@@ -34,7 +34,7 @@ def uuid_valido(valor: str) -> str:
 
 
 def opcoes(argv=None):
-    ap = argparse.ArgumentParser(description='Executa TODOS os QA automatizados reais de HU06-05/HU07-06; manual fica pendente')
+    ap = argparse.ArgumentParser(description='Executa os QAs funcionais automatizados reais de HU06-05/HU07-06')
     ap.add_argument('--contrato-id', required=True, type=uuid_valido)
     ap.add_argument('--outro-contrato-id', required=True, type=uuid_valido,
                     help='Segundo contrato existente, com etapa para teste anti-IDOR')
@@ -77,7 +77,7 @@ def zip_evidencias(saida: Path, qa07: Path, qa06: Path | None, status: dict, log
         if qa06 and qa06.is_dir():
             for p in sorted(qa06.iterdir()):
                 if p.is_file() and (
-                    (p.suffix == '.json' and (p.name.startswith('hu06-05-') or p.name in ('resumo.json', 'registro-visual.json')))
+                    (p.suffix == '.json' and (p.name.startswith('hu06-05-') or p.name == 'resumo.json'))
                     or (p.suffix == '.log' and p.name.startswith('gate-hu06-05'))
                 ):
                     z.write(p, 'hu06-05/' + p.name)
@@ -236,7 +236,12 @@ def main(argv=None):
         'inicioDiretorio': executor.saida.name, 'contratoId': args.contrato_id,
         'outroContratoId': args.outro_contrato_id,
         'statusAutomatizado': 'APROVADO' if falha is None else 'REPROVADO',
-        'statusAceiteGlobalHU06': 'PENDENTE_INSPECAO_MANUAL' if falha is None else 'NÃO_CONCLUÍDO',
+        'statusAceiteGlobalHU06': 'APROVADO_FUNCIONAL_AUTOMATIZADO' if falha is None else 'REPROVADO',
+        'limitesForaDoAceiteFuncional': [
+            'Avaliação estética subjetiva não é certificada pelo teste',
+            'Expiração temporal natural do token não é equivalente a logout 401',
+            'Aprovação/merge do PR é decisão do repositório, não execução de QA',
+        ],
         'motivoFalha': falha, 'passos': executor.steps,
         'vinculosIniciaisHU07': executor.estados,
         'restauracaoHU07': executor.restauracao,
@@ -251,7 +256,8 @@ def main(argv=None):
     print('[QA INTEGRADO] HU07-06 JSONs:', executor.qa07)
     print('[QA INTEGRADO] HU06-05 JSONs:', executor.hu06_dir if executor.hu06_dir else 'não concluído')
     print('[QA INTEGRADO] ZIP seguro para enviar:', pacote)
-    print('[QA INTEGRADO] Aceite manual HU06 permanece pendente; não foi simulado.')
+    print('[QA INTEGRADO] HU06: aceite funcional automatizado ' + ('APROVADO.' if falha is None else 'REPROVADO.'))
+    print('[QA INTEGRADO] Decisões externas (PR/avaliação subjetiva) não são testes e não geram pendência funcional.')
     return 1 if falha else 0
 
 

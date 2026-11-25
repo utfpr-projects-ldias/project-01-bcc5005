@@ -35,7 +35,7 @@ beforeEach(() => {
   jest.resetAllMocks();
   transaction.mockImplementation(async (cb) => cb(manager));
   findOneByUsuario.mockImplementation(async (where) => (where as {id: string}).id === adminId ? admin : gestor);
-  findOneUsuario.mockResolvedValue(gestor);
+  findOneUsuario.mockImplementation(async (args) => (args as { where: { id: string } }).where.id === adminId ? admin : gestor);
   findOneByContrato.mockResolvedValue(Object.assign(new Contrato(), { id: contratoId }));
   findOneVinculo.mockResolvedValue(null);
   salvar.mockImplementation(async (v) => v as PermissaoContrato);
@@ -49,7 +49,7 @@ describe('TEC07-AJUSTES-01: permissões por contrato', () => {
     })).rejects.toBeInstanceOf(ForbiddenException);
   });
   it('nega podeEditar para Colaborador', async () => {
-    findOneUsuario.mockResolvedValue(Object.assign(new Usuario(), gestor, { perfil: PerfilUsuario.COLABORADOR }));
+    findOneUsuario.mockImplementation(async (args) => (args as { where: { id: string } }).where.id === adminId ? admin : Object.assign(new Usuario(), gestor, { perfil: PerfilUsuario.COLABORADOR }));
     await expect(service.conceder(pessoaId, { contratoId, podeEditar: true }, ator))
       .rejects.toBeInstanceOf(BadRequestException);
     expect(salvar).not.toHaveBeenCalled();
@@ -67,7 +67,7 @@ describe('TEC07-AJUSTES-01: permissões por contrato', () => {
     }));
   });
   it('ADMIN delega uma operação específica ao Colaborador, registra antes/depois na auditoria', async () => {
-    findOneUsuario.mockResolvedValue(Object.assign(new Usuario(), gestor, { perfil: PerfilUsuario.COLABORADOR }));
+    findOneUsuario.mockImplementation(async (args) => (args as { where: { id: string } }).where.id === adminId ? admin : Object.assign(new Usuario(), gestor, { perfil: PerfilUsuario.COLABORADOR }));
     const resultado = await service.conceder(pessoaId, { contratoId, podeEditar: false,
       permissoesDetalhadas: { editarEvidencias: true, alterarObrigatoriedade: false } }, ator);
     expect(resultado).toMatchObject({ contratoId, podeEditar: false,
@@ -90,5 +90,38 @@ describe('TEC07-AJUSTES-01: permissões por contrato', () => {
     expect(auditoria).toHaveBeenCalledWith(manager, ator, expect.objectContaining({
       acao: AcaoAuditoria.USUARIO_PERMISSAO_REVOGADA,
     }));
+  });
+});
+
+describe('B02 — autoridade revalidada sob lock no PostgreSQL', () => {
+  it('impede concessão quando o ADMIN foi inativado antes da transação', async () => {
+    findOneUsuario.mockImplementation(async (args) => (args as { where: { id: string } }).where.id === adminId
+      ? Object.assign(new Usuario(), admin, { ativo: false }) : gestor);
+    await expect(service.conceder(pessoaId, { contratoId, podeEditar: true }, ator))
+      .rejects.toBeInstanceOf(ForbiddenException);
+    expect(salvar).not.toHaveBeenCalled();
+    expect(auditoria).not.toHaveBeenCalled();
+  });
+
+  it('impede revogação após perda do perfil administrativo na transação', async () => {
+    findOneUsuario.mockImplementation(async (args) => (args as { where: { id: string } }).where.id === adminId
+      ? Object.assign(new Usuario(), admin, { perfil: PerfilUsuario.GESTOR }) : gestor);
+    await expect(service.revogar(pessoaId, contratoId, ator)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(remover).not.toHaveBeenCalled();
+    expect(auditoria).not.toHaveBeenCalled();
+  });
+
+  it('bloqueia autor e alvo por ordem fixa de ID e confere identidade da sessão', async () => {
+    await service.conceder(pessoaId, { contratoId, podeEditar: false }, ator);
+    expect(findOneUsuario).toHaveBeenNthCalledWith(1, {
+      where: { id: adminId }, lock: { mode: 'pessimistic_write' },
+    });
+    expect(findOneUsuario).toHaveBeenNthCalledWith(2, {
+      where: { id: pessoaId }, lock: { mode: 'pessimistic_write' },
+    });
+    findOneUsuario.mockImplementation(async (args) => (args as { where: { id: string } }).where.id === adminId
+      ? Object.assign(new Usuario(), admin, { supertokensUserId: 'outra-identidade' }) : gestor);
+    await expect(service.conceder(pessoaId, { contratoId, podeEditar: false }, ator))
+      .rejects.toBeInstanceOf(ForbiddenException);
   });
 });

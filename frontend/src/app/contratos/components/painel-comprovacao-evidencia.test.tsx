@@ -1,9 +1,9 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { PainelComprovacaoEvidencia } from './painel-comprovacao-evidencia';
-import { consultarEvidencia, editarEvidencia, enviarComprovante, verificarComprovante, alterarArquivoEvidencia } from '@/lib/comprovantes';
+import { consultarEvidencia, editarEvidencia, enviarComprovante, verificarComprovante, alterarArquivoEvidencia, editarContribuicaoEvidencia } from '@/lib/comprovantes';
 jest.mock('@/lib/comprovantes', () => ({
   ...jest.requireActual('@/lib/comprovantes'),
-  consultarEvidencia: jest.fn(), editarEvidencia: jest.fn(), enviarComprovante: jest.fn(),
+  consultarEvidencia: jest.fn(), editarEvidencia: jest.fn(), editarContribuicaoEvidencia: jest.fn(), enviarComprovante: jest.fn(),
   verificarComprovante: jest.fn(), baixarComprovante: jest.fn(), alterarArquivoEvidencia: jest.fn(),
 }));
 const consultar = consultarEvidencia as jest.Mock;
@@ -41,9 +41,7 @@ test('edição é individual e não envia o array inteiro do checklist', async (
   fireEvent.click(await screen.findByRole('button', { name: 'Editar orientações' }));
   fireEvent.change(screen.getByRole('textbox', { name: 'Orientações da evidência' }), { target: { value: 'Nova orientação' } });
   fireEvent.click(screen.getByRole('button', { name: 'Salvar orientações' }));
-  await waitFor(() => expect(editar).toHaveBeenCalledWith('contrato-1','entregavel-1','evidencia-1', {
-    tipoEvidencia: 'Relatório', descricao: 'Nova orientação',
-  }));
+  await waitFor(() => expect(editar).toHaveBeenCalledWith('contrato-1','entregavel-1','evidencia-1', { descricao: 'Nova orientação' }));
 });
 
 test('alterar obrigatoriedade exige delegação, aparece abaixo do arquivo e não envia outro comprovante', async () => {
@@ -59,6 +57,37 @@ test('alterar obrigatoriedade exige delegação, aparece abaixo do arquivo e nã
   render(<PainelComprovacaoEvidencia {...props} podeAlterarObrigatoriedade={false} />);
   await screen.findByTestId('status-verificacao');
   expect(screen.queryByRole('checkbox', { name: 'Evidência obrigatória' })).not.toBeInTheDocument();
+});
+
+test('checkbox controlado muda imediatamente e confirma a obrigatoriedade após PATCH/GET', async () => {
+  let concluir: (resposta: { id: string }) => void = () => {};
+  editar.mockImplementationOnce(() => new Promise(resolve => { concluir = resolve; }));
+  consultar.mockResolvedValueOnce({ ...dados }).mockResolvedValue({ ...dados, obrigatoria: false });
+  render(<PainelComprovacaoEvidencia {...props} podeAlterarObrigatoriedade />);
+  const checkbox = await screen.findByRole('checkbox', { name: 'Evidência obrigatória' });
+  expect(checkbox).toBeChecked();
+  fireEvent.click(checkbox);
+  // Regressão real: não exigir que o navegador aguarde a resposta HTTP para
+  // observar a mudança de estado de um checkbox controlado por React.
+  expect(checkbox).not.toBeChecked();
+  await waitFor(() => expect(editar).toHaveBeenCalledWith('contrato-1', 'entregavel-1', 'evidencia-1', { obrigatoria: false }));
+  await act(async () => { concluir({ id: dados.id }); });
+  await waitFor(() => expect(checkbox).toBeEnabled());
+  expect(checkbox).not.toBeChecked();
+});
+
+test('checkbox reverte a mudança quando o PATCH é rejeitado', async () => {
+  let rejeitar: (motivo: Error) => void = () => {};
+  editar.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejeitar = reject; }));
+  consultar.mockResolvedValue({ ...dados });
+  render(<PainelComprovacaoEvidencia {...props} podeAlterarObrigatoriedade />);
+  const checkbox = await screen.findByRole('checkbox', { name: 'Evidência obrigatória' });
+  fireEvent.click(checkbox);
+  expect(checkbox).not.toBeChecked();
+  await act(async () => { rejeitar(new Error('Alteração bloqueada pela API')); });
+  await waitFor(() => expect(checkbox).toBeChecked());
+  expect(screen.getByRole('alert')).toHaveTextContent('Alteração bloqueada pela API');
+  expect(enviar).not.toHaveBeenCalled();
 });
 
 test('botão de verificação não é mostrado quando backend não autoriza', async () => {
@@ -195,13 +224,14 @@ test('rastreabilidade da evidência identifica nome anterior, novo nome e arquiv
   expect(screen.getByText('Arquivo: anexo-original.pdf')).toBeInTheDocument();
 });
 
-test('editar título sem escolher arquivo não envia comprovante nem mexe em outros itens', async () => {
+test('editar tipo antes de anexar não envia comprovante nem mexe em outros itens', async () => {
+  consultar.mockResolvedValue({...dados,status:'SEM_ENVIO',versoes:[]});
   render(<PainelComprovacaoEvidencia {...props} />);
   fireEvent.click(await screen.findByRole('button', { name: 'Editar tipo da evidência' }));
   fireEvent.change(screen.getByRole('combobox', { name: 'Tipo da evidência' }), { target: { value: 'Foto' } });
   fireEvent.click(screen.getByRole('button', { name: 'Salvar tipo da evidência' }));
   await waitFor(() => expect(editar).toHaveBeenCalledWith('contrato-1', 'entregavel-1', 'evidencia-1', {
-    tipoEvidencia: 'Foto', descricao: 'Comprovante esperado',
+    tipoEvidencia: 'Foto',
   }));
   expect(enviar).not.toHaveBeenCalled();
 });
@@ -244,12 +274,10 @@ test('verificação exige confirmação explícita antes de chamar a API', async
   await waitFor(() => expect(verificar).toHaveBeenCalledWith('contrato-1', 'entregavel-1', 'evidencia-1', 'comprovante-1'));
 });
 
-test('título e orientações são editados independentemente do arquivo', async () => {
+test('arquivo anexado bloqueia tipo, mas orientações continuam editáveis', async () => {
   render(<PainelComprovacaoEvidencia {...props} />);
-  fireEvent.click(await screen.findByRole('button', { name: 'Editar tipo da evidência' }));
-  expect(screen.getByRole('combobox', { name: 'Tipo da evidência' })).toHaveValue('Relatório');
-  expect(screen.queryByRole('textbox', { name: 'Título da evidência' })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Cancelar edição do tipo' }));
+  await screen.findByTestId('status-verificacao');
+  expect(screen.queryByRole('button', { name: 'Editar tipo da evidência' })).not.toBeInTheDocument();
   expect(editar).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'Editar orientações' }));
   expect(screen.getByRole('textbox', { name: 'Orientações da evidência' })).toHaveValue('Comprovante esperado');
@@ -266,10 +294,10 @@ test('permissão de envio não implica permissão de editar planejamento nem obr
 });
 
 
-test('orientações têm limite visual de 130 caracteres', async () => {
+test('orientações têm limite visual de 65 caracteres', async () => {
   render(<PainelComprovacaoEvidencia {...props} />);
   fireEvent.click(await screen.findByRole('button', { name: 'Editar orientações' }));
-  expect(screen.getByRole('textbox', { name: 'Orientações da evidência' })).toHaveAttribute('maxLength', '130');
+  expect(screen.getByRole('textbox', { name: 'Orientações da evidência' })).toHaveAttribute('maxLength', '65');
 });
 
 test('quando já existe comprovante o ícone é lápis e a verificação exige confirmação', async () => {
@@ -317,3 +345,98 @@ test('cancelar anexo inicial restaura o próprio cartão, sem envio ou estado de
   expect(screen.getByText('Nenhum comprovante registrado.')).toBeInTheDocument();
   expect(enviar).not.toHaveBeenCalled();
 });
+
+test('verificação confirma a contribuição existente sem permitir editar a quantidade', async () => {
+  consultar.mockResolvedValue({ ...dados, unidadeMedida: 'computadores', quantidadeMensuravel: true, podeEditarContribuicao: false,
+    versoes: [{ ...dados.versoes[0], quantidadeDeclarada: '25.000', quantidadeAprovada: null }] });
+  render(<PainelComprovacaoEvidencia {...props} />);
+  expect(await screen.findByText('25 computadores')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Editar contribuição' })).not.toBeInTheDocument();
+  fireEvent.click(await screen.findByRole('button', { name: 'Verificar comprovante' }));
+  expect(screen.queryByRole('textbox', { name: 'Quantidade verificada da evidência' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Confirmar verificação' }));
+  await waitFor(() => expect(verificar).toHaveBeenCalledWith('contrato-1', 'entregavel-1', 'evidencia-1', 'comprovante-1'));
+});
+
+test('R42: reabertura externa atualiza o painel montado e permite nova verificação', async () => {
+  consultar.mockResolvedValueOnce({...dados,status:'VERIFICADA',podeVerificar:false,versoes:[{...dados.versoes[0],status:'VERIFICADA'}]});
+  const view=render(<PainelComprovacaoEvidencia {...props} revisaoConsulta={0} somenteLeitura anexacaoDireta/>);
+  expect(await screen.findByTestId('status-verificacao')).toHaveTextContent('Verificado');
+  expect(screen.queryByRole('button',{name:'Verificar comprovante'})).not.toBeInTheDocument();
+  consultar.mockResolvedValue({...dados,reabertoEm:'2026-11-23T20:45:00Z'});
+  view.rerender(<PainelComprovacaoEvidencia {...props} revisaoConsulta={1} somenteLeitura anexacaoDireta/>);
+  expect(await screen.findByRole('button',{name:'Verificar comprovante'})).toBeInTheDocument();
+  expect(screen.getByTestId('status-verificacao')).toHaveTextContent('Pendente de verificação');
+  expect(screen.getByRole('button',{name:'Substituir comprovante'})).toBeInTheDocument();
+});
+test('R42: anexação direta não exige liberar edição de metadados',async()=>{
+  consultar.mockResolvedValue({...dados,status:'SEM_ENVIO',versoes:[],podeVerificar:false});
+  render(<PainelComprovacaoEvidencia {...props} podeEditar={false} somenteLeitura anexacaoDireta/>);
+  expect(await screen.findByRole('button',{name:'Anexar comprovante'})).toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'Editar orientações'})).not.toBeInTheDocument();
+});
+
+
+test('R42 revisado: resposta de consulta anterior não restaura uma evidência já reaberta', async () => {
+  let responder: (valor: unknown) => void = () => {};
+  consultar.mockImplementationOnce(() => new Promise(resolve => { responder = resolve; }));
+  const view = render(<PainelComprovacaoEvidencia {...props} revisaoConsulta={0} somenteLeitura anexacaoDireta />);
+  await waitFor(() => expect(consultar).toHaveBeenCalledTimes(1));
+  consultar.mockResolvedValue({ ...dados, reabertoEm: '2026-11-23T20:45:00Z' });
+  view.rerender(<PainelComprovacaoEvidencia {...props} revisaoConsulta={1} somenteLeitura anexacaoDireta />);
+  expect(await screen.findByRole('button', { name: 'Verificar comprovante' })).toBeInTheDocument();
+  await act(async () => { responder({ ...dados, status: 'VERIFICADA', podeVerificar: false, versoes: [{ ...dados.versoes[0], status: 'VERIFICADA' }] }); });
+  expect(screen.getByTestId('status-verificacao')).toHaveTextContent('Pendente de verificação');
+  expect(screen.getByRole('button', { name: 'Verificar comprovante' })).toBeInTheDocument();
+});
+
+test('R42 revisado: contexto bloqueado pela API impede edição e anexação mesmo com permissões nominais', async () => {
+  consultar.mockResolvedValue({ ...dados, contextoPermiteAlterar: false, podeVerificar: false });
+  render(<PainelComprovacaoEvidencia {...props} podeAlterarObrigatoriedade />);
+  await screen.findByTestId('status-verificacao');
+  expect(screen.queryByRole('button', { name: 'Substituir comprovante' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Editar orientações' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('checkbox', { name: 'Evidência obrigatória' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Verificar comprovante' })).not.toBeInTheDocument();
+});
+
+test('R51: reabertura mostra revisão e controles autorizados no mesmo painel', async () => {
+  consultar.mockResolvedValueOnce({...dados,status:'VERIFICADA',podeVerificar:false,versoes:[{...dados.versoes[0],status:'VERIFICADA'}]});
+  const view=render(<PainelComprovacaoEvidencia {...props} revisaoConsulta={0}/>);
+  expect(await screen.findByTestId('status-verificacao')).toHaveTextContent('Verificado');
+  expect(screen.queryByRole('button',{name:'Editar tipo da evidência'})).not.toBeInTheDocument();
+  consultar.mockResolvedValue({...dados,reabertoEm:'2026-11-24T12:00:00Z'});
+  view.rerender(<PainelComprovacaoEvidencia {...props} revisaoConsulta={1}/>);
+  await waitFor(()=>expect(screen.getByTestId('status-verificacao')).toHaveTextContent('Em revisão'));
+  expect(screen.getByRole('button',{name:'Verificar comprovante'})).toBeEnabled();
+  expect(screen.queryByRole('button',{name:'Editar tipo da evidência'})).not.toBeInTheDocument();
+  expect(screen.getByRole('button',{name:'Editar contribuição'})).toBeEnabled();
+  expect(screen.getByRole('button',{name:'Substituir comprovante'})).toBeEnabled();
+});
+
+test('R51: resposta confirmada da revisão atual não some durante revalidação do painel', async () => {
+  consultar.mockResolvedValueOnce({...dados,status:'VERIFICADA',podeVerificar:false,versoes:[{...dados.versoes[0],status:'VERIFICADA'}]});
+  const view = render(<PainelComprovacaoEvidencia {...props} revisaoConsulta={0}/>);
+  expect(await screen.findByTestId('status-verificacao')).toHaveTextContent('Verificado');
+  let resolver: (valor: unknown) => void = () => {};
+  consultar.mockImplementationOnce(() => new Promise(resolve => { resolver = resolve; }));
+  const reaberta = {...dados,reabertoEm:'2026-11-24T12:00:00Z'} as import('@/lib/comprovantes').DetalheEvidencia;
+  view.rerender(<PainelComprovacaoEvidencia {...props} revisaoConsulta={1} detalheConfirmado={reaberta}/>);
+  expect(screen.getByTestId('status-verificacao')).toHaveTextContent('Em revisão');
+  expect(screen.getByRole('button',{name:'Verificar comprovante'})).toBeEnabled();
+  await act(async()=>resolver(reaberta));
+  expect(screen.getByTestId('status-verificacao')).toHaveTextContent('Em revisão');
+});
+
+ test('corrige a contribuição de um comprovante pendente sem substituir arquivo', async()=>{
+  consultar.mockResolvedValue({...dados,tipoEntregavel:'UNICO'});
+  (editarContribuicaoEvidencia as jest.Mock).mockResolvedValue(dados.versoes[0]);
+  render(<PainelComprovacaoEvidencia {...props}/>);
+  fireEvent.click(await screen.findByRole('button',{name:'Editar contribuição'}));
+  const modal=screen.getByRole('dialog',{name:'Editar contribuição'});
+  fireEvent.click(within(modal).getByRole('button',{name:'Percentual'}));
+  fireEvent.change(within(modal).getByLabelText(/Percentual/),{target:{value:'12,50'}});
+  fireEvent.click(within(modal).getByRole('button',{name:'Salvar contribuição'}));
+  await waitFor(()=>expect(editarContribuicaoEvidencia).toHaveBeenCalledWith('contrato-1','entregavel-1','evidencia-1','comprovante-1',{modalidade:'PERCENTUAL',valor:'12.50'}));
+  expect(enviar).not.toHaveBeenCalled();
+ });

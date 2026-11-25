@@ -68,6 +68,13 @@ describe('HU09 — escopo persistido e limites seguros da recorrência', () => {
       .toThrow(BadRequestException);
   });
 
+  it('explica as datas do período incompleto sem alterar a política PQ-09/10', () => {
+    expect(() => calcularPeriodosRecorrentes('2026-01-01', '2026-01-10', PeriodicidadeEntregavel.SEMANAL))
+      .toThrow('08/01/2026 a 14/01/2026');
+    expect(() => calcularPeriodosRecorrentes('2026-01-01', '2026-01-10', PeriodicidadeEntregavel.SEMANAL))
+      .toThrow('10/01/2026');
+  });
+
   it('não produz períodos mensais ambíguos a partir de 29, 30 ou 31', () => {
     expect(() => calcularPeriodosRecorrentes('2026-01-31', '2026-04-30', PeriodicidadeEntregavel.MENSAL))
       .toThrow(BadRequestException);
@@ -86,23 +93,24 @@ describe('HU09 — mutações respeitam o ciclo de vida da hierarquia', () => {
     const entregavel = { id: 'e', etapaId: 'et', contratoId: CONTRATO, arquivadoEm: null, statusExecucao };
     const repo = { findOne: jest.fn(async () => entregavel), findOneBy: jest.fn(async () => entregavel), save: jest.fn() };
     const ocorrenciaRepo = { findOne: jest.fn(async () => ({ id: 'o', entregavelId: 'e' })), save: jest.fn() };
+    const buscarContexto = jest.fn(async (tipo: unknown) => tipo === Contrato ? { status: statusContrato, arquivadoEm: null } : tipo === Etapa ? { status: statusEtapa, arquivadoEm: null } : null);
     const manager = {
-      findOne: jest.fn(async (tipo: unknown) => tipo === Contrato ? { status: statusContrato, arquivadoEm: null } : tipo === Etapa ? { status: statusEtapa, arquivadoEm: null } : null),
+      findOne: buscarContexto,
       getRepository: (tipo: unknown) => tipo === Entregavel ? repo : ocorrenciaRepo,
     } as unknown as EntityManager;
     const dataSource = { transaction: async (fn: (m: EntityManager) => Promise<unknown>) => fn(manager) } as unknown as DataSource;
-    return { service: new OcorrenciasService({} as Repository<Ocorrencia>, {} as Repository<Entregavel>, dataSource, {} as AuditoriaService, {} as ResolverEscopoContratoService), repo, ocorrenciaRepo, manager };
+    return { service: new OcorrenciasService({} as Repository<Ocorrencia>, {} as Repository<Entregavel>, dataSource, {} as AuditoriaService, {} as ResolverEscopoContratoService), repo, ocorrenciaRepo, buscarContexto };
   }
   it.each([
     ['SUSPENSO', 'PLANEJADA', 'EM_ANDAMENTO'],
     ['PLANEJAMENTO', 'CONCLUIDA', 'EM_ANDAMENTO'],
     ['PLANEJAMENTO', 'PLANEJADA', 'CONCLUIDO'],
   ])('bloqueia geração, cadastro e edição sob %s/%s/%s, sem gravar', async (contrato, etapa, entregavel) => {
-    const { service, repo, ocorrenciaRepo, manager } = cenario(contrato, etapa, entregavel);
+    const { service, repo, ocorrenciaRepo, buscarContexto } = cenario(contrato, etapa, entregavel);
     await expect(service.gerarRecorrentes(CONTRATO, 'e', false, ator)).rejects.toBeInstanceOf(ConflictException);
     await expect(service.criarManualQuantitativa(CONTRATO, 'e', { titulo: 'QA' }, ator)).rejects.toBeInstanceOf(ConflictException);
     await expect(service.atualizar(CONTRATO, 'o', {}, ator)).rejects.toBeInstanceOf(ConflictException);
-    expect(manager.findOne).toHaveBeenCalledWith(Contrato, { where: { id: CONTRATO }, lock: { mode: 'pessimistic_write' } });
+    expect(buscarContexto).toHaveBeenCalledWith(Contrato, { where: { id: CONTRATO }, lock: { mode: 'pessimistic_write' } });
     expect(repo.save).not.toHaveBeenCalled();
     expect(ocorrenciaRepo.save).not.toHaveBeenCalled();
   });

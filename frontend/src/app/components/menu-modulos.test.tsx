@@ -1,55 +1,20 @@
 import { renderComConsultas } from '@/test-utils';
-import { act, screen } from "@testing-library/react";
-import { MenuLateral, MenuMobile } from "./menu-modulos";
-import { consultarMeuPerfil } from "@/lib/admin-usuarios";
+import { screen } from '@testing-library/react';
+import { MenuLateral, MenuMobile } from './menu-modulos';
 
-jest.mock("next/navigation", () => ({ usePathname: () => "/admin/usuarios/novo" }));
-jest.mock("@/lib/admin-usuarios", () => ({ consultarMeuPerfil: jest.fn() }));
-const perfil = consultarMeuPerfil as jest.MockedFunction<typeof consultarMeuPerfil>;
+jest.mock('next/navigation', () => ({ usePathname: () => '/admin' }));
 
-beforeEach(() => jest.clearAllMocks());
-
-test("B3 libera diário e contratos sem mostrar módulos futuros como ativos", async () => {
-  perfil.mockResolvedValue({ id: "u", nome: "Colaborador de Teste", email: "teste@example.com", perfil: "COLABORADOR", ativo: true });
-  // Verifica a ausência do link administrativo após a consulta do perfil terminar.
-  await act(async () => {
-    renderComConsultas(<MenuMobile />);
-  });
-  expect(screen.getByRole("link", { name: /Contratos/ })).toHaveAttribute("href", "/contratos");
-  expect(screen.getByRole('link', { name: 'Atividades' })).toHaveAttribute('href', '/atividades');
-  expect(screen.getByLabelText('Evidências · Indisponível')).toBeInTheDocument();
-  expect(screen.getByRole('navigation', { name: 'Navegação móvel' })).toHaveClass('flex-nowrap');
-  expect(screen.queryByRole("link", { name: "Funcionários" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("link", { name: "Minha conta" })).not.toBeInTheDocument();
-});
-
-test("B3 mantém navegação de Contratos e administração restrita ao ADMIN", async () => {
-  perfil.mockResolvedValue({ id: "u", nome: "Administrador de Teste", email: "admin@example.com", perfil: "ADMINISTRADOR", ativo: true });
+test('menu contém apenas os quatro módulos de navegação', () => {
   renderComConsultas(<MenuLateral />);
-  expect(screen.getByRole("link", { name: /Contratos/ })).toHaveAttribute("href", "/contratos");
-  const entrada = await screen.findByRole("link", { name: "Funcionários" });
-  expect(entrada).toHaveAttribute("href", "/admin/usuarios");
-  expect(entrada).toHaveAttribute("aria-current", "page");
-  expect(entrada).toHaveClass("bg-brand-green/20", "text-brand-neon");
-  expect(screen.getByRole("link", { name: "Minha conta" })).toHaveAttribute("href", "/usuario");
+  const menu = screen.getByRole('navigation');
+  expect(Array.from(menu.querySelectorAll('a')).map(link => link.getAttribute('href'))).toEqual(['/dashboard','/contratos','/relatorios','/admin']);
+  expect(screen.getByRole('link', { name: 'Administração' })).toHaveAttribute('aria-current','page');
+  expect(screen.queryByRole('link', { name: 'Ocorrências' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Atividades' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Evidências' })).not.toBeInTheDocument();
 });
-
-
-test('menu lateral mantém nomes acessíveis quando visualmente compacto', async () => {
-  perfil.mockResolvedValue({ id: 'u', nome: 'Administrador', email: 'admin@example.com', perfil: 'ADMINISTRADOR', ativo: true });
-  renderComConsultas(<MenuLateral />);
-  expect(screen.getByRole('complementary', { name: 'Navegação principal' })).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: 'Contratos' })).toHaveAttribute('title', 'Contratos');
-});
-
-test('Ocorrências segue Atividades no menu e fica disponível para usuários autorizados ao aplicativo', async () => {
-  perfil.mockResolvedValue({ id: 'u', nome: 'Usuário', email: 'teste@example.com', perfil: 'COLABORADOR', ativo: true });
-  await act(async () => { renderComConsultas(<MenuMobile />); });
-  const barra = screen.getByRole('navigation', { name: 'Navegação móvel' });
-  const links = Array.from(barra.querySelectorAll('a'));
-  const atividades = links.findIndex(link => link.getAttribute('href') === '/atividades');
-  expect(atividades).toBeGreaterThan(-1);
-  expect(links[atividades + 1]).toHaveAttribute('href', '/ocorrencias');
-  expect(screen.getByRole('link', { name: 'Ocorrências' })).toBeInTheDocument();
-  expect(barra.closest('.tec08-abas-rolagem')).toBeInTheDocument();
+test('menu mobile também mantém os quatro links', () => {
+  renderComConsultas(<MenuMobile />);
+  const menu = screen.getByRole('navigation', { name: 'Navegação móvel' });
+  expect(Array.from(menu.querySelectorAll('a')).map(link => link.getAttribute('href'))).toEqual(['/dashboard','/contratos','/relatorios','/admin']);
 });

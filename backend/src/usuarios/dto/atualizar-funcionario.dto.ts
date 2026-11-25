@@ -9,7 +9,7 @@ export class AtualizarFuncionarioDto {
   @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : value)
   @IsString()
   @MinLength(3)
-  @MaxLength(160)
+  @MaxLength(25)
   @Matches(REGEX_NOME_COMPLETO, { message: 'Informe nome e sobrenome válidos' })
   nome?: string;
 

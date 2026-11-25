@@ -15,7 +15,7 @@ test('cadastro usa campos reais, nenhum PDF fictício nem save desabilitado', ()
   expect(screen.getByLabelText('Responsável pelo contrato (opcional)')).toBeInTheDocument();
   // O cadastro persiste o contrato antes do upload; o arquivo não faz parte deste POST.
   expect(container.querySelector('input[type="file"]')).toBeNull();
-  expect(screen.getByRole('note')).toHaveTextContent(/O contrato será salvo primeiro/i);
+  expect(screen.queryByText(/O contrato será salvo primeiro/i)).not.toBeInTheDocument();
 });
 
 test('edição envia payload DTO sem id e sem string vazia em data de assinatura', async () => {
@@ -52,13 +52,12 @@ test('cadastro vazio mostra erro da aplicação em vez do balão de validação 
 
 test('limites de caracteres e mensagens explicativas de modo de cálculo', () => {
   render(<FormularioContrato responsaveis={[]} onSalvar={jest.fn()} />);
-  expect(screen.getByLabelText('Objeto *')).toHaveAttribute('maxLength', '500');
-  expect(screen.getByText(/média dos percentuais de execução/)).toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText('Modo de cálculo físico *'), { target: { value: 'PONDERADO' } });
-  expect(screen.getByText(/pesos válidos deverão somar 100%/)).toBeInTheDocument();
+  expect(screen.getByLabelText('Objeto *')).toHaveAttribute('maxLength', '50');
+  expect(screen.queryByLabelText('Modo de cálculo físico *')).not.toBeInTheDocument();
+  expect(screen.getByText(/é configurado na aba Execução/)).toBeInTheDocument();
   fireEvent.click(screen.getByText(/Informações complementares/));
-  expect(screen.getByLabelText('Descrição')).toHaveAttribute('maxLength', '1500');
-  expect(screen.getByLabelText('Observações')).toHaveAttribute('maxLength', '1000');
+  expect(screen.getByLabelText('Descrição')).toHaveAttribute('maxLength', '400');
+  expect(screen.getByLabelText('Observações')).toHaveAttribute('maxLength', '200');
 });
 
 test('edicao nao reutiliza silenciosamente termino antigo em duracao ambigua', async () => {
@@ -76,41 +75,44 @@ test('edicao nao reutiliza silenciosamente termino antigo em duracao ambigua', a
 });
 
 
-test('responsável fora da lista aparece como Não atribuído sem expor ID nem apagar vínculo ao editar outro campo', async () => {
+test('responsável anterior fora da lista é preservado ao editar outro campo', async () => {
   const salvar = jest.fn().mockResolvedValue(undefined);
   const idAnterior = '22222222-2222-4222-8222-222222222222';
   render(<FormularioContrato inicial={{ ...inicial, responsavelInternoId: idAnterior }} responsaveis={[]} onSalvar={salvar} />);
-  const seletor = screen.getByLabelText('Responsável pelo contrato (opcional)') as HTMLSelectElement;
-  expect(seletor).toHaveValue('');
-  expect(seletor).toHaveTextContent('Não atribuído');
-  expect(seletor).not.toHaveTextContent(/identificador reservado/i);
-  fireEvent.change(screen.getByLabelText('Número do contrato *'), { target: { value: '123/2026' } });
+  expect(screen.getByText(/Responsável existente \(fora da lista atual\)/)).toBeInTheDocument();
+  expect(screen.queryByText(idAnterior)).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Número do contrato *'), { target: { value: '1232026' } });
   fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
   await waitFor(() => expect(salvar).toHaveBeenCalledTimes(1));
   expect(salvar.mock.calls[0][0].responsavelInternoId).toBe(idAnterior);
 });
 
-test('seleção explícita de Não atribuído remove vínculo anterior não selecionável', async () => {
+test('remover atribuição anterior é uma decisão explícita', async () => {
   const salvar = jest.fn().mockResolvedValue(undefined);
   render(<FormularioContrato inicial={{ ...inicial, responsavelInternoId: '22222222-2222-4222-8222-222222222222' }} responsaveis={[]} onSalvar={salvar} />);
-  const seletor = screen.getByLabelText('Responsável pelo contrato (opcional)');
-  // A seleção nativa já mostra a opção neutra; change explícito sinaliza
-  // intenção de remover a atribuição, sem depender de valor reservado.
-  fireEvent.change(seletor, { target: { value: '' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Remover atribuição' }));
   fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
   await waitFor(() => expect(salvar).toHaveBeenCalledTimes(1));
   expect(salvar.mock.calls[0][0].responsavelInternoId).toBeNull();
 });
 
-
-test('responsável ativo presente na lista segue identificado pelo nome, sem fallback', () => {
+test('responsável ativo é exibido pelo e-mail e pode ser alterado por busca', () => {
   const id = '22222222-2222-4222-8222-222222222222';
   const responsavel = { id, nome: 'Gestor Exemplo', email: 'gestor@example.com', perfil: 'GESTOR' as const, ativo: true, criadoEm: '2026-11-01T00:00:00.000Z' };
   render(<FormularioContrato inicial={{ ...inicial, responsavelInternoId: id }} responsaveis={[responsavel]} onSalvar={jest.fn()} />);
-  const seletor = screen.getByLabelText('Responsável pelo contrato (opcional)');
-  expect(seletor).toHaveValue(id);
-  expect(seletor).toHaveTextContent('Gestor Exemplo');
-  expect(seletor).not.toHaveTextContent(/identificador reservado/i);
+  expect(screen.getByText('gestor@example.com')).toBeInTheDocument();
+  expect(screen.queryByText(id)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Remover atribuição' }));
+  expect(screen.getByRole('combobox', { name: 'Responsável pelo contrato (opcional)' })).toBeInTheDocument();
+});
+
+test('limites de 32 caracteres e textos auxiliares alinhados', () => {
+  render(<FormularioContrato responsaveis={[]} onSalvar={jest.fn()} />);
+  fireEvent.click(screen.getByText(/Informações complementares/));
+  expect(screen.getByLabelText('Processo administrativo')).toHaveAttribute('maxLength', '32');
+  expect(screen.getByLabelText('Unidade responsável')).toHaveAttribute('maxLength', '32');
+  expect(screen.getByText('Anotações administrativas complementares.')).toBeInTheDocument();
+  expect(screen.queryByText('Detalhamento adicional do objeto e do contexto do contrato.')).not.toBeInTheDocument();
 });
 
 test('TEC08: operações especiais são listadas no próprio status apenas com permissão', () => {
@@ -153,7 +155,7 @@ test('editar texto ou fase durante revisão mantém a revisão sem retomar opera
   const revisao = { ...inicial, status: 'PLANEJAMENTO' as const, reabertoEm: '2026-11-08T09:00:00Z' };
   const tela = render(<FormularioContrato inicial={revisao} responsaveis={[]} onSalvar={salvar} />);
   expect(screen.getByLabelText('Status operacional *')).toHaveValue('PLANEJAMENTO');
-  fireEvent.change(screen.getByLabelText('Número do contrato *'), { target: { value: 'Contrato corrigido' } });
+  fireEvent.change(screen.getByLabelText('Número do contrato *'), { target: { value: '2026002' } });
   fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
   await waitFor(() => expect(salvar).toHaveBeenCalledTimes(1));
   expect(salvar.mock.calls[0][0]).not.toHaveProperty('retomarOperacao');
@@ -176,4 +178,12 @@ test('diferencia visualmente cadastro verde de edição contextual sem alterar a
   render(<FormularioContrato inicial={inicial} responsaveis={[]} onSalvar={jest.fn()} />);
   expect(screen.getByRole('form', { name: 'Editar dados do contrato' })).toHaveAttribute('data-tec08-edicao', 'true');
   expect(screen.getByRole('button', { name: 'Salvar alterações' })).toHaveAttribute('aria-busy', 'false');
+});
+
+test('campo número só admite algarismos em novo cadastro', () => {
+  render(<FormularioContrato responsaveis={[]} onSalvar={jest.fn()} />);
+  const numero = screen.getByLabelText('Número do contrato *') as HTMLInputElement;
+  fireEvent.change(numero, { target: { value: '2026/001-A' } });
+  expect(numero.value).toBe('2026001');
+  expect(numero).toHaveAttribute('inputMode', 'numeric');
 });

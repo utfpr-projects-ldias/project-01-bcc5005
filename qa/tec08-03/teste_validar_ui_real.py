@@ -11,6 +11,25 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import validar_ui_real as ui
 
 class TesteQATec0803(unittest.TestCase):
+    def test_numero_contrato_real_usado_para_localizar_cartao(self):
+        from unittest.mock import patch
+        contrato_id = '11111111-1111-4111-8111-111111111111'
+        with patch.object(ui.base, 'api', return_value={
+            'status': 200, 'body': {'id': contrato_id, 'numeroContrato': '123456789012345'}
+        }) as api:
+            self.assertEqual(ui.numero_contrato_real(object(), contrato_id), '123456789012345')
+            self.assertEqual(api.call_args.args[1], f'/contratos/{contrato_id}')
+        with patch.object(ui.base, 'api', return_value={
+            'status': 200, 'body': {'id': contrato_id, 'numeroContrato': 'QA-ANTIGO'}
+        }):
+            with self.assertRaises(AssertionError):
+                ui.numero_contrato_real(object(), contrato_id)
+        fonte = Path(ui.__file__).read_text(encoding='utf-8')
+        self.assertIn('numero_qa = numero_contrato_real(admin, a)', fonte)
+        self.assertNotIn("numero_qa = f'QA-TEC08-03-", fonte)
+        self.assertLess(fonte.index('resumo.scroll_into_view_if_needed()', fonte.index('numero_qa = numero_contrato_real(admin, a)')),
+                        fonte.index('cartao.click()', fonte.index('numero_qa = numero_contrato_real(admin, a)')))
+
     def test_assinaturas_validas(self):
         self.assertTrue(ui.base.uuid_ok('11111111-1111-4111-8111-111111111111'))
         self.assertFalse(ui.base.uuid_ok('nao-uuid'))
@@ -23,21 +42,24 @@ class TesteQATec0803(unittest.TestCase):
         self.assertIn('aria-label="Pesquisar contrato"', carteira)
         self.assertIn('id="campo-busca"', carteira)
         self.assertIn("aria-label={opcao === 'todos' ? 'Todos os contratos'", carteira)
-        self.assertIn('aria-label={`Abrir contrato ${c.numeroContrato}`}', carteira)
+        self.assertIn('role="button" tabIndex={0} aria-label={`Abrir detalhes do contrato ${c.numeroContrato}`}', carteira)
         self.assertIn('data-testid="resumo-planejamento-contrato"', resumo)
-        self.assertIn('role="img" aria-label={rotulo}', resumo)
-        self.assertIn('etapas concluídas e comprovadas', resumo)
-        self.assertIn('entregáveis documentalmente comprovados', resumo)
-        self.assertIn('evidências obrigatórias verificadas', resumo)
+        self.assertIn('role="img" aria-label={`${item.valor} de ${item.total} ${item.descricao}`}', resumo)
+        self.assertIn('etapas finalizadas', resumo)
+        self.assertIn('entregáveis finalizados', resumo)
+        self.assertIn('evidências verificadas', resumo)
+        self.assertIn('exigências obrigatórias atendidas', resumo)
+        self.assertIn('grid-cols-4', resumo)
         self.assertIn("get_by_role('tab', name='Todos os contratos')", qa)
         self.assertIn("locator('#campo-busca').select_option('todos')", qa)
         self.assertIn("get_by_role('searchbox', name='Pesquisar contrato')", qa)
-        self.assertIn("get_by_role('link', name=f'Abrir contrato {numero_qa}'", qa)
+        self.assertIn("get_by_role('button', name=f'Abrir detalhes do contrato {numero_qa}'", qa)
         self.assertIn("get_by_test_id('resumo-planejamento-contrato')", qa)
         self.assertIn("get_by_role('img', name=rotulo, exact=True)", qa)
-        for rotulo in ('0 de 1 etapas concluídas e comprovadas',
-                       '0 de 1 entregáveis documentalmente comprovados',
-                       '0 de 1 evidências obrigatórias verificadas'):
+        for rotulo in ('0 de 1 etapas finalizadas',
+                       '0 de 1 entregáveis finalizados',
+                       '0 de 1 evidências verificadas',
+                       '0 de 1 exigências obrigatórias atendidas'):
             self.assertIn(rotulo, qa)
         for obsoleto in ('Buscar por código, número, órgão ou objeto',
                          'ul.space-y-4 > li', 'progress[aria-label',
@@ -150,7 +172,8 @@ class TesteQATec0803(unittest.TestCase):
         fonte = Path(ui.__file__).read_text(encoding='utf-8')
         pagina = (ui.RAIZ / 'frontend/src/app/contratos/novo/page.tsx').read_text(encoding='utf-8')
         self.assertNotIn('anexarDocumento=principal', pagina)
-        self.assertIn('router.push(`/contratos/${encodeURIComponent(criado.id)}`)', pagina)
+        self.assertIn("redirect('/contratos')", pagina)
+        self.assertIn("const [pendente,setPendente]=useState<DadosContrato|null>(null)", (ui.RAIZ / 'frontend/src/app/contratos/components/modal-novo-contrato.tsx').read_text(encoding='utf-8'))
         self.assertIn("page.get_by_role('tab', name='Documentos').click()", fonte)
         self.assertIn("get_by_role('button', name='Anexar documento').click()", fonte)
         self.assertIn("page.get_by_role('dialog', name='Anexar documento contratual')", fonte)
@@ -201,7 +224,9 @@ class TesteQATec0803(unittest.TestCase):
         self.assertLess(bloco.index(visivel), bloco.index(filtro))
         # A preferencia por categoria persiste, mas nao muda a aba da UI.
         pagina = (ui.RAIZ / 'frontend/src/app/contratos/[id]/page.tsx').read_text(encoding='utf-8')
-        self.assertIn("useState<'visao' | 'etapas' | 'atividades' | 'ocorrencias' | 'documentos'>('visao')", pagina)
+        self.assertIn("useState<'visao' | 'execucao' | 'etapas' | 'atividades' | 'documentos'>('visao')", pagina)
+        self.assertIn('id="painel-execucao"', pagina)
+        self.assertIn('id="painel-documentos"', pagina)
 
     def test_qa_ativa_abas_de_etapas_e_documentos_por_perfil(self):
         codigo = Path(ui.__file__).read_text(encoding='utf-8')
@@ -235,7 +260,8 @@ class TesteQATec0803(unittest.TestCase):
         self.assertIn('modal_item.wait_for', fonte)
         self.assertIn("get_by_role('region', name='Detalhe da evidência esperada')", fonte)
         self.assertIn("get_by_text('Aguardando envio', exact=True)", fonte)
-        self.assertIn("get_by_text('0/1 evidências obrigatórias verificadas', exact=True)", fonte)
+        self.assertIn("get_by_text('0/1 evidências obrigatórias', exact=True)", fonte)
+        self.assertIn("get_by_role('img', name='0 de 1 evidências obrigatórias verificadas'", fonte)
         self.assertIn('HU07: etapa/entregável criados por UI', fonte)
         componente = ui.RAIZ / 'frontend/src/app/contratos/components/entregaveis-da-etapa.tsx'
         self.assertIn('__modalEntregavel', componente.read_text(encoding='utf-8'))
@@ -260,12 +286,13 @@ class TesteQATec0803(unittest.TestCase):
     def test_cadastro_de_evidencia_usa_select_nativo_e_rotulos_reais(self):
         fonte = Path(ui.__file__).read_text(encoding='utf-8')
         formulario = (ui.RAIZ / 'frontend/src/app/contratos/components/formulario-entregavel.tsx').read_text(encoding='utf-8')
-        self.assertIn('<select id={formId(`ev-${item.chave}-tipo`)}', formulario)
-        self.assertIn('<option value="Relatório">Relatório</option>', formulario)
-        self.assertIn("get_by_label('Tipo de evidência *').select_option('Relatório')", fonte)
+        self.assertIn("'Cadastrar entregável'", formulario)
+        self.assertIn('<select id={`tipo-novo-${item.id}`}', (ui.RAIZ / 'frontend/src/app/contratos/components/conteudo-entregavel.tsx').read_text(encoding='utf-8'))
+        self.assertIn('<option value="Relatório">Relatório</option>', (ui.RAIZ / 'frontend/src/app/contratos/components/conteudo-entregavel.tsx').read_text(encoding='utf-8'))
+        self.assertIn("cadastro_evidencia.get_by_label('Tipo de evidência').select_option('Relatório')", fonte)
         self.assertNotIn("get_by_label('Tipo de evidência *').fill(", fonte)
         self.assertIn("get_by_label('Status da evidência Relatório')", fonte)
-        self.assertIn("name='Relatório', exact=True", fonte)
+        self.assertIn("name='Nova evidência esperada'", fonte)
         self.assertNotIn('Relatório de QA', fonte)
 
     def test_localizador_da_etapa_nao_usa_has_absoluto(self):

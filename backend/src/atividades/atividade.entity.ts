@@ -2,16 +2,22 @@ import { Column, CreateDateColumn, Entity, JoinColumn, JoinTable, ManyToMany, Ma
 import { Entregavel } from '../entregaveis/entregavel.entity.js';
 import { Ocorrencia } from '../ocorrencias/ocorrencia.entity.js';
 
-export type EstadoAtividade = 'REGISTRADA' | 'VERIFICADA' | 'ARQUIVADA';
+export type EstadoAtividade = 'REGISTRADA' | 'PENDENTE_CONCLUSAO' | 'VERIFICADA' | 'ARQUIVADA';
 
 /** Atividade operacional vinculada a contrato; nenhum progresso é calculado aqui. */
 @Entity('atividades')
 export class AtividadeEntity {
   @PrimaryGeneratedColumn('uuid') id!: string;
   @Column({ type: 'uuid' }) contratoId!: string;
+  /** Grupo opcional: a aprovação segue independente por contrato. */
+  @Column({ name: 'atividade_compartilhada_id', type: 'uuid', nullable: true })
+  atividadeCompartilhadaId!: string | null;
   /** HU09: vínculo opcional, com FK composta garantindo mesmo contrato. */
   @Column({ name: 'ocorrenciaId', type: 'uuid', nullable: true })
   ocorrenciaId!: string | null;
+  /** Quantidade executada nesta atividade, vinculada a ocorrência quantitativa. */
+  @Column({ name: 'quantidade_execucao', type: 'numeric', precision: 18, scale: 3, nullable: true })
+  quantidadeExecucao!: string | null;
 
   @ManyToOne(() => Ocorrencia, { nullable: true, onDelete: 'RESTRICT' })
   @JoinColumn([
@@ -43,6 +49,14 @@ export class AtividadeEntity {
     inverseJoinColumn: { name: 'entregavelId', referencedColumnName: 'id' },
   })
   entregaveis!: Entregavel[];
+  /** Vínculos de participação N:N. A coluna ocorrenciaId segue como referência exclusiva para quantidade executada. */
+  @ManyToMany(() => Ocorrencia, { cascade: false })
+  @JoinTable({
+    name: 'atividade_ocorrencias',
+    joinColumn: { name: 'atividadeId', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'ocorrenciaId', referencedColumnName: 'id' },
+  })
+  ocorrencias!: Ocorrencia[];
   @CreateDateColumn() createdAt!: Date;
   @UpdateDateColumn() updatedAt!: Date;
 }
