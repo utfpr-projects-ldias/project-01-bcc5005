@@ -1,9 +1,14 @@
-import { ModoMedicaoRecorrente1798000000000 } from '../src/database/migrations/1798000000000-ModoMedicaoRecorrente.js';
-import { SolicitacaoEncerramentoContrato1797900000000 } from '../src/database/migrations/1797900000000-SolicitacaoEncerramentoContrato.js';
-/** A mesma lista cronológica de migrations da aplicação.
- * O teste nunca executa migrations no banco de desenvolvimento: os E2E verificam
- * a URL de um banco exclusivo antes de abrir o DataSource.
- */
+import { RastreabilidadeMedicaoB071798280000000 } from '../src/database/migrations/1798280000000-RastreabilidadeMedicaoB07.js';
+import { IntegridadeReferenciasExecucaoB011798270000000 } from '../src/database/migrations/1798270000000-IntegridadeReferenciasExecucaoB01.js';
+import { IntegridadeDocumentalB091798260000000 } from '../src/database/migrations/1798260000000-IntegridadeDocumentalB09.js';
+import { CicloAtividadesB081798250000000 } from '../src/database/migrations/1798250000000-CicloAtividadesB08.js';
+import { ExecucaoOcorrenciasB071798240000000 } from '../src/database/migrations/1798240000000-ExecucaoOcorrenciasB07.js';
+import { IntegridadeAgendaB061798230000000 } from '../src/database/migrations/1798230000000-IntegridadeAgendaB06.js';
+import { PlanejamentoEntregaveisB051798220000000 } from '../src/database/migrations/1798220000000-PlanejamentoEntregaveisB05.js';
+import { CicloEtapasB041798210000000 } from '../src/database/migrations/1798210000000-CicloEtapasB04.js';
+/** Lista explícita para o resolver ESM do Jest. A suíte de paridade impede que
+ * uma migration nova fique fora da fixture. Os consumidores mantêm suas guardas
+ * de banco exclusivamente de testes, sem importar o DataSource DEV. */
 import { CriarUsuarios1792540000000 } from '../src/database/migrations/1792540000000-CriarUsuarios.js';
 import { CriarPermissoesContrato1793000000000 } from '../src/database/migrations/1793000000000-CriarPermissoesContrato.js';
 import { CriarEventosAuditoria1793100000000 } from '../src/database/migrations/1793100000000-CriarEventosAuditoria.js';
@@ -52,11 +57,26 @@ import { AtividadesCompartilhadas1797200000000 } from '../src/database/migration
 import { PrepararUuidOsspMetasMarco1797250000000 } from '../src/database/migrations/1797250000000-PrepararUuidOsspMetasMarco.js';
 import { MetasMarco1797300000000 } from '../src/database/migrations/1797300000000-MetasMarco.js';
 import { CorrigirDisparoModoOcorrencias1797400000000 } from '../src/database/migrations/1797400000000-CorrigirDisparoModoOcorrencias.js';
+import { ComprovacaoEQuantidadeEvidencia1797500000000 } from '../src/database/migrations/1797500000000-ComprovacaoEQuantidadeEvidencia.js';
 import { RegularizacaoDocumental1797600000000 } from '../src/database/migrations/1797600000000-RegularizacaoDocumental.js';
 import { ProvasVinculadasR411797650000000 } from '../src/database/migrations/1797650000000-ProvasVinculadasR41.js';
-import { RevisaoLancamentosQuantitativos1797800000000 } from '../src/database/migrations/1797800000000-RevisaoLancamentosQuantitativos.js';
 import { ExecucoesIntegradas1797700000000 } from '../src/database/migrations/1797700000000-ExecucoesIntegradas.js';
-import { ComprovacaoEQuantidadeEvidencia1797500000000 } from '../src/database/migrations/1797500000000-ComprovacaoEQuantidadeEvidencia.js';
+import { RevisaoLancamentosQuantitativos1797800000000 } from '../src/database/migrations/1797800000000-RevisaoLancamentosQuantitativos.js';
+import { SolicitacaoEncerramentoContrato1797900000000 } from '../src/database/migrations/1797900000000-SolicitacaoEncerramentoContrato.js';
+import { ModoMedicaoRecorrente1798000000000 } from '../src/database/migrations/1798000000000-ModoMedicaoRecorrente.js';
+import { EvidenciasCompartilhadas1798100000000 } from '../src/database/migrations/1798100000000-EvidenciasCompartilhadas.js';
+import { ContagemProvasDistintas1798110000000 } from '../src/database/migrations/1798110000000-ContagemProvasDistintas.js';
+import { QuantidadeDiretaEvidencias1798120000000 } from '../src/database/migrations/1798120000000-QuantidadeDiretaEvidencias.js';
+import { QuantidadeDiretaAtividades1798130000000 } from '../src/database/migrations/1798130000000-QuantidadeDiretaAtividades.js';
+import { ParcelasAtividadePorEntregavel1798140000000 } from '../src/database/migrations/1798140000000-ParcelasAtividadePorEntregavel.js';
+import { QuantidadeDiretaManual1798150000000 } from '../src/database/migrations/1798150000000-QuantidadeDiretaManual.js';
+import { RascunhoEnvioEvidencia1798160000000 } from '../src/database/migrations/1798160000000-RascunhoEnvioEvidencia.js';
+import { ComprovacaoQuantidadeDireta1798170000000 } from '../src/database/migrations/1798170000000-ComprovacaoQuantidadeDireta.js';
+
+import { IntegridadeInfraestruturaB011798180000000 } from '../src/database/migrations/1798180000000-IntegridadeInfraestruturaB01.js';
+
+import { CicloContratualB031798200000000 } from '../src/database/migrations/1798200000000-CicloContratualB03.js';
+import { BloqueioSessoesB021798190000000 } from '../src/database/migrations/1798190000000-BloqueioSessoesB02.js';
 
 export const migrationsCompletas = [
   CriarUsuarios1792540000000,
@@ -114,4 +134,23 @@ export const migrationsCompletas = [
   RevisaoLancamentosQuantitativos1797800000000,
   SolicitacaoEncerramentoContrato1797900000000,
   ModoMedicaoRecorrente1798000000000,
+  EvidenciasCompartilhadas1798100000000,
+  ContagemProvasDistintas1798110000000,
+  QuantidadeDiretaEvidencias1798120000000,
+  QuantidadeDiretaAtividades1798130000000,
+  ParcelasAtividadePorEntregavel1798140000000,
+  QuantidadeDiretaManual1798150000000,
+  RascunhoEnvioEvidencia1798160000000,
+  ComprovacaoQuantidadeDireta1798170000000,
+  IntegridadeInfraestruturaB011798180000000,
+  BloqueioSessoesB021798190000000,
+  CicloContratualB031798200000000,
+  CicloEtapasB041798210000000,
+  PlanejamentoEntregaveisB051798220000000,
+  IntegridadeAgendaB061798230000000,
+  ExecucaoOcorrenciasB071798240000000,
+  CicloAtividadesB081798250000000,
+  IntegridadeDocumentalB091798260000000,
+  IntegridadeReferenciasExecucaoB011798270000000,
+  RastreabilidadeMedicaoB071798280000000,
 ];

@@ -17,7 +17,7 @@ const ator: UsuarioAutenticado = {
   email: 'admin@exemplo.test', supertokensUserId: 'qa-r40-admin',
 };
 
-function contexto({ exigencias = 1, verificadas = 0 } = {}) {
+function contexto({ exigencias = 1, verificadas = 0, descendentesPendentes = false } = {}) {
   const entregavel = Object.assign(new Entregavel(), {
     id: entregavelId, contratoId, etapaId, tipo: TipoEntregavel.UNICO,
     percentualExecucao: '100.000', statusExecucao: 'EM_ANDAMENTO',
@@ -40,6 +40,7 @@ function contexto({ exigencias = 1, verificadas = 0 } = {}) {
   };
   const m = {
     getRepository: jest.fn((e: unknown) => {
+      if ((e as {name?:string})?.name==='Usuario') return {findOne:jest.fn(async()=>({...ator,ativo:true}))};
       if (e === Contrato) return repositorios.contrato;
       if (e === Entregavel) return repositorios.entregavel;
       if (e === Etapa) return repositorios.etapa;
@@ -47,12 +48,12 @@ function contexto({ exigencias = 1, verificadas = 0 } = {}) {
       throw new Error('Entidade inesperada no teste');
     }),
     findOne: jest.fn(async () => entregavel),
-    findOneBy: jest.fn(async () => repositorios.etapa.findOneBy()),
+    findOneBy: jest.fn(async (entidade: unknown) => entidade === Entregavel ? entregavel : repositorios.etapa.findOneBy()),
     findBy: jest.fn(async () => []),
     save: jest.fn(async (_entidade: unknown, item: Entregavel) => item),
     query: jest.fn(async (sql: string) => {
       if (sql.includes('obrigatorias+ocorrencias_exigidas')) return [{ total: exigencias }];
-      if (/AS pendentes/.test(sql)) return [{ pendentes: false }];
+      if (/AS pendentes/.test(sql)) return [{ pendentes: descendentesPendentes && sql.includes('ocorrencia_lancamentos') }];
       if (/AS etapas/.test(sql)) return [{ etapas: 1, entregaveis: 1, evidencias: exigencias,
         verificadas, etapas_sem_entregavel: 0, entregaveis_sem_evidencia: exigencias ? 0 : 1 }];
       throw new Error('Consulta inesperada no teste: ' + sql.slice(0, 110));
@@ -96,4 +97,10 @@ describe('conclusão integral, parcial e ausência de exigência documental R40'
     await c.service.concluir(contratoId, entregavelId, ator);
     expect(c.entregavel.statusExecucao).toBe('CONCLUIDO');
   });
+});
+
+test('B05: decisões de ocorrência pendentes impedem conclusão mesmo com físico e documentação completos', async () => {
+  const c=contexto({exigencias:0,descendentesPendentes:true});
+  await expect(c.service.solicitarConclusao(contratoId,entregavelId,ator)).rejects.toThrow(/descendentes/);
+  expect(c.entregavel.statusExecucao).toBe('EM_ANDAMENTO');
 });

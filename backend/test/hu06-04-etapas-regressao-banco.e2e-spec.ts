@@ -102,7 +102,29 @@ suite('HU06-04 — regressão HTTP + PostgreSQL em base migrada', () => {
       entities: [Contrato, Usuario, Etapa, PermissaoContrato, EventoAuditoria],
       migrations: migrationsCompletas,
     }).initialize();
-    await db.runMigrations();
+    await db.runMigrations({ transaction: 'each' });
+    // A mesma fixture deve preparar o schema atual, inclusive as contribuições da Sprint 04.
+    expect(await db.showMigrations()).toBe(false);
+    const aplicadas = await db.query('SELECT name FROM migrations ORDER BY timestamp') as Array<{ name: string }>;
+    expect(aplicadas.map(m => m.name)).toEqual(migrationsCompletas.map(m => m.name));
+    const [schema] = await db.query(`SELECT
+      to_regclass('public.execucoes_quantitativas_diretas') IS NOT NULL AS quantidade_direta,
+      EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public'
+        AND table_name='evidencias_esperadas' AND column_name='rascunho_envio' AND data_type='jsonb') AS rascunho,
+      EXISTS (SELECT 1 FROM pg_constraint WHERE conname='ck_comprovante_origem_quantidade'
+        AND conrelid='comprovantes_evidencia'::regclass) AS origem`);
+    expect(schema).toEqual({ quantidade_direta: true, rascunho: true, origem: true });
+    const integridade = await db.query(`SELECT conname, convalidated, confdeltype, cardinality(conkey)::int AS colunas
+      FROM pg_constraint WHERE conname IN ('fk_execucoes_ocorrencia','fk_comprovante_quantidade_ocorrencia',
+        'fk_b01_medicao_direta_atividade','fk_b01_medicao_direta_entregavel') ORDER BY conname`);
+    expect(integridade).toEqual([
+      { conname: 'fk_b01_medicao_direta_atividade', convalidated: true, confdeltype: 'r', colunas: 2 },
+      { conname: 'fk_b01_medicao_direta_entregavel', convalidated: true, confdeltype: 'r', colunas: 2 },
+      { conname: 'fk_comprovante_quantidade_ocorrencia', convalidated: true, confdeltype: 'r', colunas: 3 },
+      { conname: 'fk_execucoes_ocorrencia', convalidated: true, confdeltype: 'r', colunas: 3 },
+    ]);
+
+
 
     // Contrato e etapa HISTÓRICOS persistidos ANTES de iniciar o Nest.
     const novoContrato = async (numero: string) => {

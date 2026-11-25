@@ -8,7 +8,7 @@ import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
 import { ModoCalculo } from '../contratos/modo-calculo.enum.js';
 const ator={id:'u',perfil:PerfilUsuario.ADMINISTRADOR,email:'qa@example.invalid',supertokensUserId:'qa'};
 function cenario(){const c={id:'c',status:'EM_EXECUCAO',modoCalculo:'SIMPLES',arquivadoEm:null};const et={id:'t',status:'PLANEJADA',arquivadoEm:null};const e={id:'e',contratoId:'c',etapaId:'t',nome:'Serviço',tipo:'UNICO',percentualExecucao:null as string|null,peso:null as string|null,statusExecucao:null as string|null,situacaoComprovacao:null,quantidadeRealizada:null as string|null,quantidadePrevista:null as string|null,arquivadoEm:null};
-const find=async(k:unknown)=>k===Contrato?c:k===Etapa?et:k===Entregavel?e:null;const m={findOne:jest.fn(find),findOneBy:jest.fn(find),findBy:jest.fn(async(k:unknown)=>k===Entregavel?[e]:k===Etapa?[et]:k===Ocorrencia?[]:[]),save:jest.fn(async(_k:unknown,v:unknown)=>v),countBy:jest.fn(async()=>0),query:jest.fn(async()=>[]),update:jest.fn(async(k:unknown,_f:unknown,campos:object)=>{Object.assign(k===Etapa?et:e,campos);return {affected:1};})};const audit={registrarNaTransacao:jest.fn(async()=>undefined)};const ds={transaction:async (...args:unknown[])=>{const fn=args.at(-1) as (x:typeof m)=>Promise<unknown>;return fn(m);}};return {c,e,m,audit,service:new ExecucaoService(ds as never,audit as never)};}
+const find=async(k:unknown)=>k===Contrato?c:k===Etapa?et:k===Entregavel?e:null;const m={getRepository:()=>({findOne:async()=>({ativo:true,perfil:'ADMINISTRADOR',supertokensUserId:'qa'})}),findOne:jest.fn(find),findOneBy:jest.fn(find),findBy:jest.fn(async(k:unknown)=>k===Entregavel?[e]:k===Etapa?[et]:k===Ocorrencia?[]:[]),save:jest.fn(async(_k:unknown,v:unknown)=>v),countBy:jest.fn(async()=>0),query:jest.fn(async()=>[]),update:jest.fn(async(k:unknown,_f:unknown,campos:object)=>{Object.assign(k===Etapa?et:e,campos);return {affected:1};})};const audit={registrarNaTransacao:jest.fn(async()=>undefined)};const ds={transaction:async (...args:unknown[])=>{const fn=args.at(-1) as (x:typeof m)=>Promise<unknown>;return fn(m);}};return {c,e,m,audit,service:new ExecucaoService(ds as never,audit as never)};}
 test('100% físico não fecha comprovação e grava auditoria',async()=>{const x=cenario();const r=await x.service.atualizar('c','e',{percentualManual:100},ator);expect(r.avancoSimples).toBe(100);expect(r.entregaveis[0].statusEntregavel).toBe('EM_ANDAMENTO');expect(x.e.statusExecucao).toBe('EM_ANDAMENTO');expect(x.e.situacaoComprovacao).toBeNull();expect(x.audit.registrarNaTransacao).toHaveBeenCalledTimes(3);});
 test('peso inválido e versão antiga não escrevem',async()=>{const x=cenario();const r=await x.service.consultar('c');await expect(x.service.atualizarPesos('c',{versao:r.versaoPesos,pesos:[{entregavelId:'e',peso:'101'}]},ator)).rejects.toThrow();await expect(x.service.atualizarPesos('c',{versao:'antiga',pesos:[{entregavelId:'e',peso:'100'}]},ator)).rejects.toThrow();expect(x.m.save).not.toHaveBeenCalled();});
 test('contrato suspenso recusa atualização física',async()=>{const x=cenario();x.c.status='SUSPENSO';await expect(x.service.atualizar('c','e',{percentualManual:50},ator)).rejects.toThrow();expect(x.m.save).not.toHaveBeenCalled();});
@@ -88,6 +88,7 @@ test('redistribuição parcial mantém os pesos e o modo ponderado com auditoria
 test.each(['UNICO','CONTINUO','QUANTITATIVO','RECORRENTE','MARCO'])('R49: novo %s começa em zero sem execução reconhecida',async tipo=>{
   const x=cenario(); x.e.tipo=tipo;
   if(tipo==='QUANTITATIVO')x.e.quantidadePrevista='100';
+  if(tipo==='RECORRENTE')Object.assign(x.e,{inicioPrevisto:'2026-12-01',terminoPrevisto:'2026-12-02',periodicidade:'DIARIA'});
   const r=await x.service.consultar('c');
   expect(r.entregaveis[0].percentualExecucao).toBe(0);
   expect(r.avancoSimples).toBe(0);
@@ -108,4 +109,45 @@ test('solicitação de conclusão congela modo de cálculo e pesos', async () =>
   await expect(x.service.atualizarModoCalculo('c', { versao, modoCalculo: ModoCalculo.PONDERADO }, ator)).rejects.toThrow();
   await expect(x.service.atualizarPesoIndividual('c', 'e', { versao, peso: '20' }, ator)).rejects.toThrow();
   expect(x.m.save).not.toHaveBeenCalled();
+});
+
+
+test('não altera peso individual ou coletivo de etapa com decisão pendente', async () => {
+  const x = cenario();
+  const etapa = await x.m.findOneBy(Etapa);
+  Object.assign(etapa!, { conclusaoSolicitadaEm: new Date() });
+  const {versaoPesos} = await x.service.consultar('c');
+  await expect(x.service.atualizarPesoIndividual('c','e',{versao:versaoPesos,peso:'20'},ator)).rejects.toThrow('Reabra a etapa');
+  await expect(x.service.atualizarPesos('c',{versao:versaoPesos,pesos:[{entregavelId:'e',peso:'20'}]},ator)).rejects.toThrow('Reabra a etapa');
+  expect(x.m.save).not.toHaveBeenCalled();
+});
+
+test('B10: solicitação de encerramento congela execução e pesos',async()=>{
+  const x=cenario();Object.assign(x.c,{encerramentoSolicitado:true});
+  const r=await x.service.consultar('c');
+  expect(r.editavelPesos).toBe(false);expect(r.entregaveis[0].editavel).toBe(false);
+  await expect(x.service.atualizar('c','e',{percentualManual:50},ator)).rejects.toThrow();
+  await expect(x.service.atualizarPesoIndividual('c','e',{versao:r.versaoPesos,peso:'100'},ator)).rejects.toThrow();
+  expect(x.m.save).not.toHaveBeenCalled();
+});
+test('B10: Marco histórico sem metas/ocorrência válidas não libera conclusão do contrato',async()=>{
+  const x=cenario();Object.assign(x.e,{tipo:'MARCO',dataEfetivaMarco:'2020-01-01',statusExecucao:'CONCLUIDO'});
+  Object.assign(x.m,{find:jest.fn(async()=>[])});
+  const r=await x.service.consultarNaTransacao(x.m as never,'c');
+  expect(r.avanco).toBe(100);expect(r.integralFisicoEstrito).toBe(false);expect(r.integralEstrito).toBe(false);
+});
+
+ test('B03: identidade revogada não pode alterar modo de cálculo', async () => {
+  const x = cenario();
+  const versao = (await x.service.consultar('c')).versaoPesos;
+  Object.assign(x.m,{getRepository:()=>({findOne:async()=>({...ator,ativo:false})})});
+  await expect(x.service.atualizarModoCalculo('c',{versao,modoCalculo:ModoCalculo.PONDERADO},ator)).rejects.toThrow('Usuário indisponível');
+  expect(x.m.save).not.toHaveBeenCalled();
+  expect(x.audit.registrarNaTransacao).not.toHaveBeenCalled();
+});
+
+test('B06: recorrente inválido não apresenta zero como progresso calculável', async()=>{
+  const x=cenario(); Object.assign(x.e,{tipo:'RECORRENTE',inicioPrevisto:'2026-12-01',terminoPrevisto:'2026-12-03',periodicidade:'SEMANAL'});
+  const r=await x.service.consultar('c');
+  expect(r.entregaveis[0].percentualExecucao).toBeNull();
 });

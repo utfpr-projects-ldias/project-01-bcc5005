@@ -22,9 +22,11 @@
     "test:debug": "NODE_OPTIONS=--experimental-vm-modules node --inspect-brk ./node_modules/jest/bin/jest.js --runInBand",
     "test:e2e": "NODE_OPTIONS=--experimental-vm-modules jest --config ./jest.config.e2e.cjs",
     "typeorm": "typeorm-ts-node-esm",
-    "migration:show": "npm run typeorm -- migration:show -d ./src/database/data-source.ts",
-    "migration:run": "npm run typeorm -- migration:run -d ./src/database/data-source.ts",
+    "migration:show": "node --loader ts-node/esm ./src/database/migration-show.ts",
+    "migration:run": "node --loader ts-node/esm ./src/database/migration-run.ts",
     "migration:revert": "npm run typeorm -- migration:revert -d ./src/database/data-source.ts",
+    "storage:verificar": "node dist/armazenamento/cli/verificar-storage.js",
+    "admin:regularizar-sessoes": "node dist/usuarios/cli/regularizar-sessoes.js",
     "admin:create": "node dist/usuarios/cli/bootstrap-admin.js --interativo"
   },
   "dependencies": {

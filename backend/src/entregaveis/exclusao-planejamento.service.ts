@@ -1,3 +1,4 @@
+import { exigirPermissaoTransacional } from '../autorizacao/permissao-transacional.js';
 import { ConflictException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { DataSource, type EntityManager } from 'typeorm';
 import { ARMAZENAMENTO_ARQUIVOS, type ArmazenamentoArquivos } from '../armazenamento/contrato-armazenamento.js';
@@ -41,7 +42,10 @@ export class ExclusaoPlanejamentoService {
       SELECT 1 FROM entregaveis e
       WHERE e.contrato_id = $1 AND ${tipo === 'etapa' ? 'e.etapa_id' : 'e.id'} = $2
         AND (
-          EXISTS (SELECT 1 FROM ocorrencias o WHERE o.entregavel_id = e.id AND o.contrato_id = $1)
+          COALESCE(e.percentual_execucao,0)>0 OR COALESCE(e.quantidade_realizada,0)>0 OR e.data_efetiva_marco IS NOT NULL
+          OR e.reaberto_em IS NOT NULL OR e.regularizacao_documental_solicitada
+          OR e.status_execucao IN ('CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO')
+          OR EXISTS (SELECT 1 FROM ocorrencias o WHERE o.entregavel_id = e.id AND o.contrato_id = $1)
           OR EXISTS (SELECT 1 FROM configuracoes_ocorrencias cfg WHERE cfg.entregavel_id = e.id AND cfg.contrato_id = $1)
           OR EXISTS (SELECT 1 FROM execucoes_entregavel l WHERE l.entregavel_id=e.id AND l.contrato_id=$1)
           OR EXISTS (SELECT 1 FROM evidencias_esperadas ev WHERE ev.entregavel_id=e.id AND (ev.rascunho_envio IS NOT NULL OR EXISTS (SELECT 1 FROM comprovantes_evidencia c WHERE c.evidencia_esperada_id=ev.id) OR EXISTS(SELECT 1 FROM eventos_auditoria a WHERE a.contrato_id=$1 AND a.entidade_id=e.id::text AND (a.dados_anteriores->>'itemId'=ev.id::text OR a.dados_posteriores->>'itemId'=ev.id::text) AND (a.dados_anteriores ? 'declaracaoPreliminar' OR a.dados_posteriores ? 'declaracaoPreliminar' OR a.dados_posteriores->>'operacao'='EDITAR_VINCULOS'))))
@@ -53,6 +57,32 @@ export class ExclusaoPlanejamentoService {
     if (rows[0]?.possui) throw new ConflictException('Há ocorrências, atividades, configurações ou metas vinculadas. Preserve o histórico; não é possível excluir definitivamente');
   }
 
+  private async exigirPaiEditavel(m: EntityManager, contratoId: string, entregavelId: string, evidencia: boolean) {
+    const [pai] = await m.query(`SELECT t.arquivado_em, t.status, t.conclusao_solicitada_em, t.encerramento_solicitado_em,
+      e.arquivado_em AS entregavel_arquivado, e.status_execucao, e.regularizacao_documental_solicitada
+      FROM entregaveis e JOIN etapas t ON t.id=e.etapa_id AND t.contrato_id=e.contrato_id
+      WHERE e.id=$1 AND e.contrato_id=$2`, [entregavelId, contratoId]);
+    if (!pai) throw new NotFoundException('Etapa ou entregável não encontrado');
+    if (pai.arquivado_em || pai.conclusao_solicitada_em || pai.encerramento_solicitado_em ||
+        ['CONCLUIDA','CONCLUIDO_PARCIALMENTE','ENCERRADA','FINALIZADA'].includes(pai.status) ||
+        pai.regularizacao_documental_solicitada || ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(pai.status_execucao) ||
+        (evidencia && pai.entregavel_arquivado))
+      throw new ConflictException('Resolva a situação da etapa e do entregável antes de excluir itens');
+  }
+
+  private async exigirAusenciaDeDecisoes(m: EntityManager, contratoId: string, id: string, tipo: 'etapa' | 'entregavel') {
+    const [r] = await m.query(`SELECT EXISTS (
+      SELECT 1 FROM eventos_auditoria a WHERE a.contrato_id=$1 AND (
+        (a.entidade_tipo='ETAPA' AND $3='etapa' AND a.entidade_id=$2::uuid::text
+          AND (a.acao='ETAPA_REABERTA' OR a.dados_posteriores->>'solicitacao' IS NOT NULL
+            OR a.dados_posteriores->>'status' IN ('CONCLUIDA','CONCLUIDO_PARCIALMENTE','ENCERRADA','FINALIZADA')))
+        OR (a.entidade_tipo='ENTREGAVEL' AND a.entidade_id IN (SELECT e.id::text FROM entregaveis e WHERE e.contrato_id=$1 AND
+          (($3='etapa' AND e.etapa_id=$2::uuid) OR ($3='entregavel' AND e.id=$2::uuid)))
+          AND (a.acao='ENTREGAVEL_REABERTO' OR a.dados_posteriores->>'statusExecucao' IN ('CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO')))
+      )) AS possui`,[contratoId,id,tipo]);
+    if (r?.possui) throw new ConflictException('Há decisões históricas neste planejamento. Preserve o registro arquivado.');
+  }
+
   async excluir(tipo: TipoAlvo, contratoId: string, id: string, ator: UsuarioAutenticado,
     entregavelId?: string) {
     let resultado: { chaves: string[]; totalEvidencias: number; totalEntregaveis: number };
@@ -60,6 +90,7 @@ export class ExclusaoPlanejamentoService {
       resultado = await this.db.transaction(async m => {
       // Todas as operações têm a raiz bloqueada: exclusões e criações não podem
       // observar uma sequência parcialmente compactada.
+      await exigirPermissaoTransacional(m, contratoId, ator, tipo === 'etapa' ? 'excluirEtapasArquivadas' : tipo === 'entregavel' ? 'excluirEntregaveisArquivados' : 'excluirEvidenciasArquivadas');
       await this.contrato(m, contratoId);
       let codigo: unknown;
       let acao: AcaoAuditoria;
@@ -72,6 +103,7 @@ export class ExclusaoPlanejamentoService {
         if (!entregavelId) throw new NotFoundException('Entregável não encontrado');
         const entregavel = await m.query('SELECT id FROM entregaveis WHERE id=$1 AND contrato_id=$2', [entregavelId, contratoId]) as unknown[];
         if (!entregavel.length) throw new NotFoundException('Entregável não encontrado neste contrato');
+        await this.exigirPaiEditavel(m, contratoId, entregavelId, true);
         const encontrados = await m.query('SELECT id, codigo_publico, arquivado_em FROM evidencias_esperadas WHERE id=$1 AND entregavel_id=$2 FOR UPDATE', [id, entregavelId]) as Array<{ codigo_publico: number; arquivado_em: Date | null }>;
         if (!encontrados.length) throw new NotFoundException('Evidência não encontrada neste entregável');
         if (!encontrados[0].arquivado_em) throw new ConflictException('Arquive a evidência antes de excluí-la');
@@ -82,10 +114,13 @@ export class ExclusaoPlanejamentoService {
         entidadeId = entregavelId;
       } else if (tipo === 'entregavel') {
         const registro = await this.registro(m, 'entregaveis', id, contratoId);
+        await this.exigirPaiEditavel(m, contratoId, id, false);
         codigo = registro.codigo_publico;
         acao = AcaoAuditoria.ENTREGAVEL_EXCLUIDO;
       } else {
         const registro = await this.registro(m, 'etapas', id, contratoId);
+        if (registro.conclusao_solicitada_em || registro.encerramento_solicitado_em || ['CONCLUIDA','CONCLUIDO_PARCIALMENTE','FINALIZADA','ENCERRADA'].includes(String(registro.status)))
+          throw new ConflictException('Preserve a etapa com decisão operacional no histórico');
         codigo = registro.codigo_publico;
         sequenciaRemovida = Number(registro.sequencia);
         acao = AcaoAuditoria.ETAPA_EXCLUIDA;
@@ -93,6 +128,7 @@ export class ExclusaoPlanejamentoService {
 
       if (tipo === 'etapa' || tipo === 'entregavel') {
         await this.exigirAusenciaDeHistoricoOperacional(m, contratoId, id, tipo);
+        await this.exigirAusenciaDeDecisoes(m, contratoId, id, tipo);
       }
 
       // REGRA CRÍTICA: a auditoria encontra o contrato pela entidade no banco.
@@ -124,7 +160,13 @@ export class ExclusaoPlanejamentoService {
         await m.query('DELETE FROM etapas WHERE id=$1 AND contrato_id=$2', [id, contratoId]);
         if (sequenciaRemovida === null || !Number.isSafeInteger(sequenciaRemovida) || sequenciaRemovida < 1)
           throw new ConflictException('Sequência da etapa excluída inválida');
-        await m.query('UPDATE etapas SET sequencia = sequencia - 1 WHERE contrato_id=$1 AND sequencia>$2', [contratoId, sequenciaRemovida]);
+        const deslocadas = await m.query('UPDATE etapas SET sequencia = sequencia - 1 WHERE contrato_id=$1 AND sequencia>$2 RETURNING id, nome, sequencia', [contratoId, sequenciaRemovida]) as [Array<{ id:string; nome:string; sequencia:number }>, number] | Array<{ id:string; nome:string; sequencia:number }>;
+        // O driver PostgreSQL do TypeORM pode retornar [linhas, affected] em UPDATE.
+        const linhas = (Array.isArray(deslocadas[0]) ? deslocadas[0] : deslocadas) as Array<{id:string;nome:string;sequencia:number}>;
+        for (const etapa of linhas) await this.auditoria.registrarNaTransacao(m, ator, {
+          acao: AcaoAuditoria.ETAPA_REORDENADA, entidadeTipo: 'ETAPA', entidadeId: etapa.id,
+          dadosAnteriores: { sequencia: etapa.sequencia + 1, nome: etapa.nome }, dadosPosteriores: { sequencia: etapa.sequencia, nome: etapa.nome },
+        });
         totalEntregaveis = excluidos.length;
         totalEvidencias = removidas.length;
       }

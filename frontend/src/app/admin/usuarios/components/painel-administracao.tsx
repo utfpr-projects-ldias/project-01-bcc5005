@@ -24,7 +24,7 @@ import { chaveTexto } from '@/lib/repositorio-consultas';
 import { CHAVES_FUNCIONARIOS } from '@/hooks/use-funcionarios';
 import { CHAVE_PERFIL } from '@/hooks/use-meu-perfil';
 
-const nomeCompleto = z.string().min(3, "Informe nome e sobrenome.").max(25, "Nome completo: máximo de 25 caracteres.")
+const nomeCompleto = z.string().min(3, "Informe nome e sobrenome.").max(160, "Nome completo: máximo de 160 caracteres.")
   .regex(/^\p{L}[\p{L}\p{M}'’.-]*(?:[ \t]+\p{L}[\p{L}\p{M}'’.-]*)+$/u,
     "Informe nome e sobrenome válidos.");
 const regraSenha = z.string().min(12, "A senha precisa ter ao menos 12 caracteres.")
@@ -205,7 +205,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
       });
       invalidarListas();
       setForm({ ...inicial }); toastSucesso(`Funcionário ${criado.email} cadastrado.`);
-      router.replace("/admin/usuarios");
+      router.replace("/admin");
     } catch (e) { if (!cuidarSessao(e)) setErroFormulario(erroLegivel(e)); }
     finally { setEnviando(false); }
   }
@@ -360,7 +360,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
       <h1 className="text-2xl font-semibold">{vista === "edicao" && erroAcesso.includes("não encontrado") ? "Funcionário não encontrado" :
         (erroAcesso.includes("permissão") || erroAcesso.includes("negado")) ? "Acesso restrito" : "Não foi possível carregar os dados"}</h1>
       <p role="alert">{erroAcesso || "Não foi possível verificar sua autorização."}</p>
-      <LinkVoltar href={vista === "lista" ? "/dashboard" : "/admin/usuarios"}>{vista === "lista" ? "Voltar ao painel" : "Voltar aos funcionários"}</LinkVoltar>
+      <LinkVoltar href={vista === "lista" ? "/dashboard" : "/admin"}>{vista === "lista" ? "Voltar ao painel" : "Voltar aos funcionários"}</LinkVoltar>
     </main>
   );
 
@@ -368,7 +368,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
     <section className="min-w-0 space-y-6">
       <div className="min-w-0 space-y-6">
         <div className="space-y-3">
-          {vista !== 'lista' && <LinkVoltar href="/admin/usuarios">Voltar aos funcionários</LinkVoltar>}
+          {vista !== 'lista' && <LinkVoltar href="/admin">Voltar aos funcionários</LinkVoltar>}
           {vista !== 'lista' && <p className="max-w-3xl text-sm text-foreground/70">{vista === 'cadastro'
               ? 'Crie uma conta interna. O acesso a contratos pode ser atribuído após o cadastro.'
               : 'Atualize os dados da conta ou abra uma seção adicional para alterar credenciais e contratos.'}</p>}
@@ -440,7 +440,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                 <form className="space-y-4" noValidate onSubmit={(e) => void salvarEdicao(e)}>
                   <div>
                     <label htmlFor="edicao-nome" className="mb-1 block text-sm">Nome completo</label>
-                    <input id="edicao-nome" className={campo} value={edicao.nome} onChange={(e) => setEdicao((s) => ({ ...s, nome: e.target.value }))} maxLength={25} aria-describedby={!editando.nome ? "aviso-nome-legado" : undefined} />
+                    <input id="edicao-nome" className={campo} value={edicao.nome} onChange={(e) => setEdicao((s) => ({ ...s, nome: e.target.value }))} maxLength={160} aria-describedby={!editando.nome ? "aviso-nome-legado" : undefined} />
                     {!editando.nome && <p id="aviso-nome-legado" className="text-xs text-foreground/60">Nome legado opcional nesta edição. Ao preencher, informe nome e sobrenome.</p>}
                   </div>
                   {editando.perfil !== "ADMINISTRADOR" && <>
@@ -557,7 +557,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
             ) : vista === "cadastro" ? (
               <form onSubmit={(e) => void cadastrar(e)} noValidate className="space-y-4">
                 <div><label htmlFor="usuario-nome" className="mb-1 block text-sm">Nome completo</label>
-                  <input id="usuario-nome" className={campo} value={form.nome} onChange={(e) => setForm((s) => ({ ...s, nome: e.target.value }))} aria-invalid={!!erros.nome} maxLength={25} />
+                  <input id="usuario-nome" className={campo} value={form.nome} onChange={(e) => setForm((s) => ({ ...s, nome: e.target.value }))} aria-invalid={!!erros.nome} maxLength={160} />
                   {erros.nome && <p role="alert" className="text-xs text-error-text">{erros.nome}</p>}
                 </div>
                 <div><label htmlFor="usuario-email" className="mb-1 block text-sm">E-mail</label>

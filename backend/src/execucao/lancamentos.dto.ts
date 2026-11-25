@@ -4,9 +4,10 @@ export class DadosLancamentoDto {
   @IsString() @Matches(/^\d{4}-\d{2}-\d{2}$/) data!:string;
   @IsOptional() @IsString() @MaxLength(300) observacao?:string;
 }
-export class CorrigirLancamentoDto extends DadosLancamentoDto { @IsString() @MaxLength(200) motivo!:string; }
+export class CorrigirLancamentoDto extends DadosLancamentoDto { @IsOptional() @IsString() @Matches(/^\d{1,10}$/) versaoEsperada?:string; @IsString() @MaxLength(200) motivo!:string; }
 export class CriarLancamentoDto extends DadosLancamentoDto { @IsUUID('4') id!:string; @IsOptional() @IsUUID() ocorrenciaId?:string; }
 export class DecidirLancamentoDto {
+  @IsOptional() @IsString() @Matches(/^\d{1,10}$/) versaoEsperada?:string;
   @IsIn(['APROVADO','REJEITADO']) decisao!:'APROVADO'|'REJEITADO';
   @IsOptional() @IsString() @MaxLength(300) motivo?:string;
 }

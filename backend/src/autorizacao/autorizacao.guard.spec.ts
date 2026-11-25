@@ -5,7 +5,7 @@ import type { Reflector } from '@nestjs/core';
 import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
 import type { UsuariosService } from '../usuarios/usuarios.service.js';
 import { AutorizacaoGuard } from './autorizacao.guard.js';
-import type { Politica } from './politica.decorator.js';
+import { CHAVE_ROTA_PUBLICA, type Politica } from './politica.decorator.js';
 import type { PoliticaAcessoService } from './politica-acesso.service.js';
 import type { SessaoSuperTokensService } from './sessao-supertokens.service.js';
 import type { RequisicaoAutorizada } from './usuario-autenticado.js';
@@ -20,8 +20,9 @@ const resolver = jest.fn<() => Promise<string | null>>();
 const RAIZ = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const ETAPA = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const metadados = jest.fn<() => Politica | undefined>();
+let rotaPublica = false;
 const guard = new AutorizacaoGuard(
-  { getAllAndOverride: metadados } as unknown as Reflector,
+  { getAllAndOverride: (chave: string) => chave === CHAVE_ROTA_PUBLICA ? rotaPublica : metadados() } as unknown as Reflector,
   { identificar } as unknown as SessaoSuperTokensService,
   { buscarAtivoPorSupertokensId: procurar } as unknown as UsuariosService,
   { permitido } as unknown as PoliticaAcessoService,
@@ -39,6 +40,7 @@ function contexto(path: string, params: Record<string, string> = {}, method = 'G
 }
 beforeEach(() => {
   jest.clearAllMocks();
+  rotaPublica = false;
   metadados.mockReturnValue({ acao: 'perfil:proprio' });
   identificar.mockResolvedValue('auth-1');
   procurar.mockResolvedValue({ id: 'usuario-1', supertokensUserId: 'auth-1', email: 'adm@teste.invalid', perfil: PerfilUsuario.ADMINISTRADOR });
@@ -47,8 +49,9 @@ beforeEach(() => {
 });
 
 describe('guard global', () => {
-  it('mantém endpoints legados fora dos namespaces reservados', async () => {
+  it('permite apenas endpoint declarado público', async () => {
     metadados.mockReturnValue(undefined);
+    rotaPublica = true;
     expect(await guard.canActivate(contexto('/auth/signin').context)).toBe(true);
     expect(identificar).not.toHaveBeenCalled();
   });
@@ -58,7 +61,7 @@ describe('guard global', () => {
     await expect(guard.canActivate(contexto('/modulo-futuro').context)).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it.each(['/contratos', '/CONTRATOS/abc', '/contratos/abc', '/admin/usuarios', '/admin/usuarios/x', '/usuarios/me', '/evidencias', '/atividades', '/relatorios', '/etapas/abc', '/documentos', '/auditoria', '/admin/usuarios/x/permissoes'])(
+  it.each(['/auth/rota-nova', '/protected/ping', '/contratos', '/CONTRATOS/abc', '/contratos/abc', '/admin/usuarios', '/admin/usuarios/x', '/usuarios/me', '/evidencias', '/atividades', '/relatorios', '/etapas/abc', '/documentos', '/auditoria', '/admin/usuarios/x/permissoes'])(
     'nega rota interna sem política: %s', async (path) => {
       metadados.mockReturnValue(undefined);
       await expect(guard.canActivate(contexto(path).context)).rejects.toBeInstanceOf(ForbiddenException);

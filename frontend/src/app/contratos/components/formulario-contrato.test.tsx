@@ -54,7 +54,7 @@ test('limites de caracteres e mensagens explicativas de modo de cálculo', () =>
   render(<FormularioContrato responsaveis={[]} onSalvar={jest.fn()} />);
   expect(screen.getByLabelText('Objeto *')).toHaveAttribute('maxLength', '50');
   expect(screen.queryByLabelText('Modo de cálculo físico *')).not.toBeInTheDocument();
-  expect(screen.getByText(/é configurado na aba Execução/)).toBeInTheDocument();
+  expect(screen.getByText(/é configurado em Editar execução/)).toBeInTheDocument();
   fireEvent.click(screen.getByText(/Informações complementares/));
   expect(screen.getByLabelText('Descrição')).toHaveAttribute('maxLength', '400');
   expect(screen.getByLabelText('Observações')).toHaveAttribute('maxLength', '200');

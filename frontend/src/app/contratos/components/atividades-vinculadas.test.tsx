@@ -4,12 +4,19 @@ import { useAtividades } from '@/hooks/use-atividades';
 import { useEntregaveis } from '@/hooks/use-entregaveis';
 import { useEtapas } from '@/hooks/use-etapas';
 
-jest.mock('@/app/components/provedor-consultas', () => ({ useRepositorioConsultasOpcional: () => ({}), useConsulta: () => ({ dados: [], carregando: false, erro: null }) }));
-jest.mock('@/hooks/use-contratos', () => ({ useAcessoContrato: () => ({ dados: { permissoes: { registrarAtividades: true } }, erro: null }) }));
+jest.mock('@/app/components/provedor-consultas', () => ({ useRepositorioConsultasOpcional: () => null, useConsulta: () => ({ dados: [], carregando: false, erro: null }) }));
+jest.mock('@/hooks/use-contratos', () => ({ useContrato: () => ({ dados: {id:'contrato-qa', status:'EM_EXECUCAO'} }), useListaContratos: () => ({ dados: [] }), useAcessoContrato: () => ({ dados: { permissoes: { registrarAtividades: true } }, erro: null }) }));
+jest.mock('@/hooks/use-meu-perfil', () => ({useMeuPerfil:()=>({dados:{id:'usuario-qa',ativo:true,perfil:'ADMINISTRADOR'}})}));
+jest.mock('@/hooks/use-ocorrencias', () => ({useOcorrencias:()=>({ocorrencias:[],loading:false,erro:null})}));
 jest.mock('@/hooks/use-entregaveis', () => ({ useEntregaveis: jest.fn(() => ({ dados: [{ id: 'entrega-1', etapaId: 'etapa-1', nome: 'Entregável 1', arquivadoEm: null }, { id: 'entrega-2', etapaId: 'etapa-2', nome: 'Entregável 2', arquivadoEm: null }] })) }));
 jest.mock('@/hooks/use-etapas', () => ({ useEtapas: jest.fn(() => ({ dados: [{ id: 'etapa-1', nome: 'Etapa 1', arquivadoEm: null }, { id: 'etapa-2', nome: 'Etapa 2', arquivadoEm: null }] })) }));
 jest.mock('@/hooks/use-atividades', () => ({ useAtividades: jest.fn(() => ({ atividades: [], total: 0, loading: false, erro: null })) }));
 jest.mock('@/app/atividades/components/cartao-atividade', () => ({ CartaoAtividade: () => null, statusVisualEntregavel: () => 'normal' }));
+
+beforeEach(()=>{
+  (useEntregaveis as jest.Mock).mockReturnValue({dados:[{id:'entrega-1',etapaId:'etapa-1',nome:'Entregável 1',arquivadoEm:null,statusExecucao:'NAO_INICIADO'},{id:'entrega-2',etapaId:'etapa-2',nome:'Entregável 2',arquivadoEm:null,statusExecucao:'NAO_INICIADO'}]});
+  (useEtapas as jest.Mock).mockReturnValue({dados:[{id:'etapa-1',nome:'Etapa 1',status:'PLANEJADA',arquivadoEm:null},{id:'etapa-2',nome:'Etapa 2',status:'PLANEJADA',arquivadoEm:null}]});
+});
 
 test('modal de entregável oferece filtro por situação sem link circular', () => {
   render(<AtividadesVinculadas contratoId="contrato-qa" entregavelId="entregavel-qa" ocultarAcessoDiario />);
@@ -44,7 +51,7 @@ test('datas invertidas são identificadas imediatamente, sem clicar em Aplicar',
   fireEvent.click(screen.getByRole('button',{name:'Período'}));
   fireEvent.change(screen.getByLabelText('Data inicial'), { target: { value: '2026-11-28' } });
   fireEvent.change(screen.getByLabelText('Data final'), { target: { value: '2026-11-01' } });
-  fireEvent.click(screen.getByRole('button', {name:'Concluir'}));
+  expect(screen.getByRole('button', {name:'Concluir'})).toBeDisabled();
   expect(screen.getByRole('alert')).toHaveTextContent('A data inicial não pode ser posterior');
 });
 
@@ -56,6 +63,7 @@ test('seleção contextual apresenta Nova atividade e aplica etapa/entregável s
   fireEvent.click(screen.getByRole('option', { name: 'Etapa 1' }));
   fireEvent.click(screen.getByRole('combobox', { name: 'Entregável' }));
   fireEvent.click(screen.getByRole('option', { name: 'Entregável 1' }));
+  fireEvent.click(screen.getByRole('button',{name:'Concluir'}));
   expect(screen.getByRole('button', { name: 'Nova atividade neste contexto' })).toBeInTheDocument();
   expect(useAtividades as jest.Mock).toHaveBeenLastCalledWith('contrato-qa',
     expect.objectContaining({ etapaId: 'etapa-1', entregavelId: 'entrega-1', status: 'TODAS_ATUAIS' }));
@@ -129,8 +137,8 @@ test('filtros adicionais de comprovante e execução são enviados à consulta c
   fireEvent.click(screen.getByRole('button',{name:'Filtros'}));
   fireEvent.change(screen.getByLabelText('Comprovantes vinculados'),{target:{value:'sim'}});
   fireEvent.change(screen.getByLabelText('Contribuição física'),{target:{value:'nao'}});
-  expect(useAtividades as jest.Mock).toHaveBeenLastCalledWith('contrato-qa',expect.objectContaining({comEvidencias:'sim',comExecucao:'nao',page:1}));
   fireEvent.click(screen.getByRole('button',{name:'Concluir'}));
+  expect(useAtividades as jest.Mock).toHaveBeenLastCalledWith('contrato-qa',expect.objectContaining({comEvidencias:'sim',comExecucao:'nao',page:1}));
   fireEvent.click(screen.getByRole('button',{name:'Limpar filtros'}));
   expect(useAtividades as jest.Mock).toHaveBeenLastCalledWith('contrato-qa',expect.objectContaining({comEvidencias:'',comExecucao:'',page:1}));
 });

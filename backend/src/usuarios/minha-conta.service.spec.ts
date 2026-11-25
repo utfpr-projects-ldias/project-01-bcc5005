@@ -23,12 +23,13 @@ const transacao = jest.fn<(callback: (manager: EntityManager) => Promise<unknown
 const repo = { findOneBy: encontrar } as unknown as Repository<Usuario>;
 const repoTx = { findOne: encontrarTx, findOneBy: encontrarEmail, save: salvar };
 const manager = { getRepository: () => repoTx } as unknown as EntityManager;
-const svc = new MinhaContaService(repo,
+let svc: MinhaContaService;
+beforeEach(() => {
+  svc = new MinhaContaService(repo,
   { alterarEmail, definirNovaSenha: definirSenha } as unknown as IdentidadesFuncionariosService,
-  { transaction: transacao } as unknown as DataSource,
+  { transaction: transacao, getRepository: () => repo } as unknown as DataSource,
   { registrarNaTransacao: auditoriaTx, executarComAuditoria: auditoriaAcao } as unknown as AuditoriaService);
 
-beforeEach(() => {
   jest.restoreAllMocks(); jest.resetAllMocks();
   encontrar.mockResolvedValue(criarAdmin()); encontrarTx.mockResolvedValue(criarAdmin());
   encontrarEmail.mockResolvedValue(null); salvar.mockImplementation(async (u: Usuario) => u);
@@ -60,7 +61,7 @@ it('admin não pode alterar conta alheia nem forjar perfil no corpo (origem é s
 it('senha atual inválida bloqueia alteração antes de usar SuperTokens de escrita', async () => {
   jest.spyOn(EmailPassword, 'signIn').mockResolvedValue({ status: 'WRONG_CREDENTIALS_ERROR' } as never);
   await expect(svc.alterarEmail('outro@qa.org', 'errada', ator)).rejects.toBeInstanceOf(UnauthorizedException);
-  expect(transacao).not.toHaveBeenCalled(); expect(alterarEmail).not.toHaveBeenCalled();
+  expect(transacao).toHaveBeenCalledTimes(1); expect(salvar).not.toHaveBeenCalled(); expect(alterarEmail).not.toHaveBeenCalled();
 });
 
 it('identity verificada precisa ser exatamente a do admin da sessão', async () => {
@@ -69,11 +70,22 @@ it('identity verificada precisa ser exatamente a do admin da sessão', async () 
   expect(definirSenha).not.toHaveBeenCalled();
 });
 
-it('compensa e-mail no SuperTokens se falhar auditoria ou commit no Postgres', async () => {
+it('não altera o Core se falhar a persistência da intenção', async () => {
   auditoriaTx.mockRejectedValueOnce(new Error('auditoria falhou'));
   await expect(svc.alterarEmail('nova@qa.org', 'antiga', ator)).rejects.toThrow('auditoria falhou');
-  expect(alterarEmail).toHaveBeenNthCalledWith(1, 'st-admin', 'nova@qa.org');
-  expect(alterarEmail).toHaveBeenNthCalledWith(2, 'st-admin', 'admin@qa.org');
+  expect(alterarEmail).not.toHaveBeenCalled();
+});
+it('mantém bloqueio e não repete alteração com resposta indeterminada do Core', async () => {
+  alterarEmail.mockRejectedValueOnce(new Error('timeout'));
+  await expect(svc.alterarEmail('nova@qa.org', 'antiga', ator)).rejects.toThrow('confirmação indeterminada');
+  expect(alterarEmail).toHaveBeenCalledTimes(1);
+  expect((await encontrarTx())?.bloqueioSessoesId).toBeTruthy();
+});
+it('limita verificações de senha atual por usuário', async () => {
+  jest.spyOn(EmailPassword, 'signIn').mockResolvedValue({ status: 'WRONG_CREDENTIALS_ERROR' } as never);
+  for (let i=0; i<10; i++) await expect(svc.alterarEmail('nova@qa.org', 'errada', ator)).rejects.toBeInstanceOf(UnauthorizedException);
+  await expect(svc.alterarEmail('nova@qa.org', 'errada', ator)).rejects.toMatchObject({ status: 429 });
+  expect(EmailPassword.signIn).toHaveBeenCalledTimes(10);
 });
 
 it('senha é própria, diferente da antiga, auditada sem revelar segredo', async () => {
@@ -81,8 +93,8 @@ it('senha é própria, diferente da antiga, auditada sem revelar segredo', async
   await svc.alterarSenha('Antiga!123456', 'NovaForte!123456', ator);
   expect(definirSenha).toHaveBeenCalledTimes(1);
   expect(definirSenha).toHaveBeenCalledWith('st-admin', 'NovaForte!123456');
-  expect(auditoriaAcao).toHaveBeenCalledTimes(2);
-  expect(JSON.stringify(auditoriaAcao.mock.calls)).not.toContain('NovaForte!123456');
+  expect(auditoriaTx).toHaveBeenCalledTimes(2);
+  expect(JSON.stringify(auditoriaTx.mock.calls)).not.toContain('NovaForte!123456');
 });
 
 
@@ -105,31 +117,37 @@ test('alteração do nome é negada se a sessão não corresponde à identidade 
   expect(auditoriaTx).not.toHaveBeenCalled();
 });
 
-test('nome não pode ser alterado sem sobrenome', async () => {
-  await expect(svc.alterarNome('NomeUnico', ator)).rejects.toThrow();
+test('nome próprio único é aceito, sem exigir sobrenome', async () => {
+  await expect(svc.alterarNome('NomeUnico', ator)).resolves.toMatchObject({nome:'NomeUnico'});
+  expect(salvar).toHaveBeenCalledWith(expect.objectContaining({nome:'NomeUnico'}));
+});
+
+test('nome com números não pode ser alterado', async () => {
+  await expect(svc.alterarNome('Nome123', ator)).rejects.toThrow();
   expect(transacao).not.toHaveBeenCalled();
 });
 
 describe('B02 — compensação do e-mail próprio e revogação de sessão', () => {
   it('confirma novo e-mail após erro de COMMIT sem voltar o Core para o anterior', async () => {
     encontrar.mockResolvedValueOnce(criarAdmin()).mockResolvedValueOnce(Object.assign(criarAdmin(), { email: 'nova@qa.org' }));
-    transacao.mockImplementationOnce(async (f) => { await f(manager); throw new Error('COMMIT incerto'); });
+    transacao.mockImplementationOnce(f => f(manager)).mockImplementationOnce(async (f) => { await f(manager); throw new Error('COMMIT incerto'); });
     const resultado = await svc.alterarEmail('nova@qa.org', 'senha', ator);
     expect(resultado.email).toBe('nova@qa.org');
     expect(alterarEmail).toHaveBeenCalledTimes(1);
   });
   it('não compensa e-mail próprio se a consulta de reconciliação falhar', async () => {
     encontrar.mockResolvedValueOnce(criarAdmin()).mockRejectedValueOnce(new Error('sem conexão'));
-    transacao.mockImplementationOnce(async (f) => { await f(manager); throw new Error('COMMIT incerto'); });
+    transacao.mockImplementationOnce(f => f(manager)).mockImplementationOnce(async (f) => { await f(manager); throw new Error('COMMIT incerto'); });
     await expect(svc.alterarEmail('nova@qa.org', 'senha', ator)).rejects.toThrow('confirmação indeterminada');
     expect(alterarEmail).toHaveBeenCalledTimes(1);
   });
   it('não audita conclusão de senha quando revogação de sessões permanece pendente', async () => {
     definirSenha.mockRejectedValueOnce(new RevogacaoSessoesPendenteError());
     await expect(svc.alterarSenha('Atual!123456', 'Nova!123456', ator))
-      .rejects.toThrow('sessões anteriores podem continuar ativas');
-    expect(auditoriaAcao).toHaveBeenCalledTimes(2);
-    const callback = auditoriaAcao.mock.calls[1][1] as unknown as () => Promise<{evento: {acao: string; dadosPosteriores: unknown}}>;
+      .rejects.toThrow('regularização de sessões');
+    expect((await encontrarTx())?.bloqueioSessoesId).toBeTruthy();
+    expect(auditoriaAcao).toHaveBeenCalledTimes(1);
+    const callback = auditoriaAcao.mock.calls[0][1] as unknown as () => Promise<{evento: {acao: string; dadosPosteriores: unknown}}>;
     const evento = (await callback()).evento;
     expect(evento.acao).toBe(AcaoAuditoria.USUARIO_SENHA_REVOGACAO_PENDENTE);
     expect(JSON.stringify(evento)).not.toContain('Nova!123456');

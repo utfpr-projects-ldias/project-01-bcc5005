@@ -129,7 +129,7 @@ describe('TEC07-AJUSTES-02-01 - catálogo e contexto de auditoria', () => {
     const a = criarAmbiente();
     await expect(a.auditoria.executarComAuditoria(ator, async () => ({
       resultado: true,
-      evento: { ...evento(AcaoAuditoria.ENTREGAVEL_EDITADO, 'ENTREGAVEL'), dadosPosteriores: { texto: 'x'.repeat(17000) } },
+      evento: { ...evento(AcaoAuditoria.ENTREGAVEL_EDITADO, 'ENTREGAVEL'), dadosPosteriores: { texto: 'x'.repeat(140000) } },
     }))).rejects.toThrow('tamanho permitido');
     expect(a.salvar).not.toHaveBeenCalled();
     a.salvar.mockRejectedValueOnce(new Error('auditoria indisponível'));

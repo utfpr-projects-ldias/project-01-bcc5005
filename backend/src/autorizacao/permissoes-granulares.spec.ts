@@ -224,3 +224,11 @@ describe('decisão de execução manual independente da edição e conclusão', 
     expect(validarPermissoes({aprovarExecucaoManual:true})).toEqual({aprovarExecucaoManual:true});
   });
 });
+
+
+test('podeEditar legado não concede edição de atividades ao colaborador; delegação explícita permanece', () => {
+  const legado = permissoesEfetivas('COLABORADOR', true, null);
+  expect(legado.registrarAtividades).toBe(false);
+  expect(legado.editarAtividades).toBe(false);
+  expect(permissoesEfetivas('COLABORADOR', true, {editarAtividades:true}).editarAtividades).toBe(true);
+});

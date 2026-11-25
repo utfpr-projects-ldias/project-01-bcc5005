@@ -1,3 +1,4 @@
+import { mensagemErroDominioHttp } from './erro-dominio-http';
 export type TipoMetaMarco = 'OCORRENCIA' | 'ATIVIDADE' | 'EVIDENCIA';
 export type VinculoMeta = {
   id: string; status: 'PENDENTE' | 'APROVADO' | 'REJEITADO';
@@ -22,11 +23,8 @@ async function solicitar<T>(c: string, e: string, caminho = '', init?: RequestIn
   const resposta = await fetch(url(c,e,caminho), { credentials: 'include', cache: 'no-store', ...init,
     headers: { Accept: 'application/json', ...(init?.body ? { 'Content-Type': 'application/json' } : {}), ...init?.headers } });
   if (!resposta.ok) {
-    let mensagem = '';
-    try { const corpo = await resposta.json() as { message?: string | string[] };
-      mensagem = Array.isArray(corpo.message) ? corpo.message.join(' · ') : corpo.message ?? ''; }
-    catch { /* resposta vazia */ }
-    throw new Error(mensagem || (resposta.status === 403 ? 'Sem permissão para esta operação.' : 'Não foi possível atualizar as metas.'));
+    const mensagem = await mensagemErroDominioHttp(resposta, resposta.status === 403 ? 'Sem permissão para esta operação.' : 'Não foi possível atualizar as metas.');
+    throw Object.assign(new Error(mensagem), { status: resposta.status });
   }
   return await resposta.json() as T;
 }

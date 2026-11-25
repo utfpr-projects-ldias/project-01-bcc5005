@@ -38,3 +38,8 @@ describe('R24 — integridade temporal e de replanejamento',()=>{
     expect(proximoDiaCivil('2026-12-31')).toBe('2027-01-01');
   });
 });
+
+it('usa a primeira hora existente no dia civil de início do horário de verão',()=>{
+  expect(inicioDiaCivilUtc('2018-11-04').toISOString()).toBe('2018-11-04T03:00:00.000Z');
+  expect(inicioDiaCivilUtc('2018-11-05').toISOString()).toBe('2018-11-05T02:00:00.000Z');
+});

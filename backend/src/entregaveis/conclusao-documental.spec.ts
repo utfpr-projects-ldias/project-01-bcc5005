@@ -35,14 +35,14 @@ describe('cascata segura e auditável', () => {
     const a = cenario(true);
     const auditoria = jest.fn(async () => {});
     expect(await filhosPendentesDeConclusao(a.m, contrato, idEtapa)).toBe(true);
-    expect(await concluirEtapaAposFilhos(a.m, contrato, idEtapa, auditoria)).toBe(false);
+    expect(await concluirEtapaAposFilhos(a.m, contrato, idEtapa, auditoria, 'cccccccc-cccc-4ccc-8ccc-cccccccccccc')).toBe(false);
     expect(a.salvar).not.toHaveBeenCalled();
     expect(auditoria).not.toHaveBeenCalled();
   });
   test('primeira elegibilidade gera solicitação pendente, sem fechar a etapa', async () => {
     const a = cenario(false);
     const auditoria = jest.fn(async () => {});
-    expect(await concluirEtapaAposFilhos(a.m, contrato, idEtapa, auditoria)).toBe(true);
+    expect(await concluirEtapaAposFilhos(a.m, contrato, idEtapa, auditoria, 'cccccccc-cccc-4ccc-8ccc-cccccccccccc')).toBe(true);
     expect(a.etapa.status).toBe(StatusEtapa.EM_ANDAMENTO);
     expect(a.etapa.conclusaoSolicitadaEm).toBeInstanceOf(Date);
     expect(a.salvar).toHaveBeenCalledTimes(1);
@@ -52,13 +52,13 @@ describe('cascata segura e auditável', () => {
     const a = cenario(false);
     a.etapa.reabertoEm = new Date('2026-11-06T12:00:00Z');
     const auditoria = jest.fn(async () => {});
-    expect(await concluirEtapaAposFilhos(a.m, contrato, idEtapa, auditoria)).toBe(false);
+    expect(await concluirEtapaAposFilhos(a.m, contrato, idEtapa, auditoria, 'cccccccc-cccc-4ccc-8ccc-cccccccccccc')).toBe(false);
     expect(a.salvar).not.toHaveBeenCalled();
   });
   test('um comprovante ainda pendente impede a cascata', async () => {
     const a = cenario(false, false);
     const auditoria = jest.fn(async () => {});
-    expect(await concluirEtapaAposFilhos(a.m, contrato, idEtapa, auditoria)).toBe(false);
+    expect(await concluirEtapaAposFilhos(a.m, contrato, idEtapa, auditoria, 'cccccccc-cccc-4ccc-8ccc-cccccccccccc')).toBe(false);
     expect(a.salvar).not.toHaveBeenCalled();
   });
 });

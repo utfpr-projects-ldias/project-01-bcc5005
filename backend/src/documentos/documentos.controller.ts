@@ -35,7 +35,7 @@ export class DocumentosController {
   anexar(@Param('contratoId') contratoId: string, @Body() dto: CriarDocumentoDto,
     @UploadedFile() arquivo: ArquivoRecebido | undefined, @Req() req: RequisicaoAutorizada) {
     if (!arquivo) throw new BadRequestException('Arquivo obrigatório');
-    return this.service.anexar(contratoId, dto, arquivo, req.usuarioDominio!);
+    return this.service.anexar(contratoId, dto, arquivo, req.usuarioDominio!, req.headers?.['idempotency-key']);
   }
 
   @Patch(':documentoId')

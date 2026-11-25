@@ -126,7 +126,7 @@ describe('TEC07-03 - auditoria inicial', () => {
     const a = ambiente();
     await expect(a.auditoria.executarComAuditoria(ator, async () => ({
       resultado: true,
-      evento: { ...evento(), dadosPosteriores: { objeto: 'x'.repeat(17_000) } },
+      evento: { ...evento(), dadosPosteriores: { objeto: 'x'.repeat(140_000) } },
     }))).rejects.toThrow('tamanho permitido');
     expect(a.salvar).not.toHaveBeenCalled();
   });

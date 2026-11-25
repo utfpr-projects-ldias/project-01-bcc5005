@@ -1,5 +1,11 @@
+import { FASES_OPERACIONAIS_CONTRATO } from '../contratos/fases-operacionais.js';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { DataSource, EntityManager, IsNull } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull } from 'typeorm';
+import { Contrato } from '../contratos/contrato.entity.js';
+import { Etapa } from '../etapas/etapa.entity.js';
+import { exigirPermissaoTransacional } from '../autorizacao/permissao-transacional.js';
+import { arredondarFisico } from '../execucao/motor-progresso.js';
+import { atividadeElegivelMeta, ocorrenciaElegivelMeta, registroElegivelMeta } from './registro-elegivel-meta.js';
 import { PoliticaAcessoService } from '../autorizacao/politica-acesso.service.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
@@ -35,9 +41,19 @@ export class MetasMarcoService {
   }
   private async entregar(m: EntityManager, contratoId: string, entregavelId: string,
     alterar = false): Promise<Entregavel> {
+    if (alterar) {
+      const c = await m.findOne(Contrato, { where: { id: contratoId }, lock: { mode: 'pessimistic_write' } });
+      if (!c || c.arquivadoEm || c.conclusaoSolicitadaEm || c.encerramentoSolicitado || !FASES_OPERACIONAIS_CONTRATO.includes(c.status))
+        throw new ConflictException('Contrato indisponível para alterar metas do Marco');
+    }
     const e = await m.findOne(Entregavel, { where: { id: entregavelId, contratoId },
       ...(alterar ? { lock: { mode: 'pessimistic_write' as const } } : {}) });
     if (!e || e.arquivadoEm || e.tipo !== 'MARCO') throw new NotFoundException('Marco indisponível');
+    if (alterar) {
+      const etapa = await m.findOneBy(Etapa,{ id:e.etapaId, contratoId });
+      if (!etapa || etapa.arquivadoEm || etapa.conclusaoSolicitadaEm || etapa.encerramentoSolicitadoEm || ['CONCLUIDA','CONCLUIDO_PARCIALMENTE','ENCERRADA','FINALIZADA'].includes(etapa.status))
+        throw new ConflictException('Etapa indisponível para alterar metas do Marco');
+    }
     if (alterar && ['CONCLUIDO', 'CONCLUIDO_PARCIALMENTE', 'FINALIZADO', 'PENDENTE_CONCLUSAO', 'PENDENTE_CONCLUSAO_PARCIAL', 'PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? ''))
       throw new ConflictException('Reabra o Marco ou devolva a solicitação antes de alterar suas metas');
     return e;
@@ -56,25 +72,10 @@ export class MetasMarcoService {
     if (meta.dataPrevista && (meta.inicioPrevisto || meta.terminoPrevisto))
       throw new BadRequestException('Use data única ou intervalo, não os dois');
   }
-  /** Revalida o objeto real em toda consulta para não contabilizar uma aprovação revogada. */
-  private async elegivel(m: EntityManager, meta: MetaMarco, vinculo: VinculoMetaMarco): Promise<boolean> {
-    if (meta.tipo === 'OCORRENCIA' && vinculo.ocorrenciaId) {
-      const o = await m.findOne(Ocorrencia, { where: { id: vinculo.ocorrenciaId, contratoId: meta.contratoId } });
-      return Boolean(o && !o.substituidaEm && ['CONCLUIDO','CONCLUIDO_PARCIALMENTE'].includes(o.status));
-    }
-    if (meta.tipo === 'ATIVIDADE' && vinculo.atividadeId) {
-      const a = await m.findOne(AtividadeEntity, { where: { id: vinculo.atividadeId, contratoId: meta.contratoId } });
-      return Boolean(a && !a.excluidaEm && !a.arquivadaEm && a.status === 'VERIFICADA');
-    }
-    if (meta.tipo === 'EVIDENCIA' && vinculo.comprovanteId) {
-      return comprovanteValidoParaMeta(m, meta.contratoId, vinculo.comprovanteId);
-    }
-    return false;
-  }
   private async montar(m: EntityManager, meta: MetaMarco) {
     const vinculos = await m.find(VinculoMetaMarco, { where: { metaId: meta.id, contratoId: meta.contratoId }, order: { solicitadoEm: 'ASC' } });
     const ativos = vinculos.filter(v => v.status !== 'REJEITADO');
-    const conferencias = await Promise.all(ativos.map(async v => ({ id: v.id, elegivel: v.status === 'APROVADO' && await this.elegivel(m, meta, v) })));
+    const conferencias = await Promise.all(ativos.map(async v => ({ id: v.id, elegivel: v.status === 'APROVADO' && await registroElegivelMeta(m, meta, v) })));
     const aprovados = conferencias.filter(v => v.elegivel).length;
     return Object.assign({}, meta, { quantidadeAprovada: aprovados, percentualPreparacao: Math.min(100, aprovados / meta.quantidadeExigida * 100),
       pronto: aprovados >= meta.quantidadeExigida,
@@ -82,20 +83,21 @@ export class MetasMarcoService {
   }
   async listar(contratoId: string, entregavelId: string, ator: UsuarioAutenticado) {
     await this.autorizar(ator, contratoId, 'metas-marco:listar');
-    return this.ds.transaction(async m => {
+    return this.ds.transaction('REPEATABLE READ', async m => {
       await this.entregar(m, contratoId, entregavelId);
       const metas = await m.find(MetaMarco, { where: { contratoId, entregavelId, arquivadoEm: IsNull() }, order: { criadoEm: 'ASC' } });
       const itens = await Promise.all(metas.map(meta => this.montar(m, meta)));
       const total = itens.length;
       const concluidas = itens.filter(item => item.pronto).length;
       return { entregavelId, metas: itens, total, concluidas,
-        percentualPreparacao: total ? Math.round(itens.reduce((n, x) => n + x.percentualPreparacao, 0) / total * 100) / 100 : 0,
+        percentualPreparacao: total ? arredondarFisico(itens.reduce((n, x) => n + x.percentualPreparacao, 0) / total, concluidas === total) : 0,
         aptoPelasMetas: total > 0 && concluidas === total };
     });
   }
   async criar(contratoId: string, entregavelId: string, dto: CriarMetaMarcoDto, ator: UsuarioAutenticado) {
     await this.autorizar(ator, contratoId, 'metas-marco:criar');
     return this.ds.transaction(async m => {
+      await exigirPermissaoTransacional(m,contratoId,ator,'criarMetasMarco');
       await this.entregar(m, contratoId, entregavelId, true);
       const meta = m.create(MetaMarco, { ...campos(dto), tipo: dto.tipo, contratoId, entregavelId, criadoPor: ator.id });
       this.validarDatas(meta);
@@ -108,6 +110,7 @@ export class MetasMarcoService {
   async editar(contratoId: string, entregavelId: string, metaId: string, dto: EditarMetaMarcoDto, ator: UsuarioAutenticado) {
     await this.autorizar(ator, contratoId, 'metas-marco:editar');
     return this.ds.transaction(async m => {
+      await exigirPermissaoTransacional(m,contratoId,ator,'editarMetasMarco');
       await this.entregar(m, contratoId, entregavelId, true);
       const meta = await this.meta(m, contratoId, entregavelId, metaId, true);
       const antes = { titulo: meta.titulo, quantidadeExigida: meta.quantidadeExigida, dataPrevista: meta.dataPrevista, inicioPrevisto: meta.inicioPrevisto, terminoPrevisto: meta.terminoPrevisto };
@@ -139,16 +142,17 @@ export class MetasMarcoService {
   }
   async candidatos(contratoId: string, entregavelId: string, metaId: string, ator: UsuarioAutenticado) {
     await this.autorizar(ator, contratoId, 'metas-marco:listar');
-    return this.ds.transaction(async m => {
+    return this.ds.transaction('REPEATABLE READ', async m => {
       await this.entregar(m, contratoId, entregavelId);
       const meta = await this.meta(m, contratoId, entregavelId, metaId);
       if (meta.tipo === 'OCORRENCIA') {
-        const ocorrencias = await m.find(Ocorrencia, { where: { contratoId, status: 'CONCLUIDO' as Ocorrencia['status'] } });
-        return ocorrencias.filter(o => !o.substituidaEm).map(o => ({ id: o.id, titulo: o.titulo }));
+        const ocorrencias = await m.find(Ocorrencia, { where: { contratoId, status: In(['CONCLUIDO','CONCLUIDO_PARCIALMENTE'] as Ocorrencia['status'][]), substituidaEm: IsNull() } });
+        const elegiveis = await Promise.all(ocorrencias.map(o => ocorrenciaElegivelMeta(m,o)));
+        return ocorrencias.filter((_,i) => elegiveis[i]).map(o => ({ id: o.id, titulo: o.titulo }));
       }
       if (meta.tipo === 'ATIVIDADE') {
         const atividades = await m.find(AtividadeEntity, { where: { contratoId, status: 'VERIFICADA' }, relations: { entregaveis: true } });
-        return atividades.filter(a => !a.excluidaEm && !a.arquivadaEm && a.entregaveis.some(e => e.contratoId === contratoId))
+        return atividades.filter(a => atividadeElegivelMeta(a,contratoId))
           .map(a => ({ id: a.id, titulo: a.titulo }));
       }
       return comprovantesCandidatosMeta(m, contratoId);
@@ -157,6 +161,7 @@ export class MetasMarcoService {
   async vincular(contratoId: string, entregavelId: string, metaId: string, registroId: string, ator: UsuarioAutenticado) {
     await this.autorizar(ator, contratoId, 'metas-marco:vincular');
     return this.ds.transaction(async m => {
+      await exigirPermissaoTransacional(m,contratoId,ator,'vincularMetasMarco');
       await this.entregar(m, contratoId, entregavelId, true);
       const meta = await this.meta(m, contratoId, entregavelId, metaId, true);
       const alvo = await this.verificarRegistro(m, meta, registroId);
@@ -174,17 +179,21 @@ export class MetasMarcoService {
     aprovar: boolean, justificativa: string | undefined, ator: UsuarioAutenticado) {
     await this.autorizar(ator, contratoId, 'metas-marco:decidir');
     return this.ds.transaction(async m => {
+      await exigirPermissaoTransacional(m,contratoId,ator,'aprovarVinculosMetasMarco');
       await this.entregar(m, contratoId, entregavelId, true);
       const meta = await this.meta(m, contratoId, entregavelId, metaId, true);
       const v = await m.findOne(VinculoMetaMarco, { where: { id: vinculoId, metaId, contratoId }, lock: { mode: 'pessimistic_write' } });
       if (!v) throw new NotFoundException('Vínculo inexistente');
-      if (v.status !== 'PENDENTE') throw new ConflictException('O vínculo já foi decidido');
-      if (aprovar && !await this.elegivel(m, meta, v))
+      const revogacao = !aprovar && v.status === 'APROVADO';
+      if (v.status !== 'PENDENTE' && !revogacao) throw new ConflictException('O vínculo já foi decidido');
+      if (revogacao && (justificativa?.trim().length ?? 0)<15) throw new BadRequestException('Informe o motivo da revisão do vínculo aprovado (mínimo 15 caracteres).');
+      const antes = {metaId,vinculoId,status:v.status,decididoPor:v.decididoPor,decididoEm:v.decididoEm?.toISOString()??null,justificativa:v.justificativa};
+      if (aprovar && !await registroElegivelMeta(m, meta, v))
         throw new ConflictException('O registro precisa estar concluído ou verificado para sustentar a meta');
       v.status = aprovar ? 'APROVADO' : 'REJEITADO'; v.decididoPor = ator.id; v.decididoEm = new Date(); v.justificativa = justificativa?.trim() || null;
       await m.save(VinculoMetaMarco, v);
       await this.auditoria.registrarNaTransacao(m, ator, { acao: AcaoAuditoria.META_MARCO_VINCULO_DECIDIDO,
-        entidadeTipo: 'ENTREGAVEL', entidadeId: entregavelId, dadosAnteriores: { metaId, vinculoId, status: 'PENDENTE' },
+        entidadeTipo: 'ENTREGAVEL', entidadeId: entregavelId, dadosAnteriores: antes,
         dadosPosteriores: { metaId, vinculoId, status: v.status, justificativa: v.justificativa } });
       return this.montar(m, meta);
     });

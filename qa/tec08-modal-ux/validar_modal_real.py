@@ -14,6 +14,9 @@ from pathlib import Path
 import re
 import secrets
 import sys
+from pathlib import Path as _CaminhoQA
+sys.path.insert(0, str(_CaminhoQA(__file__).resolve().parents[1]))
+from navegacao_contrato import localizar_pagina, abrir_pagina
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'qa' / 'tec08-02'))
@@ -71,7 +74,7 @@ def fluxo(contas, visivel):
                 relatorio['provas'].append('ADMIN autenticado, contrato, etapa e entregável sintéticos criados')
 
                 pagina.goto(f'{WEB}/contratos/{contrato}', wait_until='domcontentloaded')
-                pagina.get_by_role('tab', name='Etapas').click()
+                localizar_pagina(pagina, 'Etapas').click()
                 pagina.get_by_role('button', name='Abrir detalhes da etapa 1: QA UI ' + referencia[-6:]).click()
                 etapa_modal = pagina.get_by_role('dialog', name=re.compile(r'^\d+\s*·\s*' + re.escape('QA UI ' + referencia[-6:]) + r'$'))
                 etapa_modal.wait_for(state='visible', timeout=15000)
@@ -82,7 +85,7 @@ def fluxo(contas, visivel):
                 except Exception as primeira_falha:
                     # A aba documental é independente da execução física; buscar em
                     # Comprovados somente se o item saiu de Entregáveis.
-                    aba_comprovados = painel.get_by_role('tab', name='Entregáveis verificados')
+                    aba_comprovados = painel.get_by_role('tab', name='Entregáveis finalizados')
                     if aba_comprovados.count() == 0:
                         raise primeira_falha
                     aba_comprovados.click()

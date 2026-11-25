@@ -21,7 +21,7 @@ const ator: UsuarioAutenticado = {
 };
 
 function base() {
-  const contrato = { id: contratoId, arquivadoEm: null as Date | null };
+  const contrato = { id: contratoId, arquivadoEm: null as Date | null, status: 'EM_EXECUCAO' };
   const entregue = {
     id: entregavelId,
     contratoId,
@@ -48,6 +48,8 @@ function base() {
     save: jest.fn(async (e: unknown) => e),
   };
   const repoComprovante = { findOne: jest.fn(async () => null) };
+  const repoUsuario = { findOne: jest.fn(async () => ({...ator,ativo:true})) };
+  const repoAcl = { findOne: jest.fn(async () => ({podeEditar:false,permissoesDetalhadas:{arquivarEvidencias:true}})) };
   const repoEtapa = {
     findOneBy: jest.fn(async () => ({
       id: 'etapa-qa',
@@ -78,7 +80,9 @@ function base() {
     ]),
 
     getRepository: jest.fn((entity: unknown) =>
-      entity === Contrato
+      (entity as {name?:string})?.name === 'Usuario' ? repoUsuario
+      : (entity as {name?:string})?.name === 'PermissaoContrato' ? repoAcl
+      : entity === Contrato
         ? repoContrato
         : entity === Entregavel
           ? repoEntregavel
@@ -110,6 +114,7 @@ function base() {
     repoEntregavel,
     repoEvidencia,
     repoEtapa,
+    repoUsuario,
     query,
     m,
   };
@@ -302,6 +307,7 @@ test('arquivamento de colaborador não concede permissão para aprovar conclusã
   );
   a.repoEvidencia.count.mockResolvedValue(0); // Nenhuma evidência ativa em revisão.
   const colaborador = { ...ator, perfil: PerfilUsuario.COLABORADOR };
+  a.repoUsuario.findOne.mockResolvedValueOnce({...colaborador,ativo:true});
   const resultado = await a.service.alterarEvidencia(
     contratoId,
     entregavelId,
@@ -320,4 +326,25 @@ test('arquivamento de colaborador não concede permissão para aprovar conclusã
       acao: AcaoAuditoria.ENTREGAVEL_EVIDENCIA_ESPERADA_ARQUIVADA,
     }),
   );
+});
+
+
+test('decisão pendente de descendente impede arquivar o entregável', async () => {
+  const a=base();
+  a.m.query.mockResolvedValueOnce([{pendentes:true}]);
+  await expect(a.service.alterarEntregavel(contratoId,entregavelId,true,ator)).rejects.toThrow('decisões e contribuições pendentes');
+  expect(a.repoEntregavel.save).not.toHaveBeenCalled();
+});
+
+test('regularização parcial protege requisitos obrigatórios e permite arquivar evidência opcional sem contribuição', async () => {
+  const a=base();
+  a.contrato.status='CONCLUIDO_PARCIALMENTE';
+  Object.assign(a.entregue,{statusExecucao:'CONCLUIDO_PARCIALMENTE',tipo:'UNICO'});
+  Object.assign(a.esperada,{obrigatoria:true});
+  await expect(a.service.alterarEvidencia(contratoId,entregavelId,evidenciaId,true,ator)).rejects.toThrow('Preserve a exigência obrigatória');
+  Object.assign(a.esperada,{obrigatoria:false});
+  a.m.query.mockResolvedValueOnce([{contribui:false}]);
+  await a.service.alterarEvidencia(contratoId,entregavelId,evidenciaId,true,ator);
+  expect(a.esperada.arquivadoEm).toBeInstanceOf(Date);
+  expect(a.repoEntregavel.save).not.toHaveBeenCalled();
 });

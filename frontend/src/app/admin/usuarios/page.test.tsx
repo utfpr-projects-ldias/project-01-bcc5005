@@ -121,7 +121,7 @@ test("cadastro válido grava via API e retorna à listagem", async () => {
   fireEvent.change(screen.getByLabelText("Confirmar senha"), { target: { value: "ForteSenha!123" } });
   fireEvent.click(screen.getByRole("button", { name: "Cadastrar funcionário" }));
   await waitFor(() => expect(criar).toHaveBeenCalledWith(expect.objectContaining({ email: gestor.email })));
-  expect(substituir).toHaveBeenCalledWith("/admin/usuarios");
+  expect(substituir).toHaveBeenCalledWith("/admin");
 });
 
 test("edição abre por UUID consultando API individual, mesmo fora das 100 primeiras contas", async () => {
@@ -190,7 +190,7 @@ test("edição mantém retorno para lista e ações próprias sem recriar a nave
   await screen.findByRole("heading", { name: /Conta de Gestor de Teste/ });
   expect(screen.queryByRole("complementary", { name: "Navegação principal" })).not.toBeInTheDocument();
   expect(screen.queryByRole("navigation", { name: "Navegação móvel" })).not.toBeInTheDocument();
-  expect(screen.getByRole("link", { name: /Voltar aos funcionários/ })).toHaveAttribute("href", "/admin/usuarios");
+  expect(screen.getByRole("link", { name: /Voltar aos funcionários/ })).toHaveAttribute("href", "/admin");
   expect(screen.getByRole("button", { name: "Salvar dados da conta" })).toBeInTheDocument();
 });
 
@@ -335,7 +335,7 @@ test("administração não duplica cabeçalho de rota nem identificação de ses
   expect(screen.queryByRole("heading", { name: /^Editar funcionário$/ })).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Administrador autenticado")).not.toBeInTheDocument();
   expect(container.querySelector("header")).not.toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "Voltar aos funcionários" })).toHaveAttribute("href", "/admin/usuarios");
+  expect(screen.getByRole("link", { name: "Voltar aos funcionários" })).toHaveAttribute("href", "/admin");
 });
 
 test("alternar situação recarrega a lista sem botão Atualizar", async () => {

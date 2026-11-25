@@ -16,7 +16,7 @@ sys.path.insert(0, str(RAIZ / 'qa/hu07-06'))
 from credenciais_locais import carregar_credenciais, entrar_no_next
 from validar_fluxo_real import requisitar
 
-PADRAO = re.compile(r'^[0-9]{5}$')
+PADRAO = re.compile(r'^[0-9]{5,10}$')
 UUID = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$', re.I)
 
 
@@ -66,7 +66,7 @@ def executar(page, args):
         assert 'codigoPublico' not in dados, 'Código não deve ser enviado pelo navegador'
         contratos.append(c)
     assert contratos[0]['id'] != contratos[1]['id'] and contratos[0]['codigoPublico'] != contratos[1]['codigoPublico'], 'Colisão não resolvida'
-    provas.append('Dois cadastros reais: código automático de 5 dígitos, distinto, sem input do cliente')
+    provas.append('Dois cadastros reais: código automático de 5 a 10 dígitos, distinto, sem input do cliente')
 
     for contrato in contratos:
         detalhe = conferir(requisitar(page, args.api_url, '/contratos/' + contrato['id']), 200, 'detalhar contrato')

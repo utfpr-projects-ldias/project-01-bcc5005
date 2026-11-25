@@ -7,7 +7,7 @@ const limpar = jest.fn();
 const mockReplace = jest.fn();
 jest.mock('next/navigation', () => ({ useRouter: () => ({ replace: mockReplace }) }));
 const perfilAdmin = { id: 'uuid-admin', nome: 'Admin QA', email: 'admin@qa.org', perfil: 'ADMINISTRADOR', ativo: true };
-let perfil: typeof perfilAdmin | undefined;
+let perfil: (Omit<typeof perfilAdmin, 'nome'> & {nome:string|null}) | undefined;
 jest.mock('@/hooks/use-meu-perfil', () => ({
   useMeuPerfil: () => ({ dados: perfil, carregando: false, erro: null }), CHAVE_PERFIL: ['identidade', 'me'],
 }));
@@ -104,8 +104,18 @@ test('o próprio usuário ativo pode alterar nome sem modificar e-mail ou senha'
 test('nome inválido não dispara escrita na API', () => {
   render(<MinhaContaPage />);
   const formulario = screen.getByRole('form', { name: 'Alterar meu nome' });
-  fireEvent.change(within(formulario).getByLabelText('Nome completo'), { target: { value: 'Unico' } });
+  fireEvent.change(within(formulario).getByLabelText('Nome completo'), { target: { value: 'Nome123' } });
   fireEvent.submit(formulario);
-  expect(screen.getByRole('alert')).toHaveTextContent('nome e sobrenome');
+  expect(screen.getByRole('alert')).toHaveTextContent('nome válido');
   expect(alterarMeuNome).not.toHaveBeenCalled();
+});
+
+
+test('permite informar somente um nome no perfil antes sem nome', async () => {
+  perfil = { ...perfilAdmin, nome: null };
+  render(<MinhaContaPage />);
+  const formulario = screen.getByRole('form', {name:'Alterar meu nome'});
+  fireEvent.change(within(formulario).getByLabelText('Nome completo'),{target:{value:'Rinaldi'}});
+  fireEvent.submit(formulario);
+  await waitFor(()=>expect(alterarMeuNome).toHaveBeenCalledWith('Rinaldi'));
 });

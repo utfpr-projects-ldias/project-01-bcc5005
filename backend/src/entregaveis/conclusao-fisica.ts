@@ -1,3 +1,4 @@
+import { milesimos, percentualQuantidade } from '../common/quantidade-exata.js';
 import { quantidadeDiretaEvidencias } from './quantidade-evidencias.js';
 import { percentualComParcelas, resumoParcelas } from '../execucao/parcelas-execucao.js';
 import { medicaoAprovadaAtual, medicaoReconhecidaAtual } from '../ocorrencias/medicao-ocorrencia.js';
@@ -10,7 +11,7 @@ import { calcularFisico } from '../execucao/motor-progresso.js';
 import { calcularPeriodosRecorrentes } from '../ocorrencias/ocorrencias.service.js';
 import { avaliarAgendaRecorrente, avaliarPesosAgenda } from '../ocorrencias/avaliar-agenda-recorrente.js';
 import { ConfiguracaoOcorrencias } from '../ocorrencias/configuracao-ocorrencias.entity.js';
-import { hojeCivil } from '../common/data-civil.js';
+import { dataEfetivaValida, hojeCivil } from '../common/data-civil.js';
 
 /** Gate compartilhado pelos caminhos explícito e automáticos de conclusão.
  * Não presume que comprovação documental implique execução física de 100%.
@@ -28,6 +29,8 @@ export async function aptidaoFisicaParaConclusao(
     if (parcelas.itens.some(i => i.situacao === 'PENDENTE' && !i.referenciaId && i.centesimos > 0))
       return negar('Resolva os lançamentos de execução pendentes antes de concluir');
   }
+  if (e.tipo === TipoEntregavel.MARCO && e.dataEfetivaMarco && !dataEfetivaValida(e.dataEfetivaMarco))
+    return negar('Informe uma data efetiva válida e não futura para o Marco');
   const metas = e.tipo === TipoEntregavel.MARCO ? await avaliarMetasMarco(m, e.contratoId, e.id) : null;
   // RB-03: em ÚNICO a ocorrência é opcional; se existir, precisa estar concluída.
   if ((e.tipo === TipoEntregavel.RECORRENTE || (e.tipo === TipoEntregavel.MARCO && !metas?.total)) && !atuais.length)
@@ -50,12 +53,12 @@ export async function aptidaoFisicaParaConclusao(
       return negar('Gere e aprove a agenda recorrente antes de concluir');
     const inicioAgenda = e.agendaInicioFuturo ?? e.inicioPrevisto;
     const configuracao = await m.findOneBy(ConfiguracaoOcorrencias, { entregavelId: e.id, contratoId: e.contratoId });
-    const fimAgenda = e.agendaInicioFuturo ? configuracao?.terminoPrevisto ?? e.terminoPrevisto : e.terminoPrevisto;
+    const fimAgenda = e.agendaInicioFuturo ? configuracao?.terminoPrevisto : e.terminoPrevisto;
     if (!inicioAgenda || !fimAgenda) return negar('Agenda recorrente sem período definido');
     let periodos: ReturnType<typeof calcularPeriodosRecorrentes>;
     try { periodos = calcularPeriodosRecorrentes(inicioAgenda, fimAgenda, e.periodicidade); }
     catch { return negar('Regularize os períodos da agenda antes de concluir'); }
-    const analise = avaliarAgendaRecorrente(atuais, periodos, inicioAgenda);
+    const analise = avaliarAgendaRecorrente(atuais, periodos, inicioAgenda, e.inicioPrevisto, e.terminoPrevisto);
     if (!analise.completa) return negar('Agenda recorrente incompleta; regularize os períodos');
     const pesos = avaliarPesosAgenda(atuais);
     if (!pesos.validos) return negar('Regularize os pesos dos períodos antes de concluir');
@@ -63,17 +66,16 @@ export async function aptidaoFisicaParaConclusao(
       ocorrenciasConcluidas: analise.concluidas });
   } else if (e.tipo === TipoEntregavel.QUANTITATIVO) {
     const medidas = atuais.filter(o => o.origem === 'MANUAL_QUANTITATIVA' && o.modoRegistro !== 'DESCRITIVO');
-    if (medidas.length && e.quantidadeRealizada != null && Number(e.quantidadeRealizada) !== 0)
+    if (medidas.length && e.quantidadeRealizada != null && milesimos(e.quantidadeRealizada) !== 0n)
       return negar('Concilie a quantidade informada diretamente com os registros das ocorrências');
-    if (!medidas.length && (e.quantidadeRealizada != null && Number(e.quantidadeRealizada) < 0))
+    if (!medidas.length && e.quantidadeRealizada != null && String(e.quantidadeRealizada).startsWith('-'))
       return negar('Registre a execução quantitativa diretamente ou por ocorrências aprovadas');
     const direta=await quantidadeDiretaEvidencias(m,e);
-    if(direta && (atuais.length || Number(e.quantidadeRealizada??0)!==0 || direta.pendentes))return negar('Resolva as medições diretas pendentes ou conflitantes antes de concluir.');
-    const realizada = direta ? Number(direta.reconhecida) : medidas.length
-      ? (await Promise.all(medidas.map(o => medicaoReconhecidaAtual(m,o)))).reduce((n,q) => n + Number(q ?? 0),0)
-      : e.quantidadeRealizada == null ? null : Number(e.quantidadeRealizada);
-    percentual = calcularFisico({ tipo: 'QUANTITATIVO', quantidadeRealizada: realizada,
-      quantidadePrevista: e.quantidadePrevista == null ? null : Number(e.quantidadePrevista) });
+    if(direta && (atuais.length || milesimos(e.quantidadeRealizada)!==0n || direta.pendentes))return negar('Resolva as medições diretas pendentes ou conflitantes antes de concluir.');
+    const realizada = direta ? milesimos(direta.reconhecida) : medidas.length
+      ? (await Promise.all(medidas.map(o => medicaoReconhecidaAtual(m,o)))).reduce((n,q) => n + milesimos(q),0n)
+      : e.quantidadeRealizada == null ? null : milesimos(e.quantidadeRealizada);
+    percentual = realizada == null || e.quantidadePrevista == null ? null : percentualQuantidade(realizada, milesimos(e.quantidadePrevista), false);
   } else if (e.tipo === TipoEntregavel.MARCO && metas?.total && metas.apto) {
     // O preparo completo autoriza solicitar conclusão, mas o progresso oficial
     // permanece 0% até a aprovação registrar a data efetiva do Marco.

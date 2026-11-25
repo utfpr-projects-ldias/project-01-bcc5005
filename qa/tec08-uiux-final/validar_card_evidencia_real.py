@@ -13,6 +13,9 @@ import re
 from pathlib import Path
 import secrets
 import sys
+from pathlib import Path as _CaminhoQA
+sys.path.insert(0, str(_CaminhoQA(__file__).resolve().parents[1]))
+from navegacao_contrato import localizar_pagina, abrir_pagina
 from fluxos_qa_atualizados import anexar_primeiro_comprovante
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -66,7 +69,7 @@ def testar(contas, visivel):
             esperada = next((e for e in item['evidenciasEsperadas'] if e['tipoEvidencia'] == 'Relatório de QA'), None)
             base.exigir(esperada is not None, 'Evidência Relatório de QA não localizada pelo tipo')
             pagina.goto(f'http://localhost:3000/contratos/{contrato}', wait_until='domcontentloaded')
-            pagina.get_by_role('tab', name='Etapas').click()
+            localizar_pagina(pagina, 'Etapas').click()
             pagina.get_by_role('button', name='Abrir detalhes da etapa 1: Etapa QA UI/UX').click()
             etapa_modal = pagina.get_by_role('dialog', name='1 · Etapa QA UI/UX', exact=True)
             etapa_modal.wait_for(state='visible', timeout=15000)
@@ -75,7 +78,7 @@ def testar(contas, visivel):
             try:
                 cartao.wait_for(state='visible', timeout=12000)
             except Exception as primeira_falha:
-                aba_comprovados = painel_entregaveis.get_by_role('tab', name='Entregáveis verificados')
+                aba_comprovados = painel_entregaveis.get_by_role('tab', name='Entregáveis finalizados')
                 if aba_comprovados.count() == 0:
                     raise primeira_falha
                 aba_comprovados.click()

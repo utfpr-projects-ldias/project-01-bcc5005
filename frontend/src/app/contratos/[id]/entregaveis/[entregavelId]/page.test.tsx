@@ -1,3 +1,5 @@
+import type { ReactElement } from 'react';
+import { ProvedorConsultas } from '@/app/components/provedor-consultas';
 jest.mock('@/app/contratos/components/painel-comprovacao-evidencia', () => ({
   PainelComprovacaoEvidencia: ({ contratoId, entregavelId, esperadaId, podeEditar, podeAlterarObrigatoriedade, somenteLeitura, onIntegridadeDetalhe }: {
     contratoId: string; entregavelId: string; esperadaId: string;
@@ -31,12 +33,12 @@ jest.mock('@/app/contratos/components/painel-comprovacao-evidencia', () => ({
     </div>;
   },
 }));
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render as renderSemProvider, screen } from '@testing-library/react';
 import DetalheEntregavelPage from './page';
 import { ConteudoEntregavel } from '@/app/contratos/components/conteudo-entregavel';
 import { useMeuPerfil } from '@/hooks/use-meu-perfil';
 import { useDetalheEntregavel } from '@/hooks/use-entregaveis';
-import { useAcessoContrato } from '@/hooks/use-contratos';
+import { useAcessoContrato, useContrato } from '@/hooks/use-contratos';
 import { consultarHistoricoEntregavel, type Entregavel } from '@/lib/entregaveis';
 import { consultarEvidencia } from '@/lib/comprovantes';
 jest.mock('@/lib/entregaveis', () => ({ ...jest.requireActual('@/lib/entregaveis'), consultarHistoricoEntregavel: jest.fn() }));
@@ -46,7 +48,8 @@ jest.mock('next/navigation', () => ({ useParams: () => ({ id: 'contrato-a', entr
 jest.mock('@/hooks/use-meu-perfil', () => ({ useMeuPerfil: jest.fn() }));
 jest.mock('@/hooks/use-entregaveis', () => ({ useDetalheEntregavel: jest.fn(), useEntregaveis: () => ({ dados: [] }) }));
 jest.mock('@/hooks/use-progresso', () => ({ useProgresso: () => ({ progresso: { modoCalculo: 'SIMPLES' } }) }));
-jest.mock('@/hooks/use-contratos', () => ({ useAcessoContrato: jest.fn() }));
+jest.mock('@/hooks/use-contratos', () => ({ useAcessoContrato: jest.fn(), useContrato: jest.fn() }));
+jest.mock('@/hooks/use-etapas', () => ({ useEtapas: () => ({dados:[{id:'etapa-a',contratoId:'contrato-a',status:'EM_ANDAMENTO'}]}) }));
 const historico = consultarHistoricoEntregavel as jest.Mock;
 const evidenciaConsultada = consultarEvidencia as jest.Mock;
 const perfil = useMeuPerfil as jest.Mock;
@@ -90,6 +93,7 @@ beforeEach(() => {
       tipoEvidencia: id === 'prova-1' ? 'Relatório' : 'Foto', descricao: null,
       obrigatoria: id === 'prova-1', podeVerificar: false }));
   perfil.mockReturnValue(estado({ ativo: true }));
+  (useContrato as jest.Mock).mockReturnValue(estado({id:'contrato-a',status:'EM_EXECUCAO'}));
   detalhe.mockReturnValue(estado(item));
   acesso.mockReturnValue(estado({ podeEditar: false }));
 });
@@ -211,3 +215,12 @@ test('resposta incompleta nunca libera a edição externa, mesmo para ADMIN', as
   expect(screen.queryByRole('button', { name: 'Editar tipo da evidência' })).not.toBeInTheDocument();
   expect(screen.queryByRole('checkbox', { name: 'Evidência obrigatória' })).not.toBeInTheDocument();
 });
+
+test('B05: rota direta não oferece edição sob contrato suspenso', async () => {
+  (useContrato as jest.Mock).mockReturnValue(estado({id:'contrato-a',status:'SUSPENSO'}));
+  acesso.mockReturnValue(estado({podeEditar:true,permissoes:{editarEntregaveis:true}}));
+  await act(async()=>{render(<DetalheEntregavelPage/>);}); await concluirConsultas();
+  expect(screen.queryByRole('button',{name:'Editar entregável'})).not.toBeInTheDocument();
+});
+
+function render(elemento: ReactElement) { return renderSemProvider(elemento, { wrapper: ProvedorConsultas }); }

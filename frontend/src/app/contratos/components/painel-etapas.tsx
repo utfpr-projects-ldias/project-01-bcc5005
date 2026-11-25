@@ -7,18 +7,18 @@ import { ROTULOS_TIPO, type Entregavel } from '@/lib/entregaveis';
 import { AnelTabela, BarraTabela, CabecalhoColuna, ComprovacaoTabela, IconeTabela, StatusTabela, metricasEntregavel, metricasEtapa, taxa, ordenarTabela, ordemEstados, useOrdemTabela } from './tabela-operacional';
 import { estadoDoObjeto, rotuloEstadoEntregavel } from '@/lib/identidade-operacional';
 import { EtiquetaAtraso } from '@/app/components/etiqueta-atraso';
-import { useEtapas, useMutacoesEtapas } from '@/hooks/use-etapas';
+import { useEtapas, useMutacoesEtapas, useElegibilidadeEtapa } from '@/hooks/use-etapas';
 import { alterarBloqueioOrdemEtapas, type PermissoesContrato, type ModoCalculo } from '@/lib/contratos';
 import { useProgresso } from '@/hooks/use-progresso';
 import { useEntregaveis, useResumoDocumentalContrato } from '@/hooks/use-entregaveis';
 import { EntregaveisDaEtapa } from './entregaveis-da-etapa';
 import { HistoricoEtapa } from './historico-etapa';
-import { ErroEtapa, concluirEtapa, solicitarConclusaoEtapa, solicitarEncerramentoEtapa, devolverSolicitacaoEtapa, encerrarEtapa, reabrirEtapaEncerrada, reabrirEtapa, alterarArquivamentoEtapa, excluirEtapaArquivada, type DadosEtapa, type Etapa } from '@/lib/etapas';
+import { etapaNaAba, filtrosEtapas, type AbaEtapas } from '@/lib/filtros-etapas';
+import { ErroEtapa, concluirEtapa, finalizarEtapa, solicitarConclusaoEtapa, solicitarEncerramentoEtapa, devolverSolicitacaoEtapa, encerrarEtapa, reabrirEtapaEncerrada, reabrirEtapa, alterarArquivamentoEtapa, excluirEtapaArquivada, type DadosEtapa, type AtualizacaoEtapa, type Etapa } from '@/lib/etapas';
 import { FormularioEtapa } from './formulario-etapa';
-import { resultadoFinalizacao } from '@/lib/finalizados';
 import { IconeStatus } from '@/app/components/icones-status';
 import { rotuloCodigoPublico } from '@/lib/codigos-publicos';
-import { etapaPodeSerConcluida, etapaPodeSerConcluidaParcialmente } from '@/lib/situacao-documental-etapa';
+import { sincronizarContrato } from '@/lib/sincronizar-contrato';
 import { ConfirmacaoSimples } from '@/app/components/confirmacao-simples';
 import { ModalEtapa } from './modal-etapa';
 import { BotaoEditarModal, BotaoAcaoModal } from '@/app/components/botoes-modal';
@@ -69,6 +69,8 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
   const [confirmarReaberturaEtapa, setConfirmarReaberturaEtapa] = useState<string | null>(null);
   const [confirmarEncerramentoDireto, setConfirmarEncerramentoDireto] = useState<string | null>(null);
   const [motivoEtapa, setMotivoEtapa] = useState('');
+  const [confirmarFinalizacao, setConfirmarFinalizacao] = useState<string | null>(null);
+  const [revisaoHistorico, setRevisaoHistorico] = useState(0);
   const [aprovarConclusao, setAprovarConclusao] = useState<string | null>(null);
   const [aprovarEncerramento, setAprovarEncerramento] = useState<string | null>(null);
   const [devolverPendente, setDevolverPendente] = useState<{id:string;tipo:'conclusao'|'encerramento'} | null>(null);
@@ -78,10 +80,10 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
   const [ocupadoArquivoEtapa, setOcupadoArquivoEtapa] = useState(false);
   const [confirmarArquivoEtapa, setConfirmarArquivoEtapa] = useState<{ id: string; acao: 'arquivar' | 'reativar' } | null>(null);
   const estadoPainel = contratoArquivado ? 'arquivado' : contratoCancelado ? 'cancelado' : contratoSuspenso ? 'suspenso' : contratoEncerrado ? 'encerrado' : contratoEmRevisao ? 'revisao' : (contratoConcluido || contratoPendenteConclusao) ? 'concluido' : 'normal';
-  const classeAbaAtiva = contratoPendenteConclusao ? 'bg-violet-700 text-white' : contratoArquivado ? 'bg-amber-500/20 text-amber-900 dark:text-amber-200' : (contratoSuspenso || contratoCancelado || contratoEncerrado) ? 'bg-slate-700 text-white' : contratoConcluido ? 'bg-violet-500/20 text-violet-800 dark:text-violet-200' : contratoEmRevisao ? 'bg-teal-700/25 text-teal-200' : 'bg-brand-green text-on-brand-green';
   const [buscaEtapa,setBuscaEtapa]=useState('');
-  const [tipoPendente,setTipoPendente]=useState('');
-  const [abaEtapas, setAbaEtapas] = useState<'todas' | 'revisao' | 'pendentes' | 'concluidas' | 'arquivadas'>('todas');
+  const [filtroSituacao,setFiltroSituacao]=useState<Partial<Record<AbaEtapas,string>>>({});
+  const [abaEtapas, setAbaEtapas] = useState<AbaEtapas>('todas');
+  const situacaoSelecionada = filtroSituacao[abaEtapas] ?? '';
   const [etapasLocais, setEtapasLocais] = useState<Record<string, Etapa | null>>({});
   const [erroAcao, setErroAcao] = useState('');
   const [bloqueio, setBloqueio] = useState(false);
@@ -94,6 +96,8 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
   const itemEditando = editor && editor !== 'nova' && !editor.startsWith('detalhe:') ? etapas?.find((e) => e.id === editor) : undefined;
   const idDetalhe = editor?.startsWith('detalhe:') ? editor.slice('detalhe:'.length) : interno ? retornoEdicao : null;
   const itemDetalhe = idDetalhe ? etapas?.find(e => e.id === idDetalhe) : undefined;
+  const consultaElegibilidade = useElegibilidadeEtapa(contratoId, itemDetalhe?.id ?? '', habilitado && !erroProtegido && !bloqueio && Boolean(itemDetalhe) && !contratoArquivado);
+  const elegibilidade = !consultaElegibilidade.erro && !consultaElegibilidade.carregando && !consultaElegibilidade.atualizando ? consultaElegibilidade.dados : undefined;
   const destinoAtendido = useRef<typeof destinoInterno>(undefined);
   const [destinoSelecao, setDestinoSelecao] = useState<typeof destinoInterno>();
   const destinoDisponivel = Boolean(destinoInterno && etapas?.some(e => e.id === destinoInterno.etapaId));
@@ -107,7 +111,6 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
   const podeEditarEtapa = habilitado && permissao('editarEtapas') && !erroProtegido && !bloqueio;
   const podeReordenarEtapa = habilitado && permissao('reordenarEtapas') && !erroProtegido && !bloqueio;
   const podeBloquearOrdem = habilitado && permissao('bloquearOrdemEtapas') && !erroProtegido && !bloqueio;
-  const podeEncerrarEtapa = habilitado && Boolean(permissoes?.encerrarEtapas) && !erroProtegido && !bloqueio;
   const podeReabrirEtapaEncerrada = habilitado && Boolean(permissoes?.reabrirEtapasEncerradas) && !erroProtegido && !bloqueio;
   const podeReabrirEtapa = habilitado && Boolean(permissoes?.reabrirEtapas) && !erroProtegido && !bloqueio;
   const podeArquivarEtapa = habilitado && Boolean(permissoes?.arquivarEtapas) && !erroProtegido && !bloqueio;
@@ -134,12 +137,7 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
   // somente as arquivadas saem da visão principal.
   const naAba = ordenadas?.filter(etapa => {
     if(buscaEtapa.trim()&&![etapa.nome,etapa.codigo??'',String(etapa.sequencia),...filhosDaEtapa(etapa).map(e=>e.nome)].some(v=>v.toLocaleLowerCase('pt-BR').includes(buscaEtapa.trim().toLocaleLowerCase('pt-BR'))))return false;
-    if (abaEtapas === 'arquivadas') return Boolean(etapa.arquivadoEm);
-    if (etapa.arquivadoEm) return false;
-    if (abaEtapas === 'revisao') return identidadeEtapa(etapa).estado === 'revisao';
-    if (abaEtapas === 'pendentes') return Boolean(etapa.conclusaoSolicitadaEm || etapa.encerramentoSolicitadoEm) && (!tipoPendente || (etapa.encerramentoSolicitadoEm ? 'PENDENTE_ENCERRAMENTO' : etapa.conclusaoParcialSolicitada ? 'PENDENTE_CONCLUSAO_PARCIAL' : 'PENDENTE_CONCLUSAO') === tipoPendente);
-    if (abaEtapas === 'concluidas') return !etapa.reabertoEm && !etapa.conclusaoSolicitadaEm && !etapa.encerramentoSolicitadoEm && (resultadoFinalizacao('etapa', etapa.status) !== null);
-    return identidadeEtapa(etapa).estado === 'revisao' || (!etapa.conclusaoSolicitadaEm && !etapa.encerramentoSolicitadoEm && resultadoFinalizacao('etapa', etapa.status) === null); // Revisão continua ativa.
+    return etapaNaAba(etapa, abaEtapas, situacaoSelecionada);
   });
 
   // Recuperar a leitura da página completa apenas quando a altura REAL do
@@ -303,6 +301,12 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
     }
   }, [chaveOrdem]);
 
+  function notificarAlteracao() {
+    if (cache) sincronizarContrato(cache, contratoId);
+    setRevisaoHistorico(n => n + 1);
+    onAuditoriaAlterada?.();
+  }
+
   async function atualizar() {
     setErroAcao('');
     try { await consulta.atualizar(); cache?.invalidar(['contratos', 'pendentes']); cache?.invalidar(['execucao', contratoId]); setBloqueio(false); }
@@ -312,23 +316,25 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
     }
   }
 
-  async function salvar(dados: DadosEtapa) {
+  async function salvar(dados: DadosEtapa, original?: Etapa) {
     try {
       if (editor === 'nova') await mutacoes.criar(dados);
       else if (editor) {
-        const original = etapas?.find(e => e.id === editor);
-        if (!original) throw new Error('Etapa não encontrada para atualização.');
+        if (!original || original.id !== editor) throw new Error('Etapa não encontrada para atualização.');
         const campos = ['nome','codigo','descricao','inicioPrevisto','terminoPrevisto','status','observacoes'] as const;
-        const alteracoes: Partial<DadosEtapa> = {};
+        const alteracoes: AtualizacaoEtapa = {};
         for (const campo of campos) if ((original[campo] ?? null) !== (dados[campo] ?? null)) {
           (alteracoes as Record<string, unknown>)[campo] = dados[campo];
         }
-        if (Object.keys(alteracoes).length) await mutacoes.editar(editor, alteracoes);
+        if (Object.keys(alteracoes).length) {
+          if (original.estadoEdicao) alteracoes.estadoAnterior = original.estadoEdicao;
+          await mutacoes.editar(editor, alteracoes);
+        }
       }
       else return;
       if (retornoEdicao) voltarParaDetalhe(true);
       else fecharModal();
-      setErroAcao(''); onAuditoriaAlterada?.(); toastSucesso('Etapa salva com sucesso.');
+      setErroAcao(''); notificarAlteracao(); toastSucesso('Etapa salva com sucesso.');
     } catch (erro) {
       if (erro instanceof ErroEtapa && [401, 403, 404].includes(erro.status)) { setBloqueio(true); fecharModal(); }
       throw erro;
@@ -351,7 +357,7 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
     setErroAcao('');
     try {
       await mutacoes.reordenar(idsOrdemAtual, idsOrdemNova);
-      onAuditoriaAlterada?.();
+      notificarAlteracao();
       toastSucesso('Ordem das etapas salva.');
     } catch (erro) {
       const conhecido = erro instanceof ErroEtapa;
@@ -391,9 +397,10 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
         : await reabrirEtapa(contratoId, id, motivoEtapa.trim());
       setEtapasLocais(atuais => ({ ...atuais, [id]: alterada }));
       setConfirmarReaberturaEtapa(null); setMotivoEtapa('');
-      onAuditoriaAlterada?.();
+      notificarAlteracao();
       toastSucesso('Etapa reaberta para edição.');
-      await consulta.atualizar(); cache?.invalidar(['contratos', 'pendentes']); cache?.invalidar(['execucao', contratoId]); setEtapasLocais({});
+      const [leitura] = await Promise.allSettled([consulta.atualizar(), entregaveisQuery.atualizar(), documentalQuery.atualizar()]);
+      if (leitura.status === 'fulfilled') setEtapasLocais({});
     } catch (e) { setErroAcao(e instanceof Error ? e.message : 'Não foi possível reabrir a etapa.'); }
     finally { setOcupadoArquivoEtapa(false); }
   }
@@ -414,7 +421,7 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
       setEtapasLocais(atuais => ({ ...atuais, ...Object.fromEntries(novaOrdem.map((registro, indice) =>
         [registro.id, { ...registro, sequencia: indice + 1 }])) }));
       setConfirmarArquivoEtapa(null); setMotivoEtapa('');
-      onAuditoriaAlterada?.();
+      notificarAlteracao();
       (acao === 'arquivar' ? toastAviso : toastSucesso)(acao === 'arquivar' ? 'Etapa arquivada.' : 'Etapa reativada.');
       const resultados = await Promise.allSettled([consulta.atualizar(), entregaveisQuery.atualizar(), documentalQuery.atualizar()]);
       // Preserve locally confirmed order if the read failed after a successful PATCH.
@@ -429,7 +436,7 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
       await excluirEtapaArquivada(contratoId, id);
       setEtapasLocais(atuais => ({ ...atuais, [id]: null }));
       setConfirmarExclusaoEtapa(null);
-      onAuditoriaAlterada?.();
+      notificarAlteracao();
       if (editor === `detalhe:${id}`) fecharModal();
       toastSucesso('Etapa excluída com sucesso.');
       const [atualizacaoEtapas] = await Promise.allSettled([
@@ -448,11 +455,12 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
     if (!id || !podeEditarEtapa || ocupadoArquivoEtapa || contratoBloqueado) return;
     setOcupadoArquivoEtapa(true); setErroAcao('');
     try {
-      await solicitarEncerramentoEtapa(contratoId, id, motivoEtapa.trim());
+      const alterada = await solicitarEncerramentoEtapa(contratoId, id, motivoEtapa.trim());
+      setEtapasLocais(atuais => ({ ...atuais, [id]: alterada }));
       setConfirmarEncerramentoDireto(null); setMotivoEtapa('');
-      onAuditoriaAlterada?.(); toastSucesso('Solicitação de encerramento enviada para aprovação.');
-      await Promise.allSettled([consulta.atualizar(), entregaveisQuery.atualizar(), documentalQuery.atualizar()]);
-      cache?.invalidar(['contratos', 'pendentes']); cache?.invalidar(['execucao', contratoId]);
+      notificarAlteracao(); toastSucesso('Solicitação de encerramento enviada para aprovação.');
+      const [leitura] = await Promise.allSettled([consulta.atualizar(), entregaveisQuery.atualizar(), documentalQuery.atualizar()]);
+      if (leitura.status === 'fulfilled') setEtapasLocais({});
     } catch (erro) { setErroAcao(erro instanceof Error ? erro.message : 'Não foi possível encerrar a etapa.'); }
     finally { setOcupadoArquivoEtapa(false); }
   }
@@ -463,16 +471,31 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
     if(!(tipo==='conclusao'?permissao('concluirEtapas'):permissao('encerrarEtapas')))return;
     setOcupadoArquivoEtapa(true);setErroAcao('');
     try{
-      if(decisao==='devolver')await devolverSolicitacaoEtapa(contratoId,id,tipo,motivoEtapa.trim());
-      else if(tipo==='conclusao')await concluirEtapa(contratoId,id);
-      else await encerrarEtapa(contratoId,id,etapa.encerramentoMotivo??'');
+      const alterada = decisao === 'devolver' ? await devolverSolicitacaoEtapa(contratoId,id,tipo,motivoEtapa.trim())
+        : tipo === 'conclusao' ? await concluirEtapa(contratoId,id) : await encerrarEtapa(contratoId,id,etapa.encerramentoMotivo??'');
+      setEtapasLocais(atuais => ({ ...atuais, [id]: alterada }));
       setAprovarConclusao(null);setAprovarEncerramento(null);setDevolverPendente(null);setMotivoEtapa('');
       toastSucesso(decisao==='devolver'?'Solicitação devolvida para revisão.':tipo==='conclusao'?'Etapa concluída após aprovação.':'Etapa encerrada após aprovação.');
-      onAuditoriaAlterada?.();
-      await Promise.allSettled([consulta.atualizar(),entregaveisQuery.atualizar(),documentalQuery.atualizar()]);
-      cache?.invalidar(['contratos','pendentes']);cache?.invalidar(['execucao',contratoId]);
+      notificarAlteracao();
+      const [leitura] = await Promise.allSettled([consulta.atualizar(),entregaveisQuery.atualizar(),documentalQuery.atualizar()]);
+      if (leitura.status === 'fulfilled') setEtapasLocais({});
     }catch(erro){setErroAcao(erro instanceof Error?erro.message:'Não foi possível decidir a solicitação.');}
     finally{setOcupadoArquivoEtapa(false);}
+  }
+
+  async function executarFinalizacaoEtapa() {
+    const id = confirmarFinalizacao;
+    if (!id || ocupadoArquivoEtapa || contratoBloqueado || !permissao('concluirEtapas')) return;
+    setOcupadoArquivoEtapa(true); setErroAcao('');
+    try {
+      const alterada = await finalizarEtapa(contratoId, id, motivoEtapa.trim());
+      setEtapasLocais(atuais => ({ ...atuais, [id]: alterada }));
+      setConfirmarFinalizacao(null); setMotivoEtapa('');
+      notificarAlteracao(); toastSucesso('Etapa finalizada administrativamente.');
+      const [leitura] = await Promise.allSettled([consulta.atualizar(), entregaveisQuery.atualizar(), documentalQuery.atualizar()]);
+      if (leitura.status === 'fulfilled') setEtapasLocais({});
+    } catch (erro) { setErroAcao(erro instanceof Error ? erro.message : 'Falha ao finalizar a etapa.'); }
+    finally { setOcupadoArquivoEtapa(false); }
   }
 
   async function executarConclusaoEtapa() {
@@ -480,19 +503,20 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
     if (!id || ocupadoArquivoEtapa || !permissao('editarEtapas')) return;
     const etapa = etapas?.find(registro => registro.id === id);
     if (contratoBloqueado && !(permiteRegularizar && etapa?.status === 'CONCLUIDO_PARCIALMENTE' && !parcialEtapa)) return;
-    if (!etapa || !(parcialEtapa ? etapaPodeSerConcluidaParcialmente(etapa,entregaveisQuery.dados,documentalQuery.dados) : etapaPodeSerConcluida(etapa, entregaveisQuery.dados, documentalQuery.dados))) {
+    if (!etapa) {
       setConfirmarConclusaoEtapa(null);
       setErroAcao('Ainda existem entregáveis ou evidências em revisão. Conclua os filhos primeiro.');
       return;
     }
     setOcupadoArquivoEtapa(true); setErroAcao('');
     try {
-      await solicitarConclusaoEtapa(contratoId, id, parcialEtapa);
+      const alterada = await solicitarConclusaoEtapa(contratoId, id, parcialEtapa);
+      setEtapasLocais(atuais => ({ ...atuais, [id]: alterada }));
       setConfirmarConclusaoEtapa(null);
-      onAuditoriaAlterada?.();
+      notificarAlteracao();
       toastSucesso('Solicitação de conclusão enviada para aprovação.');
-      await Promise.allSettled([consulta.atualizar(), entregaveisQuery.atualizar(), documentalQuery.atualizar()]);
-      cache?.invalidar(['contratos', 'pendentes']); cache?.invalidar(['execucao', contratoId]);
+      const [leitura] = await Promise.allSettled([consulta.atualizar(), entregaveisQuery.atualizar(), documentalQuery.atualizar()]);
+      if (leitura.status === 'fulfilled') setEtapasLocais({});
     } catch (e) { setErroAcao(e instanceof Error ? e.message : 'Falha ao concluir etapa.'); }
     finally { setOcupadoArquivoEtapa(false); }
   }
@@ -502,21 +526,14 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="pi-filtros-etapas min-w-0 space-y-2">
         <h3 id="titulo-etapas" className="sr-only">Planejamento das etapas do contrato</h3>
-    <AbasRolaveis><div data-pi-etapas-filtros data-pi-abas-neutras role="tablist" aria-label="Visualizações das etapas" className="inline-flex w-fit max-w-full flex-wrap items-center gap-1 rounded-xl border border-brand-green/25 bg-background/70 p-1">
-      <button role="tab" aria-selected={abaEtapas === 'todas'} type="button" onClick={() => setAbaEtapas('todas')}
-        className={`rounded-lg px-3 py-2 text-sm font-semibold transition-none ${abaEtapas === 'todas' ? classeAbaAtiva : 'text-foreground/65 hover:bg-brand-green/10'}`}><span className="inline-flex items-center gap-1.5"><IconeStatus tipo="ativas"/>Ativas</span></button>
-      <button role="tab" type="button" aria-selected={abaEtapas === 'revisao'} onClick={() => setAbaEtapas('revisao')}
-        className={`rounded-lg px-3 py-2 text-xs font-semibold transition-none ${abaEtapas === 'revisao' ? classeAbaAtiva : 'text-foreground/65 hover:bg-teal-700/10'}`}><span className="inline-flex items-center gap-1.5"><IconeStatus tipo="revisao"/>Em revisão</span></button>
-      <button role="tab" aria-selected={abaEtapas === 'pendentes'} type="button" onClick={() => setAbaEtapas('pendentes')} className={`rounded-lg px-3 py-2 text-xs font-semibold ${abaEtapas === 'pendentes' ? classeAbaAtiva : 'text-foreground/65 hover:bg-purple-500/10'}`}><span className="inline-flex items-center gap-1.5"><IconeStatus tipo="pendentes"/>Pendentes de conclusão</span></button>
-      <button role="tab" aria-selected={abaEtapas === 'concluidas'} type="button" onClick={() => setAbaEtapas('concluidas')}
-        className={`rounded-lg px-3 py-2 text-sm font-semibold transition-none ${abaEtapas === 'concluidas' ? classeAbaAtiva : 'text-foreground/65 hover:bg-violet-500/10'}`}><span className="inline-flex items-center gap-1.5"><IconeStatus tipo="concluidas"/>Finalizadas</span></button>
-      <button role="tab" aria-selected={abaEtapas === 'arquivadas'} aria-label="Etapas arquivadas" title="Etapas arquivadas" type="button" onClick={() => setAbaEtapas('arquivadas')}
-        className={`inline-flex h-9 w-10 items-center justify-center rounded-lg transition-none ${abaEtapas === 'arquivadas' ? 'bg-amber-500/20 text-amber-900 dark:text-amber-200' : 'text-foreground/65 hover:bg-amber-500/10'}`}>
-        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v12h14V8M9 13h6"/></svg>
-      </button>
+    <AbasRolaveis><div data-pi-etapas-filtros data-pi-abas-neutras role="tablist" aria-label="Visualizações das etapas" className="pi-abas-etapas-consulta">
+      {([{id:'todas',rotulo:'Ativas',icone:'ativas'},{id:'revisao',rotulo:'Em revisão',icone:'revisao'},{id:'pendentes',rotulo:'Pendentes de conclusão',icone:'pendentes'},{id:'concluidas',rotulo:'Finalizadas',icone:'concluidas'}] as const).map(aba=><button key={aba.id} role="tab" aria-selected={abaEtapas===aba.id} type="button" onClick={()=>setAbaEtapas(aba.id)}><IconeStatus tipo={aba.icone}/>{aba.rotulo}</button>)}
+      <button role="tab" aria-selected={abaEtapas==='arquivadas'} aria-label="Etapas arquivadas" title="Etapas arquivadas" type="button" onClick={()=>setAbaEtapas('arquivadas')}><IconeStatus tipo="arquivadas"/></button>
     </div></AbasRolaveis>
-        <div className="pi-busca-operacional w-64 max-w-full"><input type="search" aria-label="Pesquisar etapa" placeholder="Pesquisar etapa..." maxLength={100} className="w-64 max-w-full rounded-lg border border-slate-500/30 bg-transparent px-3 py-2 text-sm" value={buscaEtapa} onChange={e=>setBuscaEtapa(e.target.value)}/></div>
-        {abaEtapas === 'pendentes' && <select aria-label="Tipo de solicitação da etapa" className="pi-filtro-tabela" value={tipoPendente} onChange={e=>setTipoPendente(e.target.value)}><option value="">Todas as solicitações</option><option value="PENDENTE_CONCLUSAO">Pendente de conclusão</option><option value="PENDENTE_CONCLUSAO_PARCIAL">Pendente de conclusão parcial</option><option value="PENDENTE_ENCERRAMENTO">Pendente de encerramento</option></select>}
+    <div data-pi-controles-etapas className="flex flex-wrap items-center gap-2">
+      <div className="pi-busca-operacional w-64 max-w-full"><input type="search" aria-label="Pesquisar etapa" placeholder="Pesquisar etapa..." maxLength={100} className="w-full rounded-lg border px-3 py-2 text-sm" value={buscaEtapa} onChange={e=>setBuscaEtapa(e.target.value)}/></div>
+      <select aria-label={abaEtapas==='pendentes'?'Tipo de solicitação da etapa':'Situação da etapa'} className="pi-filtro-tabela" value={situacaoSelecionada} onChange={e=>setFiltroSituacao(v=>({...v,[abaEtapas]:e.target.value}))}><option value="">{abaEtapas==='pendentes'?'Todas as solicitações':'Todas as situações'}</option>{filtrosEtapas[abaEtapas].map(([valor,rotulo])=><option key={valor} value={valor}>{rotulo}</option>)}</select>
+    </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {abaEtapas === 'todas' && !contratoBloqueado && podeBloquearOrdem && <button type="button" onClick={() => void alternarBloqueioOrdem()}
@@ -540,7 +557,7 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
       </div>
     </div>
     {(erroConsulta || bloqueio) && <button type="button" onClick={() => void atualizar()} disabled={consulta.atualizando} className="rounded-lg border border-current/20 px-3 py-2 text-sm text-foreground/80 hover:bg-current/5 disabled:opacity-50">Tentar novamente</button>}
-    {erroAcao && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-error-text">{erroAcao}</p>}
+    {!itemDetalhe && erroAcao && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-error-text">{erroAcao}</p>}
     {reordenando && <p role="status" className="text-sm text-foreground/65">Salvando nova ordem...</p>}
     {consulta.carregando && !etapas && !erroConsulta && !bloqueio && <p role="status" className="text-sm text-foreground/70">Carregando etapas...</p>}
     {Boolean(erroConsulta) && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-error-text">
@@ -552,7 +569,7 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
       Ainda não há etapas cadastradas para este contrato. {podeEscrever ? 'Use “Nova etapa” para organizar o planejamento.' : 'O planejamento ainda não foi iniciado.'}
     </div>}
     {etapas && naAba?.length === 0 && etapas.length > 0 && <p className="text-sm text-foreground/65">
-      {buscaEtapa.trim()?'Nenhuma etapa encontrada.':abaEtapas === 'arquivadas' ? 'Nenhuma etapa arquivada.' : abaEtapas === 'concluidas' ? 'Nenhuma etapa concluída.' : abaEtapas === 'revisao' ? 'Nenhuma etapa em revisão.' : 'Nenhuma etapa pendente.'}
+      {buscaEtapa.trim()||situacaoSelecionada?'Nenhuma etapa encontrada.':abaEtapas === 'arquivadas' ? 'Nenhuma etapa arquivada.' : abaEtapas === 'concluidas' ? 'Nenhuma etapa concluída.' : abaEtapas === 'revisao' ? 'Nenhuma etapa em revisão.' : 'Nenhuma etapa pendente.'}
     </p>}
     {!!naAba?.length && <div className="pi-tabela-scroll"><table className="pi-tabela-operacional pi-tabela-etapas" aria-label="Etapas e entregáveis"><colgroup>{Array.from({length:9},(_,i)=><col key={i}/>)}<col className="pi-col-acoes"/></colgroup><thead><tr>{[['titulo','Título'],['execucao','Execução'],['entregaveis','Entregáveis'],['ocorrencias','Ocorrências'],['atividades','Atividades'],['evidencias','Evidências'],['comprovacao','Comprovação'],['status','Status'],['prazo','Prazo']].map(([campo,titulo])=><CabecalhoColuna key={campo} campo={campo} titulo={titulo} ordem={ordemTabela} alternar={alternarOrdem}/>)}<th scope="col">Ações</th></tr></thead><tbody>
       {ordenarTabela(naAba,ordemTabela,valorEtapa).map((etapa,indice)=>{
@@ -565,7 +582,7 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
         </tr>{aberto&&filhos.length>0&&<tr className="pi-grupo-entregaveis"><td colSpan={10}><div className="pi-subtabela-wrap"><div className="pi-subtabela-titulo"><span>Entregáveis da etapa</span><span>{filhos.length}</span></div><table className="pi-tabela-operacional pi-subtabela" aria-label={`Entregáveis de ${etapa.nome}`}><colgroup>{Array.from({length:8},(_,i)=><col key={i}/>)}</colgroup><thead><tr>{[['titulo','Entregável'],['execucao','Execução'],['ocorrencias','Ocorrências'],['atividades','Atividades'],['evidencias','Evidências'],['comprovacao','Comprovação'],['status','Status'],['prazo','Prazo']].map(([campo,titulo])=><CabecalhoColuna key={campo} campo={campo} titulo={titulo} ordem={ordemTabela} alternar={alternarOrdem}/>)}</tr></thead><tbody>{ordenarTabela(filhos,ordemTabela,valorFilho).map(e=>{const f=dadosFilho(e);return <tr key={e.id} data-filho="true" className="pi-linha-filha"><td><button type="button" className="pi-titulo-tabela pi-titulo-filho" onClick={ev=>{abrirModal(`detalhe:${etapa.id}`,ev.currentTarget,true);setDestinoSelecao({etapaId:etapa.id,id:e.id});}}><IconeTabela estado={f.estado}/><span className="min-w-0"><strong className="block truncate" title={e.nome}>{e.nome}</strong><span className="pi-subtitulo-tabela block truncate">{ROTULOS_TIPO[e.tipo]}{f.participacao!=null?` · ${f.participacao.toLocaleString('pt-BR',{maximumFractionDigits:1})}% do contrato`:''}</span></span></button></td><td><BarraTabela valor={f.execucao}/></td><td><AnelTabela nome="Ocorrências" fracao={f.ocorrencias}/></td><td><AnelTabela nome="Atividades" fracao={f.atividades} cor="text-emerald-600 dark:text-emerald-400"/></td><td><AnelTabela nome="Evidências" fracao={f.evidencias} cor="text-teal-600 dark:text-teal-400"/></td><td><ComprovacaoTabela fracao={f.comprovacao}/></td><td><StatusTabela estado={f.estado} rotulo={rotuloEstadoEntregavel(e.statusExecucao,Boolean(e.arquivadoEm),Boolean(e.reabertoEm),Boolean(e.regularizacaoDocumentalSolicitada))}/><EtiquetaAtraso atrasado={e.atrasado} finalizadoComAtraso={e.finalizadoComAtraso}/></td><td className="whitespace-nowrap">{e.terminoPrevisto?dataBR(e.terminoPrevisto):'—'}</td></tr>;})}</tbody></table></div></td></tr>}</Fragment>;
       })}</tbody></table></div>}
     </div>
-    {consultaAvulsa && !itemDetalhe && !editor && (consulta.erro || (consulta.dados && !destinoDisponivel)) && <ModalEtapa titulo="Etapa indisponível" ocupado={false} onFechar={()=>onFecharConsultaDireta?.()} larguraFormulario="registro"><p role="alert">{consulta.erro?'Não foi possível consultar a etapa.':'Etapa não encontrada ou não autorizada.'}</p></ModalEtapa>}
+    {consultaAvulsa && !itemDetalhe && !editor && <ModalEtapa neutro titulo={consulta.erro || (consulta.dados && !destinoDisponivel)?"Etapa indisponível":"Consultar registro"} ocupado={false} onFechar={()=>onFecharConsultaDireta?.()} larguraFormulario="registro">{consulta.erro || (consulta.dados && !destinoDisponivel)?<p role="alert">{consulta.erro?'Não foi possível consultar a etapa.':'Etapa não encontrada ou não autorizada.'}</p>:<p role="status">Consultando registro…</p>}</ModalEtapa>}
     {editor && ((editor === 'nova' && podeCriarEtapa) || (itemEditando && podeEditarEtapa) || !!itemDetalhe) && <div ref={painelEtapaRef} data-pi-etapa-dialog={Boolean(itemDetalhe && !detalheEmPagina) || undefined} data-pi-etapa-direta={Boolean(destinoSelecao?.id && !detalheEmPagina) || undefined}><ModalEtapa larguraFormulario={itemDetalhe?undefined:"etapa"} larguraDetalhe={Boolean(itemDetalhe)} interno={Boolean(itemDetalhe && detalheEmPagina)} retornoEsquerda={Boolean(itemDetalhe && detalheEmPagina)} mostrarXComVoltar={false}
       titulo={itemDetalhe ? `${itemDetalhe.sequencia} · ${itemDetalhe.nome}` : editor === 'nova' ? 'Nova etapa' : `Editar etapa · ${itemEditando?.nome ?? ''}`}
       contexto={itemDetalhe ? 'Etapa do contrato' : 'Planejamento do contrato'}
@@ -580,26 +597,28 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
       acoes={itemDetalhe ? <>
         {podeEditarEtapa && !itemDetalhe.arquivadoEm && !itemDetalhe.conclusaoSolicitadaEm && !itemDetalhe.encerramentoSolicitadoEm && (Boolean(itemDetalhe.reabertoEm) || !['CONCLUIDA','CONCLUIDO_PARCIALMENTE','ENCERRADA','FINALIZADA'].includes(itemDetalhe.status)) && !contratoBloqueado &&
           <BotaoEditarModal rotulo="Editar etapa" onClick={() => { const editar=()=>{setRetornoEdicao(itemDetalhe.id); setEditor(itemDetalhe.id);}; editar(); }} />}
-        {itemDetalhe.status === 'CONCLUIDO_PARCIALMENTE' && !itemDetalhe.conclusaoSolicitadaEm && !itemDetalhe.arquivadoEm && (!contratoBloqueado || permiteRegularizar) && permissao('editarEtapas') && <BotaoAcaoModal intencao="solicitar-conclusao" disabled={ocupadoArquivoEtapa || !etapaPodeSerConcluida(itemDetalhe,entregaveisQuery.dados,documentalQuery.dados)} onClick={() => {setParcialEtapa(false);setConfirmarConclusaoEtapa(itemDetalhe.id);}}>Solicitar regularização documental</BotaoAcaoModal>}
+        {itemDetalhe.status === 'CONCLUIDO_PARCIALMENTE' && !itemDetalhe.conclusaoSolicitadaEm && !itemDetalhe.arquivadoEm && (!contratoBloqueado || permiteRegularizar) && permissao('editarEtapas') && <BotaoAcaoModal intencao="solicitar-conclusao" disabled={ocupadoArquivoEtapa || !elegibilidade?.podeSolicitarConclusao} onClick={() => {setErroAcao('');setParcialEtapa(false);setConfirmarConclusaoEtapa(itemDetalhe.id);}}>Solicitar regularização documental</BotaoAcaoModal>}
         {(itemDetalhe.conclusaoSolicitadaEm || itemDetalhe.encerramentoSolicitadoEm) ? <div className="flex items-center gap-2" aria-label="Decisão pendente da etapa">
           <button type="button" className="rounded-lg border border-red-500/60 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-500/20 dark:text-red-300 disabled:opacity-35" disabled={ocupadoArquivoEtapa || (contratoBloqueado && !(permiteRegularizar && itemDetalhe.status === 'CONCLUIDO_PARCIALMENTE')) || !(itemDetalhe.conclusaoSolicitadaEm ? permissao('concluirEtapas') : permissao('encerrarEtapas'))}
             onClick={() => { setMotivoEtapa(''); setDevolverPendente({id:itemDetalhe.id,tipo:itemDetalhe.conclusaoSolicitadaEm?'conclusao':'encerramento'}); }}>Cancelar</button>
-          <button type="button" className="rounded-lg border border-green-600/60 bg-green-600/20 px-3 py-2 text-xs font-semibold text-green-800 hover:bg-green-600/30 dark:text-green-200 disabled:opacity-35" disabled={ocupadoArquivoEtapa || (contratoBloqueado && !(permiteRegularizar && itemDetalhe.status === 'CONCLUIDO_PARCIALMENTE')) || !(itemDetalhe.conclusaoSolicitadaEm ? permissao('concluirEtapas') : permissao('encerrarEtapas'))}
+          <button type="button" className="rounded-lg border border-green-600/60 bg-green-600/20 px-3 py-2 text-xs font-semibold text-green-800 hover:bg-green-600/30 dark:text-green-200 disabled:opacity-35" disabled={ocupadoArquivoEtapa || (contratoBloqueado && !(permiteRegularizar && itemDetalhe.status === 'CONCLUIDO_PARCIALMENTE')) || !(itemDetalhe.conclusaoSolicitadaEm ? permissao('concluirEtapas') && elegibilidade?.podeAprovarConclusao : permissao('encerrarEtapas') && elegibilidade?.podeAprovarEncerramento)}
             onClick={() => itemDetalhe.conclusaoSolicitadaEm ? setAprovarConclusao(itemDetalhe.id) : setAprovarEncerramento(itemDetalhe.id)}>Aprovar</button>
         </div> : <MenuAcoesObjeto rotulo={itemDetalhe.arquivadoEm || ['CONCLUIDA','CONCLUIDO_PARCIALMENTE','ENCERRADA','FINALIZADA'].includes(itemDetalhe.status) ? 'Reabrir' : 'Fechar'}
           disabled={ocupadoArquivoEtapa || salvandoFormulario}
-          pendenteConclusao={Boolean(!['CONCLUIDA','CONCLUIDO_PARCIALMENTE','ENCERRADA','FINALIZADA'].includes(itemDetalhe.status) && (itemDetalhe.conclusaoSolicitadaEm || etapaPodeSerConcluida(itemDetalhe,entregaveisQuery.dados,documentalQuery.dados)))}
-          acaoDireta={itemDetalhe.arquivadoEm && podeReativarEtapa && !contratoBloqueado ? () => { void alterarArquivoEtapa(itemDetalhe.id, 'reativar'); }
+          pendenteConclusao={Boolean(!['CONCLUIDA','CONCLUIDO_PARCIALMENTE','ENCERRADA','FINALIZADA'].includes(itemDetalhe.status) && (itemDetalhe.conclusaoSolicitadaEm || elegibilidade?.podeSolicitarConclusao))}
+          acaoDireta={itemDetalhe.arquivadoEm && podeReativarEtapa && !contratoBloqueado ? () => { setMotivoEtapa(''); setConfirmarArquivoEtapa({id:itemDetalhe.id,acao:'reativar'}); }
             : !itemDetalhe.arquivadoEm && !itemDetalhe.reabertoEm && ['CONCLUIDA','CONCLUIDO_PARCIALMENTE','ENCERRADA','FINALIZADA'].includes(itemDetalhe.status)
               && (['ENCERRADA','FINALIZADA'].includes(itemDetalhe.status) ? podeReabrirEtapaEncerrada : podeReabrirEtapa) && !contratoBloqueado
               ? () => { setMotivoEtapa(''); setConfirmarReaberturaEtapa(itemDetalhe.id); } : undefined}>
           {!itemDetalhe.arquivadoEm && !['CONCLUIDA','CONCLUIDO_PARCIALMENTE','ENCERRADA','FINALIZADA'].includes(itemDetalhe.status) && !itemDetalhe.conclusaoSolicitadaEm && !itemDetalhe.encerramentoSolicitadoEm && <>
-            <BotaoAcaoModal intencao="solicitar-conclusao" disabled={contratoBloqueado || !podeEditarEtapa || !etapaPodeSerConcluida(itemDetalhe,entregaveisQuery.dados,documentalQuery.dados)}
-              title="Requer todos os entregáveis e evidências resolvidos" onClick={()=>{setParcialEtapa(false);setConfirmarConclusaoEtapa(itemDetalhe.id);}}>Solicitar conclusão</BotaoAcaoModal>
-            <BotaoAcaoModal conclusaoParcial intencao="solicitar-conclusao" disabled={contratoBloqueado || !podeEditarEtapa || !etapaPodeSerConcluidaParcialmente(itemDetalhe,entregaveisQuery.dados,documentalQuery.dados)}
-              onClick={()=>{setParcialEtapa(true);setConfirmarConclusaoEtapa(itemDetalhe.id);}}>Solicitar conclusão parcial</BotaoAcaoModal>
-            <BotaoAcaoModal intencao="encerrar" disabled={contratoBloqueado || !podeEditarEtapa || etapaPodeSerConcluida(itemDetalhe,entregaveisQuery.dados,documentalQuery.dados) || etapaPodeSerConcluidaParcialmente(itemDetalhe,entregaveisQuery.dados,documentalQuery.dados)}
-              title="Encerramento administrativo com justificativa quando a execução integral não foi comprovada" onClick={()=>{setMotivoEtapa('');setConfirmarEncerramentoDireto(itemDetalhe.id);}}>Solicitar encerramento</BotaoAcaoModal>
+            <BotaoAcaoModal intencao="solicitar-conclusao" disabled={contratoBloqueado || !podeEditarEtapa || !elegibilidade?.podeSolicitarConclusao}
+              title="Requer todos os entregáveis e evidências resolvidos" onClick={()=>{setErroAcao('');setParcialEtapa(false);setConfirmarConclusaoEtapa(itemDetalhe.id);}}>Solicitar conclusão</BotaoAcaoModal>
+            <BotaoAcaoModal conclusaoParcial intencao="solicitar-conclusao" disabled={contratoBloqueado || !podeEditarEtapa || !elegibilidade?.podeSolicitarParcial}
+              onClick={()=>{setErroAcao('');setParcialEtapa(true);setConfirmarConclusaoEtapa(itemDetalhe.id);}}>Solicitar conclusão parcial</BotaoAcaoModal>
+            <BotaoAcaoModal intencao="encerrar" disabled={contratoBloqueado || !podeEditarEtapa || !elegibilidade?.podeSolicitarEncerramento}
+              title="Encerramento administrativo com justificativa quando a execução integral não foi comprovada" onClick={()=>{setErroAcao('');setMotivoEtapa('');setConfirmarEncerramentoDireto(itemDetalhe.id);}}>Solicitar encerramento</BotaoAcaoModal>
+            <BotaoAcaoModal intencao="encerrar" disabled={contratoBloqueado || !permissao('concluirEtapas') || !elegibilidade?.podeFinalizar || ocupadoArquivoEtapa}
+              onClick={()=>{setErroAcao('');setMotivoEtapa('');setConfirmarFinalizacao(itemDetalhe.id);}}>Finalizar administrativamente</BotaoAcaoModal>
           </>}
           {!!itemDetalhe.conclusaoSolicitadaEm && <>
             <BotaoAcaoModal intencao="concluir" disabled={!permissao('concluirEtapas')||(contratoBloqueado&&!(permiteRegularizar&&itemDetalhe.status==='CONCLUIDO_PARCIALMENTE'))} onClick={()=>setAprovarConclusao(itemDetalhe.id)}>Aprovar conclusão</BotaoAcaoModal>
@@ -611,30 +630,33 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
           </>}
           {!itemDetalhe.arquivadoEm && podeArquivarEtapa && !contratoBloqueado && !itemDetalhe.conclusaoSolicitadaEm && !itemDetalhe.encerramentoSolicitadoEm &&
             !(['CONCLUIDA','CONCLUIDO_PARCIALMENTE','ENCERRADA','FINALIZADA'].includes(itemDetalhe.status) && !itemDetalhe.reabertoEm) &&
-            <BotaoAcaoModal intencao="arquivar" disabled={ocupadoArquivoEtapa} onClick={()=>setConfirmarArquivoEtapa({id:itemDetalhe.id,acao:'arquivar'})}>Arquivar</BotaoAcaoModal>}
+            <BotaoAcaoModal intencao="arquivar" disabled={ocupadoArquivoEtapa || elegibilidade?.decisoesPendentes} onClick={()=>{setErroAcao('');setConfirmarArquivoEtapa({id:itemDetalhe.id,acao:'arquivar'});}}>Arquivar</BotaoAcaoModal>}
         </MenuAcoesObjeto>}
 
       </> : undefined}>
       {itemDetalhe ? <div data-pi-pagina-etapa={detalheEmPagina || undefined} data-pi-entregavel-selecionado={detalheEmPagina && Boolean(destinoSelecao?.id)} className="min-w-0 space-y-3" aria-label={`Detalhes da etapa ${itemDetalhe.nome}`}>
-        <details hidden={interno && Boolean(destinoSelecao?.id)} open={!interno || undefined} aria-label="Informações da etapa" className="pi-etapa-informacoes pi-informacoes-expansiveis min-w-0 space-y-2 text-sm">
-          <summary className="cursor-pointer font-medium">Informações da etapa</summary>
-          <dl className="grid min-w-0 gap-x-4 gap-y-3 sm:grid-cols-3">
+        {erroAcao && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-error-text">{erroAcao}</p>}
+        <details hidden={interno && Boolean(destinoSelecao?.id)} open={!interno || undefined} aria-label="Informações da etapa" data-pi-ficha-neutra className="pi-etapa-informacoes pi-identificacao-contrato pi-informacoes-expansiveis min-w-0 text-sm">
+          <summary className="cursor-pointer text-sm font-semibold text-foreground">Informações da etapa</summary>
+          <dl className="pi-grade-informacoes-contrato grid min-w-0 sm:grid-cols-2">
             {([['Identificador', rotuloCodigoPublico(itemDetalhe.codigoPublico)], ['Código', itemDetalhe.codigo || 'Não informado'], ['Início previsto', dataBR(itemDetalhe.inicioPrevisto)],
               ['Término previsto', dataBR(itemDetalhe.terminoPrevisto)]] as const)
               .map(([rotulo, valor]) => <div className="min-w-0" key={rotulo}><dt className="text-xs text-foreground/60">{rotulo}</dt><dd className="mt-1 break-words font-medium">{valor}</dd></div>)}
           </dl>
           {itemDetalhe.descricao && <div className="border-t border-current/15 pt-3"><p className="text-xs text-foreground/60">Descrição</p><p className="mt-1 whitespace-pre-wrap break-words text-foreground/85">{itemDetalhe.descricao}</p></div>}
           {itemDetalhe.observacoes && <div className="border-t border-current/15 pt-3"><p className="text-xs text-foreground/60">Observações</p><p className="mt-1 whitespace-pre-wrap break-words text-foreground/80">{itemDetalhe.observacoes}</p></div>}
-          <HistoricoEtapa contratoId={contratoId} etapaId={itemDetalhe.id} />
+          {permissao('editarEtapas') && <HistoricoEtapa contratoId={contratoId} etapaId={itemDetalhe.id} revisao={revisaoHistorico} />}
         </details>
         {!(interno && destinoSelecao?.id)&&(()=>{const m=dadosEtapa(itemDetalhe);return <section className="pi-indicadores-etapa-v24" aria-label="Indicadores da etapa"><div><h4>Execução</h4><AnelTabela nome="Execução" valorPercentual={m.execucao} percentualInterno cor="text-emerald-600 dark:text-emerald-400"/></div>{([{nome:'Entregáveis',fracao:m.entregaveis,cor:'text-violet-600 dark:text-violet-400'},{nome:'Ocorrências',fracao:m.ocorrencias,cor:'text-violet-600 dark:text-violet-400'},{nome:'Atividades',fracao:m.atividades,cor:'text-emerald-600 dark:text-emerald-400'},{nome:'Evidências',fracao:m.evidencias,cor:'text-teal-600 dark:text-teal-400'}]).map(v=><div key={v.nome}><h4>{v.nome}</h4><AnelTabela {...v} percentualInterno/><span className="text-xs text-foreground/65">{v.fracao.feitas==null||v.fracao.total==null?'—':`${v.fracao.feitas}/${v.fracao.total}`}</span></div>)}<div><h4>Comprovação</h4><ComprovacaoTabela fracao={m.comprovacao} percentual/><span className="text-xs text-foreground/65">{m.comprovacao.feitas==null||m.comprovacao.total==null?'—':`${m.comprovacao.feitas}/${m.comprovacao.total}`}</span></div></section>;})()}
+        {!contratoBloqueado && !itemDetalhe.arquivadoEm && consultaElegibilidade.erro != null && <p role="alert" className="text-sm text-error-text">Não foi possível verificar as decisões disponíveis. <button type="button" className="underline" onClick={()=>void consultaElegibilidade.atualizar().catch(()=>{})}>Tentar novamente</button></p>}
+        {elegibilidade?.decisoesPendentes && <p role="note" className="text-sm text-foreground/75">Resolva as solicitações e contribuições pendentes dos filhos antes de fechar ou arquivar a etapa.</p>}
         {itemDetalhe.avisoVigencia && !(interno && destinoSelecao?.id) && <p role="note" className="rounded-lg border border-amber-500/35 p-3 text-sm">Atenção: as datas previstas desta etapa estão fora da vigência atual do contrato. Nenhuma data foi alterada automaticamente.</p>}
         <EntregaveisDaEtapa key={itemDetalhe.id} interno={detalheEmPagina} nomeEtapa={itemDetalhe.nome} painelDireitoAberto={painelDireitoAberto} destinoInterno={destinoSelecao?.etapaId === itemDetalhe.id ? destinoSelecao : undefined} onSelecaoInterna={id => setDestinoSelecao(anterior => id ? anterior?.id === id && anterior.etapaId === itemDetalhe.id ? anterior : { etapaId:itemDetalhe.id,id } : undefined)} contextoCadastro={`${numeroContrato ? `Contrato ${numeroContrato} · ` : ""}Etapa ${itemDetalhe.sequencia} — ${itemDetalhe.nome}`} progressoFisico={progressoContrato.progresso?.entregaveis} modoCalculo={modoCalculo} estadoProprioEtapa={identidadeEtapa(itemDetalhe).estado} contratoId={contratoId} etapaId={itemDetalhe.id} dados={entregaveisQuery.dados}
           carregando={entregaveisQuery.carregando} erro={entregaveisQuery.erro} atualizar={entregaveisQuery.atualizar}
           podeCriar={permissao('criarEntregaveis') && !contratoBloqueado && !itemDetalhe.arquivadoEm && !itemDetalhe.conclusaoSolicitadaEm && !itemDetalhe.encerramentoSolicitadoEm && !['CONCLUIDA','CONCLUIDO_PARCIALMENTE','ENCERRADA','FINALIZADA'].includes(itemDetalhe.status)} podeEditar={!contratoBloqueado && permissao('editarEntregaveis')}
           podeArquivar={permissao('arquivarEntregaveis')} paiArquivado={Boolean(contratoArquivado || itemDetalhe.arquivadoEm)} paiEmRevisao={Boolean(itemDetalhe.reabertoEm && itemDetalhe.status !== 'CONCLUIDA' && itemDetalhe.status !== 'ENCERRADA')} paiParcial={(!contratoBloqueado || permiteRegularizar) && itemDetalhe.status === 'CONCLUIDO_PARCIALMENTE' && !itemDetalhe.conclusaoSolicitadaEm && !itemDetalhe.encerramentoSolicitadoEm} paiConcluido={contratoBloqueado || Boolean(itemDetalhe.conclusaoSolicitadaEm || itemDetalhe.encerramentoSolicitadoEm) || (['CONCLUIDA', 'CONCLUIDO_PARCIALMENTE', 'ENCERRADA','FINALIZADA'].includes(itemDetalhe.status) && !itemDetalhe.reabertoEm)} permissoes={permissoes}
-          dentroModal documental={documentalQuery.dados} atualizarDocumental={() => { cache?.invalidar(['contratos', 'pendentes']); cache?.invalidar(['execucao', contratoId]); void consulta.atualizar().catch(() => {}); void documentalQuery.atualizar().catch(() => {}); }}
-          onHierarquiaAlterada={() => { onAuditoriaAlterada?.(); cache?.invalidar(['entregaveis', 'contrato', contratoId]); cache?.invalidar(['etapas', 'contrato', contratoId]); cache?.invalidar(['contratos', 'pendentes']); cache?.invalidar(['execucao', contratoId]); cache?.invalidar(['contratos', 'detalhe', contratoId]); void consulta.atualizar().catch(() => {}); void entregaveisQuery.atualizar().catch(() => {}); void documentalQuery.atualizar().catch(() => {}); }}
+          dentroModal documental={documentalQuery.dados} atualizarDocumental={() => { notificarAlteracao(); void consulta.atualizar().catch(() => {}); void documentalQuery.atualizar().catch(() => {}); }}
+          onHierarquiaAlterada={() => { notificarAlteracao(); void consulta.atualizar().catch(() => {}); void entregaveisQuery.atualizar().catch(() => {}); void documentalQuery.atualizar().catch(() => {}); }}
           onDetalheMudou={aberto=>{setDetalheEntregavelAberto(aberto);if(!aberto&&destinoSelecao?.id&&!detalheEmPagina)fecharModal();}} />
       </div> : <div id={editor === 'nova' ? 'formulario-nova-etapa' : `formulario-etapa-${editor}`}>
         <FormularioEtapa key={editor} inicial={itemEditando} onSalvar={salvar}
@@ -645,7 +667,7 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
       <FormularioEtapa key={itemEditando.id} inicial={itemEditando} onSalvar={salvar} onCancelar={()=>voltarParaDetalhe()} onSalvandoMudou={setSalvandoFormulario}/>
     </ModalEtapa>,document.body)}
     {confirmarArquivoEtapa && createPortal(<div className="relative z-[180]">
-      <ConfirmacaoSimples titulo={confirmarArquivoEtapa.acao === 'arquivar' ? 'Arquivar etapa?' : 'Reativar etapa?'}
+      <ConfirmacaoSimples pendencias={erroAcao ? [erroAcao] : []} titulo={confirmarArquivoEtapa.acao === 'arquivar' ? 'Arquivar etapa?' : 'Reativar etapa?'}
         estadoContextual={etapas?.find(e => e.id === confirmarArquivoEtapa.id)?.reabertoEm ? 'revisao' : 'normal'} cancelarVermelho
         descricao={confirmarArquivoEtapa.acao === 'arquivar' ? 'A etapa sairá da visão principal, mas os seus entregáveis, evidências e arquivos ficarão preservados.' : 'A etapa voltará à lista principal no final da ordem de execução.'}
         confirmar={confirmarArquivoEtapa.acao === 'arquivar' ? 'Confirmar arquivamento' : 'Confirmar reativação'}
@@ -653,28 +675,33 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
         onConfirmar={() => void alterarArquivoEtapa(confirmarArquivoEtapa.id, confirmarArquivoEtapa.acao)} />
     </div>, document.body)}
     {confirmarEncerramentoDireto && createPortal(<div className="relative z-[180]">
-      <ConfirmacaoSimples titulo="Solicitar encerramento da etapa?" descricao="A justificativa será encaminhada para aprovação do encerramento administrativo. O percentual físico não será alterado."
+      <ConfirmacaoSimples pendencias={erroAcao ? [erroAcao] : []} titulo="Solicitar encerramento da etapa?" descricao="A justificativa será encaminhada para aprovação do encerramento administrativo. O percentual físico não será alterado."
         confirmar="Solicitar encerramento" ocupado={ocupadoArquivoEtapa}
         justificativa={motivoEtapa} justificativaMinima={15} onJustificativaChange={setMotivoEtapa}
         onCancelar={() => { setConfirmarEncerramentoDireto(null); setMotivoEtapa(''); }}
         onConfirmar={() => void executarEncerramentoDireto()} />
     </div>, document.body)}
+    {confirmarFinalizacao && createPortal(<div className="relative z-[180]">
+      <ConfirmacaoSimples pendencias={erroAcao ? [erroAcao] : []} titulo="Finalizar administrativamente a etapa?" descricao="Os entregáveis têm decisões finais, incluindo encerramentos administrativos. O avanço físico realizado permanece inalterado."
+        confirmar="Finalizar etapa" ocupado={ocupadoArquivoEtapa} estadoContextual="finalizado" justificativa={motivoEtapa} justificativaMinima={15} onJustificativaChange={setMotivoEtapa}
+        onCancelar={()=>{setConfirmarFinalizacao(null);setMotivoEtapa('');}} onConfirmar={()=>void executarFinalizacaoEtapa()} />
+    </div>,document.body)}
     {confirmarReaberturaEtapa && createPortal(<div className="relative z-[180]">
-      <ConfirmacaoSimples titulo={etapas?.find(item => item.id === confirmarReaberturaEtapa)?.status === 'ENCERRADA' ? 'Reabrir etapa encerrada?' : 'Reabrir etapa concluída?'} descricao="A etapa entrará Em revisão. Entregáveis e evidências não serão reabertos automaticamente. O histórico continuará preservado."
+      <ConfirmacaoSimples pendencias={erroAcao ? [erroAcao] : []} titulo={etapas?.find(item => item.id === confirmarReaberturaEtapa)?.status === 'ENCERRADA' ? 'Reabrir etapa encerrada?' : 'Reabrir etapa concluída?'} descricao="A etapa entrará Em revisão. Entregáveis e evidências não serão reabertos automaticamente. O histórico continuará preservado."
         confirmar="Reabrir etapa" ocupado={ocupadoArquivoEtapa} justificativa={motivoEtapa} justificativaMinima={15} onJustificativaChange={setMotivoEtapa} onCancelar={() => { setConfirmarReaberturaEtapa(null); setMotivoEtapa(''); }}
         onConfirmar={() => void executarReaberturaEtapa()} />
     </div>, document.body)}
 
-    {aprovarConclusao && createPortal(<div className="relative z-[180]"><ConfirmacaoSimples titulo="Aprovar conclusão da etapa?" descricao="Confirma a execução integral após os requisitos verificados. O registro ficará auditado." confirmar="Aprovar conclusão" confirmacaoRoxa ocupado={ocupadoArquivoEtapa} onCancelar={()=>setAprovarConclusao(null)} onConfirmar={()=>void decidirEtapa('conclusao',aprovarConclusao,'aprovar')}/></div>,document.body)}
-    {aprovarEncerramento && createPortal(<div className="relative z-[180]"><ConfirmacaoSimples titulo="Aprovar encerramento da etapa?" descricao="Confirma o encerramento administrativo sem alterar o avanço físico realizado." confirmar="Aprovar encerramento" estadoContextual="finalizado" ocupado={ocupadoArquivoEtapa} onCancelar={()=>setAprovarEncerramento(null)} onConfirmar={()=>void decidirEtapa('encerramento',aprovarEncerramento,'aprovar')}/></div>,document.body)}
-    {devolverPendente && createPortal(<div className="relative z-[180]"><ConfirmacaoSimples titulo="Devolver solicitação da etapa?" descricao="A decisão será devolvida para revisão e a justificativa ficará no histórico." confirmar="Devolver solicitação" ocupado={ocupadoArquivoEtapa} justificativa={motivoEtapa} justificativaMinima={15} onJustificativaChange={setMotivoEtapa} onCancelar={()=>setDevolverPendente(null)} onConfirmar={()=>void decidirEtapa(devolverPendente.tipo,devolverPendente.id,'devolver')}/></div>,document.body)}
+    {aprovarConclusao && createPortal(<div className="relative z-[180]"><ConfirmacaoSimples pendencias={erroAcao ? [erroAcao] : []} titulo="Aprovar conclusão da etapa?" descricao={etapas?.find(e=>e.id===aprovarConclusao)?.conclusaoParcialSolicitada ? "Confirma a execução física com pendências documentais. O registro ficará auditado." : "Confirma a execução integral após os requisitos verificados. O registro ficará auditado."} confirmar="Aprovar conclusão" confirmacaoRoxa ocupado={ocupadoArquivoEtapa} onCancelar={()=>setAprovarConclusao(null)} onConfirmar={()=>void decidirEtapa('conclusao',aprovarConclusao,'aprovar')}/></div>,document.body)}
+    {aprovarEncerramento && createPortal(<div className="relative z-[180]"><ConfirmacaoSimples pendencias={erroAcao ? [erroAcao] : []} titulo="Aprovar encerramento da etapa?" descricao="Confirma o encerramento administrativo sem alterar o avanço físico realizado." confirmar="Aprovar encerramento" estadoContextual="finalizado" ocupado={ocupadoArquivoEtapa} onCancelar={()=>setAprovarEncerramento(null)} onConfirmar={()=>void decidirEtapa('encerramento',aprovarEncerramento,'aprovar')}/></div>,document.body)}
+    {devolverPendente && createPortal(<div className="relative z-[180]"><ConfirmacaoSimples pendencias={erroAcao ? [erroAcao] : []} titulo="Devolver solicitação da etapa?" descricao="A decisão será devolvida para revisão e a justificativa ficará no histórico." confirmar="Devolver solicitação" ocupado={ocupadoArquivoEtapa} justificativa={motivoEtapa} justificativaMinima={15} onJustificativaChange={setMotivoEtapa} onCancelar={()=>setDevolverPendente(null)} onConfirmar={()=>void decidirEtapa(devolverPendente.tipo,devolverPendente.id,'devolver')}/></div>,document.body)}
     {confirmarConclusaoEtapa && createPortal(<div className="relative z-[180]">
-      <ConfirmacaoSimples titulo={parcialEtapa ? "Solicitar conclusão parcial da etapa?" : "Solicitar conclusão da etapa?"} descricao="A etapa será enviada para aprovação. A solicitação não conclui automaticamente a execução e será registrada no histórico."
+      <ConfirmacaoSimples pendencias={erroAcao ? [erroAcao] : []} titulo={parcialEtapa ? "Solicitar conclusão parcial da etapa?" : "Solicitar conclusão da etapa?"} descricao="A etapa será enviada para aprovação. A solicitação não conclui automaticamente a execução e será registrada no histórico."
         confirmar={parcialEtapa?"Solicitar conclusão parcial":"Solicitar conclusão"} confirmacaoRoxa ocupado={ocupadoArquivoEtapa} onCancelar={() => setConfirmarConclusaoEtapa(null)}
         onConfirmar={() => void executarConclusaoEtapa()} />
     </div>, document.body)}
     {confirmarExclusaoEtapa && createPortal(<div className="relative z-[180]">
-      <ConfirmacaoSimples titulo="Excluir etapa arquivada?" perigoso ocupado={ocupadoArquivoEtapa}
+      <ConfirmacaoSimples pendencias={erroAcao ? [erroAcao] : []} titulo="Excluir etapa arquivada?" perigoso ocupado={ocupadoArquivoEtapa}
         descricao="Excluir definitivamente esta etapa de teste, todos os seus entregáveis, evidências, versões e arquivos? A operação não pode ser desfeita."
         confirmar="Excluir definitivamente" onCancelar={() => setConfirmarExclusaoEtapa(null)} onConfirmar={() => void excluirEtapa(confirmarExclusaoEtapa)} />
     </div>, document.body)}

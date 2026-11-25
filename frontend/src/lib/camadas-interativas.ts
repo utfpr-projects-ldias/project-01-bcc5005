@@ -53,7 +53,8 @@ export function registrarCamada(doc: Document, elemento: Camada['elemento'], fec
 }
 /** Um Escape é consumido por uma única camada; callbacks permanecem atuais. */
 export function useCamadaInterativa(ativa: boolean, elemento: () => HTMLElement | null, fechar: () => void, prioridade = 100) {
-  const atual=useRef({elemento,fechar}); atual.current={elemento,fechar};
+  const atual=useRef({elemento,fechar});
+  useEffect(()=>{atual.current={elemento,fechar};},[elemento,fechar]);
   useEffect(()=>{
     if(!ativa)return;
     return registrarCamada(document,()=>atual.current.elemento(),()=>atual.current.fechar(),prioridade);

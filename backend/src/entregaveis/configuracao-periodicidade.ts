@@ -16,3 +16,10 @@ export function configuracaoPeriodicidadeV1Valida(
   return dados.versao === 1 && Object.keys(dados).every(c => c === 'versao' || c === 'modoRegistro') &&
     (dados.modoRegistro === undefined || dados.modoRegistro === 'DESCRITIVO' || dados.modoRegistro === 'QUANTITATIVO');
 }
+
+/** JSONB não preserva a ordem das chaves; a configuração tem semântica, não ordem textual. */
+export function configuracoesPeriodicidadeEquivalentes(a: unknown, b: unknown): boolean {
+  if (a == null || b == null) return a == null && b == null;
+  return configuracaoPeriodicidadeV1Valida(a) && configuracaoPeriodicidadeV1Valida(b) &&
+    a.versao === b.versao && a.modoRegistro === b.modoRegistro;
+}

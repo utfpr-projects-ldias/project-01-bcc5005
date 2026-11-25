@@ -59,7 +59,7 @@ test('vínculo rejeitado é distinguido de solicitação pendente e não oferece
     permissoes={{ aprovarVinculosMetasMarco: true } as never} />);
   const gerenciar = await screen.findByRole('button', { name: 'Gerenciar vínculos' });
   await act(async () => { fireEvent.click(gerenciar); });
-  expect(screen.getByText('Rejeitado')).toBeInTheDocument();
+  expect(screen.getByText('Rejeitado · Em revisão')).toBeInTheDocument();
   expect(screen.queryByText('Pendente de aprovação')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Rejeitar' })).not.toBeInTheDocument();
 });

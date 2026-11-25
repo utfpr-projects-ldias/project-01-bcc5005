@@ -6,11 +6,11 @@ jest.mock('@/hooks/use-entregaveis', () => ({
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { PainelEtapas } from './painel-etapas';
 import { ToastNotificacoes } from '@/app/components/toast-notificacoes';
-import { useEtapas, useMutacoesEtapas } from '@/hooks/use-etapas';
+import { useEtapas, useMutacoesEtapas, useElegibilidadeEtapa } from '@/hooks/use-etapas';
 import { ErroEtapa, type Etapa } from '@/lib/etapas';
 
 /** HU06-04: testes DOM com respostas MOCKADAS, sem alegar integração de rede/DB. */
-jest.mock('@/hooks/use-etapas', () => ({ useEtapas: jest.fn(), useMutacoesEtapas: jest.fn() }));
+jest.mock('@/hooks/use-etapas', () => ({ useEtapas: jest.fn(), useMutacoesEtapas: jest.fn(), useElegibilidadeEtapa: jest.fn() }));
 const hookConsulta = useEtapas as jest.Mock;
 const hookMutacao = useMutacoesEtapas as jest.Mock;
 const atualizar = jest.fn();
@@ -48,6 +48,7 @@ const retorno = (dados: Etapa[] | undefined, adicionais = {}) => ({
 
 beforeEach(() => {
   jest.resetAllMocks();
+  (useElegibilidadeEtapa as jest.Mock).mockReturnValue({ dados: undefined, carregando: false, atualizando: false, atualizar: jest.fn() });
   atualizar.mockResolvedValue(registros);
   criar.mockResolvedValue(registros[0]);
   editar.mockResolvedValue(registros[0]);
@@ -61,11 +62,11 @@ describe('HU06-04 — estados e acessibilidade do painel (React com mocks)', () 
     hookConsulta.mockReturnValue(retorno(undefined));
     const view = render(<PainelEtapas contratoId={contratoId} habilitado podeGerenciar />);
     expect(screen.getByRole('status')).toHaveTextContent('Carregando etapas');
-    expect(screen.queryByRole('list', { name: 'Etapas em ordem de execução' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('table', { name: 'Etapas e entregáveis' })).not.toBeInTheDocument();
     hookConsulta.mockReturnValue(retorno([]));
     view.rerender(<PainelEtapas contratoId={contratoId} habilitado podeGerenciar />);
     expect(screen.getByText(/Ainda não há etapas cadastradas/)).toBeInTheDocument();
-    expect(screen.queryByRole('list')).not.toBeInTheDocument();
+    expect(screen.queryByRole('table', { name: 'Etapas e entregáveis' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Nova etapa' })).toBeEnabled();
   });
 
@@ -73,20 +74,20 @@ describe('HU06-04 — estados e acessibilidade do painel (React com mocks)', () 
     hookConsulta.mockReturnValue(retorno(undefined, { carregando: false, erro: new Error('Falha simulada') }));
     render(<PainelEtapas contratoId={contratoId} habilitado podeGerenciar />);
     expect(screen.getByRole('alert')).toHaveTextContent('Não foi possível consultar as etapas');
-    expect(screen.queryByRole('list')).not.toBeInTheDocument();
+    expect(screen.queryByRole('table', { name: 'Etapas e entregáveis' })).not.toBeInTheDocument();
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' })); });
     expect(atualizar).toHaveBeenCalledTimes(1);
   });
 
   it('bloqueia planejamento para somente-leitura e não renderiza lista em erro 401', () => {
     const view = render(<PainelEtapas contratoId={contratoId} habilitado podeGerenciar={false} />);
-    expect(screen.getByRole('list', { name: 'Etapas em ordem de execução' })).toBeInTheDocument();
+    expect(screen.getByRole('table', { name: 'Etapas e entregáveis' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Nova etapa' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Editar etapa/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Descer etapa/ })).not.toBeInTheDocument();
     hookConsulta.mockReturnValue(retorno(registros, { erro: new ErroEtapa(401, 'Sessão expirada') }));
     view.rerender(<PainelEtapas contratoId={contratoId} habilitado podeGerenciar={false} />);
-    expect(screen.queryByRole('list')).not.toBeInTheDocument();
+    expect(screen.queryByRole('table', { name: 'Etapas e entregáveis' })).not.toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent('Sessão expirada');
   });
 
@@ -114,7 +115,7 @@ describe('HU06-04 — estados e acessibilidade do painel (React com mocks)', () 
       [registros[0].id, registros[1].id], [registros[1].id, registros[0].id],
     );
     expect(screen.getByRole('status')).toHaveTextContent('Ordem das etapas salva');
-    expect(screen.getByRole('list', { name: 'Etapas em ordem de execução' })).toBeInTheDocument();
+    expect(screen.getByRole('table', { name: 'Etapas e entregáveis' })).toBeInTheDocument();
   });
 
   it('conflito 409 mantém ordem anterior e solicita recarga; falha 500 não altera a lista', async () => {
@@ -125,10 +126,10 @@ describe('HU06-04 — estados e acessibilidade do painel (React com mocks)', () 
     const descer = screen.getByRole('button', { name: 'Descer etapa Planejamento' });
     await act(async () => { fireEvent.click(descer); });
     await waitFor(() => expect(atualizar).toHaveBeenCalledTimes(1));
-    const lista = screen.getByRole('list', { name: 'Etapas em ordem de execução' });
-    expect(within(lista).getAllByRole('listitem')[0]).toHaveTextContent('Planejamento');
+    const lista = screen.getByRole('table', { name: 'Etapas e entregáveis' });
+    expect(within(lista).getAllByRole('row').filter(linha => linha.hasAttribute('data-etapa-estado'))[0]).toHaveTextContent('Planejamento');
     await act(async () => { fireEvent.click(descer); });
     expect(screen.getByRole('alert')).toHaveTextContent('Falha na persistência');
-    expect(within(lista).getAllByRole('listitem')[0]).toHaveTextContent('Planejamento');
+    expect(within(lista).getAllByRole('row').filter(linha => linha.hasAttribute('data-etapa-estado'))[0]).toHaveTextContent('Planejamento');
   });
 });

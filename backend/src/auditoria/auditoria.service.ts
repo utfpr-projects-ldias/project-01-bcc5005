@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { DataSource, type EntityManager } from 'typeorm';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
 import { AcaoAuditoria, TIPO_ENTIDADE_POR_ACAO, type TipoEntidadeAuditada } from './acao-auditoria.js';
+import { Contrato } from '../contratos/contrato.entity.js';
 import { Etapa } from '../etapas/etapa.entity.js';
 import { EventoAuditoria } from './evento-auditoria.entity.js';
 
@@ -9,6 +10,8 @@ export type AlteracaoAuditavel = {
   acao: AcaoAuditoria;
   entidadeTipo: TipoEntidadeAuditada;
   entidadeId: string;
+  /** Contexto interno, exclusivo de concessão/revogação de ACL. */
+  contratoIdAcl?: string;
   dadosAnteriores?: Record<string, unknown> | null;
   dadosPosteriores?: Record<string, unknown> | null;
 };
@@ -32,7 +35,8 @@ const UUID_CONTRATO = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{
 // Nunca enviar o corpo HTTP bruto, identidade enviada pelo navegador ou credenciais.
 const CAMPO_SENSIVEL = /senha|password|token|secret|api.?key|cookie|authorization|credencial|hash|session|sessao|chave.?privada|private.?key/i;
 const CHAVE_ESTRUTURAL_PERIGOSA = /^(?:__proto__|constructor|prototype)$/i;
-const MAX_JSON = 16_384;
+// Limite em bytes, suficiente para conjuntos de vínculos permitidos, sem snapshots ilimitados.
+const MAX_JSON = 128 * 1024;
 
 function limparValor(valor: unknown, nivel = 0): unknown {
   if (nivel > 8) throw new Error('Profundidade excessiva em dados de auditoria');
@@ -62,7 +66,7 @@ function snapshotSeguro(dados: Record<string, unknown> | null | undefined): Reco
     throw new Error('Snapshot de auditoria deve ser objeto simples');
   }
   const limpos = limparValor(dados) as Record<string, unknown>;
-  if (JSON.stringify(limpos).length > MAX_JSON) {
+  if (Buffer.byteLength(JSON.stringify(limpos), 'utf8') > MAX_JSON) {
     throw new Error('Snapshot de auditoria excedeu o tamanho permitido');
   }
   return limpos;
@@ -166,7 +170,14 @@ export class AuditoriaService {
     evento: AlteracaoAuditavel,
   ): Promise<string | null> {
     if (evento.entidadeTipo === 'CONTRATO') return evento.entidadeId;
-    if (evento.entidadeTipo === 'USUARIO') return null;
+    if (evento.entidadeTipo === 'USUARIO') {
+      if (evento.contratoIdAcl === undefined) return null;
+      if (![AcaoAuditoria.USUARIO_PERMISSAO_CONCEDIDA, AcaoAuditoria.USUARIO_PERMISSAO_REVOGADA].includes(evento.acao) || !UUID_CONTRATO.test(evento.contratoIdAcl) || (evento.dadosPosteriores?.contratoId ?? evento.dadosAnteriores?.contratoId) !== evento.contratoIdAcl)
+        throw new Error('Contexto de ACL inválido');
+      const contrato = await manager.getRepository(Contrato).findOneBy({id: evento.contratoIdAcl});
+      if (!contrato) throw new Error('Contrato da ACL não encontrado');
+      return contrato.id;
+    }
     if (evento.entidadeTipo === 'ETAPA') {
       const etapa = await manager.getRepository(Etapa).findOne({
         where: { id: evento.entidadeId },

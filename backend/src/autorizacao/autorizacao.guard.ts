@@ -9,7 +9,7 @@ import { Reflector } from '@nestjs/core';
 import type { Response } from 'express';
 
 import { UsuariosService } from '../usuarios/usuarios.service.js';
-import { CHAVE_POLITICA, type Politica } from './politica.decorator.js';
+import { CHAVE_POLITICA, CHAVE_ROTA_PUBLICA, type Politica } from './politica.decorator.js';
 import { PoliticaAcessoService } from './politica-acesso.service.js';
 import { politicaOperacional } from './politicas-operacionais.js';
 import { ResolverEscopoContratoService } from './resolver-escopo-contrato.service.js';
@@ -34,7 +34,9 @@ export class AutorizacaoGuard implements CanActivate {
     const politica = this.reflector.getAllAndOverride<Politica>(CHAVE_POLITICA, [
       context.getHandler(), context.getClass(),
     ]);
-    const publica = /^\/$/i.test(req.path) || /^\/auth(?!\/me(?:\/|$))(?:\/|$)/i.test(req.path) || /^\/protected\/ping(?:\/|$)/i.test(req.path);
+    const publica = this.reflector.getAllAndOverride<boolean>(CHAVE_ROTA_PUBLICA, [
+      context.getHandler(), context.getClass(),
+    ]) === true;
     if (!politica && publica) return true;
 
     const supertokensUserId = await this.sessoes.identificar(req, res);

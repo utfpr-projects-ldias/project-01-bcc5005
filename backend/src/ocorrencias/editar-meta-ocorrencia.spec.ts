@@ -1,3 +1,4 @@
+import { Usuario } from '../usuarios/usuario.entity.js';
 import { jest } from '@jest/globals';
 import type { DataSource, EntityManager, Repository } from 'typeorm';
 import { BadRequestException, ConflictException } from '@nestjs/common';
@@ -24,7 +25,7 @@ function ambiente(registrados = 13) {
   const auditoria = { registrarNaTransacao: jest.fn(async () => undefined) };
   const m = {
     findOneBy: async (entidade: unknown) => entidade === Entregavel ? entregavel : null,
-    getRepository: (entidade: unknown) => entidade === Ocorrencia ? repo : {
+    getRepository: (entidade: unknown) => entidade === Usuario ? {findOne:async()=>({...ator,ativo:true})} : entidade === Ocorrencia ? repo : {
       findOneBy: async () => entidade === Entregavel ? entregavel : null,
     },
     findOne: async (entidade: unknown) => entidade === Contrato

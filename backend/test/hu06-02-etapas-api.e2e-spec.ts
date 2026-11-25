@@ -12,6 +12,7 @@ import { codigoPublicoLivreParaTeste } from './codigo-publico-fixture.js';
 import { Contrato } from '../src/contratos/contrato.entity.js';
 import { Usuario } from '../src/usuarios/usuario.entity.js';
 import { Etapa } from '../src/etapas/etapa.entity.js';
+import { Entregavel } from '../src/entregaveis/entregavel.entity.js';
 import { PermissaoContrato } from '../src/autorizacao/permissao-contrato.entity.js';
 import { EventoAuditoria } from '../src/auditoria/evento-auditoria.entity.js';
 import { PoliticaAcessoService } from '../src/autorizacao/politica-acesso.service.js';
@@ -54,10 +55,10 @@ suite('HU06-02 — API real e ordenação transacional PostgreSQL isolado', () =
     if (!nome.endsWith('_hu06_api_test')) throw new Error('Use apenas banco terminado em _hu06_api_test');
     db = await new DataSource({
       type: 'postgres', url, synchronize: false,
-      entities: [Contrato, Usuario, Etapa, PermissaoContrato, EventoAuditoria],
+      entities: [Contrato, Usuario, Etapa, Entregavel, PermissaoContrato, EventoAuditoria],
       migrations: migrationsCompletas,
     }).initialize();
-    await db.runMigrations();
+    await db.runMigrations({ transaction: 'each' });
     const criarContrato = async (sufixo: string) => {
       const codigoPublico = await codigoPublicoLivreParaTeste(db);
       const [r] = await db.query(`INSERT INTO contratos
@@ -140,6 +141,24 @@ suite('HU06-02 — API real e ordenação transacional PostgreSQL isolado', () =
     const res = await request(app.getHttpServer()).get(rota(contrato)).set(header('colaborador')).expect(200);
     expect(res.body.map((e: { id: string }) => e.id)).toEqual([primeira, segunda]);
     expect(res.body[0].vigenciaContrato).toEqual({ inicioVigencia: '2026-10-01', terminoVigencia: '2027-01-01' });
+  });
+
+  it('B04: consulta elegibilidade real sem filhos e preserva isolamento contratual', async () => {
+    const res = await request(app.getHttpServer()).get(`${rota(contrato)}/${primeira}/elegibilidade-conclusao`).set(header('gestor')).expect(200);
+    expect(res.body).toMatchObject({ podeSolicitarConclusao:false, podeSolicitarParcial:false, podeSolicitarEncerramento:true, podeFinalizar:false, decisoesPendentes:false });
+    await request(app.getHttpServer()).get(`${rota(alheio)}/${primeira}/elegibilidade-conclusao`).set(header('admin')).expect(404);
+  });
+
+  it('B04: rejeita edição baseada em formulário desatualizado', async () => {
+    const antes = await request(app.getHttpServer()).get(`${rota(contrato)}/${segunda}`).set(header('gestor')).expect(200);
+    expect(antes.body.estadoEdicao).toMatch(/^[a-f0-9]{64}$/);
+    const alterada = await request(app.getHttpServer()).patch(`${rota(contrato)}/${segunda}`).set(header('gestor'))
+      .send({ descricao:'Alteração concorrente', estadoAnterior:antes.body.estadoEdicao }).expect(200);
+    expect(alterada.body.estadoEdicao).not.toBe(antes.body.estadoEdicao);
+    await request(app.getHttpServer()).patch(`${rota(contrato)}/${segunda}`).set(header('gestor'))
+      .send({ descricao:'Sobrescrita indevida', estadoAnterior:antes.body.estadoEdicao }).expect(409);
+    const depois = await request(app.getHttpServer()).get(`${rota(contrato)}/${segunda}`).set(header('gestor')).expect(200);
+    expect(depois.body.descricao).toBe('Alteração concorrente');
   });
 
   it('rejeita campos extra, calendário impossível e datas invertidas sem persistir', async () => {

@@ -19,8 +19,8 @@ const ESCOPOS_PERMISSOES: readonly GrupoPermissoes[] = [
     { icone: '✕', nome: 'Cancelamento e reversão', chaves: ['cancelarContrato', 'reverterCancelamentoContrato'] },
     { icone: '✎', nome: 'Cadastro e anexação', chaves: ['editarContrato', 'anexarDocumentos', 'editarDocumentos'] },
     { icone: '✓', nome: 'Verificação de anexos', chaves: ['verificarDocumentos', 'reabrirDocumentos'] },
-    { icone: '▣', nome: 'Arquivamento de anexos', chaves: ['arquivarDocumentos', 'reativarDocumentos'] },
-    { icone: '▤', nome: 'Documento principal', chaves: ['verificarDocumentoPrincipal', 'reabrirDocumentoPrincipal', 'arquivarDocumentoPrincipal', 'reativarDocumentoPrincipal'] },
+    { icone: '▣', nome: 'Arquivamento de anexos', chaves: ['arquivarDocumentos', 'reativarDocumentos', 'excluirDocumentosArquivados'] },
+    { icone: '▤', nome: 'Documento principal', chaves: ['verificarDocumentoPrincipal', 'reabrirDocumentoPrincipal', 'arquivarDocumentoPrincipal', 'reativarDocumentoPrincipal', 'excluirDocumentoPrincipal'] },
   ] },
   { titulo: 'Etapas', secoes: [
     { icone: '✎', nome: 'Planejamento', chaves: ['criarEtapas', 'editarEtapas', 'reordenarEtapas', 'bloquearOrdemEtapas'] },

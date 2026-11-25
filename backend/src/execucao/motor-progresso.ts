@@ -9,6 +9,9 @@ const valido = (v: number | null | undefined): v is number => typeof v === 'numb
 const proporcao = (real: number | null | undefined, prevista: number | null | undefined) =>
   valido(real) && valido(prevista) && prevista > 0 ? Math.min(100, real / prevista * 100) : null;
 export const arredondar = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
+/** 100% é reservado a uma medida integral; a apresentação nunca antecipa o aceite. */
+export const arredondarFisico = (v: number, integral = v === 100) =>
+  integral ? 100 : Math.min(99.99, arredondar(v));
 export function calcularFisico(e: EntradaFisica): number | null {
   switch (e.tipo) {
     case 'QUANTITATIVO': return proporcao(e.quantidadeRealizada, e.quantidadePrevista);
@@ -25,7 +28,11 @@ export function agregarFisico(itens: { percentual: number | null; peso: string |
   const pesosParciaisValidos = pesos.every((p, i) => itens[i].peso == null || (p !== null && p >= 0 && p <= 1000000)) && soma <= 1000000;
   const pesosValidos = itens.length > 0 && pesosParciaisValidos && pesos.every(p => p !== null) && soma === 1000000;
   const calculavel = itens.length > 0 && itens.every(i => valido(i.percentual) && i.percentual <= 100);
+  const ponderavel = itens.length > 0 && pesosParciaisValidos &&
+    itens.every((i,n) => !pesos[n] || (valido(i.percentual) && i.percentual <= 100));
+  // Não multiplicar uma medida inválida (NaN/Infinity) por peso zero.
+  const integralPonderado = soma === 1000000 && itens.every((i,n) => !pesos[n] || i.percentual === 100);
   return { pesosValidos, somaPesos: itens.length ? soma / 10000 : null,
-    avancoSimples: calculavel ? arredondar(itens.reduce((s, i) => s + i.percentual!, 0) / itens.length) : null,
-    avancoPonderado: itens.length > 0 && pesosParciaisValidos && itens.every((i,n) => !pesos[n] || (valido(i.percentual) && i.percentual <= 100)) ? arredondar(itens.reduce((s, i, n) => s + (i.percentual ?? 0) * (pesos[n] ?? 0) / 1000000, 0)) : null };
+    avancoSimples: calculavel ? arredondarFisico(itens.reduce((s, i) => s + i.percentual!, 0) / itens.length, itens.every(i => i.percentual === 100)) : null,
+    avancoPonderado: ponderavel ? arredondarFisico(itens.reduce((s, i, n) => s + (pesos[n] ? i.percentual! * pesos[n]! / 1000000 : 0), 0), integralPonderado) : null };
 }

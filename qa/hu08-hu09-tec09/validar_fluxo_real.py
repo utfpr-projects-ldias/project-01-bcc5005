@@ -420,11 +420,11 @@ def main():
                 exigir({recorrente['id'], quantitativo['id']}.issubset(ids), 'Motor TEC09 perdeu entregáveis no agregado.')
                 evidencias['etapas'].append('Atividade multivínculo HU08 + anti-IDOR + agregação física TEC09')
                 page.goto(a.frontend_url + f'/contratos/{c}', wait_until='domcontentloaded')
-                page.get_by_role('tab', name='Atividades', exact=True).click()
+                page.get_by_role('group', name='Registros do contrato').get_by_role('button', name='Atividades', exact=True).click()
                 page.get_by_text(titulo_atividade, exact=False).first.wait_for(timeout=20000)
-                page.get_by_role('tab', name='Execução', exact=True).click()
-                page.get_by_role('tab', name='Geral', exact=True).wait_for(timeout=20000)
-                evidencias['etapas'].append('Frontend real: atividade no diário e aba Execução renderizada')
+                page.get_by_role('group', name='Registros do contrato').get_by_role('button', name='Execução manual', exact=True).click()
+                exigir(page.get_by_role('group', name='Registros do contrato').get_by_role('button', name='Execução manual', exact=True).get_attribute('aria-pressed') == 'true', 'Filtro de execução manual não selecionado')
+                evidencias['etapas'].append('Frontend real: atividade no acompanhamento e filtro de execução manual selecionado')
                 if a.validar_banco:
                     evidencias['postgres'] = conferir_postgres(a.contrato_id, oq, aid, lancamento)
                     evidencias['etapas'].append('PostgreSQL: ocorrências, atividades, vínculo N:N, lançamento e auditoria')
@@ -548,7 +548,7 @@ def main():
                 parametros_revisao = {'inicioFuturo': inicio_futuro,
                                       'terminoPrevisto': termino_futuro, 'periodicidade': 'SEMANAL'}
                 # Caso negativo: a grade semanal não pode ser criada com apenas
-                # dois dias. Uma prévia inválida não deve modificar a agenda nem
+                # seis dias. Uma prévia inválida não deve modificar a agenda nem
                 # o entregável; preservar o domínio é mais importante que PASS.
                 antes_parcial = exigir_api(page, a.api_url, base + '/ocorrencias')
                 ids_antes = {o['id']: (o.get('status'), o.get('substituidaEm'),
@@ -557,7 +557,7 @@ def main():
                 entrega_antes = exigir_api(page, a.api_url, base + '/entregaveis/' + recorrente['id'])
                 parcial = requisitar(page, a.api_url, rota_revisao, 'POST',
                     {**parametros_revisao,
-                     'terminoPrevisto': (date.fromisoformat(hoje) + timedelta(days=2)).isoformat()})
+                     'inicioFuturo': (date.fromisoformat(hoje) + timedelta(days=2)).isoformat()})
                 exigir(parcial['status'] == 400,
                     f'Período semanal incompleto deveria ser rejeitado com HTTP 400; recebido {parcial["status"]}.')
                 motivo_parcial = parcial.get('body')

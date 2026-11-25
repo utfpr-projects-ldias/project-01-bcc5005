@@ -62,55 +62,48 @@ function corPonto(status: string) {
  * Cada ocorrência continua sendo um registro único do banco, inclusive quando
  * preservada após replanejamento; sua posição visual não muda datas nem cálculo.
  */
-export function CalendarioOcorrencias({registros,registrosVisiveis=registros,aoAbrir,periodicidade='DIARIA'}:{
-  registros:Ocorrencia[];registrosVisiveis?:Ocorrencia[];aoAbrir:(item:Ocorrencia,gatilho:HTMLElement)=>void;periodicidade?:string;
+export function CalendarioOcorrencias({registros,registrosVisiveis=registros,aoAbrir,periodicidade='DIARIA',resumoCompleto=false}:{
+  registros:Ocorrencia[];registrosVisiveis?:Ocorrencia[];aoAbrir:(item:Ocorrencia,gatilho:HTMLElement)=>void;periodicidade?:string;resumoCompleto?:boolean;
 }) {
   const hojeIso=hoje();
   const [mesSelecionado, setMesSelecionado] = useState('');
   const [diaSelecionado, setDiaSelecionado] = useState('');
   const ativos=registros.filter(o=>!o.substituidaEm);
   const visiveis = useMemo(()=>new Set(registrosVisiveis.map(o=>o.id)),[registrosVisiveis]);
-  const todosConcluidos=ativos.length>0&&ativos.every(o=>['CONCLUIDO','CONCLUIDO_PARCIALMENTE'].includes(o.status));
+  const todosConcluidos=resumoCompleto&&ativos.length>0&&ativos.every(o=>['CONCLUIDO','CONCLUIDO_PARCIALMENTE'].includes(o.status));
   const existeEncerrada=ativos.some(o=>o.status==='ENCERRADA');
   // A superfície do calendário pertence ao ENTREGÁVEL. Nenhuma ocorrência
   // pode mudar borda/fundo do calendário inteiro; apenas seus próprios cards.
   const corTotal='pi-agenda-superficie';
-  const {grupos,semData}=useMemo(()=>{
-    const grupos=new Map<string,Ocorrencia[]>();
-    const semData:Ocorrencia[]=[];
-    registros.forEach(o=>{
-      if(!iso(chave(o))){semData.push(o);return;}
-      const k=chave(o).slice(0,7),grupo=grupos.get(k)??[];
-      grupo.push(o);grupos.set(k,grupo);
-    });
-    return {grupos,semData};
-  },[registros]);
+  const {datados,semData}=useMemo(()=>({datados:registros.filter(o=>iso(chave(o))),semData:registros.filter(o=>!iso(chave(o)))}),[registros]);
+  // Interseção com o mês selecionado, sem materializar todos os meses ou duplicar registros.
+  const primeiroMes=datados.map(o=>periodo(o).inicio.slice(0,7)).sort()[0];
+  const ultimoMes=datados.map(o=>periodo(o).fim.slice(0,7)).sort().at(-1);
   const tituloGrupo=(k:string)=>{
     return mes(`${k}-01`);
   };
-  const chaves = Array.from(grupos.keys()).sort();
-  const chaveAtiva = mesSelecionado || (chaves.includes(hojeIso.slice(0,7)) ? hojeIso.slice(0,7) : chaves[0] ?? hojeIso.slice(0,7));
+  const mesHoje=hojeIso.slice(0,7);
+  const chaveAtiva = mesSelecionado || (primeiroMes && ultimoMes && mesHoje>=primeiroMes && mesHoje<=ultimoMes ? mesHoje : primeiroMes ?? mesHoje);
   const moverMes = (deslocamento:number) => {
-    const [ano,numero]=chaveAtiva.split('-').map(Number);
-    const data=new Date(Date.UTC(ano,numero-1+deslocamento,1));
-    setMesSelecionado(`${data.getUTCFullYear()}-${String(data.getUTCMonth()+1).padStart(2,'0')}`);
-    setDiaSelecionado('');
+    const data=new Date(`${chaveAtiva}-01T00:00:00Z`);
+    data.setUTCMonth(data.getUTCMonth()+deslocamento);
+    const mesNovo=data.toISOString().split('T')[0].slice(0,7);
+    if (!/^\d{4}-\d{2}$/.test(mesNovo) || mesNovo.startsWith('0000-')) return;
+    setMesSelecionado(mesNovo); setDiaSelecionado('');
   };
-  const itensAtivos = useMemo(() => (grupos.get(chaveAtiva) ?? []).slice().sort((a,b)=>chave(a).localeCompare(chave(b)) || a.titulo.localeCompare(b.titulo)), [grupos, chaveAtiva]);
-
+  const limiteMes = new Date(`${chaveAtiva}-01T00:00:00Z`);
+  limiteMes.setUTCMonth(limiteMes.getUTCMonth()+1); limiteMes.setUTCDate(0);
+  const ultimoDia=limiteMes.toISOString().slice(0,10);
+  const itensAtivos = useMemo(() => datados.filter(o=>periodo(o).inicio<=ultimoDia && periodo(o).fim>=`${chaveAtiva}-01`).sort((a,b)=>chave(a).localeCompare(chave(b)) || a.titulo.localeCompare(b.titulo)), [datados,chaveAtiva,ultimoDia]);
   const itensPorDia = useMemo(() => {
     const mapa = new Map<string, Ocorrencia[]>();
-    for (const item of itensAtivos) {
-      const data = periodo(item).inicio;
-      const lista = mapa.get(data) ?? [];
-      lista.push(item);
-      mapa.set(data, lista);
-    }
-    for (const lista of mapa.values()) {
-      lista.sort((a,b) => ordemStatus.indexOf(statusVisual(a, hojeIso)) - ordemStatus.indexOf(statusVisual(b, hojeIso)) || a.titulo.localeCompare(b.titulo));
+    for (let i=1;i<=Number(ultimoDia.slice(8));i++) {
+      const dia=`${chaveAtiva}-${String(i).padStart(2,'0')}`;
+      const lista=itensAtivos.filter(o=>periodo(o).inicio<=dia && periodo(o).fim>=dia);
+      if(lista.length) mapa.set(dia,lista.sort((a,b)=>ordemStatus.indexOf(statusVisual(a,hojeIso))-ordemStatus.indexOf(statusVisual(b,hojeIso))||a.titulo.localeCompare(b.titulo)));
     }
     return mapa;
-  }, [itensAtivos, hojeIso]);
+  }, [itensAtivos, hojeIso, chaveAtiva, ultimoDia]);
 
   // Seleção efetiva derivada do mês e dos períodos: nenhuma microtask
   // altera estado após o render, evitando seleção obsoleta na troca de mês.
@@ -125,7 +118,7 @@ export function CalendarioOcorrencias({registros,registrosVisiveis=registros,aoA
 
   const calendarioVazio = Boolean(chaveAtiva) && !Array.from(itensPorDia.keys()).some(v => v.startsWith(`${chaveAtiva}-`));
   const ocorrenciasDoDia = (itensPorDia.get(diaEfetivo) ?? []).filter(o=>visiveis.has(o.id));
-  const outrosRegistros = itensAtivos.filter(o=>visiveis.has(o.id) && periodo(o).inicio!==diaEfetivo);
+  const outrosRegistros = itensAtivos.filter(o=>visiveis.has(o.id) && !ocorrenciasDoDia.some(d=>d.id===o.id));
 
   const cardResumo = (o: Ocorrencia, compacto = false) => {
     const p = periodo(o);
@@ -164,16 +157,15 @@ export function CalendarioOcorrencias({registros,registrosVisiveis=registros,aoA
     </div>
 
     {chaveAtiva && (() => {
-      const ano=Number(chaveAtiva.slice(0,4)),mesNumero=Number(chaveAtiva.slice(5,7));
-      const inicio=new Date(Date.UTC(ano,mesNumero-1,1));
-      const qtdDias=new Date(Date.UTC(ano,mesNumero,0)).getUTCDate();
+      const inicio=new Date(`${chaveAtiva}-01T00:00:00Z`);
+      const qtdDias=Number(ultimoDia.slice(8));
       const deslocamento=(inicio.getUTCDay()+6)%7;
       return <section className={`min-w-0 overflow-hidden rounded-xl border ${corTotal}`}>
         <div className="grid min-h-[30rem] min-w-0 gap-0 lg:grid-cols-[minmax(0,1.6fr)_minmax(18rem,0.95fr)]">
           <div className="min-w-0 border-b border-current/10 p-3 lg:border-b-0 lg:border-r">
             <div className="mb-2 flex items-center justify-between gap-2">
               <h5 className="text-sm font-semibold">Ocorrências por dia</h5>
-              <span className="text-xs text-foreground/60">{itensAtivos.length} ocorrência(s)</span>
+              <span className="text-xs text-foreground/60">{itensAtivos.filter(o=>visiveis.has(o.id)).length} visíveis de {itensAtivos.length}</span>
             </div>
             <div className="w-full overflow-x-auto" tabIndex={0} aria-label={`Dias de ${tituloGrupo(chaveAtiva)}`}>
               <div className="min-w-[560px]">
@@ -195,7 +187,7 @@ export function CalendarioOcorrencias({registros,registrosVisiveis=registros,aoA
 
                       </div>
                       {itensDoDia.length > 0 ? <>
-                        <div className="mt-2 flex flex-wrap gap-1" aria-label={`${itensDoDia.length} ocorrências neste dia`}>{resumo.map(item => <span key={item.status} title={`${item.qtd} ${nomeStatus(item.status).toLowerCase()}`} className={`inline-flex min-h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white ${corPonto(item.status)}`}>{item.qtd}</span>)}</div>
+                        <div className="mt-2 flex flex-wrap gap-1" aria-label={`${itensDoDia.length} ocorrências neste dia`} title={`${itensDoDia.filter(o=>visiveis.has(o.id)).length} visíveis de ${itensDoDia.length} no dia (marcadores da agenda integral)`}>{resumo.map(item => <span key={item.status} title={`${item.qtd} ${nomeStatus(item.status).toLowerCase()}`} className={`inline-flex min-h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white ${corPonto(item.status)}`}>{item.qtd}</span>)}</div>
                       </> : null}
                     </button>;
                   })}

@@ -1,3 +1,5 @@
+import { FASES_OPERACIONAIS_CONTRATO } from '../contratos/fases-operacionais.js';
+import { exigirPermissaoTransacional } from '../autorizacao/permissao-transacional.js';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import { AuditoriaService } from '../auditoria/auditoria.service.js';
@@ -9,8 +11,14 @@ import { uuidValido } from '../autorizacao/politicas-operacionais.js';
 
 type LinhaComprovante = {
   id: string; nomeOriginal: string; tipoEvidencia: string; status: 'VERIFICADA'|'PENDENTE_VERIFICACAO'|'REJEITADA';
-  entregavelId: string; vinculado: boolean;
+  entregavelId: string; vinculado: boolean; vigente: boolean;
 };
+
+const semDuplicidade = `AND NOT EXISTS (SELECT 1 FROM atividade_ocorrencia_medicoes am WHERE am.atividade_id=$2 AND am.contrato_id=$1 AND am.ocorrencia_id=c.ocorrencia_quantidade_id AND am.quantidade>0 AND c.origem_quantidade='NOVA_EXECUCAO' AND c.quantidade_declarada>0)
+          AND NOT EXISTS (SELECT 1 FROM atividades a WHERE a.id=$2 AND a."contratoId"=$1 AND a."ocorrenciaId"=c.ocorrencia_quantidade_id AND a.quantidade_execucao>0 AND c.origem_quantidade='NOVA_EXECUCAO' AND c.quantidade_declarada>0)
+          AND NOT EXISTS (SELECT 1 FROM atividade_entregavel_medicoes dm WHERE dm.atividade_id=$2 AND dm.contrato_id=$1 AND dm.entregavel_id=c.entregavel_id AND c.ocorrencia_quantidade_id IS NULL AND c.origem_quantidade='NOVA_EXECUCAO' AND c.quantidade_declarada>0)
+          AND NOT EXISTS (SELECT 1 FROM execucoes_entregavel a JOIN execucoes_entregavel p ON p.contrato_id=a.contrato_id AND p.entregavel_id=a.entregavel_id AND p.ocorrencia_id IS NOT DISTINCT FROM a.ocorrencia_id
+            WHERE a.origem='ATIVIDADE' AND a.origem_id=$2 AND p.origem='EVIDENCIA' AND p.origem_id=c.id AND a.centesimos>0 AND p.centesimos>0)`;
 
 @Injectable()
 export class AtividadeComprovantesService {
@@ -31,7 +39,8 @@ export class AtividadeComprovantesService {
     await this.atividade(this.db.manager, contratoId, atividadeId);
     const linhas: LinhaComprovante[] = await this.db.manager.query(`
       SELECT c.id, c.nome_original AS "nomeOriginal", ev.tipo_evidencia AS "tipoEvidencia",
-             c.status, c.entregavel_id AS "entregavelId", (av.atividade_id IS NOT NULL) AS vinculado
+             c.status, c.entregavel_id AS "entregavelId", (av.atividade_id IS NOT NULL) AS vinculado,
+             (ae."atividadeId" IS NOT NULL AND ev.arquivado_em IS NULL AND NOT EXISTS (SELECT 1 FROM comprovantes_evidencia n WHERE n.evidencia_esperada_id=c.evidencia_esperada_id AND (n.criado_em,n.id)>(c.criado_em,c.id))) AS vigente
         FROM comprovantes_evidencia c
         JOIN evidencias_esperadas ev ON ev.id=c.evidencia_esperada_id
         LEFT JOIN atividade_entregaveis ae ON ae."atividadeId"=$2 AND ae."entregavelId"=c.entregavel_id
@@ -40,6 +49,7 @@ export class AtividadeComprovantesService {
          av.atividade_id IS NOT NULL
          OR (ae."atividadeId" IS NOT NULL AND ev.arquivado_em IS NULL
            AND c.status IN ('PENDENTE_VERIFICACAO','VERIFICADA')
+           ${semDuplicidade}
            AND NOT EXISTS (
              SELECT 1 FROM comprovantes_evidencia nova WHERE nova.evidencia_esperada_id=c.evidencia_esperada_id
                AND (nova.criado_em,nova.id) > (c.criado_em,c.id)))
@@ -58,8 +68,9 @@ export class AtividadeComprovantesService {
   async desvincular(contratoId:string,atividadeId:string,comprovanteId:string,ator:UsuarioAutenticado){
     if(!uuidValido(comprovanteId))throw new BadRequestException('Comprovante inválido');
     return this.db.transaction(async m=>{
+      await exigirPermissaoTransacional(m,contratoId,ator,'editarAtividades');
       const contrato=await m.findOne(Contrato,{where:{id:contratoId},lock:{mode:'pessimistic_write'}});
-      if(!contrato||contrato.arquivadoEm||contrato.conclusaoSolicitadaEm||!['PLANEJAMENTO','EM_EXECUCAO'].includes(contrato.status))throw new ConflictException('Reabra o contrato antes de alterar vínculos.');
+      if(!contrato||contrato.arquivadoEm||contrato.conclusaoSolicitadaEm||contrato.encerramentoSolicitado||!FASES_OPERACIONAIS_CONTRATO.includes(contrato.status))throw new ConflictException('Reabra o contrato antes de alterar vínculos.');
       const atividade=await this.atividade(m,contratoId,atividadeId);
       if(atividade.status!=='REGISTRADA')throw new ConflictException('Reabra a atividade antes de desvincular evidências.');
       await this.exigirPaisAbertos(m,contratoId,atividadeId,atividade);
@@ -74,8 +85,9 @@ export class AtividadeComprovantesService {
   async vincular(contratoId: string, atividadeId: string, comprovanteId: string, ator: UsuarioAutenticado) {
     if (!uuidValido(comprovanteId)) throw new BadRequestException('Comprovante inválido');
     return this.db.transaction(async m => {
+      await exigirPermissaoTransacional(m,contratoId,ator,'editarAtividades');
       const contrato = await m.findOne(Contrato, { where: { id: contratoId }, lock: { mode: 'pessimistic_write' } });
-      if (!contrato || contrato.arquivadoEm || contrato.conclusaoSolicitadaEm || !['PLANEJAMENTO','EM_EXECUCAO'].includes(contrato.status))
+      if (!contrato || contrato.arquivadoEm || contrato.conclusaoSolicitadaEm || contrato.encerramentoSolicitado || !FASES_OPERACIONAIS_CONTRATO.includes(contrato.status))
         throw new ConflictException('O contrato precisa estar aberto para vincular comprovantes');
       const atividade = await this.atividade(m, contratoId, atividadeId);
       if (atividade.status !== 'REGISTRADA') throw new ConflictException('Reabra a atividade antes de alterar evidências vinculadas');
@@ -85,11 +97,7 @@ export class AtividadeComprovantesService {
           JOIN evidencias_esperadas ev ON ev.id=c.evidencia_esperada_id AND ev.arquivado_em IS NULL
           JOIN atividade_entregaveis ae ON ae."atividadeId"=$2 AND ae."entregavelId"=c.entregavel_id
         WHERE c.id=$3 AND c.contrato_id=$1 AND c.status IN ('PENDENTE_VERIFICACAO','VERIFICADA')
-          AND NOT EXISTS (SELECT 1 FROM atividade_ocorrencia_medicoes am WHERE am.atividade_id=$2 AND am.contrato_id=$1 AND am.ocorrencia_id=c.ocorrencia_quantidade_id AND am.quantidade>0 AND c.origem_quantidade='NOVA_EXECUCAO' AND c.quantidade_declarada>0)
-          AND NOT EXISTS (SELECT 1 FROM atividades a WHERE a.id=$2 AND a."contratoId"=$1 AND a."ocorrenciaId"=c.ocorrencia_quantidade_id AND a.quantidade_execucao>0 AND c.origem_quantidade='NOVA_EXECUCAO' AND c.quantidade_declarada>0)
-          AND NOT EXISTS (SELECT 1 FROM atividade_entregavel_medicoes dm WHERE dm.atividade_id=$2 AND dm.contrato_id=$1 AND dm.entregavel_id=c.entregavel_id AND c.ocorrencia_quantidade_id IS NULL AND c.origem_quantidade='NOVA_EXECUCAO' AND c.quantidade_declarada>0)
-          AND NOT EXISTS (SELECT 1 FROM execucoes_entregavel a JOIN execucoes_entregavel p ON p.contrato_id=a.contrato_id AND p.entregavel_id=a.entregavel_id AND p.ocorrencia_id IS NOT DISTINCT FROM a.ocorrencia_id
-            WHERE a.origem='ATIVIDADE' AND a.origem_id=$2 AND p.origem='EVIDENCIA' AND p.origem_id=c.id AND a.centesimos>0 AND p.centesimos>0)
+          ${semDuplicidade}
           AND NOT EXISTS (SELECT 1 FROM comprovantes_evidencia n
             WHERE n.evidencia_esperada_id=c.evidencia_esperada_id
               AND (n.criado_em,n.id) > (c.criado_em,c.id))`, [contratoId, atividadeId, comprovanteId]);

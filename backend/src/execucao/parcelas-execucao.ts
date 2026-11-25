@@ -23,11 +23,14 @@ export type ParcelaPublica = ExecucaoLancamento & { situacao:'PENDENTE'|'APROVAD
 export async function parcelas(m:EntityManager,e:Entregavel,atividadeIds?:string[]):Promise<ParcelaPublica[]> {
   if (!e.execucoesIntegradas || atividadeIds?.length===0) return [];
   const linhas=await m.find(ExecucaoLancamento,{where:{contratoId:e.contratoId,entregavelId:e.id,...(atividadeIds?{origem:'ATIVIDADE' as const,origemId:In(atividadeIds)}:{})},order:{dataExecucao:'DESC',criadoEm:'DESC',id:'DESC'}});
+  const atividades = new Map<string,Promise<AtividadeEntity|null>>();
   return Promise.all(linhas.map(async l=>{
     let situacao:ParcelaPublica['situacao']=l.status, titulo='Registro manual', evidenciaId:string|undefined;
     let aprovado=l.centesimosAprovados ?? l.centesimos;
     if(l.origem==='ATIVIDADE') {
-      const a=await m.findOne(AtividadeEntity,{where:{id:l.origemId!,contratoId:e.contratoId},relations:{entregaveis:true,ocorrencias:true}});
+      let consulta=atividades.get(l.origemId!);
+      if(!consulta){consulta=m.findOne(AtividadeEntity,{where:{id:l.origemId!,contratoId:e.contratoId},relations:{entregaveis:true,ocorrencias:true}});atividades.set(l.origemId!,consulta);}
+      const a=await consulta;
       titulo=a?.titulo??'Atividade não disponível';
       situacao=!a||a.excluidaEm||a.status==='ARQUIVADA'||(!a.entregaveis.some(x=>x.id===e.id)||(l.ocorrenciaId&&a.ocorrenciaId!==l.ocorrenciaId&&!a.ocorrencias?.some(x=>x.id===l.ocorrenciaId)))?'INATIVO':a.status==='VERIFICADA'?'APROVADO':'PENDENTE';
       aprovado=l.centesimos;
@@ -53,16 +56,25 @@ export async function percentualComParcelas(m:EntityManager,e:Entregavel):Promis
   const r=await resumoParcelas(m,e);
   return r.reconhecido>10000?null:r.reconhecido/100;
 }
-export async function resumoPercentualOcorrencia(m:EntityManager,o:Ocorrencia){
-  if(!o.execucoesPercentuais)return null;
+async function carregarParcelasOcorrencia(m:EntityManager,o:Ocorrencia){
   const e=await m.findOneBy(Entregavel,{id:o.entregavelId,contratoId:o.contratoId});
-  if(!e)return null;
-  const r=await resumoParcelas(m,e);
+  return e ? {e,r:await resumoParcelas(m,e)} : null;
+}
+export type CacheParcelasOcorrencia = Map<string,ReturnType<typeof carregarParcelasOcorrencia>>;
+export async function resumoPercentualOcorrencia(m:EntityManager,o:Ocorrencia,cache?:CacheParcelasOcorrencia){
+  if(!o.execucoesPercentuais)return null;
+  const chave=`${o.contratoId}:${o.entregavelId}`;
+  let promessa=cache?.get(chave);
+  if(!promessa){promessa=carregarParcelasOcorrencia(m,o);cache?.set(chave,promessa);}
+  const dados=await promessa;
+  if(!dados)return null;
+  const {e,r}=dados;
   const saldo = r.saldosOcorrencias.find(s=>s.id===o.id) ?? saldoParcelas(e.tipo==='CONTINUO'?r.base:0,[]);
-  return {...saldo, emRevisao:r.itens.some(i=>i.ocorrenciaId===o.id && i.situacao==='REJEITADO' && !i.referenciaId && i.centesimos>0)};
+  const itens=r.itens.filter(i=>i.ocorrenciaId===o.id);
+  return {...saldo, emRevisao:itens.some(i=>i.situacao==='REJEITADO'),pendente:itens.some(i=>i.situacao==='PENDENTE')};
 }
 export async function exigirOcorrenciaParcela(m:EntityManager,e:Entregavel,id:string|null|undefined){
-  if(e.tipo==='UNICO')return null;
+  if(e.tipo==='UNICO'){if(id)throw new ConflictException('Entregável único não recebe ocorrência.');return null;}
   if(e.tipo==='CONTINUO'&&!id && !await m.findOneBy(Ocorrencia,{contratoId:e.contratoId,entregavelId:e.id,substituidaEm:IsNull()}))return null;
   if(!id)throw new ConflictException('Selecione a ocorrência descritiva de destino.');
   const o=await m.findOneBy(Ocorrencia,{id,contratoId:e.contratoId,entregavelId:e.id,substituidaEm:IsNull()});
@@ -75,7 +87,7 @@ export async function exigirPermissaoParcela(m:EntityManager,contratoId:string,a
   if(!v||!permissoesEfetivas(ator.perfil,v.podeEditar,v.permissoesDetalhadas)[aprovar?'aprovarExecucaoManual':'editarExecucaoFisica']) throw new ForbiddenException('Sem permissão para esta operação de execução.');
 }
 /** Chamado sob o mesmo lock contratual da operação de origem. */
-export async function criarParcela(m:EntityManager,e:Entregavel,ator:UsuarioAutenticado,dados:{origem:ExecucaoLancamento['origem'];origemId?:string;valor?:string;referenciaId?:string;data:string;ocorrenciaId?:string;observacao?:string|null;id?:string}) {
+export async function criarParcela(m:EntityManager,e:Entregavel,ator:UsuarioAutenticado,dados:{origem:ExecucaoLancamento['origem'];origemId?:string;valor?:string;referenciaId?:string;data:string;ocorrenciaId?:string;observacao?:string|null;id?:string;pedidoOriginal?:import('./pedido-manual.js').PedidoManual}) {
   if(!aceitaParcelas(e.tipo)||e.arquivadoEm||['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao??'')) throw new ConflictException('Este entregável não permite parcelas percentuais diretas.');
   if(Boolean(dados.referenciaId)===Boolean(dados.valor))throw new BadRequestException('Informe nova contribuição ou uma referência, não ambas.');
   const o=await exigirOcorrenciaParcela(m,e,dados.ocorrenciaId);
@@ -86,7 +98,15 @@ export async function criarParcela(m:EntityManager,e:Entregavel,ator:UsuarioAute
   const n=dados.referenciaId?0:centesimos(dados.valor);
   if(n>saldo)throw new ConflictException('A contribuição excede o saldo disponível, incluindo registros pendentes.');
   const linha=m.create(ExecucaoLancamento,{...(dados.id?{id:dados.id}:{}),contratoId:e.contratoId,entregavelId:e.id,ocorrenciaId:o?.id??null,origem:dados.origem,origemId:dados.origemId??null,referenciaId:dados.referenciaId??null,centesimos:n,centesimosAprovados:null,status:'PENDENTE',dataExecucao:dados.data,observacao:dados.observacao??null,autorId:ator.id,autorNome:(ator.nome||ator.email).slice(0,255),decididoPor:null,decididoEm:null});
-  const salvo=await m.save(ExecucaoLancamento,linha);
+  // IDs de operações são fornecidos pelo cliente; INSERT nunca sobrescreve uma
+  // parcela de outro contrato numa corrida de UUID. As demais origens têm ID gerado.
+  if(dados.pedidoOriginal)linha.pedidoOriginal=dados.pedidoOriginal;
+  let salvo:ExecucaoLancamento;
+  if(dados.id){
+    try { await m.insert(ExecucaoLancamento,linha); }
+    catch(erro){if((erro as {code?:string}).code==='23505')throw new ConflictException('Identificador de lançamento já utilizado.');throw erro;}
+    salvo=await m.findOneByOrFail(ExecucaoLancamento,{id:dados.id,contratoId:e.contratoId,entregavelId:e.id});
+  } else salvo=await m.save(ExecucaoLancamento,linha);
   if(!e.execucoesIntegradas){await m.update(Entregavel,{id:e.id,contratoId:e.contratoId},{execucoesIntegradas:true});e.execucoesIntegradas=true;}
   if(o&&!o.execucoesPercentuais)await m.update(Ocorrencia,{id:o.id,contratoId:e.contratoId},{execucoesPercentuais:true});
   return salvo;

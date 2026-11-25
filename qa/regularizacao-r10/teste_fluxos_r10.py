@@ -18,11 +18,11 @@ class TesteR10(unittest.TestCase):
 
     def test_cartao_abre_consulta_sem_ativar_edicao_por_permissao(self):
         pagina = fonte('frontend/src/app/contratos/components/conteudo-entregavel.tsx')
-        self.assertIn('setEditarEvidenciaAberta(editar);', pagina)
-        self.assertNotIn('setEditarEvidenciaAberta(editar ||', pagina)
-        self.assertIn('somenteLeitura={!editarEvidenciaAberta}', pagina)
+        self.assertNotIn('setEditarEvidenciaAberta', pagina)
+        self.assertIn('podeEditar={planejamentoHabilitado && podeEditarEsperada && integridadeDetalhe', pagina)
         comprovante = fonte('frontend/src/app/contratos/components/painel-comprovacao-evidencia.tsx')
-        self.assertIn("!somenteLeitura && !arquivada && podeEnviar", comprovante)
+        self.assertIn('podeEnviar && contextoPermiteAlterar', comprovante)
+        self.assertIn('podeEditar && contextoPermiteAlterar && !somenteLeitura', comprovante)
 
     def test_documentos_baixados_pelo_detalhe_sem_ignorar_checksum(self):
         roteiro = fonte('qa/tec08-03/validar_ui_real.py')

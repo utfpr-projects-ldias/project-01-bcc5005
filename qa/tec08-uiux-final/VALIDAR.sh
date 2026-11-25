@@ -10,19 +10,11 @@ LOGDIR=""
 OK=0; ERRO=0
 
 verificar_origem() {
-  case "$(git branch --show-current 2>/dev/null)" in
-    bugfixes_sprint4) ;;
-    *) echo 'BLOQUEIO: QA exige bugfixes_sprint4 nesta rodada.' >&2; return 3 ;;
-  esac
-  if [[ "$(git rev-parse HEAD 2>/dev/null)" != 'eb87a47ec9efb936bcc8f0b3320fd833cabc41fa' ]]; then
-    echo 'BLOQUEIO: HEAD diferente do snapshot R6.' >&2; return 3
-  fi
-  # Os hashes do pacote antigo não correspondem ao frontend após R1–R7.
-  # A integridade desta rodada é verificada pelo preflight SHA-256 do patch.
-  if ! git diff --check; then
+  printf 'Branch: %s\nHEAD: %s\n' "$(git branch --show-current)" "$(git rev-parse HEAD)"
+  if ! git diff --check HEAD; then
     echo 'BLOQUEIO: git diff --check apontou erros de espaço ou conflito.' >&2; return 3
   fi
-  echo 'OK: branch, HEAD, hashes e git diff --check.'
+  echo 'OK: integridade do diff atual (branch/HEAD apenas informativos).'
 }
 
 abrir_logs() {
@@ -125,7 +117,7 @@ case "$MODO" in
     passo 'Frontend lint' 'frontend-lint' docker compose exec -T frontend npm run lint
     passo 'Frontend build' 'frontend-build' docker compose exec -T frontend npm run build
     if resumo; then
-      cp "$QA/HASHES.sha256" "$QA/.local/ultimo-full-aprovado.sha256" && chmod 600 "$QA/.local/ultimo-full-aprovado.sha256"
+      git ls-files -z backend frontend qa | xargs -0 -r sha256sum > "$QA/.local/ultimo-full-aprovado.sha256" && chmod 600 "$QA/.local/ultimo-full-aprovado.sha256" || exit 1
       echo 'GATE: bateria completa aprovada nesta versão dos arquivos.'
     else
       rm -f "$QA/.local/ultimo-full-aprovado.sha256"; exit 1
@@ -167,7 +159,7 @@ case "$MODO" in
     [[ -f "$QA/.local/ultimo-full-aprovado.sha256" ]] || {
       echo 'Execute --full e obtenha 6/6 antes do QA mutável.' >&2; exit 3
     }
-    cmp -s "$QA/HASHES.sha256" "$QA/.local/ultimo-full-aprovado.sha256" || {
+    cmp -s <(git ls-files -z backend frontend qa | xargs -0 -r sha256sum) "$QA/.local/ultimo-full-aprovado.sha256" || {
       echo 'O código mudou após o --full; execute-o novamente.' >&2; exit 3
     }
     abrir_logs

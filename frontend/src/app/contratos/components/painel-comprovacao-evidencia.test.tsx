@@ -255,7 +255,7 @@ test('submodal de arquivo mantém foco nas ações de anexo e download por ícon
   expect(anexar.compareDocumentPosition(baixar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   fireEvent.click(anexar);
   expect(screen.getByRole('region', { name: 'Edição individual da evidência' })).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'Cancelar' })).not.toBeInTheDocument();
+  expect(within(screen.getByRole('dialog', {name:'Substituir comprovante'})).getByRole('button', { name: 'Cancelar' })).toBeEnabled();
   expect(screen.queryByRole('textbox', { name: 'Título da evidência' })).not.toBeInTheDocument();
   expect(screen.getByRole('dialog', { name: 'Substituir comprovante' })).toBeInTheDocument();
 });
@@ -405,7 +405,7 @@ test('R51: reabertura mostra revisão e controles autorizados no mesmo painel', 
   const view=render(<PainelComprovacaoEvidencia {...props} revisaoConsulta={0}/>);
   expect(await screen.findByTestId('status-verificacao')).toHaveTextContent('Verificado');
   expect(screen.queryByRole('button',{name:'Editar tipo da evidência'})).not.toBeInTheDocument();
-  consultar.mockResolvedValue({...dados,reabertoEm:'2026-11-24T12:00:00Z'});
+  consultar.mockResolvedValue({...dados,tipoEntregavel:'UNICO',podeEditarContribuicao:true,reabertoEm:'2026-11-24T12:00:00Z'});
   view.rerender(<PainelComprovacaoEvidencia {...props} revisaoConsulta={1}/>);
   await waitFor(()=>expect(screen.getByTestId('status-verificacao')).toHaveTextContent('Em revisão'));
   expect(screen.getByRole('button',{name:'Verificar comprovante'})).toBeEnabled();
@@ -429,14 +429,12 @@ test('R51: resposta confirmada da revisão atual não some durante revalidação
 });
 
  test('corrige a contribuição de um comprovante pendente sem substituir arquivo', async()=>{
-  consultar.mockResolvedValue({...dados,tipoEntregavel:'UNICO'});
+  consultar.mockResolvedValue({...dados,tipoEntregavel:'UNICO',podeEditarContribuicao:true});
   (editarContribuicaoEvidencia as jest.Mock).mockResolvedValue(dados.versoes[0]);
   render(<PainelComprovacaoEvidencia {...props}/>);
   fireEvent.click(await screen.findByRole('button',{name:'Editar contribuição'}));
-  const modal=screen.getByRole('dialog',{name:'Editar contribuição'});
-  fireEvent.click(within(modal).getByRole('button',{name:'Percentual'}));
-  fireEvent.change(within(modal).getByLabelText(/Percentual/),{target:{value:'12,50'}});
-  fireEvent.click(within(modal).getByRole('button',{name:'Salvar contribuição'}));
+  fireEvent.change(screen.getByLabelText('Editar valor da contribuição'),{target:{value:'12,50'}});
+  fireEvent.click(screen.getByRole('button',{name:'Salvar contribuição'}));
   await waitFor(()=>expect(editarContribuicaoEvidencia).toHaveBeenCalledWith('contrato-1','entregavel-1','evidencia-1','comprovante-1',{modalidade:'PERCENTUAL',valor:'12.50'}));
   expect(enviar).not.toHaveBeenCalled();
  });

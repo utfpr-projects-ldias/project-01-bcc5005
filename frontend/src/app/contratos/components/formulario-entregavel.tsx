@@ -3,29 +3,30 @@ import { CampoDataCivil } from '@/app/components/campo-data-civil';
 import { useCallback, useId, useRef, useState, type Ref, type FormEvent } from 'react';
 import { ErroEntregavel, ROTULOS_TIPO, pesquisarResponsaveisEntregavel, type Entregavel } from '@/lib/entregaveis';
 import { SeletorResponsavel, type OpcaoResponsavel } from './seletor-responsavel';
-import { decimalDigitado, decimalExibicao, decimalValido } from '@/lib/campos-numericos';
+import { decimalDigitado } from '@/lib/campos-numericos';
 import { ConfirmacaoSimples } from '@/app/components/confirmacao-simples';
 import { pesoDisponivelContrato, saldoPesosRascunho } from '@/lib/peso-disponivel-contrato';
 import { inicialEntregavel,
-  validarEntregavel, type DadosPlanejamentoEntregavel, type ErrosEntregavel, type RascunhoEntregavel } from '@/lib/validacao-entregavel';
+  normalizarDecimalPlanejamento, validarEntregavel, type DadosPlanejamentoEntregavel, type ErrosEntregavel, type RascunhoEntregavel } from '@/lib/validacao-entregavel';
 
 const estilo = 'w-full min-w-0 rounded-lg border border-brand-green/35 bg-background px-3 py-2.5 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-neon aria-invalid:border-red-500';
 function IconeTipoEntregavel({tipo}:{tipo:RascunhoEntregavel['tipo']}) {return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 shrink-0" stroke="currentColor" fill="none" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{tipo==='UNICO'?<><rect x="4" y="4" width="16" height="16" rx="2"/><path d="m8 12 3 3 5-6"/></>:tipo==='QUANTITATIVO'?<path d="M4 18V9h4v9m2 0V5h4v13m2 0v-6h4v6"/>:tipo==='RECORRENTE'?<><path d="M5 8h14l-3-3m3 3-3 3M19 16H5l3-3m-3 3 3 3"/></>:tipo==='CONTINUO'?<path d="M3 12c3-7 6-7 9 0s6 7 9 0"/>:<><path d="M5 21V4m0 1h14l-3 5 3 5H5"/></>}</svg>}
 function Seta() { return <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4"><path d="m4 10 4 4 8-8" /></svg>; }
-export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, onCancelar, onArquivar, referenciaArquivar, onSalvandoMudou, podeConfigurarPesos = false, podeReplanejarOcorrencias = false, secaoEdicao, pesosContrato, modoCalculo = 'SIMPLES' }: {
-  contratoId?: string; etapaId: string; inicial?: Entregavel; onSalvar: (dados: DadosPlanejamentoEntregavel) => Promise<void>;
+export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, onCancelar, onArquivar, referenciaArquivar, onSalvandoMudou, podeConfigurarPesos = !inicial, podeReplanejarOcorrencias = false, secaoEdicao, pesosContrato, modoCalculo = 'SIMPLES' }: {
+  contratoId?: string; etapaId: string; inicial?: Entregavel; onSalvar: (dados: DadosPlanejamentoEntregavel, base?: Entregavel) => Promise<void>;
   onCancelar: () => void; onArquivar?: () => void; referenciaArquivar?: Ref<HTMLButtonElement>; onSalvandoMudou?: (salvando: boolean) => void;
   podeAlterarObrigatoriedade?: boolean; podeCriarEvidencias?: boolean;
   podeConfigurarPesos?: boolean; podeReplanejarOcorrencias?: boolean; secaoEdicao?: 'informacoes' | 'planejamento' | 'completo';
-  pesosContrato?: Array<{ id: string; peso: string | null; arquivadoEm?: string | null }>; modoCalculo?: 'SIMPLES' | 'PONDERADO';
+  pesosContrato?: Array<{ id: string; peso: string | null; arquivadoEm?: string | null; etapaArquivada?: boolean }>; modoCalculo?: 'SIMPLES' | 'PONDERADO';
 }) {
   const disponibilidade = pesoDisponivelContrato(pesosContrato, inicial?.id);
   const pesoMaximo = disponibilidade;
   const prefixo = useId().replace(/:/g, '');
   const agendaBloqueada = Boolean(inicial?.tipo === 'RECORRENTE' && !podeReplanejarOcorrencias);
-  const pesoBloqueado = Boolean(inicial && !podeConfigurarPesos);
+  const pesoBloqueado = !podeConfigurarPesos;
+  const base = useRef(inicial).current;
   const enviando = useRef(false);
-  const [dados, setDados] = useState<RascunhoEntregavel>(() => inicialEntregavel(etapaId, inicial));
+  const [dados, setDados] = useState<RascunhoEntregavel>(() => ({ ...inicialEntregavel(etapaId, base), ...(!base && pesoBloqueado ? {peso:'0'} : {}) }));
   const saldoProjetado = saldoPesosRascunho(pesosContrato, inicial?.id, dados.peso);
   const [avisoPeso, setAvisoPeso] = useState<DadosPlanejamentoEntregavel | null>(null);
   const formatarPeso = (valor: number) => valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
@@ -55,14 +56,14 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
   async function enviar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
     if (enviando.current || avisoPeso) return; // trava síncrona contra clique duplo
-    const resultado = validarEntregavel(dados, inicial);
+    const resultado = validarEntregavel(dados, base);
     if (!resultado.sucesso) { setErros(resultado.erros); setErroGeral('Revise os campos destacados.'); return; }
     if (pesoMaximo !== null && modoCalculo === 'PONDERADO' && Number(resultado.dados.peso ?? '0') > pesoMaximo + 0.000001 &&
-        !(inicial?.peso != null && Number(dados.peso.replace(',', '.')) === Number(inicial.peso))) {
-      setErros({ peso: `Disponível apenas ${pesoMaximo.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% para este entregável.` });
+        !(base?.peso != null && Number(dados.peso.replace(',', '.')) === Number(base.peso))) {
+      setErros({ peso: `Disponível apenas ${pesoMaximo.toLocaleString('pt-BR', { maximumFractionDigits: 4 })}% para este entregável.` });
       setErroGeral('Revise o peso operacional.'); return;
     }
-    if (modoCalculo === 'SIMPLES' && (!inicial || (!pesoBloqueado && Number(resultado.dados.peso) !== Number(inicial.peso)))) {
+    if (modoCalculo === 'SIMPLES' && Number(resultado.dados.peso) > 0 && (!base || (!pesoBloqueado && Number(resultado.dados.peso) !== Number(base.peso)))) {
       setAvisoPeso(resultado.dados); return;
     }
     await persistir(resultado.dados);
@@ -73,7 +74,7 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
     // O servidor valida a distribuição apenas quando o modo é PONDERADO.
     // A soma dos pesos cadastrados não pode bloquear o modo SIMPLES.
     enviando.current = true; setSalvando(true); onSalvandoMudou?.(true); setErros({}); setErroGeral('');
-    try { await onSalvar(valor); }
+    try { if (base) await onSalvar(valor, base); else await onSalvar(valor); }
     catch (erro) { setErroGeral(erro instanceof ErroEntregavel ? erro.message : 'Não foi possível salvar. O formulário foi preservado.'); }
     finally { enviando.current = false; setSalvando(false); onSalvandoMudou?.(false); }
   }
@@ -87,35 +88,36 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
         {!inicial && <h4 className="pi-titulo-formulario">Informações do entregável</h4>}
     <div className="grid gap-3 sm:grid-cols-[minmax(5rem,8rem)_minmax(0,1fr)]">
       <div><label className="mb-1 block text-sm" htmlFor={formId('codigo')}>Código (opcional)</label>
-        <input id={formId('codigo')} className={`${estilo} max-w-32`} maxLength={15} inputMode="numeric" value={dados.codigo} {...campoErro('codigo')} onChange={(e) => atualizar('codigo', e.target.value.replace(/\D/g,''))} />{mensagem('codigo')}<span className="mt-1 block text-right text-[11px] text-foreground/60">{dados.codigo.length}/15</span></div>
+        <input id={formId('codigo')} className={`${estilo} max-w-32`} maxLength={Math.max(15, base?.codigo?.length ?? 0)} value={dados.codigo} {...campoErro('codigo')} onChange={(e) => atualizar('codigo', e.target.value)} />{mensagem('codigo')}<span className="mt-1 block text-right text-[11px] text-foreground/60">{[...dados.codigo].length}/15</span></div>
       <div><label className="mb-1 block text-sm" htmlFor={formId('nome')}>Nome *</label>
-        <input id={formId('nome')} className={estilo} maxLength={Math.max(42, inicial?.nome.length ?? 0)} value={dados.nome} {...campoErro('nome')} onChange={(e) => atualizar('nome', e.target.value)} />{mensagem('nome')}<span className="mt-1 block text-right text-[11px] text-foreground/60">{dados.nome.length}/42</span></div>
+        <input id={formId('nome')} className={estilo} maxLength={Math.max(42, base?.nome.length ?? 0)} value={dados.nome} {...campoErro('nome')} onChange={(e) => atualizar('nome', e.target.value)} />{mensagem('nome')}<span className="mt-1 block text-right text-[11px] text-foreground/60">{[...dados.nome].length}/42</span></div>
     </div>
     <div className="space-y-2">
       <SeletorResponsavel id={formId('email-responsavel')} rotulo="Responsável pelo entregável (opcional)"
         valor={dados.responsavelId || null} selecionado={responsavelSelecionado} pesquisar={pesquisarResponsavel}
         desabilitado={salvando || !contratoId} erro={erros.responsavelId}
         onChange={(id, usuario) => { setResponsavelSelecionado(usuario ?? null); atualizar('responsavelId', id ?? ''); }} />
+      <p className="text-xs text-foreground/65">Escolha a pessoa que acompanhará esta entrega. O acesso ao contrato é configurado separadamente.</p>
     </div>
     <div><label className="mb-1 block text-sm" htmlFor={formId('descricao')}>Descrição (opcional)</label>
-      <textarea id={formId('descricao')} className={estilo} rows={2} maxLength={200} value={dados.descricao}
+      <textarea id={formId('descricao')} className={estilo} rows={2} maxLength={Math.max(200, base?.descricao?.length ?? 0)} value={dados.descricao}
         onChange={(e) => atualizar('descricao', e.target.value)} />{mensagem('descricao')}<span className="mt-1 block text-right text-[11px] text-foreground/60">{dados.descricao.length}/200</span></div>
     <div><label className="mb-1 block text-sm" htmlFor={formId('observacoes')}>Observações (opcional)</label>
-      <textarea id={formId('observacoes')} className={estilo} rows={2} maxLength={100} value={dados.observacoes}
+      <textarea id={formId('observacoes')} className={estilo} rows={2} maxLength={Math.max(100, base?.observacoes?.length ?? 0)} value={dados.observacoes}
         onChange={(e) => atualizar('observacoes', e.target.value)} />{mensagem('observacoes')}<span className="mt-1 block text-right text-[11px] text-foreground/60">{dados.observacoes.length}/100</span></div>
       </section>}
       {(!inicial || secaoEdicao !== 'informacoes') && <section className="min-w-0 space-y-3" aria-label="Planejamento do entregável">
         <h4 className="pi-titulo-formulario">Planejamento do entregável</h4>
     {dados.tipo === 'QUANTITATIVO' && <div className="grid gap-3 sm:grid-cols-2">
       <div><label className="mb-1 block text-sm" htmlFor={formId('quantidadePrevista')}>Quantidade prevista *</label>
-        <input id={formId('quantidadePrevista')} placeholder="Ex.: 20" maxLength={18} inputMode="decimal" className={`${estilo} max-w-44`} value={dados.quantidadePrevista}
+        <input id={formId('quantidadePrevista')} placeholder="Ex.: 20" maxLength={19} inputMode="decimal" className={`${estilo} max-w-44`} value={dados.quantidadePrevista}
           onChange={e => atualizar('quantidadePrevista', e.target.value)} {...campoErro('quantidadePrevista')} />{mensagem('quantidadePrevista')}</div>
       <div><label className="mb-1 block text-sm" htmlFor={formId('unidadeMedida')}>Unidade de medida *</label>
-        <input id={formId('unidadeMedida')} placeholder="Ex.: computadores limpos" maxLength={40} className={estilo} value={dados.unidadeMedida}
+        <input id={formId('unidadeMedida')} placeholder="Ex.: computadores limpos" maxLength={Math.max(40, base?.unidadeMedida?.length ?? 0)} className={estilo} value={dados.unidadeMedida}
           onChange={e => atualizar('unidadeMedida', e.target.value)} {...campoErro('unidadeMedida')} />{mensagem('unidadeMedida')}<span className="mt-1 block text-right text-[11px] text-foreground/60">{dados.unidadeMedida.length}/40</span></div>
     </div>}
     {dados.tipo === 'RECORRENTE' && <div className="pi-recorrente-planejamento"><div><label className="mb-1 block text-sm" htmlFor={formId('modoRecorrente')}>Medição recorrente</label><select id={formId('modoRecorrente')} className={estilo} disabled={agendaBloqueada} value={dados.modoRecorrente??''} onChange={e=>{const modo=(e.target.value||undefined) as RascunhoEntregavel['modoRecorrente'];setDados(v=>({...v,modoRecorrente:modo,...(!inicial&&modo==='DESCRITIVO'?{unidadeMedida:''}:{})}));}}>{!dados.modoRecorrente&&<option value="" disabled>Selecione a modalidade</option>}<option value="DESCRITIVO">Descritiva</option><option value="QUANTITATIVO">Quantitativa</option></select></div>{dados.modoRecorrente!=='DESCRITIVO'&&<div><label className="mb-1 block text-sm" htmlFor={formId('unidadeMedida')} title="Para períodos quantitativos">Unidade de medida {dados.modoRecorrente==='QUANTITATIVO'?'*':''}</label>
-      <input id={formId('unidadeMedida')} maxLength={40} placeholder="Ex.: computadores" className={estilo}
+      <input id={formId('unidadeMedida')} maxLength={Math.max(40, base?.unidadeMedida?.length ?? 0)} placeholder="Ex.: computadores" className={estilo}
         value={dados.unidadeMedida} onChange={e => atualizar('unidadeMedida', e.target.value)} />
       {mensagem('unidadeMedida')}<span className="mt-1 block text-right text-[11px] text-foreground/60">{dados.unidadeMedida.length}/40</span>
     </div>}
@@ -144,11 +146,11 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
     </label>
     </>}
     <div><label className="mb-1 block text-sm" htmlFor={formId('criterioConclusao')}>Critério de conclusão {['CONTINUO','MARCO'].includes(dados.tipo) ? '*' : '(opcional)'}</label>
-      <textarea id={formId('criterioConclusao')} className={estilo} rows={2} maxLength={200} value={dados.criterioConclusao} {...campoErro('criterioConclusao')}
+      <textarea id={formId('criterioConclusao')} className={estilo} rows={2} maxLength={Math.max(200, base?.criterioConclusao?.length ?? 0)} value={dados.criterioConclusao} {...campoErro('criterioConclusao')}
         onChange={(e) => atualizar('criterioConclusao', e.target.value)} />{mensagem('criterioConclusao')}<span className="mt-1 block text-right text-[11px] text-foreground/60">{dados.criterioConclusao.length}/200</span></div>
     <div><label className="mb-1 block text-sm" htmlFor={formId('peso')}>Peso operacional (%) *</label>
-      <input id={formId('peso')} maxLength={6} disabled={pesoBloqueado} className={`${estilo} max-w-32 disabled:cursor-not-allowed disabled:bg-slate-500/15 disabled:opacity-55`} inputMode="decimal" value={dados.peso} {...campoErro('peso')}
-        placeholder="Ex.: 20,00" onChange={(e) => atualizar('peso', decimalDigitado(e.target.value))} onBlur={() => { if (dados.peso && decimalValido(dados.peso, 100, Boolean(inicial?.peso != null && Number(inicial.peso) === 0))) atualizar('peso', decimalExibicao(dados.peso)); }} />{mensagem('peso')}<div className="pi-saldo-pesos pi-saldo-pesos-lado" aria-live="polite">
+      <input id={formId('peso')} maxLength={8} disabled={pesoBloqueado} className={`${estilo} max-w-32 disabled:cursor-not-allowed disabled:bg-slate-500/15 disabled:opacity-55`} inputMode="decimal" value={dados.peso} {...campoErro('peso')}
+        placeholder="Ex.: 20,00" onChange={(e) => atualizar('peso', decimalDigitado(e.target.value, 100, 4))} onBlur={() => { if (dados.peso && /^(?:\d{1,3})(?:[,.]\d{1,4})?$/.test(dados.peso) && Number(dados.peso.replace(',', '.')) <= 100) atualizar('peso', normalizarDecimalPlanejamento(dados.peso).replace('.', ',')); }} />{mensagem('peso')}<div className="pi-saldo-pesos pi-saldo-pesos-lado" aria-live="polite">
         {saldoProjetado === null ? <p>Saldo dos pesos indisponível no momento.</p> : <p data-excedente={saldoProjetado < 0}>{saldoProjetado < 0 ? <>Excedente de <strong>{formatarPeso(-saldoProjetado)}%</strong> na distribuição</> : <>Disponível <strong>{formatarPeso(saldoProjetado)}%</strong> para distribuição dos pesos</>}{modoCalculo === 'SIMPLES' && ' (Média ponderada).'}</p>}
         {modoCalculo === 'SIMPLES' && <p className="pi-peso-informativo">O peso não tem efeito na Média simples.</p>}
       </div>

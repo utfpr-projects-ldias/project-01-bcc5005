@@ -15,7 +15,7 @@ export function CampoContribuicaoDisponivel({item,ocorrenciaId,meta,modo,valor,o
  const exclui=(o:string,id:string|null|undefined)=>!!origemId&&o===origem&&id===origemId;
  const usaPeriodo=!!ocorrenciaId&&(modo==='quantidade'||item.tipo==='RECORRENTE');
  const comprometido=percentual?(usaPeriodo?0:(r?.base??0)/100)+(r?.itens??[]).filter(l=>!l.referenciaId&&!exclui(l.origem,l.origemId)&&(!usaPeriodo||l.ocorrenciaId===ocorrenciaId)).reduce((n,l)=>n+(l.reconhecido+l.reservado)/100,0): (r?.quantitativas??[]).filter(l=>!l.referenciaExecucao&&!exclui(l.origem,l.id)&&(l.situacao==='PENDENTE'||l.situacao==='APROVADO'&&l.contabilizada)&&(l.ocorrenciaId||'')===(ocorrenciaId||'')).reduce((n,l)=>n+Number(l.quantidade??0),0);
- const pronto=!!r&&!consulta.erro&&Number.isFinite(total)&&total>0&&(!percentual||item.tipo==='UNICO'||!!ocorrenciaId);const limite=saldoContribuicao(total,comprometido,0,casas);const digitado=numeroContribuicao(valor)||0;const excede=pronto&&digitado>limite;
+ const pronto=!!r&&!consulta.erro&&Number.isFinite(total)&&total>0&&(!percentual||item.tipo==='UNICO'||item.tipo==='CONTINUO'&&!(r?.ocorrencias??[]).some(o=>!o.substituidaEm)||!!ocorrenciaId);const limite=saldoContribuicao(total,comprometido,0,casas);const digitado=numeroContribuicao(valor)||0;const excede=pronto&&digitado>limite;
  const valido=valor.trim()===''||pronto&&!excede&&Number.isFinite(numeroContribuicao(valor))&&numeroContribuicao(valor)>=0;
  useEffect(()=>{onValidade?.(valido);},[valido,onValidade]);
  const unidade=percentual?'%':` ${item.unidadeMedida??'unidades'}`;const fmt=(v:number)=>v.toLocaleString('pt-BR',{maximumFractionDigits:casas});

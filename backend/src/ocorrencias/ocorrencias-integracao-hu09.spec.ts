@@ -1,3 +1,4 @@
+import { Usuario } from '../usuarios/usuario.entity.js';
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { jest } from '@jest/globals';
 import type { Repository, DataSource, EntityManager } from 'typeorm';
@@ -96,7 +97,7 @@ describe('HU09 — mutações respeitam o ciclo de vida da hierarquia', () => {
     const buscarContexto = jest.fn(async (tipo: unknown) => tipo === Contrato ? { status: statusContrato, arquivadoEm: null } : tipo === Etapa ? { status: statusEtapa, arquivadoEm: null } : null);
     const manager = {
       findOne: buscarContexto,
-      getRepository: (tipo: unknown) => tipo === Entregavel ? repo : ocorrenciaRepo,
+      getRepository: (tipo: unknown) => tipo === Usuario ? {findOne:async()=>({...ator,ativo:true})} : tipo === Entregavel ? repo : ocorrenciaRepo,
     } as unknown as EntityManager;
     const dataSource = { transaction: async (fn: (m: EntityManager) => Promise<unknown>) => fn(manager) } as unknown as DataSource;
     return { service: new OcorrenciasService({} as Repository<Ocorrencia>, {} as Repository<Entregavel>, dataSource, {} as AuditoriaService, {} as ResolverEscopoContratoService), repo, ocorrenciaRepo, buscarContexto };
@@ -113,5 +114,20 @@ describe('HU09 — mutações respeitam o ciclo de vida da hierarquia', () => {
     expect(buscarContexto).toHaveBeenCalledWith(Contrato, { where: { id: CONTRATO }, lock: { mode: 'pessimistic_write' } });
     expect(repo.save).not.toHaveBeenCalled();
     expect(ocorrenciaRepo.save).not.toHaveBeenCalled();
+  });
+});
+
+describe('B06 — fronteiras do calendário civil',()=>{
+  it.each([
+    ['0099-01-01','0099-01-31',PeriodicidadeEntregavel.MENSAL],
+    ['9999-12-31','9999-12-31',PeriodicidadeEntregavel.DIARIA],
+    ['9999-12-01','9999-12-31',PeriodicidadeEntregavel.MENSAL],
+    ['9999-01-01','9999-12-31',PeriodicidadeEntregavel.ANUAL],
+    ['2000-02-01','2000-02-29',PeriodicidadeEntregavel.MENSAL],
+  ])('gera %s a %s sem deslocar o ano', (inicio,fim,periodicidade)=>{
+    expect(calcularPeriodosRecorrentes(inicio,fim,periodicidade)).toEqual([expect.objectContaining({inicio,fim})]);
+  });
+  it('não admite intervalo incompleto além do último ano suportado',()=>{
+    expect(()=>calcularPeriodosRecorrentes('9999-12-30','9999-12-31',PeriodicidadeEntregavel.SEMANAL)).toThrow(BadRequestException);
   });
 });

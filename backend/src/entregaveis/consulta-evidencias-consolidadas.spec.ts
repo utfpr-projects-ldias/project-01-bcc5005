@@ -33,6 +33,6 @@ describe('Evidências consolidadas',()=>{
     expect(q.parametros).toEqual([contrato,'REJEITADA']);
   });
   it.each([{status:'INVALIDA'},{etapaId:'invalido'},{page:'0'},{limit:'51'},{dataInicio:'2026-02-30'},{dataInicio:'2026-11-25',dataFim:'2026-11-24'}])('rejeita filtros inválidos: %j',filtros=>{
-    expect(()=>consultaEvidenciasConsolidadas(contrato,filtros as Record<string,string>)).toThrow(BadRequestException);
+    expect(()=>consultaEvidenciasConsolidadas(contrato,Object.fromEntries(Object.entries(filtros).filter((entrada): entrada is [string, string] => typeof entrada[1] === 'string')))).toThrow(BadRequestException);
   });
 });

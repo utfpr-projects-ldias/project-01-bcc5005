@@ -1,5 +1,8 @@
 import { Module } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
+import { FiltroPersistencia } from './database/filtro-persistencia.js';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { opcoesBanco } from './database/opcoes-banco.js';
 
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
@@ -15,15 +18,14 @@ import { DocumentosModule } from './documentos/documentos.module.js';
 import { AtividadesModule } from './atividades/atividades.module.js';
 import { ExecucaoModule } from './execucao/execucao.module.js';
 import { OcorrenciasModule } from './ocorrencias/ocorrencias.module.js';
+import { DashboardModule } from './dashboard/dashboard.module.js';
 import { MetasMarcoModule } from './metas-marco/metas-marco.module.js';
 
 @Module({
   imports: [
     TypeOrmModule.forRoot({
-      type: 'postgres',
-      url: process.env.DATABASE_URL,
+      ...opcoesBanco(),
       autoLoadEntities: true,
-      synchronize: false,
     }),
     AuthModule,
     UsuariosModule,
@@ -37,11 +39,12 @@ import { MetasMarcoModule } from './metas-marco/metas-marco.module.js';
     ExecucaoModule,
     DocumentosModule,
     AtividadesModule,
+    DashboardModule,
   ],
   controllers: [
     AppController,
     AuthCheckController,
   ],
-  providers: [AppService],
+  providers: [AppService, { provide: APP_FILTER, useClass: FiltroPersistencia }],
 })
 export class AppModule {}

@@ -78,7 +78,7 @@ export function permissoesEfetivas(perfil: PerfilUsuario | string, podeEditar: b
   const base = {} as Record<ChavePermissao, boolean>;
   for (const chave of CHAVES_PERMISSOES) {
     const padrao = (chave === 'aprovarExecucaoManual' || chave === 'criarMetasMarco' || chave === 'editarMetasMarco' || chave === 'vincularMetasMarco' || chave === 'aprovarVinculosMetasMarco' || chave === 'concluirOcorrencias' || chave === 'reabrirOcorrencias' || chave === 'verificarAtividades' || chave === 'arquivarAtividades' || chave === 'verificarDocumentos' || chave === 'reabrirDocumentos' || chave === 'alterarObrigatoriedade' || chave === 'editarMetaOcorrencia' || chave === 'vincularAtividadesOcorrencia' || chave === 'vincularEvidenciasOcorrencia' || chave === 'editarExigenciasOcorrencia' || chave === 'editarPesoOcorrencia' || chave === 'corrigirExecucaoOcorrencia' || chave === 'bloquearExecucaoOcorrencia' || chave === 'encerrarContrato' || chave === 'encerrarEtapas' || chave === 'cancelarContrato' || chave === 'reverterCancelamentoContrato' || chave === 'suspenderContrato' || chave === 'retomarContrato' || chave === 'administrarDocumentoPrincipal' || chave.endsWith('DocumentoPrincipal') || chave === 'bloquearOrdemEtapas' || chave.startsWith('excluir') || chave.startsWith('reativar') || chave.startsWith('reabrir') || chave === 'arquivarEtapas' || chave.startsWith('concluir')) ? false
-      : chave === 'registrarAtividades' || chave === 'editarAtividades' ? podeEditar
+      : chave === 'registrarAtividades' || chave === 'editarAtividades' ? gestorEditor
       : chave === 'enviarComprovantes' ? true
       : chave === 'verificarComprovantes' ? true // serviço exige verificador distinto e autorizado
       : gestorEditor;

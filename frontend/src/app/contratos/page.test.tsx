@@ -2,8 +2,9 @@ import { renderComConsultas } from '@/test-utils';
 import { act, fireEvent, screen, within, waitFor } from '@testing-library/react';
 import ContratosListPage from './page';
 import { consultarMeuPerfil } from '@/lib/admin-usuarios';
-import { listarContratos, consultarPendentesConclusao, arquivarContrato, reativarContrato, excluirContratoArquivado } from '@/lib/contratos';
+import { listarContratos, consultarPendentesConclusao, arquivarContrato, reativarContrato, excluirContratoArquivado, consultarElegibilidadeExclusao } from '@/lib/contratos';
 
+jest.mock('@/hooks/use-progresso', () => ({ useProgresso: jest.fn(() => ({ progresso: null })) }));
 jest.mock('./components/progresso-circular-contrato', () => ({ ProgressoCircularContrato: ({ nome }: { nome: string }) => <span aria-label={`Progresso físico de ${nome}`} /> }));
 jest.mock('@/hooks/use-etapas', () => ({ useEtapas: jest.fn(() => ({ dados: [], carregando: false })) }));
 jest.mock('@/hooks/use-entregaveis', () => ({
@@ -12,7 +13,7 @@ jest.mock('@/hooks/use-entregaveis', () => ({
 }));
 jest.mock('@/lib/admin-usuarios', () => ({ consultarMeuPerfil: jest.fn() }));
 jest.mock('@/lib/contratos', () => ({
-  listarContratos: jest.fn(), consultarPendentesConclusao: jest.fn(), arquivarContrato: jest.fn(), reativarContrato: jest.fn(), excluirContratoArquivado: jest.fn(), STATUS: { PLANEJAMENTO: 'Planejamento', EM_EXECUCAO: 'Em execução', CONCLUIDO: 'Concluído', CONCLUIDO_PARCIALMENTE: 'Concluído parcialmente', ENCERRADO: 'Encerrado', EM_ENCERRAMENTO: 'Em encerramento', FINALIZADO: 'Finalizado', SUSPENSO: 'Suspenso', CANCELADO: 'Cancelado' }, ORDEM_STATUS: ['PLANEJAMENTO','EM_EXECUCAO','CONCLUIDO','ENCERRADO','EM_ENCERRAMENTO','SUSPENSO','CANCELADO'], MODOS: { SIMPLES: 'Simples' }, dataCivil: (x: string) => x, rotuloCodigoPublico: (c: string) => `#${c}`,
+  listarContratos: jest.fn(), consultarPendentesConclusao: jest.fn(), arquivarContrato: jest.fn(), reativarContrato: jest.fn(), excluirContratoArquivado: jest.fn(), consultarElegibilidadeExclusao: jest.fn(), STATUS: { PLANEJAMENTO: 'Planejamento', EM_EXECUCAO: 'Em execução', CONCLUIDO: 'Concluído', CONCLUIDO_PARCIALMENTE: 'Concluído parcialmente', ENCERRADO: 'Encerrado', EM_ENCERRAMENTO: 'Em encerramento', FINALIZADO: 'Finalizado', SUSPENSO: 'Suspenso', CANCELADO: 'Cancelado' }, ORDEM_STATUS: ['PLANEJAMENTO','EM_EXECUCAO','CONCLUIDO','ENCERRADO','EM_ENCERRAMENTO','SUSPENSO','CANCELADO'], MODOS: { SIMPLES: 'Simples' }, dataCivil: (x: string) => x, rotuloCodigoPublico: (c: string) => `#${c}`,
 }));
 jest.mock('./components/area-contratos', () => ({
   AreaContratos: ({ children }: { children: React.ReactNode }) => <main>{children}</main>,
@@ -24,7 +25,8 @@ const pendentes = consultarPendentesConclusao as jest.MockedFunction<typeof cons
 const arquivar = arquivarContrato as jest.MockedFunction<typeof arquivarContrato>;
 const reativar = reativarContrato as jest.MockedFunction<typeof reativarContrato>;
 const excluir = excluirContratoArquivado as jest.MockedFunction<typeof excluirContratoArquivado>;
-beforeEach(() => { window.sessionStorage.clear(); jest.clearAllMocks(); pendentes.mockResolvedValue([]); perfil.mockResolvedValue({ id: 'a', nome: 'Admin', email: 'a@example.com', perfil: 'ADMINISTRADOR', ativo: true }); });
+const consultarExclusao = consultarElegibilidadeExclusao as jest.MockedFunction<typeof consultarElegibilidadeExclusao>;
+beforeEach(() => { window.sessionStorage.clear(); jest.clearAllMocks(); consultarExclusao.mockResolvedValue({apto:true,motivo:null}); pendentes.mockResolvedValue([]); perfil.mockResolvedValue({ id: 'a', nome: 'Admin', email: 'a@example.com', perfil: 'ADMINISTRADOR', ativo: true }); });
 
 test('HU05-06: busca dados reais e não apresenta fixture CT-001/2026', async () => {
   listar.mockResolvedValue([]);
@@ -65,7 +67,7 @@ test('localiza por #00427 e 00427 sem perder busca por órgão, e mostra código
   } as Awaited<ReturnType<typeof listarContratos>>[number]]);
   await act(async () => { renderComConsultas(<ContratosListPage />); });
   const campo = screen.getByLabelText('Pesquisar contrato');
-  expect(screen.getByText('Código #00427')).toBeInTheDocument();
+  expect(screen.getByText('#00427 · Serviço especializado')).toBeInTheDocument();
   fireEvent.change(campo, { target: { value: '#00427' } });
   expect(screen.getByRole('button', { name: /Abrir detalhes do contrato/ })).toBeInTheDocument();
   fireEvent.change(campo, { target: { value: '00427' } });
@@ -89,15 +91,15 @@ test('cartão mostra o planejamento real sem inventar progresso ou evidências e
     inicioVigencia: '2026-01-01', terminoVigencia: '2027-01-01',
   } as Awaited<ReturnType<typeof listarContratos>>[number]]);
   await act(async () => { renderComConsultas(<ContratosListPage />); });
-  const resumo = screen.getByTestId('resumo-planejamento-contrato');
-  expect(resumo).toHaveTextContent('Etapas');
-  expect(resumo).toHaveTextContent('Entregáveis');
-  expect(resumo).toHaveTextContent('Evidências');
-  expect(resumo).toHaveTextContent('0/0');
-  expect(resumo.getElementsByTagName('progress')).toHaveLength(0);
-  expect(within(resumo).getAllByRole('img')).toHaveLength(3);
-  expect(within(resumo).getByRole('img', { name: /0 de 0 entregáveis finalizados/ })).toBeInTheDocument();
-  expect(resumo).not.toHaveTextContent('0%');
+  const tabela = screen.getByRole('table', { name: 'Contratos' });
+  const linha = screen.getByRole('button', { name: 'Abrir detalhes do contrato TESTE-RESUMO' }).closest('tr')!;
+  for (const titulo of ['Etapas', 'Entregáveis', 'Evidências', 'Comprovação']) {
+    expect(within(tabela).getByRole('columnheader', { name: titulo })).toBeInTheDocument();
+  }
+  expect(within(linha).getByTitle('Etapas: sem registros')).toBeInTheDocument();
+  expect(within(linha).getByTitle('Entregáveis: sem registros')).toBeInTheDocument();
+  expect(within(linha).queryByRole('img')).not.toBeInTheDocument();
+  expect(linha).not.toHaveTextContent('0%');
 });
 
 
@@ -125,7 +127,7 @@ test('Arquivados: ADMIN pode consultar, reativar e excluir com confirmação; at
   expect(reativar).not.toHaveBeenCalled();
   excluir.mockResolvedValue({ excluido: true, arquivosPendentes: 0 });
   fireEvent.click(screen.getByRole('button', { name: 'Excluir contrato ARQUIVADO' }));
-  expect(screen.getByRole('dialog', { name: 'Excluir contrato arquivado?' })).toBeInTheDocument();
+  expect(await screen.findByRole('dialog', { name: 'Excluir contrato arquivado?' })).toBeInTheDocument();
   expect(excluir).not.toHaveBeenCalled();
 });
 
@@ -169,11 +171,11 @@ test('filtros compactos: selects com mesma largura e abas junto ao título Contr
   await act(async () => { renderComConsultas(<ContratosListPage />); });
   const titulo = screen.getByRole('heading', { name: 'Contratos', level: 2 });
   expect(titulo.parentElement).toContainElement(screen.getByRole('tablist', { name: 'Situação dos contratos' }));
-  expect(screen.getByLabelText('Buscar por').parentElement).toHaveClass('order-3', 'min-[500px]:order-3');
-  expect(screen.getByLabelText('Filtrar por situação').parentElement).toHaveClass('order-2', 'min-[500px]:order-2');
-  expect(screen.getByLabelText('Pesquisar contrato').closest('.order-1')).toHaveClass('lg:order-4');
+  expect(screen.getByLabelText('Buscar por').parentElement).toHaveClass('pi-filtro-campo');
+  expect(screen.getByLabelText('Filtrar por situação').parentElement).toHaveClass('pi-filtro-status');
+  expect(screen.getByLabelText('Pesquisar contrato').closest('.pi-filtro-pesquisa')).not.toBeNull();
   expect(screen.getByRole('button', { name: 'Cadastrar contrato' })).toBeEnabled();
-  expect(screen.getByRole('button', { name: 'Ordenar contratos' })).toHaveTextContent('Mais recente');
+  expect(screen.queryByRole('button', { name: 'Ordenar contratos' })).not.toBeInTheDocument();
 });
 
 
@@ -246,12 +248,11 @@ test('cartão arquivado aproxima indicadores e ações, sem placa preta', async 
   renderComConsultas(<ContratosListPage />);
   fireEvent.click(screen.getByRole('tab', { name: 'Contratos arquivados' }));
   const link = await screen.findByRole('button', { name: 'Abrir detalhes do contrato QA-ARQUIVADO' });
-  expect(link).toHaveClass('pt-14', 'sm:pt-4');
-  const resumo = within(link).getByTestId('resumo-planejamento-contrato');
-  expect(resumo).toHaveClass('grid-cols-3');
-  const acoes = screen.getByRole('button', { name: 'Reativar contrato QA-ARQUIVADO' }).parentElement;
-  expect(acoes).not.toHaveClass('bg-background/90');
-  expect(screen.getByRole('button', { name: 'Excluir contrato QA-ARQUIVADO' })).toBeInTheDocument();
+  const linha = link.closest('tr')!;
+  expect(linha).toHaveAttribute('data-arquivado', 'true');
+  expect(within(linha).getByText('Arquivado')).toHaveAttribute('data-situacao', 'arquivado');
+  expect(within(linha).getByRole('button', { name: 'Reativar contrato QA-ARQUIVADO' })).toBeInTheDocument();
+  expect(within(linha).getByRole('button', { name: 'Excluir contrato QA-ARQUIVADO' })).toBeInTheDocument();
 });
 
 
@@ -294,7 +295,7 @@ test('carteira inclui filtro pendente de conclusão sem misturar concluídos', a
   expect(screen.getByText('PENDENTE')).toBeInTheDocument();
   expect(screen.getAllByText('Pendente de conclusão').length).toBeGreaterThan(0);
   const cartao = await screen.findByRole('button', { name: 'Abrir detalhes do contrato PENDENTE' });
-  expect(within(cartao).getByText('Pendente de conclusão')).toHaveClass('border-yellow-400/60');
+  expect(within(cartao.closest('tr')!).getByText('Pendente de conclusão')).toHaveAttribute('data-situacao', 'pendente');
 });
 
 
@@ -310,8 +311,8 @@ test('contrato reaberto sem alterações fica somente em revisão', async () => 
   await act(async () => { renderComConsultas(<ContratosListPage />); });
   fireEvent.click(screen.getByRole('tab', { name: 'Contratos em revisão' }));
   const cartao = await screen.findByRole('button', { name: 'Abrir detalhes do contrato QA-REVISAO' });
-  expect(within(cartao).getByText('Em revisão')).toBeInTheDocument();
-  expect(within(cartao).queryByText('Pendente de conclusão')).not.toBeInTheDocument();
+  expect(within(cartao.closest('tr')!).getByText('Em revisão')).toBeInTheDocument();
+  expect(within(cartao.closest('tr')!).queryByText('Pendente de conclusão')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('tab', { name: 'Contratos pendentes de conclusão' }));
   expect(screen.queryByRole('button', { name: 'Abrir detalhes do contrato QA-REVISAO' })).not.toBeInTheDocument();
 });
@@ -382,8 +383,7 @@ test('TEC08-03: suspensão exibe selo amarelo e não oferece Retomar nos cartõe
   await screen.findByRole('button', { name: 'Abrir detalhes do contrato SUSP-UI' });
   fireEvent.change(screen.getByLabelText('Filtrar por situação'), { target: { value: 'SUSPENSO' } });
   const link = screen.getByRole('button', { name: 'Abrir detalhes do contrato SUSP-UI' });
-  expect(link).toHaveAttribute('data-situacao', 'suspensos');
-  expect(within(link).getByText('Suspenso')).toHaveClass('text-yellow-200');
+  expect(within(link.closest('tr')!).getByText('Suspenso')).toHaveAttribute('data-situacao', 'suspenso');
   expect(screen.queryByRole('button', { name: /Retomar contrato/ })).not.toBeInTheDocument();
 });
 
@@ -398,9 +398,9 @@ test('TEC08-03: ações de contrato arquivado permanecem no topo e fora do link 
   const link = screen.getByRole('button', { name: 'Abrir detalhes do contrato ARQ-UI' });
   const reativar = screen.getByRole('button', { name: 'Reativar contrato ARQ-UI' });
   const excluir = screen.getByRole('button', { name: 'Excluir contrato ARQ-UI' });
-  expect(reativar.parentElement).toHaveClass('absolute', 'right-3', 'top-3');
+  expect(reativar.parentElement).toHaveClass('pi-acoes-tabela');
   expect(reativar.parentElement).toContainElement(excluir);
-  expect(reativar.parentElement).toHaveTextContent('Arquivado');
+  expect(within(link.closest('tr')!).getByText('Arquivado')).toBeInTheDocument();
   expect(link).not.toContainElement(reativar);
   expect(link).not.toContainElement(excluir);
 });
@@ -418,13 +418,25 @@ test.each([
     status, modoCalculo: 'SIMPLES', inicioVigencia: '2026-01-01', terminoVigencia: '2026-12-31',
   } as Awaited<ReturnType<typeof listarContratos>>[number]]);
   await act(async () => { renderComConsultas(<ContratosListPage />); });
-  expect(screen.getByRole('button', { name: /Abrir detalhes do contrato CONTRATO-ESTADO-2026/ }))
-    .toHaveAttribute('data-tec08-estado', estado);
+  const linha = screen.getByRole('button', { name: /Abrir detalhes do contrato CONTRATO-ESTADO-2026/ }).closest('tr')!;
+  expect(linha.querySelector('.pi-status-tabela')).toHaveAttribute('data-situacao', estado);
 });
 
 
 test('filtro não repete a opção Encerrado', async () => {
   listar.mockResolvedValue([]);
   await act(async () => { renderComConsultas(<ContratosListPage />); });
-  expect(screen.getAllByRole('option', { name: 'Encerrado' }).length).toBeLessThanOrEqual(1);
+  expect(screen.queryAllByRole('option', { name: 'Encerrado' })).toHaveLength(0);
+  expect(screen.getByRole('tab', {name:'Contratos finalizados'})).toHaveAttribute('title','Inclui contratos concluídos e encerrados');
+});
+
+
+test('B03: contrato arquivado com histórico não abre confirmação destrutiva', async () => {
+  listar.mockResolvedValue([{id:'arq-b03',codigoPublico:'00001',numeroContrato:'ARQ-B03',orgaoContratante:'UTFPR',objeto:'Histórico',status:'PLANEJAMENTO',modoCalculo:'SIMPLES',inicioVigencia:'2026-01-01',terminoVigencia:'2027-01-01',arquivadoEm:'2026-11-01T00:00:00Z'} as Awaited<ReturnType<typeof listarContratos>>[number]]);
+  consultarExclusao.mockResolvedValue({apto:false,motivo:'Contrato possui histórico vinculado.'});
+  renderComConsultas(<ContratosListPage />);
+  fireEvent.click(await screen.findByRole('button',{name:'Excluir contrato ARQ-B03'}));
+  expect(await screen.findByText('Contrato possui histórico vinculado.')).toBeInTheDocument();
+  expect(screen.queryByRole('dialog',{name:'Excluir contrato arquivado?'})).not.toBeInTheDocument();
+  expect(excluir).not.toHaveBeenCalled();
 });

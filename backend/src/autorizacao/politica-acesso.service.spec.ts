@@ -103,6 +103,8 @@ describe('TEC07-AJUSTES-02-02 — matriz PRD RF-39/40', () => {
 
   it('COLABORADOR consulta e registra atividade/evidência quando vinculado; não edita etapas', async () => {
     busca.mockResolvedValue({ podeEditar: true } as PermissaoContrato);
+    expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR), { acao: 'atividades:registrar', escopoOperacional: noContrato }, CONTRATO_ID)).toBe(false);
+    busca.mockResolvedValue({ podeEditar: true, permissoesDetalhadas: { registrarAtividades: true } } as PermissaoContrato);
     for (const acao of ['etapas:listar', 'atividades:registrar', 'evidencias:anexar'] as const) {
       expect(await politica.permitido(usuario(PerfilUsuario.COLABORADOR), { acao, escopoOperacional: noContrato }, CONTRATO_ID)).toBe(true);
     }

@@ -1,4 +1,5 @@
 'use client';
+import { formatarPercentualSemAnteciparConclusao } from '@/lib/apresentacao-indicadores';
 import type { Ocorrencia } from '@/hooks/use-ocorrencias';
 import type { ProgressoEntregavel } from '@/hooks/use-progresso';
 import { AnelProgresso } from './anel-progresso';
@@ -17,7 +18,7 @@ export function ProgressoSerieRecorrente({registros,inicio,fim,resumoFisico}:{re
   const {total,decorridos}=diasPlanejamento(inicio,fim,diaLocalBrasil());
   const fracao=resumoFisico?.realizado!=null&&resumoFisico.previsto!=null?`${resumoFisico.realizado}/${resumoFisico.previsto}`:null;
   return <div data-pi-resumo-serie className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-xl border border-current/20 bg-current/[0.025] px-3 py-2 sm:gap-5">
-    <div className="min-w-0 space-y-1.5"><div className="flex flex-wrap items-center justify-between gap-1 text-xs"><strong>Execução das ocorrências</strong><span className="tabular-nums">{progresso===null?'Não calculável':`${progresso.toLocaleString('pt-BR',{maximumFractionDigits:1})}%`}</span></div>
+    <div className="min-w-0 space-y-1.5"><div className="flex flex-wrap items-center justify-between gap-1 text-xs"><strong>Execução das ocorrências</strong><span className="tabular-nums">{progresso===null?'Não calculável':formatarPercentualSemAnteciparConclusao(progresso,1)}</span></div>
       <div role="progressbar" aria-label="Avanço das ocorrências" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progresso??undefined} className="h-2 overflow-hidden rounded-full bg-current/10"><div style={{width:`${progresso??0}%`,backgroundColor:'var(--pi-cor-propria, #5fd34a)'}} className="h-full rounded-full"/></div>
       <p className="text-xs text-foreground/65">{fracao?`${fracao} concluídas`: `${ativos.length} ocorrências ativas · aguardando cálculo`}{resumoFisico?.fonte==='PESOS_SERIE_INCOMPLETOS'?' · pesos incompletos':''}</p></div>
     <div className="flex items-center gap-1.5" title="Dias decorridos do planejamento; não representa execução física">

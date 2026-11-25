@@ -57,7 +57,7 @@ describeBanco('TEC07-AJUSTES-02-01 - PostgreSQL isolado', () => {
 
   beforeAll(async () => {
     db = await abrir(legadas);
-    await db.runMigrations();
+    await db.runMigrations({ transaction: 'each' });
     const [legado] = await db.query(`
       INSERT INTO eventos_auditoria (ator_supertokens_user_id, acao, entidade_tipo, entidade_id, dados_posteriores)
       VALUES ('usuario-legado', 'USUARIO_CRIADO', 'USUARIO', 'legado-123', '{"nome":"Legado"}'::jsonb)
@@ -67,7 +67,7 @@ describeBanco('TEC07-AJUSTES-02-01 - PostgreSQL isolado', () => {
     await db.destroy();
 
     db = await abrir(todas);
-    await db.runMigrations();
+    await db.runMigrations({ transaction: 'each' });
     const [contrato] = await db.query(`
       INSERT INTO contratos (numero_contrato, orgao_contratante, objeto,
         inicio_vigencia, termino_vigencia, status, modo_calculo)

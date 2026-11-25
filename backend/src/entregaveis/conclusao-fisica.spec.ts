@@ -74,3 +74,21 @@ describe('RF-14 e RB-03: quantitativo pode ser executado sem ocorrências', () =
     expect((await aptidaoFisicaParaConclusao(manager() as never,e)).apto).toBe(false);
   });
 });
+
+
+it('não confunde milésimo faltante com 100% em metas grandes', async () => {
+  const e = entrada(TipoEntregavel.QUANTITATIVO);
+  e.quantidadePrevista='999999999999999.999';
+  e.quantidadeRealizada='999999999999999.998';
+  const r=await aptidaoFisicaParaConclusao(manager() as never,e);
+  expect(r.apto).toBe(false);
+  expect(r.percentual).toBeLessThan(100);
+  e.quantidadeRealizada=e.quantidadePrevista;
+  expect((await aptidaoFisicaParaConclusao(manager() as never,e)).apto).toBe(true);
+});
+
+it('B10: uma data efetiva futura não representa Marco realizado', async () => {
+  const e = entrada(TipoEntregavel.MARCO);
+  e.dataEfetivaMarco = '9999-01-01';
+  expect(await aptidaoFisicaParaConclusao(manager() as never,e)).toMatchObject({apto:false,percentual:null});
+});

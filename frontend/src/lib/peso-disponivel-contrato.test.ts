@@ -15,3 +15,9 @@ test('saldo projetado usa o peso digitado, ignora arquivados e identifica excede
   expect(saldoPesosRascunho(itens,undefined,'70')).toBe(-5);
   expect(saldoPesosRascunho(undefined,'a','20')).toBeNull();
 });
+
+test('B05: preserva quatro casas e exclui entregável de etapa arquivada', () => {
+  const itens = [{id:'a',peso:'33.3333'}, {id:'b',peso:'33.3333'}, {id:'c',peso:'33.3333'}, {id:'d',peso:'100',etapaArquivada:true}];
+  expect(pesoDisponivelContrato(itens)).toBe(0.0001);
+  expect(saldoPesosRascunho(itens,undefined,'0,0001')).toBe(0);
+});

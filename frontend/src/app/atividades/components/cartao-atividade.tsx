@@ -18,6 +18,8 @@ import { useMeuPerfil } from '@/hooks/use-meu-perfil';
 import { estadoContextualContrato } from '@/lib/estado-visivel-contrato';
 import { IndicadoresPlanejamento, useIndicadoresPlanejamentoContrato } from '@/app/contratos/components/resumo-planejamento-contrato';
 import { PainelLateralContrato, NumeroComprovacoes, SetaPainelContrato, precisaPainelExpansivel } from '@/app/contratos/components/painel-lateral-contrato';
+import { sincronizarEvidenciaCompartilhada } from '@/lib/sincronizar-evidencia-compartilhada';
+import { sincronizarContrato } from '@/lib/sincronizar-contrato';
 import { useProgresso } from '@/hooks/use-progresso';
 import { ProgressoCircular } from '@/app/components/progresso-circular';
 import { useListaContratos, useAcessoContrato } from '@/hooks/use-contratos';
@@ -75,16 +77,6 @@ const COR_ATIVIDADE = {
   ARQUIVADA: { borda: 'border-amber-500/50', fundo: 'bg-amber-500/[0.04]', texto: 'text-amber-300',
     linha: 'border-amber-500/25', botao: 'border-amber-500/40 text-amber-300 hover:bg-amber-500/10' },
 } satisfies Record<EstadoAtividade, { borda: string; fundo: string; texto: string; linha: string; botao: string }>;
-const COR_ENTREGAVEL: Record<EstadoVisualEntregavel, string> = {
-  'nao-iniciado': 'border-neutral-400/35 bg-neutral-400/[0.04] text-foreground/75',
-  pendente: 'border-violet-400/45 bg-violet-500/[0.045] text-violet-700 dark:text-violet-200',
-  parcial: 'border-amber-400/40 bg-amber-500/[0.045] text-amber-800 dark:text-amber-200',
-  finalizado: 'border-purple-500/40 bg-purple-500/[0.045] text-purple-700 dark:text-purple-200',
-  normal: 'border-brand-green/30 bg-brand-green/[0.03] text-brand-neon',
-  revisao: 'border-teal-500/45 bg-teal-500/[0.045] text-teal-300',
-  concluido: 'border-violet-400/45 bg-violet-500/[0.045] text-violet-300',
-  arquivado: 'border-amber-500/45 bg-amber-500/[0.045] text-amber-300',
-};
 
 /** Mesmo ícone de contrato utilizado na navegação lateral. */
 export function IconeContrato({ tamanho = 18 }: { tamanho?: number }) {
@@ -114,7 +106,7 @@ export function PreviaContrato({ contratoId, fechar, foco, destinoInicial }: { c
   const encerramentoElegivel = Boolean(contrato && !contrato.arquivadoEm && !contrato.conclusaoSolicitadaEm && !['SUSPENSO','CANCELADO','CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','ENCERRADO'].includes(contrato.status));
   const podeSolicitar = Boolean(admin || acessoContrato.dados?.permissoes?.editarContrato);
   const regularizacaoElegivel = Boolean(contrato?.status === 'CONCLUIDO_PARCIALMENTE' && !contrato.arquivadoEm && !contrato.conclusaoSolicitadaEm && elegibilidade.dados?.apto && podeSolicitar);
-  const arquivoPermitido = Boolean(admin && contrato && !contrato.arquivadoEm && !['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','ENCERRADO','SUSPENSO','CANCELADO'].includes(contrato.status) && !contrato.conclusaoSolicitadaEm);
+  const arquivoPermitido = Boolean(admin && contrato && !contrato.arquivadoEm && !['SUSPENSO','CANCELADO'].includes(contrato.status) && !contrato.conclusaoSolicitadaEm && !contrato.encerramentoSolicitado);
   const enviarAcao = (acao: string) => iframeRef.current?.contentWindow?.postMessage({tipo:'pi:acao-contrato',contratoId,acao},window.location.origin);
   const acaoReabrir = contrato?.conclusaoSolicitadaEm ? null : contrato?.status === 'CANCELADO' ? 'reverter-cancelamento'
     : contrato?.status === 'SUSPENSO' ? 'retomar'
@@ -189,7 +181,7 @@ export function PreviaContrato({ contratoId, fechar, foco, destinoInicial }: { c
   },[contratoId,destinoInicial]);
   const [conteudoPronto, setConteudoPronto] = useState(false);
   const fecharAtual = useRef(fechar);
-  fecharAtual.current = fechar;
+  useEffect(() => { fecharAtual.current = fechar; }, [fechar]);
   const marcadorHistorico = useRef<string | null>(null);
   function fecharPainel() {
     if (marcadorHistorico.current && window.history.state?.__previaContrato === marcadorHistorico.current) {
@@ -222,6 +214,10 @@ export function PreviaContrato({ contratoId, fechar, foco, destinoInicial }: { c
     function receber(evento: MessageEvent) {
       if (evento.origin !== window.location.origin || evento.source !== iframeRef.current?.contentWindow) return;
       if (evento.data?.contratoId !== contratoId) return;
+      if (evento.data?.tipo === 'pi:evidencia-compartilhada-atualizada') {
+        sincronizarEvidenciaCompartilhada(cacheContrato);
+        return;
+      }
       if (evento.data?.tipo === 'pi:estrutura-operacional-atualizada') {
         cacheContrato?.invalidar(['contratos', 'elegibilidade-conclusao', contratoId]);
         cacheContrato?.invalidar(['execucao', contratoId]);
@@ -235,12 +231,7 @@ export function PreviaContrato({ contratoId, fechar, foco, destinoInicial }: { c
       if (!atualizado || atualizado.id !== contratoId) return;
       setContratoConfirmado(atualizado);
       cacheContrato?.gravar(chaveTexto(['contratos', 'detalhe', contratoId]), atualizado);
-      cacheContrato?.invalidar(['contratos', 'lista']);
-      cacheContrato?.invalidar(['contratos', 'pendentes']);
-      cacheContrato?.invalidar(['contratos','elegibilidade-conclusao', contratoId]);
-      cacheContrato?.invalidar(['execucao', contratoId]);
-      cacheContrato?.invalidar(['etapas','contrato',contratoId]);
-      cacheContrato?.invalidar(['entregaveis','contrato',contratoId]);
+      if (cacheContrato) sincronizarContrato(cacheContrato, contratoId);
     }
     window.addEventListener('message', receber);
     return () => window.removeEventListener('message', receber);
@@ -287,7 +278,6 @@ export function PreviaContrato({ contratoId, fechar, foco, destinoInicial }: { c
       if (foco?.isConnected) foco.focus({ preventScroll: true });
     };
     // A instância do modal é a unidade de histórico; não adicionar outro marcador ao rerender.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contratoId, foco]);
   const percentual = (valor: number | null | undefined) => typeof valor !== 'number' || !Number.isFinite(valor) ? '—' : `${valor.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`;
   const [ordemDecrescente,setOrdemDecrescente] = useState(true);
@@ -320,7 +310,8 @@ export function PreviaContrato({ contratoId, fechar, foco, destinoInicial }: { c
             : !acaoReabrir && <MenuAcoesObjeto rotulo="Fechar" disabled={!contrato} pendenteConclusao={Boolean(contrato?.conclusaoSolicitadaEm)}>
             <BotaoAcaoModal intencao="suspender" disabled={!encerramentoElegivel || !permitido('suspenderContrato')} onClick={() => enviarAcao('suspender')}>⏸ Suspender contrato</BotaoAcaoModal>
             <BotaoAcaoModal intencao="cancelar" disabled={!encerramentoElegivel || !permitido('cancelarContrato')} onClick={() => enviarAcao('cancelar')}>✕ Cancelar contrato</BotaoAcaoModal>
-            <BotaoAcaoModal intencao="encerrar" disabled={!encerramentoElegivel || Boolean(elegibilidade.dados?.apto) || !permitido('encerrarContrato')} onClick={() => enviarAcao('encerrar')}>Solicitar encerramento</BotaoAcaoModal>
+            <BotaoAcaoModal intencao="encerrar" disabled={!encerramentoElegivel || elegibilidade.dados?.podeEncerrarAntecipadamente === false || Boolean(elegibilidade.dados?.apto) || !permitido('encerrarContrato')} onClick={() => enviarAcao('encerrar')}>Solicitar encerramento</BotaoAcaoModal>
+            {elegibilidade.dados?.podeFinalizar && permitido('concluirContrato') && <BotaoAcaoModal intencao="encerrar" disabled={!encerramentoElegivel} onClick={() => enviarAcao('finalizar')}>Solicitar finalização administrativa</BotaoAcaoModal>}
             <BotaoAcaoModal intencao="solicitar-conclusao" disabled={!encerramentoElegivel || !!contrato?.conclusaoSolicitadaEm || !elegibilidade.dados?.apto || !(admin || acessoContrato.dados?.permissoes?.editarContrato)}
               title={elegibilidade.dados?.pendencias?.[0] ?? 'Solicitar avaliação de conclusão integral'}
               onClick={() => enviarAcao('solicitar-conclusao')}>
@@ -341,7 +332,7 @@ export function PreviaContrato({ contratoId, fechar, foco, destinoInicial }: { c
       <div ref={corpoRef} data-pi-corpo-contrato className="relative flex min-h-0 flex-1 flex-row overflow-hidden">
         <div inert={drawerAtivo || undefined} className="relative flex min-h-0 min-w-0 flex-1 bg-background">
           {!conteudoPronto && <div role="status" className="sr-only">Consultando contrato.</div>}
-          <iframe ref={iframeRef} title="Conteúdo do contrato" src={`/contratos/${encodeURIComponent(contratoId)}?${new URLSearchParams({painel:"1",...(destinoInicial?{consultaDireta:"1",etapa:destinoInicial.etapaId,...(destinoInicial.entregavelId?{entregavel:destinoInicial.entregavelId}:{})}:{})}).toString()}`}
+          <iframe ref={iframeRef} title="Conteúdo do contrato" src={`/contratos/painel/${encodeURIComponent(contratoId)}?${new URLSearchParams({painel:"1",...(destinoInicial?{consultaDireta:"1",etapa:destinoInicial.etapaId,...(destinoInicial.entregavelId?{entregavel:destinoInicial.entregavelId}:{})}:{})}).toString()}`}
             onLoad={iframeCarregado} loading="eager" className={`absolute inset-0 h-full w-full border-0 bg-background transition-opacity duration-150 ${conteudoPronto ? 'opacity-100' : 'opacity-0'}`} />
         </div>
         <PainelLateralContrato compacto={compacto} aberto={painelAberto} onFechar={()=>fecharPainelLateral()}>

@@ -23,7 +23,7 @@ export class Contrato {
   id!: string;
 
   /** Identificação pública amigável; UUID continua sendo a chave primária e das URLs. */
-  @Column({ name: 'codigo_publico', type: 'varchar', length: 5, unique: true, update: false })
+  @Column({ name: 'codigo_publico', type: 'varchar', length: 10, unique: true, update: false })
   codigoPublico!: string;
 
   @Column({ name: 'numero_contrato', type: 'varchar', length: 100 })
@@ -111,6 +111,10 @@ export class Contrato {
   /** Distingue a solicitação administrativa das duas modalidades de conclusão. */
   @Column({ name: 'encerramento_solicitado', type: 'boolean', default: false })
   encerramentoSolicitado?: boolean;
+
+  /** Nulo em solicitações administrativas legadas, cuja modalidade é ambígua. */
+  @Column({ name: 'tipo_encerramento_solicitado', type: 'varchar', length: 16, nullable: true })
+  tipoEncerramentoSolicitado?: 'FINALIZACAO' | 'ANTECIPADO' | null;
 
   /** Trava de reordenação é estado global do contrato, não preferência de sessão. */
   @Column({ name: 'ordem_etapas_bloqueada', type: 'boolean', default: false })

@@ -4,6 +4,7 @@ import { AtividadesService } from '../atividades/atividades.service.js';
 import { AtividadeEntity } from '../atividades/atividade.entity.js';
 import { Entregavel } from './entregavel.entity.js';
 import { Etapa } from '../etapas/etapa.entity.js';
+import { Usuario } from '../usuarios/usuario.entity.js';
 import { Contrato } from '../contratos/contrato.entity.js';
 import { AcaoAuditoria } from '../auditoria/acao-auditoria.js';
 import { PerfilUsuario } from '../usuarios/perfil-usuario.enum.js';
@@ -29,6 +30,7 @@ function cenario({ outraAtividade = false, documentoPronto = true }: {
   const repoEntregavel = { findOneBy: jest.fn(async () => entregavel), save: jest.fn(async () => entregavel) };
   const repoEtapa = { findOneBy: jest.fn(async () => etapa), save: jest.fn(async () => etapa) };
   const query = jest.fn(async (sql: string) => {
+    if (sql.includes('referencia_execucao IS NOT NULL')) return [];
     if (sql.includes('COUNT(DISTINCT')) return [{ etapas: 1, entregaveis: 1,
       evidencias: 2, verificadas: documentoPronto ? 2 : 1,
       etapas_sem_entregavel: 0, entregaveis_sem_evidencia: 0 }];
@@ -36,7 +38,7 @@ function cenario({ outraAtividade = false, documentoPronto = true }: {
   });
   const manager = {
     findOne: jest.fn(async (entidade: unknown) => entidade === AtividadeEntity ? atividade : entidade === Contrato ? contrato : null),
-    getRepository: jest.fn((entidade: unknown) => entidade === Entregavel ? repoEntregavel : repoEtapa),
+    getRepository: jest.fn((entidade: unknown) => entidade === Usuario ? {findOne:jest.fn(async()=>({...ator,ativo:true,bloqueioSessoesId:null}))} : entidade === Entregavel ? repoEntregavel : repoEtapa),
     query,
     find: jest.fn(async (entidade: unknown) => entidade === Entregavel ? [entregavel] : entidade === Etapa ? [etapa] : []),
     save: jest.fn(async (_entidade: unknown, registro: unknown) => registro),

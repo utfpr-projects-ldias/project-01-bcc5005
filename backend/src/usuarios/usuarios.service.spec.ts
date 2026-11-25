@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { jest } from '@jest/globals';
-import type { Repository } from 'typeorm';
+import { IsNull, type Repository } from 'typeorm';
 
 import { PerfilUsuario } from './perfil-usuario.enum.js';
 import { Usuario } from './usuario.entity.js';
@@ -52,7 +52,7 @@ describe('UsuariosService / TEC07-01', () => {
   it('consulta apenas contas ativas', async () => {
     buscar.mockResolvedValue(fakeUsuario());
     await servico.buscarAtivoPorSupertokensId('st-123');
-    expect(buscar).toHaveBeenCalledWith({ supertokensUserId: 'st-123', ativo: true });
+    expect(buscar).toHaveBeenCalledWith({ supertokensUserId: 'st-123', ativo: true, bloqueioSessoesId: IsNull() });
   });
 
   it('cria identidade provisionada apenas com perfil explícito', async () => {

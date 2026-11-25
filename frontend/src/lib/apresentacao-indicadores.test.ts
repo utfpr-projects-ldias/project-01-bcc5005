@@ -1,4 +1,4 @@
-import { apresentarFracao, tomComprovacao } from './apresentacao-indicadores';
+import { apresentarFracao, tomComprovacao, formatarPercentualSemAnteciparConclusao } from './apresentacao-indicadores';
 test('contagem vazia é neutra, não é progresso completo', () => {
   expect(apresentarFracao(0,0)).toEqual({texto:'0/0',percentual:0,estado:'sem-requisitos'});
   expect(tomComprovacao(0,0)).toBe('neutro');
@@ -17,4 +17,12 @@ test('cobertura parcial e completa preservam frações e semântica', () => {
   expect(apresentarFracao(7,10)).toEqual({texto:'7/10',percentual:70,estado:'aplicavel'});
   expect(tomComprovacao(7,10)).toBe('parcial');
   expect(tomComprovacao(10,10)).toBe('completo');
+});
+
+test('B10: 100% somente quando a medida está integral', () => {
+  expect(formatarPercentualSemAnteciparConclusao(99.9999)).toBe('99,99%');
+  expect(formatarPercentualSemAnteciparConclusao(99.99,1)).toBe('99,9%');
+  expect(formatarPercentualSemAnteciparConclusao(99.99,0)).toBe('99%');
+  expect(formatarPercentualSemAnteciparConclusao(100)).toBe('100%');
+  expect(formatarPercentualSemAnteciparConclusao(NaN)).toBe('—');
 });

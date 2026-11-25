@@ -8,7 +8,7 @@ import { AtividadeComprovantesService } from './atividade-comprovantes.service.j
 const contratoId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const atividadeId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const comprovanteId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
-const ator = { id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' } as UsuarioAutenticado;
+const ator = { id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',email:'qa@example.invalid',perfil:'ADMINISTRADOR',supertokensUserId:'qa' } as UsuarioAutenticado;
 
 function cenario(options: { existente?: boolean; auditFalha?: boolean; arquivo?: boolean } = {}) {
   const sql: string[] = [];
@@ -23,7 +23,7 @@ function cenario(options: { existente?: boolean; auditFalha?: boolean; arquivo?:
     if (opcoes.where?.id === atividadeId) return { id: atividadeId, contratoId, excluidaEm: null, status: 'REGISTRADA' };
     return null;
   });
-  const manager = { findOne, query } as unknown as EntityManager;
+  const manager = { findOne, query, getRepository:jest.fn(()=>({findOne:jest.fn(async()=>({...ator,ativo:true,bloqueioSessoesId:null}))})) } as unknown as EntityManager;
   const db = { manager, transaction: (executar: (m: EntityManager) => Promise<unknown>) => executar(manager) } as unknown as DataSource;
   const registrarNaTransacao = jest.fn(async () => { if (options.auditFalha) throw new Error('auditoria indisponível'); });
   const auditoria = { registrarNaTransacao } as unknown as AuditoriaService;

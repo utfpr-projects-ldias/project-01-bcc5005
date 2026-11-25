@@ -1,5 +1,7 @@
 import {
   Body,
+  DefaultValuePipe,
+  ParseIntPipe,
   Delete,
   Controller,
   Get,
@@ -119,8 +121,8 @@ export class OcorrenciasController {
 
   @Get('ocorrencias/:ocorrenciaId/lancamentos')
   @ExigirPoliticaOperacional('ocorrencias:visualizar',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})
-  lancamentos(@Param('contratoId') contratoId:string,@Param('ocorrenciaId') id:string) {
-    return this.ocorrenciasService.listarLancamentos(contratoId,id);
+  lancamentos(@Param('contratoId') contratoId:string,@Param('ocorrenciaId') id:string, @Query('offset',new DefaultValuePipe(0),ParseIntPipe) offset:number, @Query('limite',new ParseIntPipe({optional:true})) limite?:number) {
+    return this.ocorrenciasService.listarLancamentos(contratoId,id,offset,limite);
   }
   @Post('ocorrencias/:ocorrenciaId/lancamentos')
   @ExigirPoliticaOperacional('ocorrencias:visualizar',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})
@@ -132,12 +134,12 @@ export class OcorrenciasController {
   @ExigirPoliticaOperacional('ocorrencias:visualizar',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})
   corrigirLancamento(@Param('contratoId') contratoId:string,@Param('ocorrenciaId') id:string,
     @Param('lancamentoId') lancamentoId:string,@Body() dto:CorrigirLancamentoOcorrenciaDto,@Req() req:RequisicaoAutorizada) {
-    return this.ocorrenciasService.corrigirLancamento(contratoId,id,lancamentoId,dto.quantidade,dto.justificativa,req.usuarioDominio!,dto.data,dto.observacao);
+    return this.ocorrenciasService.corrigirLancamento(contratoId,id,lancamentoId,dto.quantidade,dto.justificativa,req.usuarioDominio!,dto.data,dto.observacao,dto.versaoEsperada);
   }
   @Post('ocorrencias/:ocorrenciaId/lancamentos/:lancamentoId/decidir')
   @ExigirPoliticaOperacional('ocorrencias:decidir-lancamento',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})
   decidirLancamento(@Param('contratoId') c:string,@Param('ocorrenciaId') o:string,@Param('lancamentoId') id:string,@Body() dto:DecidirLancamentoOcorrenciaDto,@Req() req:RequisicaoAutorizada) {
-    return this.ocorrenciasService.decidirLancamento(c,o,id,dto.decisao,dto.motivo,req.usuarioDominio!);
+    return this.ocorrenciasService.decidirLancamento(c,o,id,dto.decisao,dto.motivo,req.usuarioDominio!,dto.versaoEsperada);
   }
   @Patch('ocorrencias/:ocorrenciaId/lancamentos/:lancamentoId/bloqueio')
   @ExigirPoliticaOperacional('ocorrencias:visualizar',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})
@@ -170,8 +172,8 @@ export class OcorrenciasController {
   }
   @Get('ocorrencias/:ocorrenciaId/historico')
   @ExigirPoliticaOperacional('ocorrencias:visualizar',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})
-  historico(@Param('contratoId') contratoId:string,@Param('ocorrenciaId') id:string) {
-    return this.ocorrenciasService.historico(contratoId,id);
+  historico(@Param('contratoId') contratoId:string,@Param('ocorrenciaId') id:string,@Req() req:RequisicaoAutorizada, @Query('offset',new DefaultValuePipe(0),ParseIntPipe) offset:number, @Query('limite',new ParseIntPipe({optional:true})) limite?:number) {
+    return this.ocorrenciasService.historico(contratoId,id,req.usuarioDominio!,offset,limite);
   }
   @Patch('ocorrencias/:ocorrenciaId/exigencias')
   @ExigirPoliticaOperacional('ocorrencias:visualizar',{tipo:'recurso',recurso:'ocorrencia',parametro:'ocorrenciaId',parametroContratoPai:'contratoId'})

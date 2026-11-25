@@ -26,8 +26,9 @@ export function NavegacaoContrato({pagina,onPagina,painelGlobalAberto,acoes,chil
     window.addEventListener('pi:recolher-navegacao-contrato',recolher);
     return ()=>window.removeEventListener('pi:recolher-navegacao-contrato',recolher);
   },[]);
-  useEffect(()=>{if(painelGlobalAberto)setAberto(false);},[painelGlobalAberto]);
-  useEffect(()=>{setAberto(false);},[pagina]);
+  const [paginaAnterior,setPaginaAnterior]=useState(pagina);
+  if(paginaAnterior!==pagina){setPaginaAnterior(pagina);setAberto(false);}
+  if(painelGlobalAberto&&aberto)setAberto(false);
   useEffect(()=>{
     if(!visivel)return;
     const liberar=bloquearRolagemDocumento();
@@ -39,7 +40,7 @@ export function NavegacaoContrato({pagina,onPagina,painelGlobalAberto,acoes,chil
   function escolher(p:PaginaContrato){if(onPagina(p)){window.dispatchEvent(new Event('pi:recolher-lista-entregaveis'));fechar();}}
   return <div data-pi-workspace-contrato className="min-w-0">
     <header ref={header} className="pi-workspace-cabecalho flex min-w-0 items-center justify-between gap-2 border-b border-slate-500/20 bg-background">
-      <nav className="pi-nav-desktop" aria-label="Páginas do contrato">{paginas.map(p=><button type="button" key={p.id} id={`tab-${p.id}`} aria-current={pagina===p.id?'page':undefined} aria-controls={`painel-${p.id}`} onClick={()=>escolher(p.id)}><Icone desenho={p.desenho}/>{p.nome}</button>)}</nav>
+      <nav className="pi-nav-desktop" aria-label="Páginas do contrato — navegação principal">{paginas.map(p=><button type="button" key={p.id} id={`tab-${p.id}`} aria-current={pagina===p.id?'page':undefined} aria-controls={`painel-${p.id}`} onClick={()=>escolher(p.id)}><Icone desenho={p.desenho}/>{p.nome}</button>)}</nav>
       <h2 className="pi-nav-mobile pi-contrato-acento flex min-w-0 items-center gap-2 py-3 text-base font-semibold"><Icone desenho={atual.desenho}/>{atual.nome}</h2>
       <div className="flex shrink-0 items-center gap-1">
         <button ref={toggle} type="button" aria-label={visivel?'Fechar navegação do contrato':'Abrir navegação do contrato'} title={visivel?'Fechar navegação do contrato':'Abrir navegação do contrato'} aria-expanded={visivel} aria-controls={id} disabled={painelGlobalAberto} className="pi-nav-mobile pi-navegacao-toggle inline-flex h-9 w-9 items-center justify-center rounded-lg hover:bg-current/10 focus-visible:outline-2 focus-visible:outline-current disabled:opacity-40" onClick={()=>{if(visivel)fechar();else{window.dispatchEvent(new Event('pi:recolher-lista-entregaveis'));window.dispatchEvent(new Event('pi:fechar-menus'));setTopo(Math.max(0,header.current?.getBoundingClientRect().bottom??56));setAberto(true);}}} onKeyDown={e=>{if(visivel&&e.key==='Tab'){e.preventDefault();const itens=painel.current?.querySelectorAll<HTMLButtonElement>('button');(e.shiftKey?itens?.item(itens.length-1):itens?.item(0))?.focus();}}}>

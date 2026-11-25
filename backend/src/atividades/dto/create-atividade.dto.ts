@@ -20,8 +20,8 @@ export class CreateAtividadeDto {
   @IsString() @IsNotEmpty() @Matches(/\S/, {message: 'Não informe somente espaços.'}) @MaxLength(500) descricao!: string;
   @IsString() @IsNotEmpty() @Matches(/\S/, {message: 'Não informe somente espaços.'}) @MaxLength(40) tipo!: string;
   @IsOptional() @IsUUID() ocorrenciaId?: string | null;
-  @ValidateIf((_obj, valor) => valor !== undefined) @IsArray() @ArrayUnique() @IsUUID('all', { each: true }) ocorrenciaIds?: string[];
-  @ValidateIf((_obj, valor) => valor !== undefined) @IsArray() @ArrayUnique((m: MedicaoAtividadeDto) => m?.ocorrenciaId)
+  @ValidateIf((_obj, valor) => valor !== undefined) @IsArray() @ArrayMaxSize(100) @ArrayUnique() @IsUUID('all', { each: true }) ocorrenciaIds?: string[];
+  @ValidateIf((_obj, valor) => valor !== undefined) @IsArray() @ArrayMaxSize(100) @ArrayUnique((m: MedicaoAtividadeDto) => m?.ocorrenciaId)
   @ValidateNested({ each: true }) @Type(() => MedicaoAtividadeDto)
   medicoes?: MedicaoAtividadeDto[];
   @ValidateIf((_obj, valor) => valor !== undefined) @IsArray() @ArrayMaxSize(30) @ArrayUnique((m:MedicaoDiretaAtividadeDto)=>m?.entregavelId)
@@ -34,5 +34,5 @@ export class CreateAtividadeDto {
   @ValidateIf((_obj, valor) => valor !== undefined) @IsString() @MaxLength(50) local?: string;
   @ValidateIf((_obj, valor) => valor !== undefined) @IsString() @MaxLength(25) duracao?: string;
   @ValidateIf((_obj, valor) => valor !== undefined) @IsString() @MaxLength(200) observacoes?: string;
-  @IsArray() @ArrayMinSize(1) @ArrayUnique() @IsUUID('all', { each: true }) entregavelIds!: string[];
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @ArrayUnique() @IsUUID('all', { each: true }) entregavelIds!: string[];
 }

@@ -43,29 +43,28 @@ export class RepositorioConsultas {
     const controlador = new AbortController();
     entrada.controlador = controlador;
     this.notificar(entrada, { ...entrada.estado, carregando: entrada.estado.dados === undefined, atualizando: entrada.estado.dados !== undefined, erro: undefined });
-    const pedido = Promise.resolve().then(() => consulta(controlador.signal));
-    entrada.pendente = pedido;
-    // A consulta anterior pode ser invalidada sem que seu consumidor ainda
-    // esteja aguardando a promessa. Evita unhandledrejection em abort.
-    void pedido.catch(() => {});
-    try {
-      const dados = await pedido;
-      if (entrada.geracao === geracao && this.sessao === sessao && !controlador.signal.aborted) {
-        entrada.ultimaLeitura = Date.now();
-        this.notificar(entrada, { dados, carregando: false, atualizando: false });
-      }
+    const vigente = () => entrada.geracao === geracao && this.sessao === sessao && !controlador.signal.aborted;
+    const pedido = Promise.resolve().then(() => {
+      if (!vigente()) throw new DOMException('Consulta obsoleta', 'AbortError');
+      return consulta(controlador.signal);
+    }).then(dados => {
+      if (!vigente()) throw new DOMException('Consulta obsoleta', 'AbortError');
+      entrada.ultimaLeitura = Date.now();
+      this.notificar(entrada, { dados, carregando: false, atualizando: false });
       return dados;
-    } catch (erro) {
-      if (entrada.geracao === geracao && this.sessao === sessao && !controlador.signal.aborted) {
-        const status = (erro as { status?: number } | null)?.status;
-        // Um 401/403/404 nunca pode deixar no DOM um dado protegido do cache.
-        this.notificar(entrada, { ...(status === 401 || status === 403 || status === 404 ? {} : { dados: entrada.estado.dados }), erro, carregando: false, atualizando: false });
-      }
+    }).catch(erro => {
+      if (!vigente()) throw new DOMException('Consulta obsoleta', 'AbortError');
+      const status = (erro as { status?: number } | null)?.status;
+      this.notificar(entrada, { ...(status === 401 || status === 403 || status === 404 ? {} : { dados: entrada.estado.dados }), erro, carregando: false, atualizando: false });
       throw erro;
-    } finally {
+    }).finally(() => {
       if (entrada.geracao === geracao) { entrada.pendente = undefined; entrada.controlador = undefined; }
-    }
+    });
+    entrada.pendente = pedido;
+    void pedido.catch(() => {});
+    return pedido;
   }
+
   gravar<T>(chave: string, dados: T) {
     const entrada = this.entrada(chave);
     entrada.geracao++;
@@ -90,6 +89,27 @@ export class RepositorioConsultas {
         void this.buscar(chave, entrada.consultar, { forcar: true }).catch(() => {});
       }
     }
+  }
+  /** Enquanto o conteúdo está oculto, atualiza leituras ativas sem desmontar
+   * formulários por um estado vazio transitório. Falhas não revelam dados antigos. */
+  async revalidarProtegidas() {
+    const sessao = ++this.sessao;
+    const pedidos: Promise<unknown>[] = [];
+    for (const [chave, entrada] of this.entradas) {
+      entrada.geracao++;
+      entrada.controlador?.abort();
+      entrada.controlador = undefined; entrada.pendente = undefined;
+      entrada.ultimaLeitura = 0;
+      if (entrada.ouvintes.size && entrada.consultar) {
+        const pedido = this.buscar(chave, entrada.consultar, { forcar: true });
+        const geracao = entrada.geracao;
+        pedidos.push(pedido.catch(erro => {
+          if (sessao === this.sessao && geracao === entrada.geracao)
+            this.notificar(entrada, { erro, carregando: false, atualizando: false });
+        }));
+      } else this.notificar(entrada, VAZIO);
+    }
+    await Promise.all(pedidos);
   }
   /** Chamado nos limites de sessao; impede respostas de requests antigos de repovoarem o cache. */
   limpar() {

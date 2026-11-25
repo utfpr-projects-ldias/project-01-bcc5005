@@ -8,9 +8,10 @@ class ContratoQAAtual(unittest.TestCase):
     def test_carteira_expoe_cadastro_pesquisa_e_modal(self):
         ui = (ROOT / 'frontend/src/app/contratos/page.tsx').read_text()
         qa = (ROOT / 'qa/revisao-contratos/VALIDAR-CODIGO-REAL.py').read_text()
-        for termo in ('ModalNovoContrato', 'campo-busca', 'Pesquisar contrato',
-                      'Abrir detalhes do contrato', 'Conteúdo do contrato'):
-            self.assertTrue(termo in ui or termo == 'Conteúdo do contrato', termo)
+        linha = (ROOT / 'frontend/src/app/contratos/components/linha-contrato.tsx').read_text()
+        for termo in ('ModalNovoContrato', 'campo-busca', 'Pesquisar contrato', 'aria-label="Contratos"'):
+            self.assertIn(termo, ui)
+        self.assertIn('Abrir detalhes do contrato', linha)
         self.assertIn("get_by_role('searchbox', name='Pesquisar contrato')", qa)
         self.assertIn("get_by_role('dialog', name='Detalhes do contrato')", qa)
 

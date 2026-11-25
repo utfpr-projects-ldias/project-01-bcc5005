@@ -47,7 +47,7 @@ describeNoBanco('HU06-01 — integração PostgreSQL isolada', () => {
 
   beforeAll(async () => {
     ds = await abrir();
-    await ds.runMigrations();
+    await ds.runMigrations({ transaction: 'each' });
     const [contrato] = await ds.query(`
       INSERT INTO contratos
         (numero_contrato, orgao_contratante, objeto, inicio_vigencia,

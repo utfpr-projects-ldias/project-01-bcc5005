@@ -1,11 +1,16 @@
 'use client';
 import { useConsulta, useRepositorioConsultas } from '@/app/components/provedor-consultas';
-import { criarEtapa, editarEtapa, listarEtapas, reordenarEtapas, type DadosEtapa } from '@/lib/etapas';
+import { criarEtapa, editarEtapa, listarEtapas, reordenarEtapas, consultarElegibilidadeEtapa, type AtualizacaoEtapa, type DadosEtapa } from '@/lib/etapas';
+import { sincronizarContrato } from '@/lib/sincronizar-contrato';
 import { chaveTexto } from '@/lib/repositorio-consultas';
 
 export const CHAVES_ETAPAS = { lista: (contratoId: string) => ['etapas', 'contrato', contratoId] as const };
 export function useEtapas(contratoId: string, habilitada = true) {
   return useConsulta(CHAVES_ETAPAS.lista(contratoId), () => listarEtapas(contratoId), { habilitada: habilitada && !!contratoId, validadeMs: 10000 });
+}
+export function useElegibilidadeEtapa(contratoId: string, etapaId: string, habilitada = true) {
+  return useConsulta([...CHAVES_ETAPAS.lista(contratoId), 'elegibilidade', etapaId],
+    signal => consultarElegibilidadeEtapa(contratoId, etapaId, signal), { habilitada: habilitada && !!contratoId && !!etapaId });
 }
 export function useMutacoesEtapas(contratoId: string) {
   const cache = useRepositorioConsultas();
@@ -13,26 +18,18 @@ export function useMutacoesEtapas(contratoId: string) {
   return {
     criar: async (dados: DadosEtapa) => {
       const etapa = await criarEtapa(contratoId, dados);
-      cache.invalidar(chave);
-      cache.invalidar(['contratos', 'pendentes']);
-      cache.invalidar(['contratos','elegibilidade-conclusao',contratoId]);
-      cache.invalidar(['execucao',contratoId]);
+      sincronizarContrato(cache, contratoId);
       return etapa;
     },
-    editar: async (etapaId: string, dados: Partial<DadosEtapa>) => {
+    editar: async (etapaId: string, dados: AtualizacaoEtapa) => {
       const etapa = await editarEtapa(contratoId, etapaId, dados);
-      cache.invalidar(chave);
-      cache.invalidar(['contratos', 'pendentes']);
-      cache.invalidar(['contratos','elegibilidade-conclusao',contratoId]);
-      cache.invalidar(['execucao',contratoId]);
+      sincronizarContrato(cache, contratoId);
       return etapa;
     },
     reordenar: async (ordemAnterior: string[], ordemNova: string[]) => {
       const lista = await reordenarEtapas(contratoId, ordemAnterior, ordemNova);
       cache.gravar(chaveTexto(chave), lista);
-      cache.invalidar(['contratos', 'pendentes']);
-      cache.invalidar(['contratos','elegibilidade-conclusao',contratoId]);
-      cache.invalidar(['execucao',contratoId]);
+      sincronizarContrato(cache, contratoId);
       return lista;
     },
   };

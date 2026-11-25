@@ -16,6 +16,8 @@ import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import { ExecucaoService } from '../execucao/execucao.service.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
 import { Contrato } from './contrato.entity.js';
+import { Usuario } from '../usuarios/usuario.entity.js';
+import { PermissaoContrato } from '../autorizacao/permissao-contrato.entity.js';
 import { ContratosService } from './contratos.service.js';
 import type { CriarContratoDto } from './dto/criar-contrato.dto.js';
 import { ModoCalculo } from './modo-calculo.enum.js';
@@ -108,8 +110,10 @@ function montarCenario() {
     findOne: jest.fn<() => Promise<Contrato | null>>().mockResolvedValue(null),
   };
 
+  const usuarioRepo = { ...repositorio, findOne: jest.fn(async () => ({ ...ator, ativo: true, bloqueioSessoesId: null })) };
+  const vinculoRepo = { ...repositorio, findOne: jest.fn(async () => null as unknown) };
   const manager = {
-    getRepository: jest.fn(() => repositorio),
+    getRepository: jest.fn((entidade?: unknown) => entidade === Usuario ? usuarioRepo : entidade === PermissaoContrato ? vinculoRepo : repositorio),
     query: jest.fn(async (sql: string) => /FROM ocorrencias o|FROM entregaveis e JOIN etapas et/.test(sql) ? [] : [{ numero: 428 }]),
   } as unknown as EntityManager;
 
@@ -131,7 +135,7 @@ function montarCenario() {
   };
 
   const execucao = { consultarNaTransacao: jest.fn<() => Promise<{
-    avanco: number | null; integralEstrito: boolean; configuracaoPendente: boolean;
+    avanco: number | null; integralEstrito: boolean; integralFisicoEstrito?: boolean; configuracaoPendente: boolean;
     entregaveis: Array<{statusEntregavel: string; percentualExecucao: number | null}>;
   }>>(async () => ({
     avanco: 100, integralEstrito: true, configuracaoPendente: false,
@@ -149,7 +153,7 @@ function montarCenario() {
     auditoria,
     manager,
     eventos,
-    execucao,
+    execucao, usuarioRepo, vinculoRepo,
   };
 }
 
@@ -576,7 +580,7 @@ describe('Código público de contratos', () => {
 
 test('código público: esgotamento da sequência não cria contrato e devolve 409', async () => {
   const c = montarCenario();
-  Object.assign(c.manager, { query: jest.fn(async () => [{ numero: 100000 }]) });
+  Object.assign(c.manager, { query: jest.fn(async () => [{ numero: 2147483648 }]) });
   await expect(c.service.criar(dtoCriacao(), ator)).rejects.toBeInstanceOf(ConflictException);
   expect(c.repositorio.save).not.toHaveBeenCalled();
   expect(c.eventos).toHaveLength(0);
@@ -746,7 +750,7 @@ describe('Rastreabilidade contratual e pendência de conclusão (TEC08)', () => 
     c.repositorio.findOneBy.mockResolvedValue(contratoBase());
     const qb = { where: jest.fn().mockReturnThis(), andWhere: jest.fn().mockReturnThis(),
       orderBy: jest.fn().mockReturnThis(), addOrderBy: jest.fn().mockReturnThis(),
-      take: jest.fn().mockReturnThis(), getMany: jest.fn().mockResolvedValue([]) };
+      take: jest.fn().mockReturnThis(), getMany: jest.fn(async () => []) };
     const repo = { createQueryBuilder: jest.fn().mockReturnValue(qb) };
     Object.assign(c.repositorio, { manager: { getRepository: () => repo } });
     const antes = '33333333-3333-4333-8333-333333333333';
@@ -869,6 +873,8 @@ describe('Encerramento explícito da revisão contratual (TEC08)', () => {
       if (sql.includes('COUNT(DISTINCT')) return [{ etapas: 1, entregaveis: 1, evidencias: 1,
         verificadas: 1, etapas_sem_entregavel: 0, entregaveis_sem_evidencia: 0 }];
       if (sql.includes('possui_revisao')) return [{ possui_revisao: filhoEmRevisao }];
+      if (sql.includes('AS verificado')) return [{ verificado: true }];
+      if (sql.includes('AS possui')) return [{ possui: false }];
       return [{ pendentes: filhoIncompleto }];
     }) });
     return c;
@@ -1068,11 +1074,12 @@ describe('Cancelamento auditado, independente de conclusão e arquivamento', () 
       dadosPosteriores: expect.objectContaining({ decisao: 'CANCELAMENTO_EXPLICITO' }),
     });
   });
-  it('não reverte por permissão de cancelamento e retorna ao Planejamento quando autorizado', async () => {
+  it('retorna ao estado anterior auditado, preservando a revisão administrativa', async () => {
     const c = montarCenario();
     c.repositorio.findOne.mockResolvedValue(contratoBase({status: StatusContrato.CANCELADO}));
+    (c.manager.query as jest.MockedFunction<typeof c.manager.query>).mockResolvedValue([{ anterior: 'EM_EXECUCAO' }]);
     const salvo = await c.service.alterarCancelamento(ID_CONTRATO, false, ator);
-    expect(salvo.status).toBe('PLANEJAMENTO');
+    expect(salvo.status).toBe('EM_EXECUCAO');
     expect(salvo.reabertoEm).toBeInstanceOf(Date);
     expect(c.eventos[0]).toMatchObject({
       dadosPosteriores: expect.objectContaining({ decisao: 'REVERSAO_DE_CANCELAMENTO', reabertoEm: expect.any(Date) }),
@@ -1167,4 +1174,123 @@ describe('Revisão com fase operacional independente', () => {
     await expect(c.service.atualizar(ID_CONTRATO,
       { status: PLANEJAMENTO, retomarOperacao: true }, ator)).rejects.toBeInstanceOf(ConflictException);
   });
+});
+
+
+describe('B03 — integridade contratual', () => {
+  it('continua a numeração depois de 99999, sem renumerar códigos existentes', async () => {
+    const c = montarCenario();
+    (c.manager.query as jest.MockedFunction<typeof c.manager.query>).mockResolvedValue([{numero:100000}]);
+    expect((await c.service.criar(dtoCriacao(), ator)).codigoPublico).toBe('100000');
+  });
+  it('colisão no código público retorna conflito controlado', async () => {
+    const c = montarCenario();
+    const erro = new QueryFailedError('INSERT INTO contratos', [], Object.assign(new Error('duplicado'), {code:'23505',constraint:'uq_contratos_codigo_publico'}));
+    c.repositorio.save.mockRejectedValueOnce(erro);
+    await expect(c.service.criar(dtoCriacao(), ator)).rejects.toBeInstanceOf(ConflictException);
+  });
+  it('não inventa uma fase anterior para cancelamento sem histórico', async () => {
+    const c = montarCenario();
+    c.repositorio.findOne.mockResolvedValue(contratoBase({status:StatusContrato.CANCELADO}));
+    (c.manager.query as jest.MockedFunction<typeof c.manager.query>).mockResolvedValue([]);
+    await expect(c.service.alterarCancelamento(ID_CONTRATO,false,ator)).rejects.toBeInstanceOf(ConflictException);
+    expect(c.repositorio.save).not.toHaveBeenCalled();
+  });
+  it('revalida a disponibilidade do ator dentro da transação de edição', async () => {
+    const c = montarCenario();
+    c.usuarioRepo.findOne.mockResolvedValue({...ator,ativo:false,bloqueioSessoesId:null});
+    c.repositorio.findOneBy.mockResolvedValue(contratoBase());
+    await expect(c.service.atualizar(ID_CONTRATO,{objeto:'Não autorizado'},ator)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(c.repositorio.save).not.toHaveBeenCalled();
+  });
+  it('não aprova modalidade legada de encerramento sem confirmação explícita', async () => {
+    const c = montarCenario();
+    c.repositorio.findOne.mockResolvedValue(contratoBase({conclusaoSolicitadaEm:new Date(),encerramentoSolicitado:true,motivoEncerramento:'Justificativa administrativa longa',tipoEncerramentoSolicitado:null}));
+    await expect(c.service.concluir(ID_CONTRATO,ator)).rejects.toThrow('modalidade identificável');
+    expect(c.repositorio.save).not.toHaveBeenCalled();
+  });
+  it('revalida os filhos na aprovação de uma finalização', async () => {
+    const c = montarCenario();
+    c.repositorio.findOne.mockResolvedValue(contratoBase({conclusaoSolicitadaEm:new Date(),encerramentoSolicitado:true,motivoEncerramento:'Justificativa administrativa longa',tipoEncerramentoSolicitado:'FINALIZACAO'}));
+    (c.manager.query as jest.MockedFunction<typeof c.manager.query>).mockResolvedValue([{tem_entregaveis:true,etapa_pendente:true,entregavel_pendente:false,parcialmente_finalizado:true}]);
+    await expect(c.service.concluir(ID_CONTRATO,ator)).rejects.toThrow('Conclua ou finalize todas');
+    expect(c.repositorio.save).not.toHaveBeenCalled();
+  });
+});
+
+
+test('B03: conclusão parcial não aceita etapa ativa sem entregável', async () => {
+  const c = montarCenario();
+  c.repositorio.findOne.mockResolvedValue(contratoBase({conclusaoSolicitadaEm:new Date(),conclusaoParcialSolicitada:true}));
+  const query = jest.fn(async (sql:string) => sql.includes('COUNT(DISTINCT')
+    ? [{etapas:2,entregaveis:1,evidencias:1,verificadas:0,etapas_sem_entregavel:1}]
+    : sql.includes('AS principal') ? [{pendentes:true,principal:false}] : [{possui:false,pendentes:false}]);
+  Object.assign(c.manager,{query});
+  c.execucao.consultarNaTransacao.mockResolvedValue({avanco:100,integralEstrito:false,integralFisicoEstrito:true,configuracaoPendente:false,entregaveis:[{statusEntregavel:'CONCLUIDO_PARCIALMENTE',percentualExecucao:100}]});
+  await expect(c.service.concluir(ID_CONTRATO,ator)).rejects.toThrow('Conclua operacionalmente todos os filhos');
+  expect(query.mock.calls.find(([sql])=>sql.includes('AS principal'))?.[0]).toContain('NOT EXISTS(SELECT 1 FROM entregaveis e WHERE e.etapa_id=t.id');
+  expect(c.repositorio.save).not.toHaveBeenCalled();
+});
+
+test('B03: consulta de elegibilidade utiliza um único snapshot', async () => {
+  const c = montarCenario();
+  c.repositorio.findOneBy.mockResolvedValue(contratoBase({status:StatusContrato.SUSPENSO}));
+  const transaction = jest.fn(async (_isolation:string, fn:(m:EntityManager)=>Promise<unknown>)=>fn(c.manager));
+  Object.assign(c.repositorio,{manager:{transaction}});
+  expect(await c.service.consultarElegibilidadeConclusao(ID_CONTRATO)).toMatchObject({apto:false,aptoParcial:false,solicitada:false});
+  expect(transaction).toHaveBeenCalledWith('REPEATABLE READ',expect.any(Function));
+  expect(c.execucao.consultarNaTransacao).not.toHaveBeenCalled();
+});
+
+
+test('B02: identidade revogada é rejeitada antes de bloquear ou alterar a raiz', async () => {
+  const c = montarCenario();
+  c.usuarioRepo.findOne.mockResolvedValue({ ...ator, ativo: false, bloqueioSessoesId: null });
+  await expect(c.service.alterarSuspensao(ID_CONTRATO, true, ator)).rejects.toBeInstanceOf(ForbiddenException);
+  expect(c.repositorio.findOne).not.toHaveBeenCalled();
+  expect(c.repositorio.save).not.toHaveBeenCalled();
+});
+test('B02: gestor sem ACL não passa para a mutação da raiz', async () => {
+  const c = montarCenario();
+  const gestor = { ...ator, perfil: 'GESTOR' } as UsuarioAutenticado;
+  c.usuarioRepo.findOne.mockResolvedValue({ ...gestor, ativo: true, bloqueioSessoesId: null });
+  await expect(c.service.reabrir(ID_CONTRATO, gestor)).rejects.toBeInstanceOf(ForbiddenException);
+  expect(c.vinculoRepo.findOne).toHaveBeenCalledWith({ where: { contratoId: ID_CONTRATO, usuarioId: gestor.id }, lock: { mode: 'pessimistic_read' } });
+  expect(c.repositorio.findOne).not.toHaveBeenCalled();
+});
+
+
+test('B03: não encerra antecipadamente enquanto houver decisão descendente', async () => {
+  const c = montarCenario();
+  c.repositorio.findOne.mockResolvedValue(contratoBase());
+  Object.assign(c.manager, { query: jest.fn(async () => [{ possui: true }]) });
+  await expect(c.service.encerrarAntecipadamente(ID_CONTRATO,'Encerramento administrativo justificado.',ator)).rejects.toThrow('Decida as solicitações');
+  expect(c.repositorio.save).not.toHaveBeenCalled();
+  c.repositorio.findOne.mockResolvedValue(contratoBase({ conclusaoSolicitadaEm:new Date(), encerramentoSolicitado:true, tipoEncerramentoSolicitado:'ANTECIPADO', motivoEncerramento:'Encerramento administrativo justificado.' }));
+  await expect(c.service.concluir(ID_CONTRATO, ator)).rejects.toThrow('Decida as solicitações');
+  expect(c.eventos).toHaveLength(0);
+});
+
+test('B03: revisão com progresso incompleto não pode ser fechada', async () => {
+  const c=montarCenario();
+  c.repositorio.findOne.mockResolvedValue(contratoBase({reabertoEm:new Date()}));
+  Object.assign(c.manager,{query:jest.fn(async(sql:string)=>sql.includes('COUNT(DISTINCT') ? [{etapas:1,entregaveis:1,evidencias:0,verificadas:0,etapas_sem_entregavel:0}] : sql.includes('AS verificado') ? [{verificado:true}] : [{pendentes:false,possui:false,possui_revisao:false}])});
+  c.execucao.consultarNaTransacao.mockResolvedValue({avanco:99,integralEstrito:false,configuracaoPendente:false,entregaveis:[{percentualExecucao:99,statusEntregavel:'CONCLUIDO'}]});
+  await expect(c.service.fecharRevisao(ID_CONTRATO,ator)).rejects.toThrow('100%');
+  expect(c.repositorio.save).not.toHaveBeenCalled();
+});
+
+test('B03: edição concorrente não sobrescreve estado atualizado', async () => {
+  const c=montarCenario();
+  const original=contratoBase();
+  const { estadoEdicaoContrato }=await import('./estado-edicao-contrato.js');
+  c.repositorio.findOneBy.mockResolvedValue({...original,objeto:'Alteração concorrente'});
+  await expect(c.service.atualizar(ID_CONTRATO,{objeto:'Minha edição',estadoAnterior:estadoEdicaoContrato(original)},ator)).rejects.toThrow('após a abertura');
+  expect(c.repositorio.save).not.toHaveBeenCalled();
+});
+
+test('B03: modo de cálculo só muda pelo endpoint com versão dos pesos', async () => {
+  const c=montarCenario(); c.repositorio.findOneBy.mockResolvedValue(contratoBase());
+  await expect(c.service.atualizar(ID_CONTRATO,{modoCalculo:ModoCalculo.PONDERADO},ator)).rejects.toThrow('Editar execução');
+  expect(c.repositorio.save).not.toHaveBeenCalled();
 });
