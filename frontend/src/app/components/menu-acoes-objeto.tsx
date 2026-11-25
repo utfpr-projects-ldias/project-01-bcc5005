@@ -74,7 +74,7 @@ export function MenuAcoesObjeto({ children, rotulo = 'Fechar', disabled = false,
          setAberto(v => !v);
        }}
       className={somenteIcone ? "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg hover:bg-current/10 focus-visible:outline-2 focus-visible:outline-current disabled:opacity-40" : `inline-flex min-h-9 shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-2 disabled:opacity-50 ${'border-slate-400/40 bg-slate-500/10 text-foreground hover:bg-slate-500/20 focus-visible:outline-violet-400'}`}>
-      {icone ?? (pendenteConclusao ? <IconeConclusao className="h-[17px] w-[17px] shrink-0 text-violet-400" /> : (reabertura || acaoDireta) ? <IconeReabertura className="h-[17px] w-[17px] shrink-0" /> : <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>)}
+      {icone ?? (pendenteConclusao ? <IconeConclusao className="h-[17px] w-[17px] shrink-0 text-violet-400" /> : (reabertura || acaoDireta) ? <IconeReabertura className={`h-[17px] w-[17px] shrink-0 ${/^reabrir/i.test(rotulo) ? 'pi-icone-reabrir-verde' : ''}`} /> : <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>)}
       {!somenteIcone && rotulo}
       {!somenteIcone && !acaoDireta && <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m6 9 6 6 6-6"/></svg>}
     </button>

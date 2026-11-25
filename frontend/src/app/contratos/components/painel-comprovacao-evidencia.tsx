@@ -143,12 +143,15 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
     setOcupado(true); setErro('');
     try {
       await acao();
-      cache?.invalidar(['contratos']);
-      cache?.invalidar(['execucao',contratoId]);
-      cache?.invalidar(['ocorrencias',contratoId]);
-      cache?.invalidar(['atividades',contratoId]);
-      cache?.invalidar(['etapas', 'contrato', contratoId]);
-      cache?.invalidar(['entregaveis', 'contrato', contratoId]);
+      if(dados?.versoes[0]?.grupoCompartilhadoId || dados?.compartilhamentosPreliminares?.length)sincronizarEvidenciaCompartilhada(cache,contratoId);
+      else {
+        cache?.invalidar(['contratos']);
+        cache?.invalidar(['execucao',contratoId]);
+        cache?.invalidar(['ocorrencias',contratoId]);
+        cache?.invalidar(['atividades',contratoId]);
+        cache?.invalidar(['etapas', 'contrato', contratoId]);
+        cache?.invalidar(['entregaveis', 'contrato', contratoId]);
+      }
       toastSucesso(mensagem, mensagem.startsWith('Comprovante em revisão') ? 'Em revisão' : 'Comprovante verificado');
       // A mutação já foi confirmada. Uma falha de leitura posterior não deve anunciar falha da decisão.
       const atualizado = await recarregar().catch(() => { setErro('Operação registrada. Não foi possível atualizar os dados da evidência.'); return undefined; });
@@ -312,27 +315,28 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
   </ModalEtapa>, document.body);
   return <><div className="space-y-3" data-testid="painel-comprovacao-evidencia" data-evidencia-estado={estadoProprio} data-tec08-painel-evidencia>
     <div className="flex items-center gap-2">
-      <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${dados.reabertoEm && dados.status !== 'VERIFICADA' ? 'border-teal-500/45 bg-teal-500/10 text-teal-800 dark:text-teal-200' : CLASSE_STATUS[dados.status]}`}
-        data-testid="status-verificacao">{dados.reabertoEm && dados.status !== 'VERIFICADA' ? `Em revisão · ${ROTULO_STATUS[dados.status]}` : ROTULO_STATUS[dados.status]}</span>
+      <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${arquivada ? 'border-slate-500/45 text-foreground/70' : dados.reabertoEm && dados.status !== 'VERIFICADA' ? 'border-teal-500/45 bg-teal-500/10 text-teal-800 dark:text-teal-200' : CLASSE_STATUS[dados.status]}`}
+        data-testid="status-verificacao">{arquivada ? 'Arquivada' : dados.reabertoEm && dados.status !== 'VERIFICADA' ? `Em revisão · ${ROTULO_STATUS[dados.status]}` : ROTULO_STATUS[dados.status]}</span>
       {dados.podeVerificar && ['PENDENTE_VERIFICACAO','REJEITADA'].includes(dados.versoes[0]?.status??'') && !Boolean(dados.arquivadoEm || dados.entregavelArquivadoEm) && <button type="button"
         disabled={ocupado} aria-label="Verificar comprovante" onClick={() => setConfirmandoVerificacao(true)}
         className="ml-auto rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-600 disabled:opacity-50">Verificar</button>}
       {dados.podeVerificar && dados.versoes[0]?.status === 'PENDENTE_VERIFICACAO' && !arquivada &&
         <button type="button" disabled={ocupado} aria-label="Devolver para revisão" onClick={() => { setMotivoRejeicao(''); setConfirmandoRejeicao(true); }}
           className="rounded-lg border border-red-500/50 px-3 py-2 text-xs font-semibold text-error-text hover:bg-red-500/10">Revisar</button>}
-      {!dados.podeVerificar && dados.versoes[0]?.status === 'PENDENTE_VERIFICACAO' && <span className="text-xs text-foreground/65">Verificação depende de autorização e da situação do registro.</span>}
+
       {!ocultarArquivamento && contextoPermiteAlterar && (podeArquivar ?? podeEditar) && !arquivada && dados.status !== 'VERIFICADA' && <button type="button" ref={botaoArquivarRef} disabled={ocupado}
         aria-label="Arquivar evidência" title="Arquivar evidência"
         onClick={() => setConfirmandoArquivo(true)} className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-lg border border-orange-500/50 text-orange-700 hover:bg-orange-500/15 dark:text-orange-300 disabled:opacity-50">
         <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v12h14V8M9 13h6"/></svg>
       </button>}
     </div>
-    {!ultima&&Boolean(dados.totalDestinosAguardandoEnvio)&&<p className="text-xs text-foreground/65">{dados.totalDestinosAguardandoEnvio} vínculo(s) adicional(is) aguardando envio do comprovante.</p>}
-    <ContadoresVinculos itens={[{rotulo:"Contratos",total:new Set([contratoId,...(dados.compartilhamentos??[]).filter(v=>v.vigente).map(v=>v.contratoId)]).size},{rotulo:"Entregáveis",total:new Set([entregavelId,...(dados.compartilhamentos??[]).filter(v=>v.vigente).map(v=>v.entregavelId)]).size},{rotulo:"Ocorrências",total:dados.vinculosAtuais?.filter(v=>v.tipo==='ocorrencia').length??null},{rotulo:"Atividades",total:dados.vinculosAtuais?.filter(v=>v.tipo==='atividade').length??null}]}/>{Boolean(dados.vinculosAtuais?.length)&&<details className="text-sm"><summary className="cursor-pointer">Consultar vínculos</summary><ul className="mt-2 space-y-1">{dados.vinculosAtuais?.map(v=><li key={`${v.tipo}:${v.id}`} className="truncate" title={v.titulo}>{v.tipo==='ocorrencia'?'Ocorrência':'Atividade'}: {v.titulo}</li>)}</ul></details>}
+    {!ultima&&dados.aguardandoEnvioCompartilhado&&<p className="text-xs text-foreground/65">Aguardando o comprovante da evidência compartilhada.</p>}
+    <ContadoresVinculos itens={[{rotulo:"Contratos",total:new Set([contratoId,...(dados.compartilhamentos??[]).filter(v=>v.vigente).map(v=>v.contratoId),...(dados.compartilhamentosPreliminares??[]).map(v=>v.contratoId)]).size},{rotulo:"Entregáveis",total:new Set([entregavelId,...(dados.compartilhamentos??[]).filter(v=>v.vigente).map(v=>v.entregavelId),...(dados.compartilhamentosPreliminares??[]).map(v=>v.entregavelId)]).size},{rotulo:"Ocorrências",total:dados.vinculosAtuais?.filter(v=>v.tipo==='ocorrencia').length??null},{rotulo:"Atividades",total:dados.vinculosAtuais?.filter(v=>v.tipo==='atividade').length??null}]}/>{Boolean(dados.vinculosAtuais?.length)&&<details className="text-sm"><summary className="cursor-pointer">Consultar vínculos</summary><ul className="mt-2 space-y-1">{dados.vinculosAtuais?.map(v=><li key={`${v.tipo}:${v.id}`} className="truncate" title={v.titulo}>{v.tipo==='ocorrencia'?'Ocorrência':'Atividade'}: {v.titulo}</li>)}</ul></details>}
     {cache&&podeEditarMetadados&&!arquivada&&dados.status!=='VERIFICADA'&&<button type="button" className="self-start rounded-md border border-current/20 px-3 py-1.5 text-xs" disabled={ocupado} onClick={()=>setEditarVinculos(true)}>Editar vínculos</button>}
     {editarVinculos&&cache&&podeEditarMetadados&&<EditorVinculosLocaisEvidencia dados={dados} fechar={()=>setEditarVinculos(false)} atualizar={async()=>{cache.invalidar(['execucao',contratoId]);cache.invalidar(['ocorrencias',contratoId]);cache.invalidar(['atividades',contratoId]);cache.invalidar(['entregaveis','contrato',contratoId]);const d=await recarregar();onComprovanteAlterado?.(d);}}/>}
-    {Boolean(dados.compartilhamentos?.length)&&<details className="rounded-lg border border-current/15 p-3 text-sm"><summary className="cursor-pointer font-medium">Verificações por destino</summary><p className="mt-2 text-xs text-foreground/65">A verificação é independente em cada entregável.</p><div className="mt-2 divide-y divide-current/10">{dados.compartilhamentos?.map(v=><div key={v.comprovanteId} className="flex items-center gap-3 py-2"><div className="min-w-0 flex-1"><p className="truncate" title={v.entregavel}>{v.entregavel}</p><p className="text-xs text-foreground/65">Contrato {v.contrato} · {v.vigente?ROTULO_STATUS[v.status]:'Versão histórica'}</p></div>{v.podeVerificar&&v.comprovanteId!==dados.versoes[0]?.id&&!somenteLeitura&&<button type="button" disabled={ocupado} onClick={()=>setDestinoVerificar(v)} className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white">Verificar</button>}</div>)}</div></details>}
-    {destinoVerificar&&<ConfirmacaoSimples titulo="Verificar evidência neste destino?" descricao={`Contrato ${destinoVerificar.contrato} · ${destinoVerificar.entregavel}. A decisão não altera a verificação nem a execução física de outros destinos.`} confirmar="Verificar" aprovarVerde ocupado={ocupado} onCancelar={()=>setDestinoVerificar(null)} onConfirmar={()=>{const v=destinoVerificar;setOcupado(true);setErro('');void verificarComprovante(v.contratoId,v.entregavelId,v.esperadaId,v.comprovanteId).then(async()=>{setDestinoVerificar(null);cache?.invalidar(['contratos']);cache?.invalidar(['execucao',v.contratoId]);cache?.invalidar(['ocorrencias',v.contratoId]);cache?.invalidar(['atividades',v.contratoId]);cache?.invalidar(['etapas','contrato',v.contratoId]);cache?.invalidar(['entregaveis','contrato',v.contratoId]);await recarregar();onComprovanteAlterado?.();toastSucesso('Evidência verificada neste destino.');}).catch(e=>{setDestinoVerificar(null);setErro(e instanceof Error?e.message:'Não foi possível verificar o destino.');}).finally(()=>setOcupado(false));}}/>}
+    {Boolean(dados.compartilhamentosPreliminares?.length)&&<details className="rounded-lg border border-current/15 p-3 text-sm"><summary className="cursor-pointer font-medium">Contratos e entregáveis vinculados</summary><div className="mt-2 divide-y divide-current/10">{dados.compartilhamentosPreliminares?.map(v=><div key={v.esperadaId} className="py-2"><p className="truncate" title={v.entregavel}>{v.entregavel}</p><p className="text-xs text-foreground/65">Contrato {v.contrato} · Aguardando envio</p></div>)}</div></details>}
+    {Boolean(dados.compartilhamentos?.length)&&<details className="rounded-lg border border-current/15 p-3 text-sm"><summary className="cursor-pointer font-medium">Contratos e entregáveis vinculados</summary><div className="mt-2 divide-y divide-current/10">{dados.compartilhamentos?.map(v=><div key={v.comprovanteId} className="flex items-center gap-3 py-2"><div className="min-w-0 flex-1"><p className="truncate" title={v.entregavel}>{v.entregavel}</p><p className="text-xs text-foreground/65">Contrato {v.contrato} · {v.vigente?ROTULO_STATUS[v.status]:'Versão histórica'}</p></div>{v.podeVerificar&&v.comprovanteId!==dados.versoes[0]?.id&&!somenteLeitura&&<button type="button" disabled={ocupado} onClick={()=>setDestinoVerificar(v)} className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white">Aprovar evidência</button>}</div>)}</div></details>}
+    {destinoVerificar&&<ConfirmacaoSimples titulo="Aprovar evidência compartilhada?" descricao="A verificação será aplicada a todos os vínculos vigentes deste arquivo." confirmar="Aprovar" aprovarVerde ocupado={ocupado} onCancelar={()=>setDestinoVerificar(null)} onConfirmar={()=>{const v=destinoVerificar;setOcupado(true);setErro('');void verificarComprovante(v.contratoId,v.entregavelId,v.esperadaId,v.comprovanteId).then(async()=>{setDestinoVerificar(null);sincronizarEvidenciaCompartilhada(cache,contratoId);await recarregar();onComprovanteAlterado?.();toastSucesso('Evidência aprovada nos vínculos vigentes.');}).catch(e=>{setDestinoVerificar(null);setErro(e instanceof Error?e.message:'Não foi possível verificar o destino.');}).finally(()=>setOcupado(false));}}/>}
     <div className="space-y-2 text-sm">
       <div className="flex items-center justify-between gap-2">
         {campoInline === 'titulo' && podeEditarMetadados && !ultima && !arquivada && dados.status !== 'VERIFICADA' ? <div className="min-w-0 flex-1"><label htmlFor={`titulo-inline-${esperadaId}`} className="sr-only">Tipo da evidência</label>
@@ -400,7 +404,7 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
     </section>}
     {editarContribuicao&&<EditorContribuicaoEvidencia dados={dados} fechar={()=>{setEditarContribuicao(false);registrarVoltaEdicao?.(null);}} atualizar={async()=>{cache?.invalidar(['contratos']);cache?.invalidar(['execucao']);cache?.invalidar(['ocorrencias']);cache?.invalidar(['entregaveis']);const d=await recarregar();onComprovanteAlterado?.(d);}}/>}
     {!editando && confirmacaoArquivo}
-    {arquivada && <p role="status" className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-200">Evidência arquivada. Arquivos e histórico disponíveis para consulta.</p>}
+    {arquivada && <p role="status" className="rounded-lg border border-slate-500/25 p-3 text-sm text-foreground/70">Evidência arquivada.</p>}
     <section aria-label="Comprovação da evidência" className="space-y-2">
       <div data-tec08-secao-filho data-tec08-estado={estadoProprio} className="pi-anexo-evidencia flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-current/20 bg-background p-3">
         {anexoInline && arquivoEdicao && !ultima && podeAnexar && !arquivada ?
@@ -489,7 +493,7 @@ export function PainelComprovacaoEvidencia({ contratoId, entregavelId, esperadaI
         'Comprovante em revisão. A contribuição não será contabilizada.'); }} />}
   {confirmandoVerificacao && ultima && createPortal(<div className="relative z-[170]">
     <ConfirmacaoSimples titulo="Confirmar verificação da evidência?"
-      descricao={`Confirme somente se você baixou e analisou “${ultima.nomeOriginal}” e verificou que corresponde ao requisito desta evidência. A decisão será registrada na rastreabilidade. Se houver contribuição física declarada, o valor cadastrado será reconhecido; a conclusão do entregável exige aprovação própria.`}
+      descricao={ultima.grupoCompartilhadoId ? "Confirme se o arquivo atende aos requisitos. A aprovação vale para todos os vínculos vigentes." : "Confirme se o arquivo atende aos requisitos da evidência."}
       confirmar="Confirmar verificação" cancelarVermelho ocupado={ocupado} onCancelar={() => setConfirmandoVerificacao(false)}
       onConfirmar={() => { setConfirmandoVerificacao(false); void executar(() => verificarComprovante(contratoId, entregavelId, esperadaId, ultima.id), 'Comprovante verificado e registrado na auditoria.'); }} />
   </div>, document.body)}

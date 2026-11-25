@@ -427,3 +427,20 @@ test('detalhe ancorado usa a geometria da área original e fecha sem navegar', (
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   expect(window.location.href).toBe(rota);
 });
+
+test.each([
+  { contexto: 'Etapa', titulo: '1 · Planejamento', identidadeEntregavel: false, etiqueta: 'Em revisão', atrasado: false },
+  { contexto: 'Entregável · Quantitativo', titulo: 'Entrega quantitativa', identidadeEntregavel: true, etiqueta: 'Não iniciado', atrasado: true },
+])('cabeçalho hierárquico organiza contexto, título e situações: $contexto', (props) => {
+  const fechar = jest.fn();
+  render(<ModalEtapa {...props} interno retornoEsquerda etiquetaNoContexto ocupado={false} onFechar={fechar} acoes={<button type="button">Fechar</button>}><p>Conteúdo</p></ModalEtapa>);
+  const titulo = screen.getByRole('heading', { name: props.titulo });
+  const identidade = titulo.closest('.pi-header-identidade')!;
+  expect(Array.from(identidade.children).map(el => el.classList.contains('pi-header-contexto') ? 'contexto' : el.classList.contains('pi-header-titulo') ? 'titulo' : 'situacoes')).toEqual(['contexto', 'titulo', 'situacoes']);
+  expect(identidade.querySelector('.pi-header-contexto')).toHaveTextContent(props.contexto);
+  expect(identidade.querySelector('.pi-header-situacoes')).toHaveTextContent(props.etiqueta);
+  if (props.atrasado) expect(identidade.querySelector('.pi-header-situacoes')).toHaveTextContent('Atrasado');
+  expect(screen.getByRole('button', { name: 'Fechar' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Fechar edição da etapa' }));
+  expect(fechar).toHaveBeenCalledTimes(1);
+});

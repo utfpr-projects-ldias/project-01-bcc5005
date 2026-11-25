@@ -1,4 +1,5 @@
 'use client';
+import { IconeTipoEntregavel } from './icone-tipo-entregavel';
 import { CampoDataCivil } from '@/app/components/campo-data-civil';
 import { useCallback, useId, useRef, useState, type Ref, type FormEvent } from 'react';
 import { ErroEntregavel, ROTULOS_TIPO, pesquisarResponsaveisEntregavel, type Entregavel } from '@/lib/entregaveis';
@@ -9,11 +10,13 @@ import { pesoDisponivelContrato, saldoPesosRascunho } from '@/lib/peso-disponive
 import { inicialEntregavel,
   normalizarDecimalPlanejamento, validarEntregavel, type DadosPlanejamentoEntregavel, type ErrosEntregavel, type RascunhoEntregavel } from '@/lib/validacao-entregavel';
 
+import { intervaloVigencia, validarDatasNaVigencia, type VigenciaPlanejamento } from '@/lib/vigencia-planejamento';
+
 const estilo = 'w-full min-w-0 rounded-lg border border-brand-green/35 bg-background px-3 py-2.5 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-neon aria-invalid:border-red-500';
-function IconeTipoEntregavel({tipo}:{tipo:RascunhoEntregavel['tipo']}) {return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 shrink-0" stroke="currentColor" fill="none" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{tipo==='UNICO'?<><rect x="4" y="4" width="16" height="16" rx="2"/><path d="m8 12 3 3 5-6"/></>:tipo==='QUANTITATIVO'?<path d="M4 18V9h4v9m2 0V5h4v13m2 0v-6h4v6"/>:tipo==='RECORRENTE'?<><path d="M5 8h14l-3-3m3 3-3 3M19 16H5l3-3m-3 3 3 3"/></>:tipo==='CONTINUO'?<path d="M3 12c3-7 6-7 9 0s6 7 9 0"/>:<><path d="M5 21V4m0 1h14l-3 5 3 5H5"/></>}</svg>}
+
 function Seta() { return <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4"><path d="m4 10 4 4 8-8" /></svg>; }
-export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, onCancelar, onArquivar, referenciaArquivar, onSalvandoMudou, podeConfigurarPesos = !inicial, podeReplanejarOcorrencias = false, secaoEdicao, pesosContrato, modoCalculo = 'SIMPLES' }: {
-  contratoId?: string; etapaId: string; inicial?: Entregavel; onSalvar: (dados: DadosPlanejamentoEntregavel, base?: Entregavel) => Promise<void>;
+export function FormularioEntregavel({ contratoId, etapaId, vigencia, inicial, onSalvar, onCancelar, onArquivar, referenciaArquivar, onSalvandoMudou, podeConfigurarPesos = !inicial, podeReplanejarOcorrencias = false, secaoEdicao, pesosContrato, modoCalculo = 'SIMPLES' }: {
+  contratoId?: string; etapaId: string; vigencia?: VigenciaPlanejamento; inicial?: Entregavel; onSalvar: (dados: DadosPlanejamentoEntregavel, base?: Entregavel) => Promise<void>;
   onCancelar: () => void; onArquivar?: () => void; referenciaArquivar?: Ref<HTMLButtonElement>; onSalvandoMudou?: (salvando: boolean) => void;
   podeAlterarObrigatoriedade?: boolean; podeCriarEvidencias?: boolean;
   podeConfigurarPesos?: boolean; podeReplanejarOcorrencias?: boolean; secaoEdicao?: 'informacoes' | 'planejamento' | 'completo';
@@ -58,6 +61,8 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
     if (enviando.current || avisoPeso) return; // trava síncrona contra clique duplo
     const resultado = validarEntregavel(dados, base);
     if (!resultado.sucesso) { setErros(resultado.erros); setErroGeral('Revise os campos destacados.'); return; }
+    const errosVigencia = validarDatasNaVigencia(resultado.dados, vigencia, base);
+    if (Object.keys(errosVigencia).length) { setErros(errosVigencia); setErroGeral('Revise as datas previstas.'); return; }
     if (pesoMaximo !== null && modoCalculo === 'PONDERADO' && Number(resultado.dados.peso ?? '0') > pesoMaximo + 0.000001 &&
         !(base?.peso != null && Number(dados.peso.replace(',', '.')) === Number(base.peso))) {
       setErros({ peso: `Disponível apenas ${pesoMaximo.toLocaleString('pt-BR', { maximumFractionDigits: 4 })}% para este entregável.` });
@@ -81,7 +86,7 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
   return <><form data-tec08-formulario-contextual data-tec08-edicao={inicial ? "true" : undefined} data-tec08-criacao={inicial ? undefined : "true"} noValidate aria-label={inicial ? `Editar entregável ${inicial.nome}` : 'Cadastrar entregável'} onSubmit={(e) => void enviar(e)}
     className="pi-form-entregavel min-w-0 space-y-3">
     <fieldset className="min-w-0 space-y-2"><legend className="text-sm font-semibold">Tipo de entregável *</legend>
-      {inicial ? <p className="text-sm font-medium">{ROTULOS_TIPO[dados.tipo]} <span className="text-xs font-normal text-foreground/65">· Tipo definido no cadastro</span></p> : <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-5">{(Object.entries(ROTULOS_TIPO) as [RascunhoEntregavel['tipo'],string][]).map(([tipo,rotulo])=><label key={tipo} className="pi-opcao-origem flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border border-current/15 px-2.5 py-2 text-xs font-medium"><input className="sr-only" type="radio" name={formId('tipo')} value={tipo} checked={dados.tipo===tipo} onChange={()=>{setDados(v=>({...v,tipo,quantidadePrevista:'',unidadeMedida:'',periodicidade:'',modoRecorrente:'DESCRITIVO'}));setMesmoDia(false);setErros({});}}/><IconeTipoEntregavel tipo={tipo}/>{rotulo}</label>)}</div>}
+      {inicial ? <p className="text-sm font-medium">{ROTULOS_TIPO[dados.tipo]} <span className="text-xs font-normal text-foreground/65">· Tipo definido no cadastro</span></p> : <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-5">{(Object.entries(ROTULOS_TIPO) as [RascunhoEntregavel['tipo'],string][]).map(([tipo,rotulo])=><label key={tipo} htmlFor={formId(`tipo-${tipo}`)} className="pi-opcao-origem pi-tipo-cadastro flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border border-current/15 px-2.5 py-2 text-xs font-medium"><input id={formId(`tipo-${tipo}`)} className="pi-radio-area" type="radio" name={formId('tipo')} value={tipo} checked={dados.tipo===tipo} onChange={()=>{setDados(v=>({...v,tipo,quantidadePrevista:'',unidadeMedida:'',periodicidade:'',modoRecorrente:'DESCRITIVO'}));setMesmoDia(false);setErros({});}}/><IconeTipoEntregavel tipo={tipo}/>{rotulo}</label>)}</div>}
     </fieldset>
     <div className="pi-form-colunas">
       {(!inicial || secaoEdicao !== 'planejamento') && <section className="min-w-0 space-y-3" aria-label="Informações do entregável">
@@ -127,12 +132,13 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
         <option value="">Selecione</option>
         {([['DIARIA','Diária'],['SEMANAL','Semanal'],['MENSAL','Mensal'],['TRIMESTRAL','Trimestral'],['SEMESTRAL','Semestral'],['ANUAL','Anual']] as const).map(([v,t])=><option key={v} value={v}>{t}</option>)}
       </select>{mensagem('periodicidade')}{agendaBloqueada && <p className="mt-1 text-xs text-foreground/65">Somente leitura: requer permissão de replanejamento.</p>}</div></div>}
+    {vigencia && <p className="text-xs text-foreground/70">Vigência do contrato: {intervaloVigencia(vigencia)}</p>}
     <div className={`pi-datas-pareadas ${mesmoDia && ['UNICO','MARCO','QUANTITATIVO'].includes(dados.tipo) ? 'pi-data-unica' : ''}`}>
       <div><label className="mb-1 block text-sm" htmlFor={formId('inicioPrevisto')}>{mesmoDia && ['UNICO','MARCO','QUANTITATIVO'].includes(dados.tipo) ? 'Data prevista *' : 'Início previsto *'}</label>
-        <CampoDataCivil id={formId('inicioPrevisto')}  disabled={agendaBloqueada} className={`${estilo} tec08-data-hora max-w-52 disabled:cursor-not-allowed disabled:bg-slate-500/15 disabled:opacity-55`} value={dados.inicioPrevisto} {...campoErro('inicioPrevisto')}
+        <CampoDataCivil id={formId('inicioPrevisto')} min={vigencia?.inicioVigencia} max={vigencia?.terminoVigencia} disabled={agendaBloqueada} className={`${estilo} tec08-data-hora max-w-52 disabled:cursor-not-allowed disabled:bg-slate-500/15 disabled:opacity-55`} value={dados.inicioPrevisto} {...campoErro('inicioPrevisto')}
           onChange={(e) => atualizar('inicioPrevisto', e.target.value)} />{mensagem('inicioPrevisto')}</div>
       {!(mesmoDia && ['UNICO','MARCO','QUANTITATIVO'].includes(dados.tipo)) && <div><label className="mb-1 block text-sm" htmlFor={formId('terminoPrevisto')}>Término previsto</label>
-        <CampoDataCivil id={formId('terminoPrevisto')}  disabled={agendaBloqueada} className={`${estilo} tec08-data-hora max-w-52 disabled:cursor-not-allowed disabled:bg-slate-500/15 disabled:opacity-55`} value={dados.terminoPrevisto} {...campoErro('terminoPrevisto')}
+        <CampoDataCivil id={formId('terminoPrevisto')} min={vigencia?.inicioVigencia} max={vigencia?.terminoVigencia} disabled={agendaBloqueada} className={`${estilo} tec08-data-hora max-w-52 disabled:cursor-not-allowed disabled:bg-slate-500/15 disabled:opacity-55`} value={dados.terminoPrevisto} {...campoErro('terminoPrevisto')}
           onChange={(e) => atualizar('terminoPrevisto', e.target.value)} />{mensagem('terminoPrevisto')}</div>}
     </div>
     {['UNICO','MARCO','QUANTITATIVO'].includes(dados.tipo) && <>

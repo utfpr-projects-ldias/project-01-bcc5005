@@ -22,6 +22,7 @@ import { useEtapas } from '@/hooks/use-etapas';
 import { pesquisarResponsaveisAtividade, useAtividades, type DadosAtividade } from '@/hooks/use-atividades';
 import { criarCompartilhada, type VinculoCompartilhado } from '@/lib/atividades-compartilhadas';
 import { useRepositorioConsultasOpcional } from '@/app/components/provedor-consultas';
+import { sincronizarEvidenciaCompartilhada } from '@/lib/sincronizar-evidencia-compartilhada';
 import { atividadeSchema, TIPOS_ATIVIDADE, type FormularioAtividade } from '@/lib/validacao-atividade';
 
 const vazio = (entregavelId: string): FormularioAtividade => ({
@@ -132,7 +133,8 @@ export function ModalCadastroAtividade({ contratoId, entregavelId = '', origem, 
       if(adicionais.length){
         const vinculos=[{contratoId,entregavelIds:parsed.data.entregavelIds,ocorrenciaIds:parsed.data.ocorrenciaIds??[],medicoes:parsed.data.medicoes??[],medicoesDiretas,parcelasPercentuais:dados.parcelasPercentuais},...adicionais];
         await criarCompartilhada({titulo:dados.titulo,dataHora:dados.dataHora,descricao:dados.descricao,tipo:dados.tipo,participantes:dados.participantes,responsavel:dados.responsavel,responsavelId:dados.responsavelId??undefined,local:dados.local,duracao:dados.duracao,observacoes:dados.observacoes,vinculos});
-        for(const v of vinculos){cache?.invalidar(['atividades',v.contratoId]);cache?.invalidar(['ocorrencias',v.contratoId]);cache?.invalidar(['execucao',v.contratoId]);cache?.invalidar(['entregaveis','contrato',v.contratoId]);cache?.invalidar(['etapas','contrato',v.contratoId]);cache?.invalidar(['contratos','elegibilidade-conclusao',v.contratoId]);window.dispatchEvent(new CustomEvent('pi:estrutura-operacional-atualizada',{detail:{contratoId:v.contratoId}}));}
+        sincronizarEvidenciaCompartilhada(cache,contratoId);
+        window.dispatchEvent(new CustomEvent('pi:estrutura-operacional-atualizada',{detail:{contratoId,cacheAtualizado:Boolean(cache)}}));
       }else await diario.criarAtividade(dados);
       onFechar(); await Promise.resolve().then(()=>onSalvo?.()).catch(() => {});
     }

@@ -89,11 +89,15 @@ export function ModalEtapa({ titulo, ocupado, onFechar, focoRetorno, contexto = 
       dialogo.style.setProperty('--pi-ancora-altura', `${Math.max(0, window.innerHeight - topo - margem)}px`);
     };
     posicionar();
-    const observador = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(posicionar) : null;
+    let larguraAnterior = alvo.getBoundingClientRect().width;
+    const reposicionarSeLarguraMudou = () => {
+      const largura = alvo.getBoundingClientRect().width;
+      if (largura > 0 && Math.abs(largura - larguraAnterior) > 1) { larguraAnterior = largura; posicionar(); }
+    };
+    const observador = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(reposicionarSeLarguraMudou) : null;
     observador?.observe(alvo);
     window.addEventListener('resize', posicionar);
-    window.addEventListener('scroll', posicionar, true);
-    return () => { observador?.disconnect(); window.removeEventListener('resize', posicionar); window.removeEventListener('scroll', posicionar, true); };
+    return () => { observador?.disconnect(); window.removeEventListener('resize', posicionar); };
   }, [ancora]);
   function fechar() { if (!ocupado) onFechar(); }
   function teclado(evento: KeyboardEvent<HTMLDivElement>) {
@@ -146,17 +150,22 @@ export function ModalEtapa({ titulo, ocupado, onFechar, focoRetorno, contexto = 
     : alturaEstavel ? 'h-[min(82dvh,730px)]' : 'max-h-[min(88dvh,850px)]';
   // O maxHeight inline aplica o limite também quando uma classe arbitrária
   // de altura não for gerada pelo Tailwind.
+  const hierarquia = Boolean((retornoEsquerda && (identidadeEntregavel || interno || ancora)) || (larguraDetalhe && etiquetaNoContexto));
+  const etiquetaSituacao = etiqueta && <span className={`max-w-full rounded-full border px-2 py-0.5 text-xs font-semibold ${corTitulo} ${corConclusao}`}>{etiqueta}</span>;
+  const etiquetaPrazo = <EtiquetaAtraso atrasado={atrasado} finalizadoComAtraso={finalizadoComAtraso}/>;
   const cabecalho = (
-      <header data-pi-cabecalho-hierarquia={Boolean(retornoEsquerda&&(identidadeEntregavel||interno||ancora))||undefined} data-pi-cabecalho-contextual={cabecalhoContextual || undefined} className={`flex shrink-0 items-center justify-between gap-2 border-b ${interno ? "px-0 py-3" : "px-3 py-3 sm:px-5"} ${cabecalhoUmaLinha ? 'flex-wrap sm:flex-nowrap' : 'flex-wrap'} ${corConclusao}`}>
+      <header data-pi-cabecalho-hierarquia={hierarquia || undefined} data-pi-cabecalho-contextual={cabecalhoContextual || undefined} className={`flex shrink-0 items-center justify-between gap-2 border-b ${interno ? "px-0 py-3" : "px-3 py-3 sm:px-5"} ${cabecalhoUmaLinha ? 'flex-wrap sm:flex-nowrap' : 'flex-wrap'} ${corConclusao}`}>
         {retornoEsquerda && <button ref={fecharRef} type="button" onClick={fechar} disabled={ocupado}
           data-pi-voltar-hierarquia data-tec08-fechar-modal data-pi-acao="secundaria" aria-label={rotuloFechar} title={rotuloFechar}
           className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-transparent text-foreground transition-colors hover:border-slate-400/65 hover:bg-slate-500/10 focus-visible:outline-2 focus-visible:outline-brand-neon disabled:opacity-50">
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><path d="m14 6-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>}
         <div className="min-w-0 flex-1 pi-header-identidade"><div className="flex min-w-0 flex-wrap items-center justify-start gap-2 pi-header-contexto">{contextoExibido && <p title={contextoExibido} className={`min-w-0 truncate text-[11px] font-semibold uppercase tracking-wider text-foreground/60 ${cabecalhoUmaLinha ? 'whitespace-nowrap' : ''}`}>{contextoExibido}</p>}
-          {etiquetaNoContexto && etiqueta && <span className={`max-w-[145px] shrink-0 truncate whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold ${corTitulo} ${corConclusao}`}>{etiqueta}</span>}<EtiquetaAtraso atrasado={atrasado} finalizadoComAtraso={finalizadoComAtraso}/></div>
-          <div className="mt-0.5 flex min-w-0 items-baseline gap-2 pi-header-titulo"><h2 id={tituloId} tabIndex={-1} data-pi-foco-inicial title={tituloExibido} className={`min-w-0 text-lg font-semibold leading-snug ${corTitulo} ${cabecalhoUmaLinha || camada === 'evidencia' ? 'block truncate whitespace-nowrap' : 'line-clamp-2 break-words [overflow-wrap:anywhere]'}`}>{tituloExibido}</h2>{codigoPublico != null && <span className="shrink-0 font-mono text-xs text-foreground/60">{rotuloCodigoPublico(codigoPublico)}</span>}{!etiquetaNoContexto && etiqueta && <span className={`max-w-[170px] shrink-0 truncate whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold ${corTitulo} ${corConclusao}`}>{etiqueta}</span>}</div></div>
-        <div className={`flex shrink-0 items-center justify-end gap-1 sm:gap-2 ${cabecalhoUmaLinha ? 'flex-wrap sm:flex-nowrap' : 'flex-wrap'}`}>
+          {!hierarquia && etiquetaNoContexto && etiqueta && <span className={`max-w-[145px] shrink-0 truncate whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold ${corTitulo} ${corConclusao}`}>{etiqueta}</span>}{!hierarquia && etiquetaPrazo}</div>
+          <div className="mt-0.5 flex min-w-0 items-baseline gap-2 pi-header-titulo"><h2 id={tituloId} tabIndex={-1} data-pi-foco-inicial title={tituloExibido} className={`min-w-0 text-lg font-semibold leading-snug ${corTitulo} ${!hierarquia && (cabecalhoUmaLinha || camada === 'evidencia') ? 'block truncate whitespace-nowrap' : 'line-clamp-2 break-words [overflow-wrap:anywhere]'}`}>{tituloExibido}</h2>{codigoPublico != null && <span className="shrink-0 font-mono text-xs text-foreground/60">{rotuloCodigoPublico(codigoPublico)}</span>}{!hierarquia && !etiquetaNoContexto && etiqueta && <span className={`max-w-[170px] shrink-0 truncate whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold ${corTitulo} ${corConclusao}`}>{etiqueta}</span>}</div>
+          {hierarquia && (etiqueta || atrasado || finalizadoComAtraso) && <div className="pi-header-situacoes">{etiquetaSituacao}{etiquetaPrazo}</div>}
+        </div>
+        <div className={`pi-header-acoes flex shrink-0 items-center justify-end gap-1 sm:gap-2 ${cabecalhoUmaLinha ? 'flex-wrap sm:flex-nowrap' : 'flex-wrap'}`}>
 
         {acoesComoMenu && acoes ? <MenuAcoesObjeto disabled={ocupado} rotulo={rotuloMenuAcoes}>{acoes}</MenuAcoesObjeto> : acoes}
         {(!retornoEsquerda || mostrarXComVoltar) && !ocultarFechar && <button ref={fecharRef} type="button" onClick={fechar} disabled={ocupado}

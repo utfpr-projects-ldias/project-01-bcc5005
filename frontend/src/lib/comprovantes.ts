@@ -27,6 +27,8 @@ export type RascunhoEnvioEvidencia = {quantidadeExecutada?:string;ocorrenciaQuan
 export type DetalheEvidencia = {
   declaracaoPreliminar?:DeclaracaoPreliminar|null;
   totalDestinosAguardandoEnvio?:number;
+  aguardandoEnvioCompartilhado?:boolean;
+  compartilhamentosPreliminares?:{esperadaId:string;entregavelId:string;entregavel:string;contratoId:string;contrato:string}[];
   id: string; codigoPublico?: number; contratoId: string; entregavelId: string; tipoEvidencia: string;
   descricao: string | null; obrigatoria: boolean;
   status: StatusComprovante; versoes: VersaoComprovante[]; podeVerificar: boolean; contextoPermiteAlterar?: boolean; podeEditarContribuicao?: boolean;

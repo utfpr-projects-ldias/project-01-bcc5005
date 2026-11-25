@@ -36,7 +36,7 @@ const ESCOPOS_PERMISSOES: readonly GrupoPermissoes[] = [
   { titulo: 'Ocorrências', secoes: [
     { icone: '✎', nome: 'Cadastro e edição', chaves: ['criarOcorrencias', 'editarOcorrencias', 'editarMetaOcorrencia', 'vincularAtividadesOcorrencia', 'vincularEvidenciasOcorrencia', 'editarExigenciasOcorrencia', 'editarPesoOcorrencia'] },
     { icone: '✓', nome: 'Conclusão e reabertura', chaves: ['concluirOcorrencias', 'reabrirOcorrencias'] },
-    { icone: '▣', nome: 'Agenda e medições', chaves: ['configurarAgendaOcorrencias', 'registrarExecucaoOcorrencia', 'corrigirExecucaoOcorrencia', 'bloquearExecucaoOcorrencia', 'excluirExecucaoOcorrencia'] },
+    { icone: '▣', nome: 'Agenda e medições', chaves: ['configurarAgendaOcorrencias', 'registrarExecucaoOcorrencia', 'corrigirExecucaoOcorrencia', 'corrigirExecucaoAprovada', 'bloquearExecucaoOcorrencia', 'excluirExecucaoOcorrencia'] },
   ] },
   { titulo: 'Execução', secoes: [
     { icone: '✎', nome: 'Registrar e editar valores físicos (manual, atividades e evidências)', chaves: ['editarExecucaoFisica'] },

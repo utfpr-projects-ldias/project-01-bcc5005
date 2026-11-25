@@ -8,7 +8,7 @@ export const CHAVES_PERMISSOES = [
   'criarEntregaveis', 'editarEntregaveis', 'arquivarEntregaveis', 'reativarEntregaveis', 'reabrirEntregaveis', 'excluirEntregaveisArquivados',
   'criarEvidencias', 'editarEvidencias', 'arquivarEvidencias', 'reativarEvidencias', 'reabrirEvidencias', 'excluirEvidenciasArquivadas',
   'alterarObrigatoriedade', 'enviarComprovantes', 'verificarComprovantes',
-  'criarOcorrencias', 'editarOcorrencias', 'editarMetaOcorrencia', 'vincularAtividadesOcorrencia', 'vincularEvidenciasOcorrencia', 'editarExigenciasOcorrencia', 'editarPesoOcorrencia', 'registrarExecucaoOcorrencia', 'aprovarExecucaoManual', 'corrigirExecucaoOcorrencia', 'bloquearExecucaoOcorrencia', 'excluirExecucaoOcorrencia', 'concluirOcorrencias', 'reabrirOcorrencias', 'configurarAgendaOcorrencias', 'editarExecucaoFisica', 'configurarPesos',
+  'criarOcorrencias', 'editarOcorrencias', 'editarMetaOcorrencia', 'vincularAtividadesOcorrencia', 'vincularEvidenciasOcorrencia', 'editarExigenciasOcorrencia', 'editarPesoOcorrencia', 'registrarExecucaoOcorrencia', 'aprovarExecucaoManual', 'corrigirExecucaoOcorrencia', 'corrigirExecucaoAprovada', 'bloquearExecucaoOcorrencia', 'excluirExecucaoOcorrencia', 'concluirOcorrencias', 'reabrirOcorrencias', 'configurarAgendaOcorrencias', 'editarExecucaoFisica', 'configurarPesos',
   'criarMetasMarco', 'editarMetasMarco', 'vincularMetasMarco', 'aprovarVinculosMetasMarco',
   'registrarAtividades', 'editarAtividades', 'verificarAtividades', 'reabrirAtividades', 'arquivarAtividades', 'reativarAtividades', 'excluirAtividadesArquivadas',
   'editarContrato', 'concluirContrato', 'encerrarContrato', 'reabrirContrato', 'cancelarContrato', 'reverterCancelamentoContrato', 'suspenderContrato', 'retomarContrato', 'verificarDocumentos', 'reabrirDocumentos', 'concluirEtapas', 'concluirEntregaveis', 'anexarDocumentos', 'editarDocumentos', 'arquivarDocumentos', 'reativarDocumentos', 'excluirDocumentosArquivados', 'verificarDocumentoPrincipal', 'reabrirDocumentoPrincipal', 'arquivarDocumentoPrincipal', 'reativarDocumentoPrincipal', 'excluirDocumentoPrincipal', 'administrarDocumentoPrincipal',
@@ -69,19 +69,17 @@ export const ACAO_PERMISSAO: Readonly<Record<string, ChavePermissao>> = {
 
 };
 
-/** Padrões conservadores: gestor com edição mantém comportamento atual;
- * alterar obrigatoriedade SEMPRE requer delegação explícita pelo ADMIN. */
+/** Edição operacional não delega decisões, arquivamento ou reabertura. */
+const EDICAO_OPERACIONAL: readonly ChavePermissao[] = ['registrarAtividades', 'editarAtividades', 'criarEvidencias', 'editarEvidencias', 'enviarComprovantes', 'anexarDocumentos', 'registrarExecucaoOcorrencia', 'editarExecucaoFisica', 'corrigirExecucaoOcorrencia'];
+const EDICAO_GESTOR: readonly ChavePermissao[] = ['criarEtapas', 'editarEtapas', 'reordenarEtapas', 'criarEntregaveis', 'editarEntregaveis', 'criarOcorrencias', 'editarOcorrencias', 'configurarAgendaOcorrencias', 'editarContrato', 'editarDocumentos'];
+
 export function permissoesEfetivas(perfil: PerfilUsuario | string, podeEditar: boolean,
   detalhes: PermissoesGranulares | null | undefined): Record<ChavePermissao, boolean> {
   const admin = perfil === 'ADMINISTRADOR';
   const gestorEditor = perfil === 'GESTOR' && podeEditar;
   const base = {} as Record<ChavePermissao, boolean>;
   for (const chave of CHAVES_PERMISSOES) {
-    const padrao = (chave === 'aprovarExecucaoManual' || chave === 'criarMetasMarco' || chave === 'editarMetasMarco' || chave === 'vincularMetasMarco' || chave === 'aprovarVinculosMetasMarco' || chave === 'concluirOcorrencias' || chave === 'reabrirOcorrencias' || chave === 'verificarAtividades' || chave === 'arquivarAtividades' || chave === 'verificarDocumentos' || chave === 'reabrirDocumentos' || chave === 'alterarObrigatoriedade' || chave === 'editarMetaOcorrencia' || chave === 'vincularAtividadesOcorrencia' || chave === 'vincularEvidenciasOcorrencia' || chave === 'editarExigenciasOcorrencia' || chave === 'editarPesoOcorrencia' || chave === 'corrigirExecucaoOcorrencia' || chave === 'bloquearExecucaoOcorrencia' || chave === 'encerrarContrato' || chave === 'encerrarEtapas' || chave === 'cancelarContrato' || chave === 'reverterCancelamentoContrato' || chave === 'suspenderContrato' || chave === 'retomarContrato' || chave === 'administrarDocumentoPrincipal' || chave.endsWith('DocumentoPrincipal') || chave === 'bloquearOrdemEtapas' || chave.startsWith('excluir') || chave.startsWith('reativar') || chave.startsWith('reabrir') || chave === 'arquivarEtapas' || chave.startsWith('concluir')) ? false
-      : chave === 'registrarAtividades' || chave === 'editarAtividades' ? gestorEditor
-      : chave === 'enviarComprovantes' ? true
-      : chave === 'verificarComprovantes' ? true // serviço exige verificador distinto e autorizado
-      : gestorEditor;
+    const padrao = gestorEditor && (EDICAO_OPERACIONAL.includes(chave) || EDICAO_GESTOR.includes(chave));
     base[chave] = admin || (detalhes?.[chave] ?? padrao);
   }
   return base;

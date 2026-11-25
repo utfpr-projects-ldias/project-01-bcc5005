@@ -129,7 +129,7 @@ export function validarVigenciaPlanejamento(e: Pick<Entregavel,'inicioPrevisto'|
   for (const campo of ['inicioPrevisto','terminoPrevisto'] as const) {
     const dia = e[campo];
     if (dia && dia !== anterior?.[campo] && (dia < c.inicioVigencia || dia > c.terminoVigencia))
-      throw new BadRequestException('As novas datas previstas devem estar dentro da vigência do contrato.');
+      throw new BadRequestException(`${campo === 'inicioPrevisto' ? 'Início previsto' : 'Término previsto'} fora da vigência do contrato. Informe uma data entre ${c.inicioVigencia.split('-').reverse().join('/')} e ${c.terminoVigencia.split('-').reverse().join('/')}.`);
   }
 }
 function pesoEscalado(peso: string): bigint {
@@ -443,9 +443,17 @@ export class EntregaveisService implements OnModuleInit {
     return listarEvidenciasConsolidadas(this.dataSource.manager,contratoId,filtros);
   }
 
+  private podeConsultarArquivo(ator: UsuarioAutenticado, vinculo: PermissaoContrato | null): boolean {
+    if (ator.perfil === PerfilUsuario.ADMINISTRADOR) return true;
+    if (!vinculo) return false;
+    const p = permissoesEfetivas(ator.perfil, vinculo.podeEditar, vinculo.permissoesDetalhadas);
+    return (ator.perfil === PerfilUsuario.GESTOR && vinculo.podeEditar) ||
+      p.arquivarEntregaveis || p.reativarEntregaveis || p.excluirEntregaveisArquivados;
+  }
+
   async listar(contratoId: string, etapaId?: string, arquivados = false, ator?: UsuarioAutenticado) {
-    if (arquivados && (!ator || (ator.perfil !== PerfilUsuario.ADMINISTRADOR &&
-      (ator.perfil !== PerfilUsuario.GESTOR || !(await this.dataSource.getRepository(PermissaoContrato).findOneBy({contratoId, usuarioId: ator.id}))?.podeEditar))))
+    if (arquivados && (!ator || !this.podeConsultarArquivo(ator, ator.perfil === PerfilUsuario.ADMINISTRADOR ? null :
+      await this.dataSource.getRepository(PermissaoContrato).findOneBy({ contratoId, usuarioId: ator.id }))))
       throw new ForbiddenException('Sem permissão para consultar entregáveis arquivados');
     if (!await this.dataSource.getRepository(Contrato).findOneBy({ id: contratoId })) {
       throw new NotFoundException('Contrato não encontrado');
@@ -500,7 +508,7 @@ export class EntregaveisService implements OnModuleInit {
     if (!e) throw new NotFoundException('Entregável não encontrado');
     if (e.arquivadoEm && ator.perfil !== PerfilUsuario.ADMINISTRADOR) {
       const vinculo = await this.dataSource.getRepository(PermissaoContrato).findOneBy({ contratoId, usuarioId: ator.id });
-      if (!vinculo || ator.perfil !== PerfilUsuario.GESTOR || !vinculo.podeEditar)
+      if (!this.podeConsultarArquivo(ator, vinculo))
         throw new NotFoundException('Entregável não encontrado');
     }
     // Ao consultar um entregável arquivado, preservar também seu histórico de evidências arquivadas.
@@ -601,7 +609,7 @@ export class EntregaveisService implements OnModuleInit {
       const fisico = await aptidaoFisicaParaConclusao(m, e);
       if (!fisico.apto) throw new ConflictException(fisico.motivo);
       if (await possuiDecisoesDescendentesPendentes(m, e))
-        throw new ConflictException('Resolva as decisões e contribuições pendentes dos descendentes antes de concluir.');
+        throw new ConflictException('Há registros aguardando decisão.');
       const exigencias = await requisitosDocumentaisObrigatorios(m, id);
       const documentacaoCompleta = await this.documentacaoIntegralDisponivel(m, e, exigencias);
       if ((regularizacao || e.statusExecucao === 'PENDENTE_CONCLUSAO') && !documentacaoCompleta)
@@ -668,7 +676,7 @@ export class EntregaveisService implements OnModuleInit {
       const etapa = await m.getRepository(Etapa).findOneBy({ id: e.etapaId, contratoId });
       const vinculo = ator.perfil === PerfilUsuario.ADMINISTRADOR ? null :
         await m.getRepository(PermissaoContrato).findOneBy({ contratoId, usuarioId: ator.id });
-      if (e.arquivadoEm && ator.perfil !== PerfilUsuario.ADMINISTRADOR && (ator.perfil !== PerfilUsuario.GESTOR || !vinculo?.podeEditar))
+      if (e.arquivadoEm && !this.podeConsultarArquivo(ator, vinculo))
         throw new NotFoundException('Entregável não encontrado');
       const permissoes = vinculo ? permissoesEfetivas(ator.perfil, vinculo.podeEditar, vinculo.permissoesDetalhadas) : null;
       const solicitar = ator.perfil === PerfilUsuario.ADMINISTRADOR || Boolean(permissoes?.editarEntregaveis);
@@ -720,8 +728,8 @@ export class EntregaveisService implements OnModuleInit {
       }
       const descendentesPendentes = contextoAtivo && await possuiDecisoesDescendentesPendentes(m, e);
       const apto = contextoAtivo && fisico.apto && !atividadesPendentes && !descendentesPendentes;
-      const encerramentoApto = contextoAtivo && !descendentesPendentes;
-      if (descendentesPendentes) impedimentos.push('Resolva as decisões e contribuições pendentes dos descendentes antes de concluir ou encerrar.');
+      const encerramentoApto = contextoAtivo && !regularizacao;
+      if (descendentesPendentes) impedimentos.push('Há registros aguardando decisão.');
       const podeSolicitarConclusao = solicitar && apto && (aberto || (regularizacao && !pendente)) && documentacaoCompleta;
       const podeSolicitarParcial = solicitar && apto && aberto && !documentacaoCompleta;
       const podeAprovar = aprovar && apto && (e.regularizacaoDocumentalSolicitada || e.statusExecucao === 'PENDENTE_CONCLUSAO' ? documentacaoCompleta : e.statusExecucao === 'PENDENTE_CONCLUSAO_PARCIAL' && !documentacaoCompleta);
@@ -747,7 +755,7 @@ export class EntregaveisService implements OnModuleInit {
       const fisico = await aptidaoFisicaParaConclusao(m, e);
       if (!fisico.apto) throw new ConflictException(fisico.motivo);
       if (await possuiDecisoesDescendentesPendentes(m, e))
-        throw new ConflictException('Resolva as decisões e contribuições pendentes dos descendentes antes de concluir.');
+        throw new ConflictException('Há registros aguardando decisão.');
       if (await atividadesPendentesDeVerificacao(m, contratoId, null, id))
         throw new ConflictException('Ainda existem atividades não verificadas');
       if (!await this.documentacaoIntegralDisponivel(m, e, await requisitosDocumentaisObrigatorios(m, id)))
@@ -780,7 +788,7 @@ export class EntregaveisService implements OnModuleInit {
       const fisico = await aptidaoFisicaParaConclusao(m, e);
       if (!fisico.apto) throw new ConflictException(fisico.motivo);
       if (await possuiDecisoesDescendentesPendentes(m, e))
-        throw new ConflictException('Resolva as decisões e contribuições pendentes dos descendentes antes de concluir.');
+        throw new ConflictException('Há registros aguardando decisão.');
       if (await atividadesPendentesDeVerificacao(m, contratoId, null, id))
         throw new ConflictException('Ainda existem atividades não verificadas');
       if (await this.documentacaoIntegralDisponivel(m, e, await requisitosDocumentaisObrigatorios(m, id)))
@@ -854,8 +862,6 @@ export class EntregaveisService implements OnModuleInit {
       if (['PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO','CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(e.statusExecucao ?? ''))
         throw new ConflictException('Já existe uma solicitação ou decisão final');
       await this.validarRegularizacao(m, e, false, contrato);
-      if (await possuiDecisoesDescendentesPendentes(m, e))
-        throw new ConflictException('Resolva as decisões e contribuições pendentes dos descendentes antes de encerrar.');
       // Encerramento ADMINISTRATIVO: permite interromper uma execução parcial,
       // inclusive sem ocorrências cadastradas ou com ocorrências em andamento.
       // Não confundir com conclusão física (que possui validações próprias).
@@ -880,8 +886,6 @@ export class EntregaveisService implements OnModuleInit {
       if (!e || e.arquivadoEm) throw new NotFoundException('Entregável indisponível');
       if (e.statusExecucao !== 'PENDENTE_ENCERRAMENTO') throw new ConflictException('Não há encerramento aguardando aprovação');
       await this.validarRegularizacao(m, e, false, contrato);
-      if (await possuiDecisoesDescendentesPendentes(m, e))
-        throw new ConflictException('Resolva as decisões e contribuições pendentes dos descendentes antes de encerrar.');
       // Aprovar encerramento não aprova/encerra ocorrências nem altera suas medições.
       // Cada ocorrência conserva o status histórico e continua visível no detalhe.
       const anterior = { statusExecucao: e.statusExecucao };

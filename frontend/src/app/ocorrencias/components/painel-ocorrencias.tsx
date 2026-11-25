@@ -23,6 +23,7 @@ import { ModalDetalheEntregavel } from '@/app/contratos/components/modal-detalhe
 import { consultarAtividade, editarAtividadeApi, listarAtividadesVinculaveis, transicionarAtividadeApi, type Atividade } from '@/hooks/use-atividades';
 import { estadoTemporal, diaLocalBrasil } from '@/lib/estado-temporal';
 import { useRepositorioConsultasOpcional } from '@/app/components/provedor-consultas';
+import { sincronizarEvidenciaCompartilhada } from '@/lib/sincronizar-evidencia-compartilhada';
 import { CampoBuscaSugestoes } from '@/app/components/campo-busca-sugestoes';
 import { useProgresso } from '@/hooks/use-progresso';
 import { SeletorEntregavel } from './seletor-entregavel';
@@ -221,7 +222,7 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, regulari
   // Permissões granulares de entregável; leitura não concede escrita.
   const autorizado = !somenteLeitura && !acesso.erro && Boolean(perfil?.ativo);
   const administrador = perfil?.perfil === 'ADMINISTRADOR';
-  const permitir = (chave: 'criarOcorrencias' | 'editarOcorrencias' | 'editarMetaOcorrencia' | 'vincularAtividadesOcorrencia' | 'vincularEvidenciasOcorrencia' | 'editarExigenciasOcorrencia' | 'editarPesoOcorrencia' | 'registrarExecucaoOcorrencia' | 'aprovarExecucaoManual' | 'corrigirExecucaoOcorrencia' | 'bloquearExecucaoOcorrencia' | 'excluirExecucaoOcorrencia' | 'concluirOcorrencias' | 'reabrirOcorrencias' | 'configurarAgendaOcorrencias' | 'editarExecucaoFisica' | 'enviarComprovantes') => autorizado && (administrador || Boolean(acesso.dados?.permissoes?.[chave]));
+  const permitir = (chave: 'criarOcorrencias' | 'editarOcorrencias' | 'editarMetaOcorrencia' | 'vincularAtividadesOcorrencia' | 'vincularEvidenciasOcorrencia' | 'editarExigenciasOcorrencia' | 'editarPesoOcorrencia' | 'registrarExecucaoOcorrencia' | 'aprovarExecucaoManual' | 'corrigirExecucaoOcorrencia' | 'corrigirExecucaoAprovada' | 'bloquearExecucaoOcorrencia' | 'excluirExecucaoOcorrencia' | 'concluirOcorrencias' | 'reabrirOcorrencias' | 'configurarAgendaOcorrencias' | 'editarExecucaoFisica' | 'enviarComprovantes') => autorizado && (administrador || Boolean(acesso.dados?.permissoes?.[chave]));
   const podeCriarBase = permitir('criarOcorrencias');
   const podeEditar = permitir('editarOcorrencias');
   const podeEditarMeta = permitir('editarMetaOcorrencia');
@@ -341,6 +342,7 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, regulari
     setVerificandoAtividade(true); setAtividadeErro('');
     try {
       await transicionarAtividadeApi(contratoId, atividadeDetalhe.id, atividadeDetalhe.status === 'REGISTRADA' ? 'solicitar-conclusao' : 'aprovar-conclusao');
+      if(atividadeDetalhe.atividadeCompartilhadaId)sincronizarEvidenciaCompartilhada(cache,contratoId);
       cache?.invalidar(['atividades', contratoId]); cache?.invalidar(['ocorrencias', contratoId]);
       const [atividadeAtualizada, ocorrenciaAtualizada] = await Promise.all([
         consultarAtividade(contratoId, atividadeDetalhe.id),
@@ -927,7 +929,7 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, regulari
             {([['DETALHES','Manual'],['ATIVIDADES','Atividades'],['EVIDENCIAS','Evidências'],['HISTORICO','Histórico']] as const).filter(([id])=>id!=='HISTORICO'||podeConsultarHistorico).map(([id,rotulo])=><button key={id} role="tab" type="button" aria-selected={abaDetalhe===id} onClick={()=>setAbaDetalhe(id)}>{id==='DETALHES'&&<span aria-hidden="true">✎ </span>}{rotulo}</button>)}
           </div>
           <div hidden={abaDetalhe!=='DETALHES'} className="min-w-0">
-            <ExecucaoOcorrencia key={`${contratoId}:${detalhe.id}`} usuarioId={perfil?.id} contratoId={contratoId} ocorrencia={detalhe} unidade={unidades[detalhe.entregavelId]||'unidades'} podeRegistrar={podeRegistrarMedicao&&abertos.some(e=>e.id===detalhe.entregavelId)} podeCorrigir={podeCorrigirMedicao&&abertos.some(e=>e.id===detalhe.entregavelId)} podeBloquear={podeBloquearMedicao&&abertos.some(e=>e.id===detalhe.entregavelId)} podeExcluir={podeExcluirMedicao&&abertos.some(e=>e.id===detalhe.entregavelId)} podeAprovar={permitir('aprovarExecucaoManual')&&abertos.some(e=>e.id===detalhe.entregavelId)} onAtualizar={atualizarDetalheOcorrencia}/>
+            <ExecucaoOcorrencia key={`${contratoId}:${detalhe.id}`} usuarioId={perfil?.id} contratoId={contratoId} ocorrencia={detalhe} unidade={unidades[detalhe.entregavelId]||'unidades'} podeRegistrar={podeRegistrarMedicao&&abertos.some(e=>e.id===detalhe.entregavelId)} podeCorrigir={podeCorrigirMedicao&&abertos.some(e=>e.id===detalhe.entregavelId)} podeCorrigirAprovada={permitir('corrigirExecucaoAprovada')} podeBloquear={podeBloquearMedicao&&abertos.some(e=>e.id===detalhe.entregavelId)} podeExcluir={podeExcluirMedicao&&abertos.some(e=>e.id===detalhe.entregavelId)} podeAprovar={permitir('aprovarExecucaoManual')&&abertos.some(e=>e.id===detalhe.entregavelId)} onAtualizar={atualizarDetalheOcorrencia}/>
           </div>
           {abaDetalhe==='ATIVIDADES' && <section className="pi-lista-vinculos-v18 space-y-3" aria-label="Atividades vinculadas à ocorrência">
 

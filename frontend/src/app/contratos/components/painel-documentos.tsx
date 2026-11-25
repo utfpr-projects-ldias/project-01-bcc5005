@@ -329,11 +329,10 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
     }
   }
 
-  return <section data-pi-painel-contextual data-tec08-contexto-operacional data-tec08-estado={estadoContextual} id="documentos-contratuais" aria-labelledby="titulo-documentos" className="pi-documentos-desktop min-w-0 space-y-3">
+  return <section data-pi-painel-contextual data-tec08-contexto-operacional data-tec08-estado={estadoContextual} id="documentos-contratuais" aria-label="Documentos contratuais" className="pi-documentos-desktop min-w-0 space-y-3">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0 space-y-1">
         <div className="flex flex-wrap items-center gap-3">
-          <h3 data-pi-titulo id="titulo-documentos" className="text-lg font-semibold text-foreground">Documentos</h3>
           <AbasRolaveis><div role="tablist" aria-label="Situação dos documentos" className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-xl border border-slate-500/30 p-1">
             {([['ATIVOS', 'Ativos'], ['PENDENTE_VERIFICACAO', 'Pendentes de verificação'],
               ['EM_REVISAO', 'Em revisão'], ['VERIFICADO', 'Verificados'], ['ARQUIVADO', 'Arquivados']] as const)

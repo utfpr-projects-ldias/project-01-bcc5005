@@ -23,7 +23,6 @@ export function ProtecaoSessaoInterna({ children }: { children: ReactNode }) {
   const ultimoUsuario = useRef<MeuPerfil | null>(null);
   const [saindo, setSaindo] = useState(false);
   const [falhaSaida, setFalhaSaida] = useState(false);
-  const [jaAutorizado, setJaAutorizado] = useState(false);
   const abaFicouOcultaEm = useRef<number | null>(null);
   const ultimoRetorno = useRef<number | null>(null);
 
@@ -33,7 +32,8 @@ export function ProtecaoSessaoInterna({ children }: { children: ReactNode }) {
     async function verificar() {
       if (verificando || !montado) return;
       verificando = true;
-      setEstado("verificando"); // Evita exibir dados privados antigos durante revalidação.
+      // A primeira entrada é protegida; retornos mantêm o layout até o resultado da API.
+      if (!ultimoUsuario.current) setEstado("verificando");
       try {
         if (!await doesSessionExist()) {
           if (!montado) return;
@@ -62,7 +62,6 @@ export function ProtecaoSessaoInterna({ children }: { children: ReactNode }) {
         }
         cache.gravar(chaveTexto(['identidade', 'me']), perfil);
         ultimoUsuario.current = perfil;
-        setJaAutorizado(true);
         setEstado("autorizado");
       } catch (erro) {
         if (!montado) return;
@@ -106,19 +105,8 @@ export function ProtecaoSessaoInterna({ children }: { children: ReactNode }) {
     };
   }, [router, cache]);
 
-  if (estado === "autorizado" || (estado === "verificando" && jaAutorizado)) return <>
-    {/* Mesmo durante a revalidação, o formulário e seus estados continuam montados.
-        Ocultar o conteúdo enquanto se verificam permissões evita expor dados antigos. */}
-    {/* Manter a geometria de TODAS as páginas enquanto a sessão é revalidada:
-        display:none colapsava a página e deslocava a rolagem para cima.
-        A visibilidade é ocultada e o conteúdo fica fora da árvore acessível até o aceite. */}
-    <div key={versaoIdentidade} className="contents"
-      style={{ visibility: estado === "autorizado" ? "visible" : "hidden" }}
-      inert={estado !== "autorizado"} aria-hidden={estado !== "autorizado"}>{children}</div>
-    {estado === "verificando" && <div className="fixed inset-0 z-[90] flex items-center justify-center bg-background/95 p-6 text-foreground" role="status">
-      <IndicadorCarregamento texto="Verificando sessão e permissões..." />
-    </div>}
-  </>;
+  if (estado === "autorizado")
+    return <div key={versaoIdentidade} className="contents">{children}</div>;
   if (estado === "verificando" || estado === "redirecionando") return (
     <div className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground" role="status">
       <IndicadorCarregamento texto="Verificando sessão e permissões..." />

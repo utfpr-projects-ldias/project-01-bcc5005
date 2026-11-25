@@ -28,9 +28,9 @@ describe('serviço de atividade compartilhada', () => {
       politica.acao === 'atividades:visualizar' ? (visiveis?.has(contratoId) ?? true) : permitidos.has(contratoId));
     const acesso = {permitido, permitidoNaTransacao: (_m:unknown, a:unknown, p:{acao:string}, cid:string) => permitido(a,p,cid)};
     const atividades = { verificarNaTransacao:jest.fn(async (_m:unknown,cid:string) => {
-      const r = registros.find(x=>x.contratoId===cid); if(r) r.status='VERIFICADA';
+      if(registros.some(x=>x.contratoId===cid)) for(const r of registros) if(['REGISTRADA','PENDENTE_CONCLUSAO'].includes(r.status)) r.status='VERIFICADA';
     }), solicitarNaTransacao:jest.fn(async (_m:unknown,cid:string) => {
-      const r = registros.find(x=>x.contratoId===cid); if(r) r.status='PENDENTE_CONCLUSAO';
+      if(registros.some(x=>x.contratoId===cid)) for(const r of registros) if(r.status==='REGISTRADA') r.status='PENDENTE_CONCLUSAO';
     }), criarNaTransacao:jest.fn(async (_m:unknown,cid:string,_dados?:unknown) => ({resultado:{id:cid},
       evento:{acao:'ATIVIDADE_CRIADA',entidadeTipo:'ATIVIDADE',entidadeId:cid}})) };
     const auditoria={registrarNaTransacao:jest.fn(async()=>undefined)};
@@ -40,12 +40,12 @@ describe('serviço de atividade compartilhada', () => {
     return {service,registros,atividades,database,auditoria};
   };
 
-  it('aprova somente os 2 contratos autorizados de 6 e permanece idempotente', async () => {
+  it('uma autorização basta para aprovar o grupo e repetir a decisão é idempotente', async () => {
     const autorizados=new Set([id(101),id(102)]);
     const {service,atividades}=construir(autorizados,Array(6).fill('PENDENTE_CONCLUSAO'));
-    expect(await service.aprovar(grupoId,{},usuario)).toMatchObject({total:6,aprovadas:2,novasAprovacoes:2});
-    expect(await service.aprovar(grupoId,{},usuario)).toMatchObject({total:6,aprovadas:2,novasAprovacoes:0});
-    expect(atividades.verificarNaTransacao).toHaveBeenCalledTimes(2);
+    expect(await service.aprovar(grupoId,{},usuario)).toMatchObject({total:6,aprovadas:6,novasAprovacoes:6});
+    expect(await service.aprovar(grupoId,{},usuario)).toMatchObject({total:6,aprovadas:6,novasAprovacoes:0});
+    expect(atividades.verificarNaTransacao).toHaveBeenCalledTimes(1);
   });
 
   it('não expõe contagem nem IDs de contratos invisíveis', async () => {
@@ -61,10 +61,10 @@ describe('serviço de atividade compartilhada', () => {
     expect(atividades.verificarNaTransacao).not.toHaveBeenCalled();
   });
 
-  it('solicita somente nos contratos em que o usuário pode editar', async () => {
+  it('solicita o grupo a partir de um contrato autorizado', async () => {
     const {service,atividades}=construir(new Set([id(101),id(102)]),Array(6).fill('REGISTRADA'));
-    expect(await service.solicitar(grupoId,{},usuario)).toMatchObject({total:6,pendentes:2,novasSolicitacoes:2});
-    expect(atividades.solicitarNaTransacao).toHaveBeenCalledTimes(2);
+    expect(await service.solicitar(grupoId,{},usuario)).toMatchObject({total:6,pendentes:6,novasSolicitacoes:6});
+    expect(atividades.solicitarNaTransacao).toHaveBeenCalledTimes(1);
   });
 
   it('cria medições independentes por contrato, sem copiar unidade ou quantidade do outro', async () => {

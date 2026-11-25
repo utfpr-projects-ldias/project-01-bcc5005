@@ -669,7 +669,7 @@ test('B04: não habilita conclusão com elegibilidade negada pelo servidor', () 
   fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes da etapa 1: Planejamento' }));
   fireEvent.click(screen.getByRole('button', { name: 'Fechar: escolher ação' }));
   expect(within(screen.getByRole('menu', { name: 'Fechar' })).getByRole('button', { name: 'Solicitar conclusão' })).toBeDisabled();
-  expect(screen.getByText(/Resolva as solicitações e contribuições pendentes/)).toBeInTheDocument();
+  expect(screen.queryByText(/Resolva as solicitações e contribuições pendentes/)).not.toBeInTheDocument();
 });
 
 test('B04: finalização administrativa exige elegibilidade e justificativa', async () => {
@@ -686,4 +686,25 @@ test('B04: finalização administrativa exige elegibilidade e justificativa', as
   fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'Encerramento administrativo autorizado' } });
   fireEvent.click(confirmar);
   await waitFor(() => expect(finalizarEtapa).toHaveBeenCalledWith(contrato, base.id, 'Encerramento administrativo autorizado'));
+});
+
+
+test('mostra o motivo de impedimento de arquivamento no diálogo de confirmação', async () => {
+  (alterarArquivamentoEtapa as jest.Mock).mockRejectedValueOnce(new Error('Resolva a contribuição pendente.'));
+  render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar permissoes={{ arquivarEtapas: true } as never} />);
+  abrirArquivamentoPlanejamento();
+  const caixa = screen.getByRole('dialog', { name: 'Arquivar etapa?' });
+  fireEvent.click(within(caixa).getByRole('button', { name: 'Confirmar arquivamento' }));
+  expect(await within(caixa).findByText('Resolva a contribuição pendente.')).toBeInTheDocument();
+});
+
+test('etapa arquivada oferece lixeira separada do fechamento', () => {
+  consultar.mockReturnValue(estado([{...base, arquivadoEm:'2026-11-05T00:00:00Z'}]));
+  render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar permissoes={{ excluirEtapasArquivadas: true } as never} />);
+  fireEvent.click(screen.getByRole('tab', { name: 'Etapas arquivadas' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes da etapa 1: Planejamento' }));
+  const lixeira = screen.getByRole('button', { name: 'Excluir etapa arquivada' });
+  expect(lixeira).toHaveAttribute('data-pi-excluir-modal');
+  fireEvent.click(lixeira);
+  expect(screen.getByRole('dialog', { name: 'Excluir etapa arquivada?' })).toBeInTheDocument();
 });

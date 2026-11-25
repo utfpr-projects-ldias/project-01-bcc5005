@@ -524,3 +524,28 @@ test.each(['Escape','Voltar do mouse'])('etapa ancorada abre o título do entreg
   fechar(etapaAberta);
   expect(screen.queryByRole('dialog',{name:'Etapa QA'})).not.toBeInTheDocument();
 });
+
+test('filtros de situação por aba, tipos independentes e limpeza conjunta', () => {
+  render(<EntregaveisDaEtapa {...props} dados={[
+    {...e,id:'um',nome:'Entrega pontual',statusExecucao:'NAO_INICIADO'},
+    {...e,id:'dois',nome:'Entrega medida',tipo:'QUANTITATIVO',statusExecucao:'EM_ANDAMENTO'},
+    {...e,id:'tres',nome:'Entrega concluída',statusExecucao:'CONCLUIDO'},
+    {...e,id:'quatro',nome:'Entrega revista',reabertoEm:'2026-11-10T00:00:00Z',statusExecucao:'EM_ANDAMENTO'},
+  ]}/>);
+  const filtro=screen.getByRole('combobox',{name:'Situação do entregável'});
+  expect(within(filtro).queryByRole('option',{name:'Concluído'})).not.toBeInTheDocument();
+  fireEvent.change(filtro,{target:{value:'Em andamento'}});
+  expect(screen.getByRole('button',{name:'Entrega medida'})).toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'Entrega pontual'})).not.toBeInTheDocument();
+  fireEvent.click(within(screen.getByRole('group',{name:'Tipo de entregável'})).getByRole('button',{name:'Único'}));
+  expect(screen.queryByRole('button',{name:'Entrega medida'})).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Limpar filtros'}));
+  expect(screen.getByRole('button',{name:'Entrega pontual'})).toBeInTheDocument();
+  expect(screen.getByRole('button',{name:'Entrega medida'})).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab',{name:'Entregáveis finalizados'}));
+  expect(within(screen.getByRole('combobox',{name:'Situação do entregável'})).getByRole('option',{name:'Concluído'})).toBeInTheDocument();
+  expect(screen.getByRole('button',{name:'Entrega concluída'})).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab',{name:'Em revisão'}));
+  expect(within(screen.getByRole('combobox',{name:'Situação do entregável'})).getByRole('option',{name:'Em revisão'})).toBeInTheDocument();
+  expect(screen.getByRole('button',{name:'Entrega revista'})).toBeInTheDocument();
+});

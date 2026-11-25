@@ -349,6 +349,12 @@ describe('B05 — precisão, vigência e versão do planejamento', () => {
     expect(()=>validarVigenciaPlanejamento(e,vigencia,e)).not.toThrow();
     expect(()=>validarVigenciaPlanejamento({...e,inicioPrevisto:'2026-11-01'},vigencia,e)).not.toThrow();
   });
+  it('identifica a data inválida e informa a vigência real do contrato', () => {
+    const v={inicioVigencia:'2026-11-01',terminoVigencia:'2026-11-30'};
+    expect(()=>validarVigenciaPlanejamento({inicioPrevisto:'2026-10-31',terminoPrevisto:'2026-11-15'},v)).toThrow('Início previsto fora da vigência do contrato. Informe uma data entre 01/11/2026 e 30/11/2026.');
+    expect(()=>validarVigenciaPlanejamento({inicioPrevisto:'2026-11-01',terminoPrevisto:'2026-12-01'},v)).toThrow('Término previsto fora da vigência do contrato. Informe uma data entre 01/11/2026 e 30/11/2026.');
+    expect(()=>validarVigenciaPlanejamento({inicioPrevisto:'2026-11-01',terminoPrevisto:'2026-11-30'},v)).not.toThrow();
+  });
   it('hash não depende da escala decimal ou ordem do JSON, mas diferencia milésimos grandes', () => {
     const e=exemplo(TipoEntregavel.RECORRENTE); e.configuracaoPeriodicidade={versao:1,modoRegistro:'DESCRITIVO'};
     e.quantidadePrevista='999999999999999.001';

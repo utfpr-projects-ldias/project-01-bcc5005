@@ -168,7 +168,7 @@ export class AtividadeCompartilhadaService {
     });
   }
 
-  /** Solicitação em lote, atômica, limitada às permissões de edição por contrato. */
+  /** Solicitação compartilhada autorizada por um dos vínculos visíveis. */
   async solicitar(id: string, dto: AprovarCompartilhadaDto, ator: UsuarioAutenticado) {
     if (!uuidValido(id)) throw new NotFoundException('Atividade compartilhada não encontrada');
     return this.database.transaction(async manager => {
@@ -188,28 +188,28 @@ export class AtividadeCompartilhadaService {
       if (selecionados && [...selecionados].some(cid => !visiveis.has(cid)))
         throw new NotFoundException('Vínculo não encontrado');
       const autorizados: AtividadeEntity[] = [];
-      for (const registro of registros) {
-        if (selecionados && !selecionados.has(registro.contratoId)) continue;
-        if (!await this.pode(ator, 'atividades:editar', registro.contratoId, manager)) {
-          if (selecionados) throw new ForbiddenException('Sem permissão de solicitar em um dos contratos');
+      for (const r of registros) {
+        if (selecionados && !selecionados.has(r.contratoId)) continue;
+        if (!visiveis.has(r.contratoId) || !await this.pode(ator,'atividades:editar',r.contratoId,manager)) {
+          if(selecionados)throw new ForbiddenException('Sem permissão de solicitar no contrato escolhido.');
           continue;
         }
-        if (registro.status === 'REGISTRADA') autorizados.push(registro);
-        else if (selecionados && registro.status !== 'PENDENTE_CONCLUSAO' && registro.status !== 'VERIFICADA')
-          throw new ConflictException('Uma das atividades não admite solicitação');
+        autorizados.push(r);
       }
-      for (const registro of autorizados)
-        await this.atividades.solicitarNaTransacao(manager, registro.contratoId, registro.id, ator);
+      if(!autorizados.length)throw new ForbiddenException('Sem permissão para solicitar a conclusão.');
+      const origem=autorizados.find(r=>r.status==='REGISTRADA');
+      const antesVisiveis=registros.filter(r=>visiveis.has(r.contratoId)&&r.status==='PENDENTE_CONCLUSAO').length;
+      if(origem)await this.atividades.solicitarNaTransacao(manager,origem.contratoId,origem.id,ator);
+      else if(!autorizados.some(r=>r.status==='PENDENTE_CONCLUSAO'||r.status==='VERIFICADA'))throw new ConflictException('A atividade não admite solicitação.');
       const atualizados = await manager.find(AtividadeEntity, {
         where: { atividadeCompartilhadaId: id, excluidaEm: IsNull() },
       });
-      return { id, novasSolicitacoes: autorizados.length, ...contarAprovacoes(atualizados.filter(r => visiveis.has(r.contratoId)).map(r => r.status)) };
+      const estados=atualizados.filter(r=>visiveis.has(r.contratoId)).map(r=>r.status);
+      return {id,novasSolicitacoes:estados.filter(s=>s==='PENDENTE_CONCLUSAO').length-antesVisiveis,...contarAprovacoes(estados)};
     });
   }
 
-  /** Aprovação em lote atômica por contratos autorizados, sem reaprovação da mesma linha.
-   * Sem contratoIds: considera todos os contratos permitidos; os demais ficam intactos.
-   * Com seleção explícita: acesso insuficiente causa rollback total e 403. */
+  /** Uma decisão compartilhada, autorizada por um vínculo visível e com permissão de verificar. */
   async aprovar(id: string, dto: AprovarCompartilhadaDto, ator: UsuarioAutenticado) {
     if (!uuidValido(id)) throw new NotFoundException('Atividade compartilhada não encontrada');
     return this.database.transaction(async manager => {
@@ -231,21 +231,22 @@ export class AtividadeCompartilhadaService {
       const autorizados: AtividadeEntity[] = [];
       for (const r of registros) {
         if (selecionados && !selecionados.has(r.contratoId)) continue;
-        const podeAprovar = await this.pode(ator, 'atividades:verificar', r.contratoId, manager);
-        if (!podeAprovar) {
-          if (selecionados) throw new ForbiddenException('Sem permissão de verificar em um dos contratos solicitados');
+        if (!visiveis.has(r.contratoId) || !await this.pode(ator,'atividades:verificar',r.contratoId,manager)) {
+          if(selecionados)throw new ForbiddenException('Sem permissão de verificar no contrato escolhido.');
           continue;
         }
-        if (r.status === 'PENDENTE_CONCLUSAO') autorizados.push(r);
-        else if (selecionados && r.status !== 'VERIFICADA')
-          throw new ConflictException('Uma das atividades não está pendente de conclusão');
+        autorizados.push(r);
       }
-      for (const registro of autorizados)
-        await this.atividades.verificarNaTransacao(manager, registro.contratoId, registro.id, ator);
+      if(!autorizados.length)throw new ForbiddenException('Sem permissão para aprovar esta atividade.');
+      const origem=autorizados.find(r=>r.status==='PENDENTE_CONCLUSAO');
+      const antesVisiveis=registros.filter(r=>visiveis.has(r.contratoId)&&r.status==='VERIFICADA').length;
+      if(origem)await this.atividades.verificarNaTransacao(manager,origem.contratoId,origem.id,ator);
+      else if(!autorizados.some(r=>r.status==='VERIFICADA'))throw new ConflictException('A atividade não está pendente de conclusão.');
       const atualizados = await manager.find(AtividadeEntity, {
         where: { atividadeCompartilhadaId: id, excluidaEm: IsNull() },
       });
-      return { id, novasAprovacoes: autorizados.length, ...contarAprovacoes(atualizados.filter(r => visiveis.has(r.contratoId)).map(r => r.status)) };
+      const estados=atualizados.filter(r=>visiveis.has(r.contratoId)).map(r=>r.status);
+      return {id,novasAprovacoes:estados.filter(s=>s==='VERIFICADA').length-antesVisiveis,...contarAprovacoes(estados)};
     });
   }
 }

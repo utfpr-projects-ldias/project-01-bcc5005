@@ -82,8 +82,8 @@
 .pi-dashboard .db-tabela :is(th,td):last-child {padding-right:12px;}
 .pi-dashboard .db-tabela tbody tr:hover td {background:var(--db-hover);}
 .pi-dashboard .db-tabela :is(th,td):nth-child(7) {text-align:center;}
-.pi-dashboard .db-identidade {display:block;min-width:0;width:100%;text-align:left;}
-.pi-dashboard .db-identidade strong {display:block;font-size:13px;font-weight:650;color:var(--db-accent);overflow-wrap:anywhere;}
+.pi-dashboard .db-identidade {display:block;min-width:0;width:fit-content;max-width:100%;text-align:left;}
+.pi-dashboard .db-identidade strong {display:block;font-size:13px;font-weight:650;color:var(--db-accent);overflow-wrap:anywhere;text-decoration:underline;text-underline-offset:3px;}
 .pi-dashboard .db-identidade:hover strong {text-decoration:underline;text-underline-offset:3px;}
 .pi-dashboard :is(.db-identidade > span,.db-orgao,.db-truncar) {display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .pi-dashboard .db-identidade > span {font-size:12px;margin-top:2px;}

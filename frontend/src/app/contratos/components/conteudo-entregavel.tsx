@@ -1,6 +1,7 @@
 'use client';
+import { BotaoExcluirModal, BotaoAcaoModal } from '@/app/components/botoes-modal';
 import {ContadoresVinculos} from '@/app/components/contadores-vinculos';
-import { BotaoAcaoModal } from '@/app/components/botoes-modal';
+
 import { MenuAcoesObjeto } from '@/app/components/menu-acoes-objeto';
 import { AbasRolaveis } from '@/app/components/abas-rolaveis';
 import { resultadoFinalizacao } from '@/lib/finalizados';
@@ -27,6 +28,7 @@ import { ExecucoesEntregavel, type CadastroExecucao, type OrigemExecucao, type R
 import { ModalCadastroAtividade } from '@/app/atividades/components/modal-cadastro-atividade';
 import { CartaoAtividade } from '@/app/atividades/components/cartao-atividade';
 import { consultarAtividade, type Atividade } from '@/hooks/use-atividades';
+import { sincronizarContrato } from '@/lib/sincronizar-contrato';
 import { sincronizarEvidenciaCompartilhada } from '@/lib/sincronizar-evidencia-compartilhada';
 import { useRepositorioConsultasOpcional } from '@/app/components/provedor-consultas';
 import type { PermissoesContrato } from '@/lib/contratos';
@@ -49,7 +51,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
   item: Entregavel; resumoInicial?: ResumoDocumentalEntregavel; podeEditarEsperada?: boolean;
   podeCriarEvidencia?: boolean; podeArquivarEvidencia?: boolean; podeReativarEvidencia?: boolean; podeReabrirEvidencia?: boolean; podeExcluirEvidenciaArquivada?: boolean; podeAlterarObrigatoriedade?: boolean;
   podeEnviarComprovantes?: boolean; podeVerHistorico?: boolean; bloqueadoPorPai?: boolean; paiArquivado?: boolean; paiConcluido?: boolean; paiEmRevisao?: boolean; contextoModal?: boolean; regularizacaoDocumental?: boolean; somenteLeituraExecucao?:boolean; permissoesExecucao?:PermissoesContrato;
-  aoAtualizarEsperada?: () => void;
+  aoAtualizarEsperada?: (cacheAtualizado?: boolean) => void;
   registrarVoltaEvidencia?: (voltar: (() => void) | null) => void;
   registrarVoltaEdicao?: (voltar: (() => void) | null) => void;
 }) {
@@ -192,7 +194,11 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
   const [erroExecucao,setErroExecucao]=useState('');
   const cacheExecucao=useRepositorioConsultasOpcional();
   const versaoDetalheExecucao=useRef(0);
-  const atualizarExecucaoIntegrada=()=>{cacheExecucao?.invalidar(['atividades',item.contratoId]);cacheExecucao?.invalidar(['execucao',item.contratoId]);cacheExecucao?.invalidar(['entregaveis','contrato',item.contratoId]);cacheExecucao?.invalidar(['ocorrencias',item.contratoId]);cacheExecucao?.invalidar(['etapas','contrato',item.contratoId]);cacheExecucao?.invalidar(['contratos','detalhe',item.contratoId]);cacheExecucao?.invalidar(['contratos','pendentes']);cacheExecucao?.invalidar(['contratos','lista']);window.dispatchEvent(new CustomEvent('pi:estrutura-operacional-atualizada',{detail:{contratoId:item.contratoId}}));setVersaoEstado(v=>v+1);aoAtualizarEsperada?.();};
+  const atualizarExecucaoIntegrada=()=>{
+    if(cacheExecucao)sincronizarContrato(cacheExecucao,item.contratoId);
+    window.dispatchEvent(new CustomEvent('pi:estrutura-operacional-atualizada',{detail:{contratoId:item.contratoId,cacheAtualizado:Boolean(cacheExecucao)}}));
+    setVersaoEstado(v=>v+1);aoAtualizarEsperada?.(Boolean(cacheExecucao));
+  };
   function atualizarEvidenciaIntegrada(detalhe?: DetalheEvidencia) {
     if (detalhe && detalhe.id === evidenciaId && detalhe.contratoId === item.contratoId && detalhe.entregavelId === item.id) {
       setDetalheConfirmado({chave: `${item.contratoId}:${item.id}:${item.evidenciasEsperadas.map(e => e.id).join(',')}:${versaoEstado + 1}`, detalhe});
@@ -308,7 +314,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
       }
       setSalvandoNova(false); fecharCadastro(true); setNovoTipo(''); setNovaDescricao(''); setNovaObrigatoria(true);
       setNovoArquivo(null); setNovaEvidenciaCriadaId(null);
-      if(vinculosCadastro.destinos?.length&&!novoArquivo)toastAviso('Vínculos salvos. Anexe o comprovante para disponibilizá-lo nos outros entregáveis.');
+      if(vinculosCadastro.destinos?.length&&!novoArquivo)sincronizarEvidenciaCompartilhada(cacheExecucao,item.contratoId);
       atualizarExecucaoIntegrada();
     } catch (erro) {
       const mensagem=erro instanceof Error ? erro.message : 'Não foi possível adicionar a evidência.';
@@ -316,6 +322,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
         // Metadados e declaração já persistidos. A recuperação ocorre no item existente.
         fecharCadastro(true,false);
         atualizarExecucaoIntegrada();
+        if(vinculosCadastro.destinos?.length)sincronizarEvidenciaCompartilhada(cacheExecucao,item.contratoId);
         toastAviso(`Evidência cadastrada. O arquivo não foi enviado: ${mensagem}`);
         setEvidenciaId(id);
       }else setErroCadastro(mensagem);
@@ -675,18 +682,18 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
     textoFechar="Fechar ×" somenteIconeFechar bloqueadoPorSubmodal={edicaoAberta}
     acoes={<>
       <MenuAcoesObjeto rotulo={selecionada.arquivadoEm ? 'Reativar' : estadoEvidencias[selecionada.id]?.status === 'VERIFICADA' ? 'Reabrir' : 'Fechar'}
-        acaoDireta={selecionada.arquivadoEm && podeReativarEvidencia && !bloqueadoPorPai ? () => setConfirmarReativacao(selecionada.id)
+        acaoDireta={selecionada.arquivadoEm && podeReativarEvidencia && !bloqueadoPorPai ? () => {setErroArquivo('');setConfirmarReativacao(selecionada.id);}
           : !selecionada.arquivadoEm && (planejamentoHabilitado || regularizacaoAtiva) && podeReabrirEvidencia && estadoEvidencias[selecionada.id]?.status === 'VERIFICADA' && (!bloqueadoPorPai || regularizacaoAtiva) && !paiArquivado
             ? () => setConfirmarReabertura(selecionada.id) : undefined}>
       {selecionada.arquivadoEm && podeReativarEvidencia && !bloqueadoPorPai &&
-        <BotaoAcaoModal intencao="reativar" disabled={ocupadoArquivo} onClick={() => setConfirmarReativacao(selecionada.id)}>⟳ Reativar</BotaoAcaoModal>}
+        <BotaoAcaoModal intencao="reativar" disabled={ocupadoArquivo} onClick={() => {setErroArquivo('');setConfirmarReativacao(selecionada.id);}}>⟳ Reativar</BotaoAcaoModal>}
       {!selecionada.arquivadoEm && (planejamentoHabilitado || regularizacaoAtiva) && podeReabrirEvidencia && estadoEvidencias[selecionada.id]?.status === 'VERIFICADA' && (!bloqueadoPorPai || regularizacaoAtiva) && !paiArquivado &&
         <BotaoAcaoModal intencao="reabrir" disabled={arquivandoItem} onClick={() => setConfirmarReabertura(selecionada.id)}>Reabrir</BotaoAcaoModal>}
       {!selecionada.arquivadoEm && planejamentoHabilitado && podeArquivarEvidencia && estadoEvidencias[selecionada.id]?.status !== 'VERIFICADA' && !bloqueadoPorPai && !paiArquivado &&
-        <BotaoAcaoModal intencao="arquivar" disabled={ocupadoArquivo} onClick={() => setConfirmarArquivamento(selecionada.id)}>Arquivar</BotaoAcaoModal>}
+        <BotaoAcaoModal intencao="arquivar" disabled={ocupadoArquivo} onClick={() => {setErroArquivo('');setConfirmarArquivamento(selecionada.id);}}>Arquivar</BotaoAcaoModal>}
       </MenuAcoesObjeto>
       {selecionada.arquivadoEm && podeExcluirEvidenciaArquivada && !bloqueadoPorPai &&
-        <button type="button" title="Excluir evidência arquivada" aria-label="Excluir evidência arquivada" disabled={ocupadoArquivo} onClick={() => setConfirmarExclusao(selecionada.id)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/35 bg-red-500/10 text-red-300 hover:bg-red-500/20 disabled:opacity-40">×</button>}
+        <BotaoExcluirModal rotulo="Excluir evidência arquivada" disabled={ocupadoArquivo} onClick={() => {setErroArquivo('');setConfirmarExclusao(selecionada.id);}}/>}
     </>}
     rotuloFechar="Fechar evidência"
     onFechar={() => {
@@ -710,7 +717,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
     </section>
   </ModalEtapa>, document.body)}
   {confirmarExclusao && createPortal(<div className="relative z-[160]" onKeyDown={e => e.stopPropagation()}>
-    <ConfirmacaoSimples titulo="Excluir evidência arquivada?" perigoso ocupado={ocupadoArquivo}
+    <ConfirmacaoSimples pendencias={erroArquivo ? [erroArquivo] : []} titulo="Excluir evidência arquivada?" perigoso ocupado={ocupadoArquivo}
       descricao="Excluir definitivamente esta evidência de teste, todos os comprovantes e todos os arquivos enviados? Não é possível desfazer."
       confirmar="Excluir definitivamente" onCancelar={() => setConfirmarExclusao(null)} onConfirmar={() => void (async () => {
         const id = confirmarExclusao;
@@ -723,24 +730,24 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
           setConfirmarExclusao(null);
           toastSucesso('Evidência excluída com sucesso.');
           atualizarEstadoEvidencias(); aoAtualizarEsperada?.();
-        } catch (e) { setErroArquivo(e instanceof Error ? e.message : 'Falha ao excluir evidência.'); setConfirmarExclusao(null); }
+        } catch (e) { setErroArquivo(e instanceof Error ? e.message : 'Falha ao excluir evidência.'); }
         finally { setOcupadoArquivo(false); }
       })()} />
   </div>, document.body)}
   {confirmarReativacao && createPortal(<div className="relative z-[160]">
-    <ConfirmacaoSimples titulo="Desarquivar evidência?"
+    <ConfirmacaoSimples pendencias={erroArquivo ? [erroArquivo] : []} titulo="Reativar evidência?"
       descricao="A evidência voltará ao checklist ativo deste entregável. A alteração será registrada na rastreabilidade e nenhum detalhe será aberto automaticamente."
-      confirmar="Confirmar desarquivamento" ocupado={ocupadoArquivo} justificativa={motivoEvidencia} onJustificativaChange={setMotivoEvidencia}
+      confirmar="Confirmar reativação" ocupado={ocupadoArquivo} justificativa={motivoEvidencia} onJustificativaChange={setMotivoEvidencia}
       onCancelar={() => { setConfirmarReativacao(null); setMotivoEvidencia(''); }} onConfirmar={() => void reativar()} />
   </div>, document.body)}
   {confirmarReabertura && createPortal(<div className="relative z-[160]">
-    <ConfirmacaoSimples titulo="Reabrir evidência verificada?"
+    <ConfirmacaoSimples pendencias={erroArquivo ? [erroArquivo] : []} titulo="Reabrir evidência verificada?"
       descricao="A evidência voltará a Pendente de verificação. O comprovante existente e o histórico serão preservados."
       confirmar="Reabrir evidência" ocupado={arquivandoItem} justificativa={motivoEvidencia} onJustificativaChange={setMotivoEvidencia}
       onCancelar={() => { setConfirmarReabertura(null); setMotivoEvidencia(''); }} onConfirmar={() => void executarReaberturaEvidencia()} />
   </div>, document.body)}
   {confirmarArquivamento && createPortal(<div className="relative z-[160]">
-    <ConfirmacaoSimples titulo="Arquivar evidência?"
+    <ConfirmacaoSimples pendencias={erroArquivo ? [erroArquivo] : []} titulo="Arquivar evidência?"
       descricao={`Esta evidência sairá do planejamento ativo, mas os comprovantes e o histórico continuarão preservados. Deseja arquivar “${item.evidenciasEsperadas.find(e => e.id === confirmarArquivamento)?.tipoEvidencia ?? 'esta evidência'}”?`}
       confirmar="Confirmar arquivamento" perigoso ocupado={arquivandoItem}
       onCancelar={() => setConfirmarArquivamento(null)} onConfirmar={() => void arquivarEvidenciaDireta()} />

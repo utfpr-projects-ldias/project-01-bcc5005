@@ -26,3 +26,10 @@ export function BotaoAcaoModal({ intencao, children, conclusaoParcial = false, c
     {children}
   </button>;
 }
+
+/** A exclusão é uma ação distinta do fechamento da janela. */
+export function BotaoExcluirModal({ rotulo, className = '', ...props }: Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'type' | 'children'> & { rotulo: string }) {
+  return <button {...props} type="button" title={rotulo} aria-label={rotulo} data-pi-excluir-modal className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-40 ${className}`}>
+    <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg>
+  </button>;
+}

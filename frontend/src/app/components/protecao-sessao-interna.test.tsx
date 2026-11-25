@@ -120,7 +120,7 @@ test('seletor nativo com blur/focus prolongado não oculta nem remonta a página
   expect(screen.queryByText('Verificando sessão e permissões...')).not.toBeInTheDocument();
 });
 
-test('retorno após aba realmente oculta preserva formulário e esconde dados até autorização', async () => {
+test('retorno após aba realmente oculta preserva formulário durante revalidação em segundo plano', async () => {
   render(<ProtecaoSessaoInterna><input aria-label="Rascunho" defaultValue="Original" /></ProtecaoSessaoInterna>);
   const campo = await screen.findByRole('textbox', { name: 'Rascunho' });
   fireEvent.change(campo, { target: { value: 'Preservado' } });
@@ -128,7 +128,8 @@ test('retorno após aba realmente oculta preserva formulário e esconde dados at
   perfil.mockImplementationOnce(() => new Promise<typeof usuario>(res => { liberar = res; }));
   await alternarAba();
   expect(campo.isConnected).toBe(true);
-  expect(campo.closest('[aria-hidden="true"]')).toHaveStyle({ visibility: 'hidden' });
+  expect(campo).toBeVisible();
+  expect(screen.queryByText('Verificando sessão e permissões...')).not.toBeInTheDocument();
   await act(async () => { liberar(usuario); });
   expect(campo).toBeVisible();
   expect(campo).toHaveValue('Preservado');
@@ -160,16 +161,15 @@ test('retorno curto à aba não esconde a página nem gera revalidação duplica
   expect(screen.getByText('Minha posição na página')).toBeVisible();
 });
 
-test('retorno prolongado mantém geometria de conteúdo enquanto esconde dados protegidos', async () => {
+test('retorno prolongado mantém geometria de conteúdo durante revalidação', async () => {
   render(<ProtecaoSessaoInterna><section style={{ height: 900 }}>Conteúdo longo</section></ProtecaoSessaoInterna>);
   expect(await screen.findByText('Conteúdo longo')).toBeVisible();
   let liberar!: (u: typeof usuario) => void;
   perfil.mockImplementationOnce(() => new Promise<typeof usuario>((res) => { liberar = res; }));
   await alternarAba();
   const conteudo = screen.getByText('Conteúdo longo');
-  expect(conteudo.closest('[aria-hidden="true"]')).toHaveClass('contents');
-  expect(conteudo.closest('[aria-hidden="true"]')).toHaveStyle({ visibility: 'hidden' });
-  expect(screen.getByText('Verificando sessão e permissões...').closest('.fixed')).not.toBeNull();
+  expect(conteudo).toBeVisible();
+  expect(screen.queryByText('Verificando sessão e permissões...')).not.toBeInTheDocument();
   await act(async () => { liberar(usuario); });
   expect(conteudo).toBeVisible();
 });
