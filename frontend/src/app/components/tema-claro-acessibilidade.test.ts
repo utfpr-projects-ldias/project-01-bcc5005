@@ -25,11 +25,11 @@ function contraste(cor: string, fundo: string) {
 test('o claro define superfície própria e mantém os estados contrastantes', () => {
   const trecho = css.split('/* TEC08-03 · Revisão de acessibilidade do tema claro')[1];
   expect(trecho).toContain('@media (prefers-color-scheme: light)');
-  expect(trecho).toContain('--bg-primary: #f7faf6;');
+  expect(trecho).toContain('--bg-primary: #f8fafc;');
   for (const tinta of ['#854d0e', '#713f12', '#5b21b6', '#0f766e', '#b91c1c', '#42534a', '#166534']) {
-    expect(contraste(tinta, '#f7faf6')).toBeGreaterThanOrEqual(4.5);
+    expect(contraste(tinta, '#f8fafc')).toBeGreaterThanOrEqual(4.5);
   }
-  expect(contraste('#17251c', '#f7faf6')).toBeGreaterThanOrEqual(7);
+  expect(contraste('#17251c', '#f8fafc')).toBeGreaterThanOrEqual(7);
 });
 
 test('suspensão e arquivamento não compartilham a mesma cor de texto', () => {

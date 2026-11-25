@@ -90,7 +90,7 @@ export function FormularioEntregavel({ contratoId, etapaId, inicial, onSalvar, o
       <div><label className="mb-1 block text-sm" htmlFor={formId('codigo')}>Código (opcional)</label>
         <input id={formId('codigo')} className={`${estilo} max-w-32`} maxLength={Math.max(15, base?.codigo?.length ?? 0)} value={dados.codigo} {...campoErro('codigo')} onChange={(e) => atualizar('codigo', e.target.value)} />{mensagem('codigo')}<span className="mt-1 block text-right text-[11px] text-foreground/60">{[...dados.codigo].length}/15</span></div>
       <div><label className="mb-1 block text-sm" htmlFor={formId('nome')}>Nome *</label>
-        <input id={formId('nome')} className={estilo} maxLength={Math.max(42, base?.nome.length ?? 0)} value={dados.nome} {...campoErro('nome')} onChange={(e) => atualizar('nome', e.target.value)} />{mensagem('nome')}<span className="mt-1 block text-right text-[11px] text-foreground/60">{[...dados.nome].length}/42</span></div>
+        <input id={formId('nome')} className={estilo} maxLength={Math.max(45, base?.nome.length ?? 0)} value={dados.nome} {...campoErro('nome')} onChange={(e) => atualizar('nome', e.target.value)} />{mensagem('nome')}<span className="mt-1 block text-right text-[11px] text-foreground/60">{[...dados.nome].length}/45</span></div>
     </div>
     <div className="space-y-2">
       <SeletorResponsavel id={formId('email-responsavel')} rotulo="Responsável pelo entregável (opcional)"

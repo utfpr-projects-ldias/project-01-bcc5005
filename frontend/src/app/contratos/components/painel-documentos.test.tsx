@@ -363,7 +363,7 @@ test('documento arquivado abre detalhe e pode ser reativado sem reaparecer na ab
   fireEvent.click(detalhe);
   expect(screen.getByRole('dialog', { name: doc.nomeOriginal })).toHaveTextContent('Arquivado');
   expect(within(screen.getByRole('dialog', { name: doc.nomeOriginal })).getByRole('button', { name: 'Baixar arquivo' })).toBeInTheDocument();
-  fireEvent.click(within(screen.getByRole('dialog', { name: doc.nomeOriginal })).getByRole('button', { name: 'Reabrir' }));
+  fireEvent.click(within(screen.getByRole('dialog', { name: doc.nomeOriginal })).getByRole('button', { name: 'Reativar' }));
   const confirmar = screen.getByRole('dialog', { name: 'Reativar documento?' });
   expect(reativarDocumento).not.toHaveBeenCalled();
   const justificativa = 'Reativação do documento após conferência administrativa.';

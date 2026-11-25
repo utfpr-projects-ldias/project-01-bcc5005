@@ -24,19 +24,14 @@ import { chaveTexto } from '@/lib/repositorio-consultas';
 import { CHAVES_FUNCIONARIOS } from '@/hooks/use-funcionarios';
 import { CHAVE_PERFIL } from '@/hooks/use-meu-perfil';
 
-const nomeCompleto = z.string().min(3, "Informe nome e sobrenome.").max(160, "Nome completo: máximo de 160 caracteres.")
-  .regex(/^\p{L}[\p{L}\p{M}'’.-]*(?:[ \t]+\p{L}[\p{L}\p{M}'’.-]*)+$/u,
-    "Informe nome e sobrenome válidos.");
-const regraSenha = z.string().min(12, "A senha precisa ter ao menos 12 caracteres.")
-  .max(128, "A senha deve ter no máximo 128 caracteres.")
-  .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^a-zA-Z0-9]).+$/,
-    "Use maiúscula, minúscula, número e símbolo.");
+import { LIMITES_CONTA, nomeContaSchema as nomeCompleto, emailContaSchema, senhaContaSchema as regraSenha } from '@/lib/validacao-conta';
+
 const cadastroSchema = z.object({
   nome: nomeCompleto,
-  email: z.email("Informe um e-mail válido.").max(254, "E-mail: máximo de 254 caracteres."),
+  email: emailContaSchema,
   perfil: z.enum(["GESTOR", "COLABORADOR"]),
   senhaInicial: regraSenha,
-  confirmarSenha: z.string(),
+  confirmarSenha: z.string().max(LIMITES_CONTA.senha),
 }).refine((data) => data.senhaInicial === data.confirmarSenha, {
   message: "As senhas não coincidem.", path: ["confirmarSenha"],
 });
@@ -44,9 +39,9 @@ const inicial = { nome: "", email: "", perfil: "COLABORADOR" as PerfilFuncionari
 
 type Campo = "nome" | "email" | "perfil" | "senhaInicial" | "confirmarSenha";
 type Erros = Partial<Record<Campo, string>>;
-const botao = "inline-flex min-h-9 w-fit cursor-pointer items-center justify-center rounded-lg border border-brand-green/40 px-3 py-1.5 text-sm font-medium text-foreground transition-colors duration-100 hover:border-brand-green/70 hover:bg-brand-green/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-neon disabled:cursor-not-allowed disabled:opacity-50";
-const campo = "w-full min-w-0 rounded-lg border border-brand-green/30 bg-background px-3 py-2 text-foreground focus-visible:outline-2 focus-visible:outline-brand-green";
-const acao = "inline-flex min-h-9 w-fit cursor-pointer items-center justify-center gap-2 rounded-lg border border-brand-green/40 bg-brand-green px-3 py-1.5 text-sm font-semibold text-on-brand-green shadow-sm transition-colors duration-100 hover:bg-brand-green/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-neon disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none";
+const botao = "inline-flex min-h-9 w-fit cursor-pointer items-center justify-center rounded-lg border border-[color:var(--pi-admin-borda)] px-3 py-1.5 text-sm font-medium text-foreground transition-colors duration-100 hover:border-[color:var(--pi-admin-borda)] hover:bg-[var(--pi-admin-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7bafc3] disabled:cursor-not-allowed disabled:opacity-50";
+const campo = "w-full min-w-0 rounded-lg border border-[color:var(--pi-admin-borda)] bg-background px-3 py-2 text-foreground focus-visible:outline-2 focus-visible:outline-[#7bafc3]";
+const acao = "inline-flex min-h-9 w-fit cursor-pointer items-center justify-center gap-2 rounded-lg border border-[color:var(--pi-admin-borda)] bg-[#35616f] px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors duration-100 hover:bg-[#294e5b] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7bafc3] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none";
 
 function erroLegivel(erro: unknown): string {
   return erro instanceof ErroApi ? erro.message : "Não foi possível comunicar com o servidor. Tente novamente.";
@@ -259,7 +254,9 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
     evento.preventDefault(); if (!editando || enviando || editando.perfil === "ADMINISTRADOR") return;
     setEnviando(true); setErroFormulario("");
     try {
-      const atualizado = await alterarEmailFuncionario(editando.id, emailNovo.trim().toLowerCase());
+      const validacao = emailContaSchema.safeParse(emailNovo);
+      if (!validacao.success) { setErroFormulario(validacao.error.issues[0]?.message ?? "E-mail inválido."); return; }
+      const atualizado = await alterarEmailFuncionario(editando.id, validacao.data);
       invalidarListas();
       cache.gravar(chaveTexto(CHAVES_FUNCIONARIOS.detalhe(atualizado.id)), atualizado);
       if (atualizado.id === minhaConta?.id) cache.invalidar(CHAVE_PERFIL);
@@ -374,18 +371,18 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
               : 'Atualize os dados da conta ou abra uma seção adicional para alterar credenciais e contratos.'}</p>}
         </div>
         <div className="flex flex-col gap-5">
-          {vista === "lista" && <section className="min-w-0 rounded-2xl border border-brand-green/20 bg-brand-darkgreen/5 p-4 md:p-5" aria-labelledby="titulo-lista">
+          {vista === "lista" && <section className="min-w-0 rounded-2xl border border-[color:var(--pi-admin-borda)] bg-[var(--pi-admin-superficie)] p-4 md:p-5" aria-labelledby="titulo-lista">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-3">
                 <h2 id="titulo-lista" className="text-base font-semibold">Funcionários</h2>
-                <div className="inline-flex items-center gap-1 rounded-lg border border-brand-green/25 p-1" role="group" aria-label="Situação dos funcionários">
+                <div className="inline-flex items-center gap-1 rounded-lg border border-[color:var(--pi-admin-borda)] p-1" role="group" aria-label="Situação dos funcionários">
                   <button type="button" onClick={() => trocarAba('ativos')} disabled={atualizando} aria-pressed={aba === 'ativos'}
-                    className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${aba === 'ativos' ? 'bg-brand-green text-on-brand-green' : 'text-foreground/70 hover:bg-brand-green/10 hover:text-foreground'}`}>Ativos <span className="tabular-nums">({quantidades.ativos})</span></button>
+                    className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${aba === 'ativos' ? 'bg-[var(--pi-admin-hover)] text-foreground ring-1 ring-[color:var(--pi-admin-borda)]' : 'text-foreground/70 hover:bg-[var(--pi-admin-hover)] hover:text-foreground'}`}>Ativos <span className="tabular-nums">({quantidades.ativos})</span></button>
                   <button type="button" onClick={() => trocarAba('arquivados')} disabled={atualizando} aria-pressed={aba === 'arquivados'}
-                    className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${aba === 'arquivados' ? 'bg-brand-green text-on-brand-green' : 'text-foreground/70 hover:bg-brand-green/10 hover:text-foreground'}`}>Arquivados <span className="tabular-nums">({quantidades.arquivados})</span></button>
+                    className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${aba === 'arquivados' ? 'bg-[var(--pi-admin-hover)] text-foreground ring-1 ring-[color:var(--pi-admin-borda)]' : 'text-foreground/70 hover:bg-[var(--pi-admin-hover)] hover:text-foreground'}`}>Arquivados <span className="tabular-nums">({quantidades.arquivados})</span></button>
                 </div>
               </div>
-              <Link href="/admin/usuarios/novo" className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg bg-brand-green px-3 text-xs font-semibold text-on-brand-green transition hover:brightness-110 focus-visible:outline-2 focus-visible:outline-brand-neon">
+              <Link href="/admin/usuarios/novo" className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg bg-[#35616f] px-3 text-xs font-semibold text-white transition hover:brightness-110 focus-visible:outline-2 focus-visible:outline-[#7bafc3]">
                 <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6m-3-3h6"/></svg>
                 Cadastrar funcionário
               </Link>
@@ -394,24 +391,24 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
               <label htmlFor="buscar-funcionario" className="sr-only">Buscar funcionário por nome ou e-mail</label>
               <input id="buscar-funcionario" className={campo + " min-w-[12rem] flex-1"} value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar nome ou e-mail" maxLength={160} />
               <button type="submit" disabled={atualizando} className={botao}>Buscar</button>
-              <button type="button" disabled={atualizando} className={botao} onClick={() => { setBusca(""); setFiltro(""); setPagina(1); void recarregar(aba, 1, ""); }}>Limpar</button>
+              <button type="button" disabled={atualizando || (!busca && !filtro)} className={botao} onClick={() => { setBusca(""); setFiltro(""); setPagina(1); void recarregar(aba, 1, ""); }}>Limpar filtros</button>
             </form>
             {erroLista && <p role="alert" className="mt-3 text-sm text-error-text">{erroLista}</p>}
             <p className="mt-3 text-xs text-foreground/65">{listaVisivel.total} resultados · Página {lista.pagina} de {listaVisivel.totalPaginas}</p>
             {listaVisivel.itens.length === 0 ? <p className="mt-5 text-sm text-foreground/70">Nenhum funcionário nesta consulta.</p> : (
               <ul className="mt-3 space-y-2">
                 {listaVisivel.itens.map((u) => (
-                  <li key={u.id} className="min-w-0 rounded-xl border border-brand-green/20 bg-background/50 p-3 transition-colors hover:border-brand-green/45 hover:bg-brand-green/5">
+                  <li key={u.id} className="min-w-0 rounded-xl border border-[color:var(--pi-admin-borda)] bg-background/50 p-3 transition-colors hover:border-[color:var(--pi-admin-borda)] hover:bg-[var(--pi-admin-hover)]">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="flex min-w-0 flex-1 items-start gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-brand-green/25 bg-brand-green/10 text-sm font-bold text-brand-neon" aria-hidden="true">{u.nome?.trim()?.[0]?.toUpperCase() || '?'}</div>
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[color:var(--pi-admin-borda)] bg-[var(--pi-admin-hover)] text-sm font-bold text-foreground" aria-hidden="true">{u.nome?.trim()?.[0]?.toUpperCase() || '?'}</div>
                         <div className="min-w-0"><p className="font-semibold break-words">{u.nome || "Nome não informado"}</p>
                         <p className="text-sm text-foreground/70 break-all">{u.email}</p>
                         <p className="mt-0.5 text-xs text-foreground/65">{nomePerfil(u.perfil)} · {u.ativo ? "Ativo" : "Arquivado"} · {dataBR(u.criadoEm)}</p></div>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {(u.perfil !== "ADMINISTRADOR" || u.id === minhaConta?.id) && <Link className={botao} href={`/admin/usuarios/${encodeURIComponent(u.id)}/editar`} aria-label={`Editar ${u.email}`}>Editar</Link>}
-                        {u.perfil !== "ADMINISTRADOR" && <button type="button" className={botao} onClick={() => setConfirmacao({ tipo: "conta", usuario: u })}>{u.ativo ? "Arquivar" : "Reativar"}</button>}
+                        {u.perfil !== "ADMINISTRADOR" && <button type="button" className={`${botao} ${u.ativo ? "text-amber-700 dark:text-amber-300" : "text-foreground"}`} onClick={() => setConfirmacao({ tipo: "conta", usuario: u })}>{u.ativo ? "Arquivar" : "Reativar"}</button>}
                       </div>
                     </div>
                   </li>
@@ -425,23 +422,24 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
             </div>
           </section>}
 
-          {vista !== "lista" && <section className="mx-auto w-full max-w-3xl min-w-0 space-y-5 rounded-2xl border border-brand-green/20 p-4 md:p-6" aria-labelledby="titulo-formulario">
+          {vista !== "lista" && <section className="mx-auto w-full max-w-3xl min-w-0 space-y-5 rounded-2xl border border-[color:var(--pi-admin-borda)] p-4 md:p-6" aria-labelledby="titulo-formulario">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 id="titulo-formulario" className="text-lg font-semibold">{editando ? `Conta de ${editando.nome || "Nome não informado"}` : "Nova conta de funcionário"}</h2>
-              {vista === "edicao" && <span className="rounded-full bg-brand-green/10 px-3 py-1 text-xs text-foreground/70">Edição administrativa</span>}
+              {vista === "edicao" && <span className="rounded-full bg-[var(--pi-admin-hover)] px-3 py-1 text-xs text-foreground/70">Edição administrativa</span>}
             </div>
             {erroFormulario && <p role="alert" className="text-sm text-error-text">{erroFormulario}</p>}
             {vista === "edicao" && editando ? (
               <>
                 <p className="break-all text-sm text-foreground/70">Conta: {editando.email}</p>
-                <div className="rounded-xl border border-brand-green/15 bg-brand-darkgreen/10 p-4">
+                <div className="rounded-xl border border-[color:var(--pi-admin-borda)] bg-[var(--pi-admin-superficie)] p-4">
                 <h3 className="mb-1 font-semibold">Dados e situação da conta</h3>
                 <p className="mb-4 text-xs text-foreground/65">Use Salvar dados somente para nome, perfil e situação. As demais operações são independentes.</p>
                 <form className="space-y-4" noValidate onSubmit={(e) => void salvarEdicao(e)}>
                   <div>
                     <label htmlFor="edicao-nome" className="mb-1 block text-sm">Nome completo</label>
-                    <input id="edicao-nome" className={campo} value={edicao.nome} onChange={(e) => setEdicao((s) => ({ ...s, nome: e.target.value }))} maxLength={160} aria-describedby={!editando.nome ? "aviso-nome-legado" : undefined} />
-                    {!editando.nome && <p id="aviso-nome-legado" className="text-xs text-foreground/60">Nome legado opcional nesta edição. Ao preencher, informe nome e sobrenome.</p>}
+                    <input id="edicao-nome" className={campo} value={edicao.nome} onChange={(e) => setEdicao((s) => ({ ...s, nome: e.target.value }))} aria-describedby={!editando.nome ? "aviso-nome-legado" : undefined} maxLength={LIMITES_CONTA.nome} minLength={3} />
+                  <p className="text-right text-xs text-foreground/60">{edicao.nome.length}/{LIMITES_CONTA.nome} · mínimo 3</p>
+                    {!editando.nome && <p id="aviso-nome-legado" className="text-xs text-foreground/60">Nome legado opcional nesta edição. Ao preencher, informe um nome válido.</p>}
                   </div>
                   {editando.perfil !== "ADMINISTRADOR" && <>
                     <div>
@@ -457,28 +455,31 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                   <div className="space-y-3" aria-label="Configurações administrativas adicionais">
                     <h3 className="text-base font-semibold">Outras configurações</h3>
                     <p className="text-sm text-foreground/65">Abra apenas a seção que deseja modificar. As alterações são independentes.</p>
-                    <details className="group rounded-xl border border-brand-green/20 p-4">
-                      <summary className="cursor-pointer font-semibold focus-visible:outline-2 focus-visible:outline-brand-green">Alterar e-mail <span className="ml-2 text-xs font-normal text-foreground/60">Credencial de acesso</span></summary>
+                    <details className="group rounded-xl border border-[color:var(--pi-admin-borda)] p-4">
+                      <summary className="cursor-pointer font-semibold focus-visible:outline-2 focus-visible:outline-[#7bafc3]">Alterar e-mail <span className="ml-2 text-xs font-normal text-foreground/60">Credencial de acesso</span></summary>
                       <form onSubmit={(e) => void salvarEmail(e)} className="mt-4 space-y-3">
                         <p className="text-xs text-foreground/65">E-mail atual: {editando.email}</p>
                         <label htmlFor="edicao-email" className="block text-sm">Novo e-mail</label>
-                        <input id="edicao-email" type="email" className={campo} value={emailNovo} maxLength={254} required onChange={(e) => setEmailNovo(e.target.value)} />
+                        <input id="edicao-email" type="email" className={campo} value={emailNovo} required onChange={(e) => setEmailNovo(e.target.value)} maxLength={LIMITES_CONTA.email} />
+                  <p className="text-right text-xs text-foreground/60">{emailNovo.length}/{LIMITES_CONTA.email}</p>
                         <button className={acao} type="submit" disabled={enviando || emailNovo.trim().toLowerCase() === editando.email}>{enviando ? <IndicadorCarregamento compacto texto="Atualizando..." /> : "Confirmar mudança de e-mail"}</button>
                       </form>
                     </details>
-                    <details className="group rounded-xl border border-brand-green/20 p-4">
-                      <summary className="cursor-pointer font-semibold focus-visible:outline-2 focus-visible:outline-brand-green">Redefinir senha <span className="ml-2 text-xs font-normal text-foreground/60">Operação sensível</span></summary>
+                    <details className="group rounded-xl border border-[color:var(--pi-admin-borda)] p-4">
+                      <summary className="cursor-pointer font-semibold focus-visible:outline-2 focus-visible:outline-[#7bafc3]">Redefinir senha <span className="ml-2 text-xs font-normal text-foreground/60">Operação sensível</span></summary>
                       <form onSubmit={(e) => void salvarSenha(e)} className="mt-4 space-y-3">
-                        <p className="text-xs text-foreground/65">A senha anterior nunca é exibida. Use 12–128 caracteres com maiúscula, minúscula, número e símbolo.</p>
+                        <p className="text-xs text-foreground/65">A senha anterior nunca é exibida. Use 12–30 caracteres com maiúscula, minúscula, número e símbolo.</p>
                         <label htmlFor="nova-senha" className="block text-sm">Nova senha</label>
-                        <input id="nova-senha" type="password" autoComplete="new-password" className={campo} value={senhaNova} onChange={(e) => setSenhaNova(e.target.value)} />
+                        <input id="nova-senha" type="password" autoComplete="new-password" className={campo} value={senhaNova} onChange={(e) => setSenhaNova(e.target.value)} maxLength={LIMITES_CONTA.senha} minLength={12} />
+                  <p className="text-right text-xs text-foreground/60">{senhaNova.length}/{LIMITES_CONTA.senha} · mínimo 12</p>
                         <label htmlFor="confirmar-nova-senha" className="block text-sm">Confirmar nova senha</label>
-                        <input id="confirmar-nova-senha" type="password" autoComplete="new-password" className={campo} value={senhaConfirmada} onChange={(e) => setSenhaConfirmada(e.target.value)} />
+                        <input id="confirmar-nova-senha" type="password" autoComplete="new-password" className={campo} value={senhaConfirmada} onChange={(e) => setSenhaConfirmada(e.target.value)} maxLength={LIMITES_CONTA.senha} minLength={12} />
+                  <p className="text-right text-xs text-foreground/60">{senhaConfirmada.length}/{LIMITES_CONTA.senha} · mínimo 12</p>
                         <button className={acao} type="submit" disabled={enviando}>{enviando ? <IndicadorCarregamento compacto texto="Redefinindo..." /> : "Confirmar redefinição de senha"}</button>
                       </form>
                     </details>
-                    <details className="group rounded-xl border border-brand-green/20 p-4" data-testid="acessos-contratuais">
-                      <summary className="cursor-pointer font-semibold focus-visible:outline-2 focus-visible:outline-brand-green">Acesso aos contratos <span className="ml-2 text-xs font-normal text-foreground/60">{permissoes.length} vínculo(s)</span></summary>
+                    <details className="group rounded-xl border border-[color:var(--pi-admin-borda)] p-4" data-testid="acessos-contratuais">
+                      <summary className="cursor-pointer font-semibold focus-visible:outline-2 focus-visible:outline-[#7bafc3]">Acesso aos contratos <span className="ml-2 text-xs font-normal text-foreground/60">{permissoes.length} vínculo(s)</span></summary>
                       <div className="mt-4 space-y-4">
                         <p className="text-sm text-foreground/70">Vincule um contrato para consulta. Depois, habilite a edição ou ajuste permissões específicas no cartão do vínculo. Ser responsável pelo cadastro não concede acesso automaticamente.</p>
                         {erroPermissoes && <p role="alert" className="text-sm text-error-text">{erroPermissoes}</p>}
@@ -490,21 +491,21 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                               // Administradores não recebem vínculos como funcionários. A normalização
                               // também impede que o tipo administrativo alcance funções de perfil comum.
                               const perfilVinculo: PerfilFuncionario = editando.perfil === 'ADMINISTRADOR' ? 'GESTOR' : editando.perfil;
-                              return <li key={v.contratoId} className="@container min-w-0 rounded-xl border border-brand-green/20 bg-brand-darkgreen/5 p-3 sm:p-4">
+                              return <li key={v.contratoId} className="@container min-w-0 rounded-xl border border-[color:var(--pi-admin-borda)] bg-[var(--pi-admin-superficie)] p-3 sm:p-4">
                                 <div className="min-w-0 space-y-3">
                                   <div className="min-w-0">
                                     {contrato ? <>
                                       <button type="button" title={contrato.numeroContrato} aria-label={`Ver identificação completa do contrato ${contrato.numeroContrato}`}
-                                        className="block max-w-full truncate rounded text-left text-sm font-semibold text-brand-neon underline decoration-brand-green/40 underline-offset-4 hover:decoration-brand-neon focus-visible:outline-2 focus-visible:outline-brand-green"
+                                        className="block max-w-full truncate rounded text-left text-sm font-semibold text-foreground underline decoration-current/40 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-[#7bafc3]"
                                         onClick={(evento) => setIdentificacaoAberta({ contrato, gatilho: evento.currentTarget })}>
                                         {contrato.numeroContrato}</button>
                                       <p className="mt-1 text-xs text-foreground/60">Código #{contrato.codigoPublico}</p>
-                                    </> : <p className="break-all font-semibold text-brand-neon">Contrato {v.contratoId}</p>}
+                                    </> : <p className="break-all font-semibold text-foreground">Contrato {v.contratoId}</p>}
                                     <p className="mt-1 text-xs text-foreground/70" data-testid={`permissao-contrato-${v.contratoId}`}>
                                       {resumirAcessoVinculo(perfilVinculo, v)}
                                     </p>
                                   </div>
-                                  <div className="flex flex-wrap items-center gap-2 border-t border-brand-green/15 pt-3">
+                                  <div className="flex flex-wrap items-center gap-2 border-t border-[color:var(--pi-admin-borda)] pt-3">
                                     {editando.perfil !== "ADMINISTRADOR" && <EditorPermissoesContrato key={v.contratoId} vinculo={v}
                                       perfil={editando.perfil} salvando={!!atualizandoVinculo || enviando}
                                       onSalvar={permissoes => salvarPermissoesDetalhadas(v, permissoes)} />}
@@ -524,10 +525,10 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                                 </div>
                               </li>;
                             })}
-                            {!permissoes.length && <li className="rounded-lg border border-dashed border-brand-green/20 p-3 text-foreground/60">Nenhum contrato vinculado.</li>}
+                            {!permissoes.length && <li className="rounded-lg border border-dashed border-[color:var(--pi-admin-borda)] p-3 text-foreground/60">Nenhum contrato vinculado.</li>}
                           </ul>
                         </section>
-                        <section className="border-t border-brand-green/20 pt-4" aria-label="Conceder novo acesso">
+                        <section className="border-t border-[color:var(--pi-admin-borda)] pt-4" aria-label="Conceder novo acesso">
                           <h4 className="text-sm font-semibold">Adicionar acesso</h4>
                           {contratosLivres.length === 0 ? <p className="mt-2 text-sm text-foreground/60">Não há outros contratos disponíveis para vincular. Crie um contrato ou revise os vínculos acima.</p> :
                             <form onSubmit={(e) => void salvarPermissao(e)} className="mt-4 min-w-0 space-y-5">
@@ -541,7 +542,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                                 O vínculo será criado com <strong>somente leitura</strong>. Depois, no cartão acima,
                                 você poderá permitir edição e personalizar as operações em “Ver permissões completas”.
                               </p>
-                              <div className="flex justify-end border-t border-brand-green/20 pt-4">
+                              <div className="flex justify-end border-t border-[color:var(--pi-admin-borda)] pt-4">
                                 <button type="submit" disabled={enviando || !contratoSelecionado || !editando.ativo}
                                   className={acao}>
                                   {enviando ? <IndicadorCarregamento compacto texto="Vinculando..." /> : "Adicionar vínculo"}
@@ -557,22 +558,26 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
             ) : vista === "cadastro" ? (
               <form onSubmit={(e) => void cadastrar(e)} noValidate className="space-y-4">
                 <div><label htmlFor="usuario-nome" className="mb-1 block text-sm">Nome completo</label>
-                  <input id="usuario-nome" className={campo} value={form.nome} onChange={(e) => setForm((s) => ({ ...s, nome: e.target.value }))} aria-invalid={!!erros.nome} maxLength={160} />
+                  <input id="usuario-nome" className={campo} value={form.nome} onChange={(e) => setForm((s) => ({ ...s, nome: e.target.value }))} aria-invalid={!!erros.nome} maxLength={LIMITES_CONTA.nome} minLength={3} />
+                  <p className="text-right text-xs text-foreground/60">{form.nome.length}/{LIMITES_CONTA.nome} · mínimo 3</p>
                   {erros.nome && <p role="alert" className="text-xs text-error-text">{erros.nome}</p>}
                 </div>
                 <div><label htmlFor="usuario-email" className="mb-1 block text-sm">E-mail</label>
-                  <input id="usuario-email" type="email" className={campo} value={form.email} onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))} aria-invalid={!!erros.email} maxLength={254} />
+                  <input id="usuario-email" type="email" className={campo} value={form.email} onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))} aria-invalid={!!erros.email} maxLength={LIMITES_CONTA.email} />
+                  <p className="text-right text-xs text-foreground/60">{form.email.length}/{LIMITES_CONTA.email}</p>
                   {erros.email && <p role="alert" className="text-xs text-error-text">{erros.email}</p>}
                 </div>
                 <div><label htmlFor="usuario-perfil" className="mb-1 block text-sm">Perfil</label>
                   <select id="usuario-perfil" className={campo} value={form.perfil} onChange={(e) => setForm((s) => ({ ...s, perfil: e.target.value as PerfilFuncionario }))}><option value="GESTOR">Gestor</option><option value="COLABORADOR">Colaborador</option></select>
                 </div>
                 <div><label htmlFor="usuario-senha" className="mb-1 block text-sm">Senha inicial</label>
-                  <input id="usuario-senha" type="password" maxLength={128} autoComplete="new-password" className={campo} value={form.senhaInicial} onChange={(e) => setForm((s) => ({ ...s, senhaInicial: e.target.value }))} aria-invalid={!!erros.senhaInicial} />
+                  <input id="usuario-senha" type="password" autoComplete="new-password" className={campo} value={form.senhaInicial} onChange={(e) => setForm((s) => ({ ...s, senhaInicial: e.target.value }))} aria-invalid={!!erros.senhaInicial} maxLength={LIMITES_CONTA.senha} minLength={12} />
+                  <p className="text-right text-xs text-foreground/60">{form.senhaInicial.length}/{LIMITES_CONTA.senha} · mínimo 12</p>
                   {erros.senhaInicial && <p role="alert" className="text-xs text-error-text">{erros.senhaInicial}</p>}
                 </div>
                 <div><label htmlFor="usuario-confirmacao" className="mb-1 block text-sm">Confirmar senha</label>
-                  <input id="usuario-confirmacao" type="password" autoComplete="new-password" className={campo} value={form.confirmarSenha} onChange={(e) => setForm((s) => ({ ...s, confirmarSenha: e.target.value }))} aria-invalid={!!erros.confirmarSenha} />
+                  <input id="usuario-confirmacao" type="password" autoComplete="new-password" className={campo} value={form.confirmarSenha} onChange={(e) => setForm((s) => ({ ...s, confirmarSenha: e.target.value }))} aria-invalid={!!erros.confirmarSenha} maxLength={LIMITES_CONTA.senha} minLength={12} />
+                  <p className="text-right text-xs text-foreground/60">{form.confirmarSenha.length}/{LIMITES_CONTA.senha} · mínimo 12</p>
                   {erros.confirmarSenha && <p role="alert" className="text-xs text-error-text">{erros.confirmarSenha}</p>}
                 </div>
                 <button className={acao + " w-full"} type="submit" disabled={enviando}>{enviando ? <IndicadorCarregamento compacto texto="Cadastrando..." /> : "Cadastrar funcionário"}</button>
@@ -583,6 +588,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
       </div>
       {identificacaoAberta && <ModalIdentificacaoContrato contrato={identificacaoAberta.contrato} focoRetorno={identificacaoAberta.gatilho} onFechar={fecharIdentificacao} />}
       {confirmacao && <ConfirmacaoSimples
+        neutro={confirmacao.tipo === "nivel" || (confirmacao.tipo === "conta" && !confirmacao.usuario.ativo)}
         titulo={confirmacao.tipo === "conta" ? (confirmacao.usuario.ativo ? "Arquivar funcionário?" : "Reativar funcionário?")
           : confirmacao.tipo === "nivel" ? (confirmacao.nivel === "leitura" ? "Voltar para somente leitura?" : "Permitir edição neste contrato?")
           : "Revogar permissão?"}

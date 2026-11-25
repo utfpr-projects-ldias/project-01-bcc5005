@@ -687,6 +687,7 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, regulari
         <span aria-hidden="true" className="mr-1.5">☷</span>Mais filtros{(dataInicial || dataFinal || situacaoFiltro !== 'TODAS' || etapaFiltro || (!contextoEntregavel && entregavelFiltro)) ? ' •' : ''}
       </button>}
       <CampoBuscaSugestoes valor={busca} onChange={setBusca} rotulo="Pesquisar ocorrências pelo título" placeholder="Pesquisar pelo título..." opcoes={sugestoesBusca} />
+      <button type="button" className="pi-limpar-filtros" disabled={!busca&&!dataInicial&&!dataFinal&&situacaoFiltro==='TODAS'&&!etapaFiltro&&(contextoEntregavel||!entregavelFiltro)} onClick={()=>{setBusca('');setDataInicial('');setDataFinal('');setSituacaoFiltro('TODAS');if(!contextoEntregavel){setEtapaFiltro('');setEntregavelFiltro('');}}}>Limpar filtros</button>
     </div>
     {modalFiltros && <ModalEtapa camada="edicao" titulo="Mais filtros" contexto="Pesquisar ocorrências" compacto estadoContextual={estadoContextual} ocupado={false} focoRetorno={focoFiltros} onFechar={() => setModalFiltros(false)}>
       <div className="space-y-4">

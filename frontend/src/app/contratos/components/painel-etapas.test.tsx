@@ -641,7 +641,7 @@ test.each([
   expect(within(filtros).getByRole('tab', { name: 'Ativas' })).toHaveAttribute('aria-selected', 'true');
 });
 
-test('etapa interna mantém a listagem montada e permite voltar sem diálogo de consulta', () => {
+test('etapa interna mantém a listagem montada em diálogo ancorado e permite voltar', () => {
   consultar.mockReturnValue(estado());
   elegibilidadeHook.mockImplementation((_c, id) => {
     const e = consultar().dados?.find((item: Etapa) => item.id === id);
@@ -654,13 +654,12 @@ test('etapa interna mantém a listagem montada e permite voltar sem diálogo de 
   });
   render(<PainelEtapas interno contratoId={contrato} habilitado podeGerenciar />);
   fireEvent.click(screen.getByRole('button',{name:'Abrir detalhes da etapa 1: Planejamento'}));
-  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  expect(screen.getByRole('region',{name:'1 · Planejamento'})).toBeInTheDocument();
+  expect(screen.getByRole('dialog',{name:'1 · Planejamento'})).toHaveAttribute('data-pi-modal-ancorado');
   expect(screen.queryByText('Selecione um entregável')).not.toBeInTheDocument();
   expect(screen.getByRole('complementary',{name:'Lista de entregáveis'})).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button',{name:'Voltar às etapas'}));
   expect(screen.getByRole('button',{name:'Abrir detalhes da etapa 1: Planejamento'})).toBeInTheDocument();
-  expect(screen.queryByRole('region',{name:'1 · Planejamento'})).not.toBeInTheDocument();
+  expect(screen.queryByRole('dialog',{name:'1 · Planejamento'})).not.toBeInTheDocument();
 });
 
 
@@ -680,8 +679,8 @@ test('B04: finalização administrativa exige elegibilidade e justificativa', as
   render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
   fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes da etapa 1: Planejamento' }));
   fireEvent.click(screen.getByRole('button', { name: 'Fechar: escolher ação' }));
-  fireEvent.click(within(screen.getByRole('menu', { name: 'Fechar' })).getByRole('button', { name: 'Finalizar administrativamente' }));
-  const dialog = screen.getByRole('dialog', { name: 'Finalizar administrativamente a etapa?' });
+  fireEvent.click(within(screen.getByRole('menu', { name: 'Fechar' })).getByRole('button', { name: 'Encerrar etapa' }));
+  const dialog = screen.getByRole('dialog', { name: 'Encerrar etapa?' });
   const confirmar = within(dialog).getByRole('button', { name: 'Finalizar etapa' });
   expect(confirmar).toBeDisabled();
   fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'Encerramento administrativo autorizado' } });

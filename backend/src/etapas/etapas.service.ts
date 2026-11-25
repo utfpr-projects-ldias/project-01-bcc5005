@@ -60,8 +60,8 @@ function calendarioValido(data: string): boolean {
 
 function verificarDados(etapa: Pick<Etapa, 'nome' | 'codigo' | 'inicioPrevisto' | 'terminoPrevisto'>, nomeAnterior?: string, codigoAnterior?: string | null): void {
   // Nomes históricos maiores que o novo limite não são alterados ou truncados.
-  if (!etapa.nome.trim() || (etapa.nome.length > 36 && etapa.nome !== nomeAnterior)) {
-    throw new BadRequestException('Nome da etapa é obrigatório e deve ter até 36 caracteres');
+  if (!etapa.nome.trim() || ([...etapa.nome].length > 45 && etapa.nome !== nomeAnterior)) {
+    throw new BadRequestException('Nome da etapa é obrigatório e deve ter até 45 caracteres');
   }
   if (etapa.codigo !== null && (!etapa.codigo.trim() || (etapa.codigo.length > 15 && etapa.codigo !== codigoAnterior))) {
     throw new BadRequestException('Código da etapa inválido');

@@ -1,4 +1,5 @@
 'use client';
+import { modalidadeEncerramento } from '@/lib/modalidade-encerramento';
 import { useCamadaInterativa } from '@/lib/camadas-interativas';
 import { rotuloPrazoVigencia } from '@/lib/prazo-vigencia';
 import { BotaoAcaoModal } from '@/app/components/botoes-modal';
@@ -15,7 +16,7 @@ import { chaveTexto } from '@/lib/repositorio-consultas';
 import { chaveInicioTemporal, EVENTO_AGENDA_OCORRENCIAS_ALTERADA } from '@/lib/inicio-temporal-ocorrencias';
 import { ConfirmacaoSimples } from '@/app/components/confirmacao-simples';
 import { IndicadorAvancoFinalizado } from '../components/indicador-avanco-finalizado';
-import { solicitarConclusaoContrato, consultarElegibilidadeConclusao, arquivarContrato, concluirContrato, finalizarContrato, devolverContratoParaRevisao, fecharRevisaoContrato, reabrirContrato, encerrarContratoAntecipadamente, cancelarContrato, reverterCancelamentoContrato, suspenderContrato, retomarContrato } from '@/lib/contratos';
+import { solicitarConclusaoContrato, consultarElegibilidadeConclusao, arquivarContrato, concluirContrato, finalizarContrato, devolverContratoParaRevisao, fecharRevisaoContrato, reabrirContrato, encerrarContratoAntecipadamente, cancelarContrato, reverterCancelamentoContrato, suspenderContrato, retomarContrato, reativarContrato, consultarElegibilidadeExclusao, excluirContratoArquivado } from '@/lib/contratos';
 import { useRepositorioConsultas } from '@/app/components/provedor-consultas';
 import { useParams } from 'next/navigation';
 import { useMeuPerfil } from '@/hooks/use-meu-perfil';
@@ -103,6 +104,8 @@ export default function DetalheContratoPage() {
   }, []);
   const [versaoHistorico, setVersaoHistorico] = useState(0);
   const [confirmarArquivo, setConfirmarArquivo] = useState(false);
+  const [acaoArquivado, setAcaoArquivado] = useState<'reativar' | 'excluir' | null>(null);
+  const [erroAcaoArquivado, setErroAcaoArquivado] = useState('');
   const [confirmarReabertura, setConfirmarReabertura] = useState(false);
   const [confirmarConclusao, setConfirmarConclusao] = useState(false);
   const [solicitacaoParcial,setSolicitacaoParcial] = useState(false);
@@ -296,7 +299,8 @@ export default function DetalheContratoPage() {
       if (evento.data?.tipo === 'pi:editar-execucao' && evento.data?.contratoId === id && (administrador || acessoQuery.dados?.permissoes?.configurarPesos)) { window.dispatchEvent(new Event('pi:recolher-navegacao-contrato')); window.dispatchEvent(new Event('pi:recolher-lista-entregaveis')); setEditarExecucao(true); }
       if (evento.data?.tipo === 'pi:acao-contrato' && evento.data?.contratoId === id) {
         const acao = evento.data?.acao;
-        if (acao === 'suspender' && podeSuspender) setConfirmarSuspensao(true);
+        if ((acao === 'reativar' || acao === 'excluir') && administrador && contrato?.arquivadoEm && !alterandoArquivo) { setMotivoDecisao(''); setErroAcaoArquivado(''); setAcaoArquivado(acao); }
+        else if (acao === 'suspender' && podeSuspender) setConfirmarSuspensao(true);
         else if (acao === 'cancelar' && podeCancelarContrato) setCancelamentoAberto(true);
         else if (acao === 'reverter-cancelamento' && podeReverterCancelamento) setConfirmarReversaoCancelamento(true);
         else if (acao === 'retomar' && podeRetomar) setConfirmarRetomada(true);
@@ -315,7 +319,7 @@ export default function DetalheContratoPage() {
   // Ações do modal contextual sempre usam a autorização e a situação atuais.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [painelInterno, id, podeAbrirEdicao, contrato?.id, contrato?.status, contrato?.arquivadoEm, editarAberto,
-      podeSuspender, podeCancelarContrato, podeReverterCancelamento, podeRetomar, podeEncerrar, encerramentoBloqueadoPorFilhos, podeArquivarContrato, podeDeliberar, podeFinalizar, podeSolicitarConclusao, podeSolicitarParcial, pendenteConclusao, administrador, acessoQuery.dados?.permissoes?.reabrirContrato, acessoQuery.dados?.permissoes?.configurarPesos]);
+      podeSuspender, podeCancelarContrato, podeReverterCancelamento, podeRetomar, podeEncerrar, encerramentoBloqueadoPorFilhos, podeArquivarContrato, podeDeliberar, podeFinalizar, podeSolicitarConclusao, podeSolicitarParcial, pendenteConclusao, administrador, alterandoArquivo, acessoQuery.dados?.permissoes?.reabrirContrato, acessoQuery.dados?.permissoes?.configurarPesos]);
   useEffect(() => {
     if (!contrato?.id) return;
     let versao = 0; let controller: AbortController | undefined; let quadroInicial: number | undefined;
@@ -633,6 +637,30 @@ export default function DetalheContratoPage() {
     } catch (erro) { setErroArquivo(erro instanceof Error ? erro.message : 'Não foi possível reabrir o contrato.'); }
     finally { setAlterandoArquivo(false); }
   }
+  async function executarAcaoArquivado() {
+    if (!administrador || !contrato?.arquivadoEm || !acaoArquivado || alterandoArquivo) return;
+    if (acaoArquivado === 'reativar' && motivoDecisao.trim().length < 15) return;
+    setAlterandoArquivo(true); setErroAcaoArquivado('');
+    try {
+      if (acaoArquivado === 'reativar') {
+        const atualizado = await reativarContrato(contrato.id, motivoDecisao.trim());
+        cache.gravar(chaveTexto(['contratos', 'detalhe', contrato.id]), atualizado);
+        comunicarDecisaoContrato(atualizado);
+        toastSucesso('Contrato reativado.');
+      } else {
+        const elegibilidade = await consultarElegibilidadeExclusao(contrato.id);
+        if (!elegibilidade.apto) throw new Error(elegibilidade.motivo ?? 'Exclusão não permitida.');
+        const resultado = await excluirContratoArquivado(contrato.id);
+        if (!resultado.excluido) throw new Error('Não foi possível excluir o contrato.');
+        sincronizarContrato(cache, contrato.id);
+        if (resultado.arquivosPendentes > 0) toastAviso('Contrato excluído. Há arquivos pendentes de limpeza.');
+        else toastSucesso('Contrato excluído.');
+        if (painelInterno && window.parent !== window) window.parent.postMessage({tipo:'pi:contrato-excluido', contratoId:id},window.location.origin);
+      }
+      setAcaoArquivado(null); setMotivoDecisao('');
+    } catch (erro) { setErroAcaoArquivado(erro instanceof Error ? erro.message : 'Não foi possível concluir a operação.'); }
+    finally { setAlterandoArquivo(false); }
+  }
   async function alterarArquivo() {
     if (!podeArquivarContrato || !contrato || alterandoArquivo) return;
     setAlterandoArquivo(true); setErroArquivo('');
@@ -692,8 +720,7 @@ export default function DetalheContratoPage() {
           {!pendenteConclusao && !concluido && !finalizado && !encerrado && !suspenso && !cancelado && !contrato.arquivadoEm && <MenuAcoesObjeto rotulo="Fechar contrato" disabled={alterandoArquivo} pendenteConclusao={pendenteConclusao}>
            {podeSuspender && <BotaoAcaoModal intencao="suspender" disabled={alterandoArquivo} onClick={() => setConfirmarSuspensao(true)}>⏸ Suspender contrato</BotaoAcaoModal>}
            {podeCancelarContrato && <BotaoAcaoModal intencao="cancelar" disabled={alterandoArquivo} onClick={() => setCancelamentoAberto(true)}>✕ Cancelar contrato</BotaoAcaoModal>}
-           {podeEncerrar && <BotaoAcaoModal intencao="encerrar" disabled={alterandoArquivo || encerramentoBloqueadoPorFilhos} title={encerramentoBloqueadoPorFilhos ? 'Decida as solicitações pendentes dos registros descendentes primeiro.' : undefined} onClick={() => setAbrirEncerramento(true)}>Solicitar encerramento</BotaoAcaoModal>}
-          {podeFinalizar && <BotaoAcaoModal intencao="encerrar" disabled={alterandoArquivo} onClick={() => setConfirmarFinalizacao(true)}>Solicitar finalização administrativa</BotaoAcaoModal>}
+           {(podeEncerrar || podeFinalizar) && <BotaoAcaoModal intencao="encerrar" disabled={alterandoArquivo || !modalidadeEncerramento(podeEncerrar && !encerramentoBloqueadoPorFilhos,podeFinalizar)} onClick={() => modalidadeEncerramento(podeEncerrar && !encerramentoBloqueadoPorFilhos,podeFinalizar)==='finalizar'?setConfirmarFinalizacao(true):setAbrirEncerramento(true)}>Solicitar encerramento</BotaoAcaoModal>}
           {!finalizado && !concluido && !encerrado && !cancelado && !suspenso && !contrato.arquivadoEm && !pendenteConclusao && (administrador || acessoQuery.dados?.permissoes?.editarContrato) &&
             <BotaoAcaoModal intencao="solicitar-conclusao" disabled={!podeSolicitarConclusao || alterandoArquivo} title={!podeSolicitarConclusao ? motivoIndisponibilidadeConclusao : 'Solicitar aprovação da conclusão integral'}
               onClick={() => {setSolicitacaoParcial(false);setConfirmarSolicitacao(true);}}>
@@ -721,7 +748,7 @@ export default function DetalheContratoPage() {
               className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-300 ${pdfAptoParaDecisao ? 'border-violet-500 bg-violet-700 text-white hover:bg-violet-600' : 'border-violet-500/45 bg-violet-950/20 text-violet-200/40 disabled:cursor-not-allowed'}`}><IconeConclusao className="h-4 w-4 shrink-0 text-violet-300" /> Aprovar</button>
           </> : contrato.arquivadoEm ? null : (concluido || encerrado || finalizado) && (administrador || acessoQuery.dados?.permissoes?.reabrirContrato) ? (
             <button type="button" onClick={() => setConfirmarReabertura(true)} disabled={alterandoArquivo}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-400/40 bg-slate-500/10 px-3 text-xs font-semibold text-foreground hover:bg-slate-500/20 focus-visible:outline-2 focus-visible:outline-green-500 disabled:opacity-50" aria-label="Reabrir contrato concluído"><IconeReabertura className="h-4 w-4 text-green-500" /> Reabrir</button>
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-400/40 bg-slate-500/10 px-3 text-xs font-semibold text-foreground hover:bg-slate-500/20 focus-visible:outline-2 focus-visible:outline-brand-neon disabled:opacity-50" aria-label="Reabrir contrato concluído"><IconeReabertura className="h-4 w-4 text-green-500" /> Reabrir</button>
           ) : podeFecharRevisao && podeEditar ? (
             <button type="button" data-tec08-decisao="fechamento" aria-label={tituloFechamento} disabled={alterandoArquivo}
               onClick={() => setConfirmarFechamentoRevisao(true)}
@@ -940,9 +967,16 @@ export default function DetalheContratoPage() {
       descricao={`O contrato deixará de ficar ${finalizado ? 'Finalizado' : encerrado ? 'Encerrado' : 'Concluído'} e passará para Em revisão. Etapas, entregáveis e evidências continuarão no estado atual e poderão ser reabertos separadamente. O histórico será preservado.`}
       confirmar="Reabrir contrato" estadoContextual={finalizado ? 'finalizado' : encerrado ? 'encerrado' : 'concluido'} preservarCorOrigem ocupado={alterandoArquivo} justificativa={motivoDecisao} onJustificativaChange={setMotivoDecisao} onCancelar={() => setConfirmarReabertura(false)}
       onConfirmar={() => void executarReabertura()} />}
+    {acaoArquivado && contrato?.arquivadoEm && administrador && <ConfirmacaoSimples
+      titulo={acaoArquivado === 'reativar' ? 'Reativar contrato?' : 'Excluir contrato arquivado?'}
+      descricao={acaoArquivado === 'reativar' ? 'Restaurar o contrato preservando registros e histórico.' : 'A exclusão é definitiva e depende da elegibilidade conferida pelo servidor.'}
+      confirmar={acaoArquivado === 'reativar' ? 'Reativar' : 'Excluir definitivamente'} perigoso={acaoArquivado === 'excluir'}
+      ocupado={alterandoArquivo} pendencias={erroAcaoArquivado ? [erroAcaoArquivado] : []}
+      justificativa={motivoDecisao} onJustificativaChange={acaoArquivado === 'reativar' ? setMotivoDecisao : undefined}
+      onCancelar={()=>setAcaoArquivado(null)} onConfirmar={()=>void executarAcaoArquivado()} />}
     {confirmarArquivo && contrato && <ConfirmacaoSimples
       titulo='Arquivar contrato?'
-      descricao='O contrato ficará em Arquivados. Os documentos e o histórico serão preservados. Para reativá-lo, utilize a aba Arquivados.'
+      descricao='O contrato ficará em Arquivados. Os documentos e o histórico serão preservados. Para reativá-lo, abra o contrato e selecione Reativar.'
       confirmar='Arquivar contrato'
       ocupado={alterandoArquivo}
       onCancelar={() => { if (!alterandoArquivo) setConfirmarArquivo(false); }}

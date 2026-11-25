@@ -107,11 +107,11 @@ export function EditorPermissoesContrato({ vinculo, perfil, salvando, onSalvar }
   };
   return <>
     <button type="button" onClick={(evento) => abrir(evento.currentTarget)} aria-haspopup="dialog" aria-expanded={aberto}
-      className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-brand-green/35 px-3 py-1.5 text-xs font-semibold text-brand-neon transition-colors hover:bg-brand-green/15 focus-visible:outline-2 focus-visible:outline-brand-neon">
+      className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[color:var(--pi-admin-borda)] px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-[var(--pi-admin-hover)] focus-visible:outline-2 focus-visible:outline-[#7bafc3]">
       <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M12 3 4 7v5c0 5 3 8 8 10 5-2 8-5 8-10V7l-8-4Z"/><path d="m9 12 2 2 4-4"/></svg>
       Ver permissões completas
     </button>
-    {aberto && createPortal(<ModalEtapa titulo="Permissões do contrato" contexto="Controle de acesso" compacto
+    {aberto && createPortal(<ModalEtapa neutro titulo="Permissões do contrato" contexto="Controle de acesso" compacto
       camada="principal" alturaEstavel textoFechar="Fechar ×" rotuloFechar="Fechar permissões" ocupado={salvando || submetendo} focoRetorno={gatilhoFoco} onFechar={fechar}>
       <section aria-label="Permissões detalhadas" className="space-y-4" data-testid="permissoes-detalhadas">
         <p className="text-xs leading-relaxed text-foreground/65">Marque cada operação separadamente. Criar, editar, concluir, reabrir, arquivar, reativar e excluir são poderes distintos; a concessão de um não autoriza os outros.</p>
@@ -121,7 +121,7 @@ export function EditorPermissoesContrato({ vinculo, perfil, salvando, onSalvar }
             <AbasRolaveis><div role="tablist" aria-label="Níveis de permissões" className="flex flex-wrap gap-1 rounded-xl border border-foreground/15 bg-background p-1">
               {ESCOPOS_PERMISSOES.map((grupo, indice) => <button key={grupo.titulo} type="button" role="tab"
                 aria-selected={escopo === indice} onClick={() => { setEscopo(indice); setSubsecao(0); }}
-                className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-brand-neon ${escopo === indice ? 'bg-brand-green text-on-brand-green' : 'text-foreground/75 hover:bg-white/10'}`}>
+                className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-[#7bafc3] ${escopo === indice ? 'bg-[var(--pi-admin-hover)] text-foreground ring-1 ring-[color:var(--pi-admin-borda)]' : 'text-foreground/75 hover:bg-[var(--pi-admin-hover)]'}`}>
                 {grupo.titulo}
               </button>)}
             </div></AbasRolaveis>
@@ -131,7 +131,7 @@ export function EditorPermissoesContrato({ vinculo, perfil, salvando, onSalvar }
             <AbasRolaveis><div role="tablist" aria-label="Grupos de permissões" className="flex flex-wrap gap-1 rounded-xl border border-foreground/15 bg-background p-1">
               {grupoAtual.secoes.map((secao, indice) => <button key={secao.nome} type="button" role="tab"
                 aria-selected={subsecao === indice} onClick={() => setSubsecao(indice)}
-                className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-brand-neon ${subsecao === indice ? 'bg-brand-green text-on-brand-green' : 'text-foreground/75 hover:bg-white/10'}`}>
+                className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-[#7bafc3] ${subsecao === indice ? 'bg-[var(--pi-admin-hover)] text-foreground ring-1 ring-[color:var(--pi-admin-borda)]' : 'text-foreground/75 hover:bg-[var(--pi-admin-hover)]'}`}>
                 <span aria-hidden="true" className="mr-1">{secao.icone}</span>{secao.nome}
               </button>)}
             </div></AbasRolaveis>
@@ -143,10 +143,10 @@ export function EditorPermissoesContrato({ vinculo, perfil, salvando, onSalvar }
                 const operacao = OPERACOES_CONTRATO.find(op => op.chave === chave);
                 if (!operacao) return null;
                 return <label key={chave}
-                  className="flex min-h-12 cursor-pointer items-center gap-2.5 rounded-lg border border-foreground/15 bg-background px-3 py-2 text-xs hover:border-brand-green/60 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-violet-300">
+                  className="flex min-h-12 cursor-pointer items-center gap-2.5 rounded-lg border border-foreground/15 bg-background px-3 py-2 text-xs hover:border-[color:var(--pi-admin-borda)] has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-violet-300">
                   <input type="checkbox" checked={selecionadas[chave]} disabled={salvando || submetendo}
                     onChange={e => setSelecionadas(v => ({ ...v, [chave]: e.target.checked }))}
-                    className="h-4 w-4 shrink-0 accent-brand-green" />
+                    className="h-4 w-4 shrink-0 accent-[#35616f]" />
                   <span className="min-w-0 break-words">{operacao.rotulo}</span>
                 </label>;
               })}
@@ -155,11 +155,11 @@ export function EditorPermissoesContrato({ vinculo, perfil, salvando, onSalvar }
           <p className="text-xs text-foreground/55">As alterações feitas nas outras abas são preservadas até salvar. Cada permissão é independente.</p>
         </div>
         {erro && <p role="alert" className="text-sm text-error-text">{erro}</p>}
-        <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-brand-green/20 pt-3">
+        <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-[color:var(--pi-admin-borda)] pt-3">
           <button type="button" disabled={salvando || submetendo} onClick={fechar}
-            className="rounded-lg border border-brand-green/35 px-4 py-2 text-sm hover:bg-brand-green/10 disabled:opacity-50">Cancelar</button>
+            className="rounded-lg border border-[color:var(--pi-admin-borda)] px-4 py-2 text-sm hover:bg-[var(--pi-admin-hover)] disabled:opacity-50">Cancelar</button>
           <button type="button" disabled={salvando || submetendo} onClick={() => void salvar()}
-            className="rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-on-brand-green hover:brightness-110 disabled:opacity-50">{salvando || submetendo ? 'Salvando...' : 'Salvar permissões'}</button>
+            className="rounded-lg bg-[#35616f] px-4 py-2 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-50">{salvando || submetendo ? 'Salvando...' : 'Salvar permissões'}</button>
         </footer>
       </section>
     </ModalEtapa>, document.body)}

@@ -43,7 +43,7 @@ export type IntencaoAcao = 'neutra' | 'editar' | 'criar' | 'solicitar-conclusao'
 export const CLASSES_ACAO_MENU: Record<IntencaoAcao, string> = {
   neutra: 'border-slate-500/30 text-foreground hover:bg-slate-500/15',
   editar: 'border-teal-500/40 text-teal-700 dark:text-teal-200 hover:bg-teal-500/15',
-  criar: 'border-green-500/40 text-green-700 dark:text-green-200 hover:bg-green-500/15',
+  criar: 'border-slate-500/40 text-foreground hover:bg-slate-500/15',
   'solicitar-conclusao': 'border-violet-500/40 text-violet-700 dark:text-violet-200 hover:bg-violet-500/15',
   concluir: 'border-violet-500/40 text-violet-700 dark:text-violet-200 hover:bg-violet-500/15',
   verificar: 'border-violet-500/40 text-violet-700 dark:text-violet-200 hover:bg-violet-500/15',

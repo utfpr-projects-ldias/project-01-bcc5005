@@ -33,7 +33,7 @@ export function SeletorContrato({ contratos, valor, onChange, carregando = false
   }}>
     <label htmlFor="contrato-atividades" className="block text-xs font-semibold text-foreground/80">Contrato</label>
     <div className="relative mt-1.5">
-      <input id="contrato-atividades" type="search" maxLength={160} role="combobox" aria-label="Contrato" autoComplete="off"
+      <input id="contrato-atividades" type="text" inputMode="search" data-pi-campo-com-icone="fim" title={!aberto && selecionado ? legenda(selecionado) : undefined} maxLength={160} role="combobox" aria-label="Contrato" autoComplete="off"
         aria-controls={idLista} aria-expanded={aberto} aria-autocomplete="list"
         aria-activedescendant={aberto && filtrados[realce] ? `${idLista}-${filtrados[realce].id}` : undefined}
         placeholder={carregando ? 'Carregando contratos...' : 'Selecione um contrato...'}
@@ -46,7 +46,7 @@ export function SeletorContrato({ contratos, valor, onChange, carregando = false
         className="w-full min-w-0 rounded-lg border border-brand-green/25 bg-background py-2.5 pl-3 pr-9 text-sm text-foreground outline-none transition-colors focus:border-brand-green focus-visible:ring-2 focus-visible:ring-brand-green/30 disabled:opacity-50" />
       <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/55"><path d="m6 9 6 6 6-6" /></svg>
     </div>
-    {aberto && !carregando && <div id={idLista} role="listbox" aria-label="Contratos disponíveis" className="absolute inset-x-0 top-full z-[45] mt-1 max-h-64 overflow-y-auto rounded-xl border border-brand-green/35 bg-background p-1 shadow-2xl">
+    {aberto && !carregando && <div id={idLista} role="listbox" data-pi-opcoes-texto aria-label="Contratos disponíveis" className="absolute inset-x-0 top-full z-[45] mt-1 max-h-64 overflow-y-auto rounded-xl border border-brand-green/35 bg-background p-1 shadow-2xl">
       <button role="option" aria-selected={!valor} type="button" onMouseEnter={()=>setRealce(-1)} onMouseDown={e => e.preventDefault()}
         onClick={() => escolher('')} className="w-full rounded-lg px-3 py-2 text-left text-xs text-foreground/70 ">Limpar seleção</button>
       {filtrados.length === 0 ? <p className="px-3 py-4 text-sm text-foreground/65">Nenhum contrato encontrado.</p>
@@ -54,7 +54,7 @@ export function SeletorContrato({ contratos, valor, onChange, carregando = false
         aria-selected={valor === contrato.id} onMouseEnter={() => setRealce(indice)} onMouseDown={e => e.preventDefault()}
         onClick={() => escolher(contrato.id)} title={legenda(contrato)}
         className={`block w-full min-w-0 rounded-lg px-3 py-2 text-left text-sm transition-colors ${realce === indice ? 'bg-current/10 text-foreground' : 'text-foreground '}`}>
-        <span className="block truncate">{legenda(contrato)}</span>
+        <span className="block min-w-0">{legenda(contrato)}</span>
       </button>)}
       {contratos.length > 100 && <p className="px-3 py-1 text-xs text-foreground/50">Digite para restringir a pesquisa.</p>}
     </div>}

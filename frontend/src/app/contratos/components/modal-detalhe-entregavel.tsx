@@ -221,7 +221,7 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, pode
     acoes={(!editando || interno) && item ? <>
       {podeEditarCadastro && !bloqueioEdicao && !bloqueioFinalizacao && !verificado &&
         <BotaoEditarModal rotulo="Editar entregável" disabled={salvando}
-          onClick={() => { const editar=()=>{setSecaoEdicao('completo');setEditando(true);}; if(!interno || solicitarNavegacaoInterna(editar)) editar(); }} />}
+          onClick={() => { const editar=()=>{setSecaoEdicao('completo');setEditando(true);}; if(!interno || solicitarNavegacaoInterna(editar, true)) editar(); }} />}
       {regularizacao && !pendenteDecisao && !bloqueioDocumental && permissoes?.editarEntregaveis && <BotaoAcaoModal intencao={podeSolicitarConclusao ? "solicitar-conclusao" : "neutra"} disabled={salvando} onClick={() => podeSolicitarConclusao ? void transicionar('solicitar-conclusao') : setDialogoSolicitacao('impedimentos')}>Solicitar regularização documental</BotaoAcaoModal>}
       {pendenteDecisao ? <div className="flex items-center gap-2" aria-label="Decisão pendente do entregável">
         <button type="button" disabled={salvando || !permissoes?.concluirEntregaveis} onClick={() => {setMotivoDevolucao('');setDevolucaoPendente(true);}}
@@ -230,7 +230,7 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, entregavelId, pode
           onClick={() => (item.regularizacaoDocumentalSolicitada || ['PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL'].includes(item.statusExecucao ?? '')) ? setConfirmarConclusao(true) : void transicionar('aprovar-encerramento')}
           className="rounded-lg border border-green-600/60 bg-green-600/20 px-3 py-2 text-xs font-semibold text-green-800 hover:bg-green-600/30 dark:text-green-200 disabled:opacity-35">Aprovar</button>
         {permissoes?.concluirEntregaveis && (item.statusExecucao === 'PENDENTE_ENCERRAMENTO' ? !elegibilidade?.podeAprovarEncerramento : !podeConcluir) && <button type="button" onClick={()=>setDialogoSolicitacao('impedimentos')} className="text-xs underline text-foreground/75">Ver impedimentos</button>}
-      </div> : <MenuAcoesObjeto rotulo={item.arquivadoEm || ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(item.statusExecucao ?? '') ? 'Reabrir' : 'Fechar'} disabled={salvando}
+      </div> : <MenuAcoesObjeto rotulo={item.arquivadoEm ? 'Reativar' : ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(item.statusExecucao ?? '') ? 'Reabrir' : 'Fechar'} disabled={salvando}
         pendenteConclusao={['PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL'].includes(item.statusExecucao ?? '')}
         acaoDireta={item.arquivadoEm && permissoes?.reativarEntregaveis ? onReativar
           : !item.arquivadoEm && !item.reabertoEm && ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(item.statusExecucao ?? '') && permissoes?.reabrirEntregaveis && !bloqueioEdicao ? onReabrir : undefined}>
@@ -317,7 +317,7 @@ function FormularioMetadadosEntregavel({item,ocupado,onSalvar,onCancelar}:{item:
   const [observacoes,setObservacoes]=useState(item.observacoes??'');
   const [erro,setErro]=useState('');
   const entradas=[
-    {id:'nome',rotulo:'Nome',valor:nome,alterar:setNome,original:base.nome,limite:42,obrigatorio:true},
+    {id:'nome',rotulo:'Nome',valor:nome,alterar:setNome,original:base.nome,limite:45,obrigatorio:true},
     {id:'codigo',rotulo:'Código',valor:codigo,alterar:setCodigo,original:base.codigo??'',limite:50},
     {id:'descricao',rotulo:'Descrição',valor:descricao,alterar:setDescricao,original:base.descricao??'',limite:3000,textarea:true},
     {id:'observacoes',rotulo:'Observações',valor:observacoes,alterar:setObservacoes,original:base.observacoes??'',limite:3000,textarea:true},

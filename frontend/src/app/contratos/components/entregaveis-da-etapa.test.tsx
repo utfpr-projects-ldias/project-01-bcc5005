@@ -2,7 +2,8 @@ jest.mock('@/app/contratos/components/painel-comprovacao-evidencia', () => ({
   PainelComprovacaoEvidencia: ({ esperadaId }: { esperadaId: string }) => <p data-testid="comprovacao-da-evidencia">Enviar comprovante · Aguardando envio · {esperadaId}</p>,
 }));
 import { act, fireEvent, render as renderSemProvider, screen, waitFor, within } from '@testing-library/react';
-import type { ReactElement } from 'react';
+import { useRef, useState, type ReactElement } from 'react';
+import { ModalEtapa } from './modal-etapa';
 import { ProvedorConsultas } from '@/app/components/provedor-consultas';
 const render = (elemento: ReactElement) => renderSemProvider(elemento, { wrapper: ProvedorConsultas });
 import { EntregaveisDaEtapa } from './entregaveis-da-etapa';
@@ -356,13 +357,13 @@ test('reativar entregável arquivado exige confirmação e não troca de aba aut
   render(<EntregaveisDaEtapa {...props} podeArquivar permissoes={{ reativarEntregaveis: true } as never} />);
   fireEvent.click(screen.getByRole('tab', { name: 'Entregáveis arquivados' }));
   await abrirDetalheArquivado();
-  const reativar = screen.getByRole('button', { name: 'Reabrir' });
+  const reativar = screen.getByRole('button', { name: 'Reativar' });
   fireEvent.click(reativar);
   expect(arquivarEntregavel).not.toHaveBeenCalled();
   const confirmar = screen.getByRole('dialog', { name: 'Reativar entregável?' });
   fireEvent.click(within(confirmar).getByRole('button', { name: 'Cancelar' }));
   expect(arquivarEntregavel).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: 'Reabrir' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Reativar' }));
   const dialogo = screen.getByRole('dialog', { name: 'Reativar entregável?' });
   fireEvent.change(within(dialogo).getByRole('textbox', { name: /Justificativa obrigatória/ }), { target: { value: 'Reativação auditável para retomada do planejamento.' } });
   fireEvent.click(within(dialogo).getByRole('button', { name: 'Confirmar reativação' }));
@@ -496,4 +497,30 @@ test('modo PONDERADO informa excedente e permite cadastrar com peso zero', () =>
   fireEvent.click(screen.getByRole('button', { name: 'Novo entregável' }));
   expect(screen.getByRole('form', { name: 'Cadastrar entregável' })).toBeInTheDocument();
   expect(screen.getByText(/Excedente de/)).toBeInTheDocument();
+});
+
+
+test.each(['Escape','Voltar do mouse'])('etapa ancorada abre o título do entregável e %s fecha somente o nível superior', async (acao) => {
+  function Cenario() {
+    const ancora = useRef<HTMLDivElement>(null);
+    const [aberta,setAberta] = useState(true);
+    return <div ref={ancora}>
+      {aberta && <ModalEtapa ancora={ancora} titulo="Etapa QA" ocupado={false} onFechar={()=>setAberta(false)}>
+        <EntregaveisDaEtapa {...props} interno dentroModal />
+      </ModalEtapa>}
+    </div>;
+  }
+  render(<Cenario/>);
+  fireEvent.click(screen.getByRole('button',{name:e.nome}));
+  const detalhe=await screen.findByRole('region',{name:e.nome});
+  const fechar=(alvo:HTMLElement)=>{
+    if(acao==='Escape')fireEvent.keyDown(alvo,{key:'Escape'});
+    else {fireEvent.mouseDown(alvo,{button:3});fireEvent(alvo,new MouseEvent('auxclick',{button:3,bubbles:true,cancelable:true}));}
+  };
+  fechar(detalhe);
+  expect(screen.queryByRole('region',{name:e.nome})).not.toBeInTheDocument();
+  const etapaAberta=screen.getByRole('dialog',{name:'Etapa QA'});
+  expect(within(etapaAberta).getByRole('button',{name:e.nome})).toBeInTheDocument();
+  fechar(etapaAberta);
+  expect(screen.queryByRole('dialog',{name:'Etapa QA'})).not.toBeInTheDocument();
 });

@@ -9,8 +9,8 @@ export class AtualizarFuncionarioDto {
   @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : value)
   @IsString()
   @MinLength(3)
-  @MaxLength(160)
-  @Matches(REGEX_NOME_COMPLETO, { message: 'Informe nome e sobrenome válidos' })
+  @MaxLength(30)
+  @Matches(REGEX_NOME_COMPLETO, { message: 'Informe um nome válido' })
   nome?: string;
 
   @ValidateIf((_obj: AtualizarFuncionarioDto, value: unknown) => value !== undefined)

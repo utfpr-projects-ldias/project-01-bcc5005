@@ -70,8 +70,8 @@ function textoObrigatorio(valor: string | null, limite: number): boolean {
 
 export function validarMetadadosEntregavel(e: Entregavel, nomeAnterior?: string, campos?: readonly string[]): void {
   const validar = (campo: string) => !campos || campos.includes(campo);
-  if (validar('nome') && (typeof e.nome !== 'string' || !e.nome.trim() || ([...e.nome].length > 42 && e.nome !== nomeAnterior)))
-    throw new BadRequestException('Nome obrigatório e limitado a 42 caracteres');
+  if (validar('nome') && (typeof e.nome !== 'string' || !e.nome.trim() || ([...e.nome].length > 45 && e.nome !== nomeAnterior)))
+    throw new BadRequestException('Nome obrigatório e limitado a 45 caracteres');
   for (const [chave, campo, valor, limite] of [
     ['codigo', 'Código', e.codigo, 15], ['unidadeMedida', 'Unidade', e.unidadeMedida, 40],
     ['descricao', 'Descrição', e.descricao, 200], ['observacoes', 'Observações', e.observacoes, 100],

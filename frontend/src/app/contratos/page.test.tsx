@@ -119,15 +119,10 @@ test('Arquivados: ADMIN pode consultar, reativar e excluir com confirmação; at
   expect(screen.getByText('ARQUIVADO')).toBeInTheDocument();
   expect(screen.queryByText('ATIVO')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: /Abrir detalhes do contrato ARQUIVADO/ })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Reativar contrato ARQUIVADO' })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Reativar contrato ARQUIVADO' }));
-  expect(screen.getByRole('dialog', { name: 'Reativar contrato?' })).toBeInTheDocument();
+  expect(screen.queryByRole('columnheader', { name: 'Ações' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Reativar contrato ARQUIVADO' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Excluir contrato ARQUIVADO' })).not.toBeInTheDocument();
   expect(reativar).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
-  expect(reativar).not.toHaveBeenCalled();
-  excluir.mockResolvedValue({ excluido: true, arquivosPendentes: 0 });
-  fireEvent.click(screen.getByRole('button', { name: 'Excluir contrato ARQUIVADO' }));
-  expect(await screen.findByRole('dialog', { name: 'Excluir contrato arquivado?' })).toBeInTheDocument();
   expect(excluir).not.toHaveBeenCalled();
 });
 
@@ -251,8 +246,8 @@ test('cartão arquivado aproxima indicadores e ações, sem placa preta', async 
   const linha = link.closest('tr')!;
   expect(linha).toHaveAttribute('data-arquivado', 'true');
   expect(within(linha).getByText('Arquivado')).toHaveAttribute('data-situacao', 'arquivado');
-  expect(within(linha).getByRole('button', { name: 'Reativar contrato QA-ARQUIVADO' })).toBeInTheDocument();
-  expect(within(linha).getByRole('button', { name: 'Excluir contrato QA-ARQUIVADO' })).toBeInTheDocument();
+  expect(within(linha).queryByRole('button', { name: 'Reativar contrato QA-ARQUIVADO' })).not.toBeInTheDocument();
+  expect(within(linha).queryByRole('button', { name: 'Excluir contrato QA-ARQUIVADO' })).not.toBeInTheDocument();
 });
 
 
@@ -396,13 +391,10 @@ test('TEC08-03: ações de contrato arquivado permanecem no topo e fora do link 
   await screen.findByRole('tab', { name: 'Contratos arquivados' });
   fireEvent.click(screen.getByRole('tab', { name: 'Contratos arquivados' }));
   const link = screen.getByRole('button', { name: 'Abrir detalhes do contrato ARQ-UI' });
-  const reativar = screen.getByRole('button', { name: 'Reativar contrato ARQ-UI' });
-  const excluir = screen.getByRole('button', { name: 'Excluir contrato ARQ-UI' });
-  expect(reativar.parentElement).toHaveClass('pi-acoes-tabela');
-  expect(reativar.parentElement).toContainElement(excluir);
   expect(within(link.closest('tr')!).getByText('Arquivado')).toBeInTheDocument();
-  expect(link).not.toContainElement(reativar);
-  expect(link).not.toContainElement(excluir);
+  expect(screen.queryByRole('columnheader', { name: 'Ações' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Reativar contrato ARQ-UI' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Excluir contrato ARQ-UI' })).not.toBeInTheDocument();
 });
 
 
@@ -435,8 +427,8 @@ test('B03: contrato arquivado com histórico não abre confirmação destrutiva'
   listar.mockResolvedValue([{id:'arq-b03',codigoPublico:'00001',numeroContrato:'ARQ-B03',orgaoContratante:'UTFPR',objeto:'Histórico',status:'PLANEJAMENTO',modoCalculo:'SIMPLES',inicioVigencia:'2026-01-01',terminoVigencia:'2027-01-01',arquivadoEm:'2026-11-01T00:00:00Z'} as Awaited<ReturnType<typeof listarContratos>>[number]]);
   consultarExclusao.mockResolvedValue({apto:false,motivo:'Contrato possui histórico vinculado.'});
   renderComConsultas(<ContratosListPage />);
-  fireEvent.click(await screen.findByRole('button',{name:'Excluir contrato ARQ-B03'}));
-  expect(await screen.findByText('Contrato possui histórico vinculado.')).toBeInTheDocument();
+  await screen.findByRole('button',{name:'Abrir detalhes do contrato ARQ-B03'});
+  expect(screen.queryByRole('button',{name:'Excluir contrato ARQ-B03'})).not.toBeInTheDocument();
   expect(screen.queryByRole('dialog',{name:'Excluir contrato arquivado?'})).not.toBeInTheDocument();
   expect(excluir).not.toHaveBeenCalled();
 });

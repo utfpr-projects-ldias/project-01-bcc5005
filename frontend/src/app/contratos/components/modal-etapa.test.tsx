@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ModalEtapa } from './modal-etapa';
 
 function Cenario({ ocupado = false }: { ocupado?: boolean }) {
@@ -128,6 +128,8 @@ test('botão lateral Voltar do mouse fecha somente a camada mais recente, preser
   render(<Pilha />);
   const filho = screen.getByRole('dialog', { name: 'Evidência QA' });
   fireEvent.mouseDown(filho.parentElement!, { button: 3 });
+  expect(filho).toBeInTheDocument();
+  fireEvent(filho, new MouseEvent('auxclick', {button:3,bubbles:true,cancelable:true}));
   expect(screen.queryByRole('dialog', { name: 'Evidência QA' })).not.toBeInTheDocument();
   expect(screen.getByRole('dialog', { name: 'Etapa QA' })).toBeInTheDocument();
   expect(document.body.style.overflow).toBe('hidden');
@@ -385,4 +387,43 @@ test.each(['MANUAL','ATIVIDADE','EVIDENCIA','OCORRENCIA'] as const)('cadastro %s
   expect(modal.style.maxWidth).toBe('1024px');
   expect(screen.queryByText('Contexto variável')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Ocorrência' })).toBeDisabled();
+});
+
+test('decisão abre sem foco visual no título ou Cancelar',()=>{
+  render(<ModalEtapa titulo="Solicitar encerramento" ocupado={false} onFechar={jest.fn()}><button>Cancelar</button></ModalEtapa>);
+  const dialogo=screen.getByRole('dialog',{name:'Solicitar encerramento'});
+  expect(dialogo).toHaveFocus();
+  expect(screen.getByRole('heading',{name:'Solicitar encerramento'})).not.toHaveFocus();
+  expect(screen.getByRole('button',{name:'Cancelar'})).not.toHaveFocus();
+});
+
+
+test('detalhe ancorado usa a geometria da área original e fecha sem navegar', () => {
+  function CenarioAncorado() {
+    const area = useRef<HTMLElement>(null);
+    const [aberto, setAberto] = useState(false);
+    return <section ref={area} data-testid="area-etapas">
+      <button onClick={() => setAberto(true)}>Abrir etapa</button>
+      {aberto && <ModalEtapa titulo="Etapa ancorada" ancora={area} ocupado={false} onFechar={() => setAberto(false)}><p>Entregáveis</p></ModalEtapa>}
+    </section>;
+  }
+  const rota = window.location.href;
+  render(<CenarioAncorado/>);
+  const area = screen.getByTestId('area-etapas');
+  jest.spyOn(area, 'getBoundingClientRect').mockReturnValue({x:30,y:80,left:30,top:80,right:730,bottom:280,width:700,height:200,toJSON:()=>({})});
+  fireEvent.click(screen.getByRole('button', {name:'Abrir etapa'}));
+  const modal = screen.getByRole('dialog', {name:'Etapa ancorada'});
+  expect(modal).toHaveAttribute('aria-modal','true');
+  expect(modal.parentElement).toHaveAttribute('data-pi-sobreposicao-etapa');
+  expect(modal.style.getPropertyValue('--pi-ancora-x')).toBe('30px');
+  expect(modal.style.getPropertyValue('--pi-ancora-y')).toBe('32px');
+  expect(modal.style.getPropertyValue('--pi-ancora-largura')).toBe('700px');
+  expect(modal.style.getPropertyValue('--pi-ancora-altura')).toBe(`${window.innerHeight - 44}px`);
+  jest.spyOn(area, 'getBoundingClientRect').mockReturnValue({x:30,y:30,left:30,top:30,right:730,bottom:230,width:700,height:200,toJSON:()=>({})});
+  fireEvent(window, new Event('resize'));
+  expect(modal.style.getPropertyValue('--pi-ancora-y')).toBe('12px');
+  expect(area).toBeInTheDocument();
+  fireEvent.keyDown(modal,{key:'Escape'});
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(window.location.href).toBe(rota);
 });

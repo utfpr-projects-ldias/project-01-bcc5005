@@ -199,7 +199,7 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, mo
       const selecionar = () => {
       window.dispatchEvent(new Event('pi:recolher-lista-entregaveis'));
       setGatilhoDetalhe(gatilho); setEditarAoAbrir(editar); setDetalheId(id); if(interno)onSelecaoInterna?.(id); onDetalheMudou?.(true); };
-      if (dentroModal && !interno || solicitarNavegacaoInterna(selecionar)) selecionar(); return;
+      if (dentroModal && !interno || solicitarNavegacaoInterna(selecionar, true)) selecionar(); return;
     }
     if (detalheId) return;
     const marcador = `${marcadorModal}:${id}`;
@@ -216,8 +216,14 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, mo
   function fecharDetalhe(pularEdicao = false, forcar = false) {
     if (!detalheId) return;
     if (interno || dentroModal) {
-      if (interno && !forcar && !solicitarNavegacaoInterna(() => fecharDetalhe(pularEdicao, true))) return;
-      setDetalheId(null); setEditarAoAbrir(false); if(interno)onSelecaoInterna?.(null); onDetalheMudou?.(false); return;
+      if (interno && !forcar && !solicitarNavegacaoInterna(() => fecharDetalhe(pularEdicao, true), true)) return;
+      setDetalheId(null); setEditarAoAbrir(false); if(interno)onSelecaoInterna?.(null); onDetalheMudou?.(false);
+      if (interno && historico.current && window.history.state?.__modalEntregavel === historico.current) {
+        historico.current = null;
+        window.history.back();
+      }
+      if (gatilhoDetalhe?.isConnected) requestAnimationFrame(() => gatilhoDetalhe.focus({preventScroll:true}));
+      return;
     }
     const marcador = historico.current;
     setDetalheId(null);
@@ -234,10 +240,32 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, mo
       restaurar();
     }
   }
+  // Dentro da etapa ancorada, reservar um nível também no histórico do iframe.
+  // Assim o Voltar nativo não salta diretamente para o contrato ou para a carteira.
+  useEffect(() => {
+    if (!interno || !detalheId || historico.current || !window.history.state?.__modalEtapa) return;
+    const marcador = `${marcadorModal}:${detalheId}`;
+    window.history.pushState({ ...window.history.state, __modalEntregavel: marcador }, '', window.location.href);
+    historico.current = marcador;
+  }, [interno, detalheId, marcadorModal]);
   useEffect(() => {
     const voltar = () => {
       const marcador = historico.current;
       if (!marcador || window.history.state?.__modalEntregavel === marcador) return;
+      if (interno) {
+        // Restaurar o nível quando há formulário pendente; o descarte confirmado
+        // fecha normalmente e remove a entrada. Sem rascunho, fechar uma vez.
+        const fechar = () => {
+          historico.current = null;
+          setDetalheId(null); setEditarAoAbrir(false); onSelecaoInterna?.(null); onDetalheMudou?.(false);
+        };
+        const continuar = () => { fechar(); if (window.history.state?.__modalEntregavel === marcador) window.history.back(); };
+        if (!solicitarNavegacaoInterna(continuar, true)) {
+          window.history.pushState({ ...window.history.state, __modalEntregavel: marcador }, '', window.location.href);
+          return;
+        }
+        fechar(); return;
+      }
       historico.current = null;
       setDetalheId(null);
       onDetalheMudou?.(false);
@@ -245,7 +273,7 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, mo
     };
     window.addEventListener('popstate', voltar);
     return () => window.removeEventListener('popstate', voltar);
-  }, [restaurar, onDetalheMudou]);
+  }, [restaurar, onDetalheMudou, interno, onSelecaoInterna]);
   useEffect(() => () => {
     if (posicao.current) ajustarRestauracaoHistorico(posicao.current.restauracao);
   }, []);
@@ -314,7 +342,7 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, mo
     </div>
     <div className="pi-ferramentas-etapa-v24">      {abaEntregaveis === 'pendentes' && <select aria-label="Tipo de solicitação do entregável" className="pi-filtro-sublinhado" value={tipoPendente} onChange={e=>setTipoPendente(e.target.value)}><option value="">Todas as solicitações</option><option value="PENDENTE_CONCLUSAO">Pendente de conclusão</option><option value="PENDENTE_CONCLUSAO_PARCIAL">Pendente de conclusão parcial</option><option value="PENDENTE_ENCERRAMENTO">Pendente de encerramento</option><option value="REGULARIZACAO">Regularização documental</option></select>}
       <select aria-label="Tipo de entregável" value={filtroTipo} onChange={e=>setFiltroTipo(e.target.value)} className="pi-filtro-sublinhado"><option value="">Todos os tipos</option>{Object.entries(ROTULOS_TIPO).map(([id,rotulo])=><option key={id} value={id}>{rotulo}</option>)}</select>
-<div className="pi-busca-operacional w-60 max-w-full min-w-0"><label className="sr-only" htmlFor={`${marcadorModal}-pesquisa`}>Pesquisar entregável</label><input id={`${marcadorModal}-pesquisa`} placeholder="Pesquisar entregável..." type="search" value={pesquisa} onChange={e=>setPesquisa(e.target.value)} className="w-full min-w-0 rounded-lg border border-current/20 bg-transparent px-3 py-2 text-sm"/></div></div>
+<div className="pi-busca-operacional w-60 max-w-full min-w-0"><label className="sr-only" htmlFor={`${marcadorModal}-pesquisa`}>Pesquisar entregável</label><input id={`${marcadorModal}-pesquisa`} placeholder="Pesquisar entregável..." type="search" value={pesquisa} onChange={e=>setPesquisa(e.target.value)} className="w-full min-w-0 rounded-lg border border-current/20 bg-transparent px-3 py-2 text-sm"/></div><button type="button" className="pi-limpar-filtros" disabled={!pesquisa&&!filtroTipo&&!tipoPendente} onClick={()=>{setPesquisa('');setFiltroTipo('');setTipoPendente('');}}>Limpar filtros</button></div>
     {aviso && <p role="alert" className="mt-2 text-sm text-error-text">{aviso}</p>}
     {abaEntregaveis === 'ativos' && podeCriar && !paiBloqueado && !erro && iniciado && aberto && typeof document !== 'undefined' && createPortal(
       <ModalEtapa titulo="Novo entregável" contexto={contextoCadastro ?? "Cadastro na etapa selecionada"} camada="edicao" larguraFormulario="entregavel" formularioLongo ocupado={salvando}
@@ -344,7 +372,7 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, mo
       onHierarquiaAlterada?.();
       if (mostrarArquivados) setArquivados(await listarEntregaveisArquivados(contratoId, etapaId));
     }} />;
-  return <section data-pi-listagem-etapa data-tec08-contexto-operacional data-tec08-estado={contextoVisualEtapa} aria-label="Entregáveis da etapa" className={interno ? "min-w-0" : somenteDetalheId ? "contents" : `mt-4 min-h-[min(42dvh,400px)] min-w-0 rounded-xl border p-3 sm:p-4 ${contextoVisualEtapa === 'arquivado' ? 'border-amber-500/45 bg-amber-500/[0.04]' : contextoVisualEtapa === 'revisao' ? 'border-teal-700/40 bg-teal-900/[0.05]' : contextoVisualEtapa === 'concluido' ? 'border-violet-500/40 bg-violet-500/[0.04]' : contextoVisualEtapa === 'encerrado' ? 'border-slate-500/40 bg-slate-500/[0.04]' : 'border-brand-green/20 bg-brand-darkgreen/10'}`}>
+  return <section data-pi-operacional-neutro data-pi-listagem-etapa data-tec08-contexto-operacional data-tec08-estado={contextoVisualEtapa} aria-label="Entregáveis da etapa" className={interno ? "min-w-0" : somenteDetalheId ? "contents" : `mt-4 min-h-[min(42dvh,400px)] min-w-0 rounded-xl border p-3 sm:p-4 ${contextoVisualEtapa === 'arquivado' ? 'border-amber-500/45 bg-amber-500/[0.04]' : contextoVisualEtapa === 'revisao' ? 'border-teal-700/40 bg-teal-900/[0.05]' : contextoVisualEtapa === 'concluido' ? 'border-violet-500/40 bg-violet-500/[0.04]' : contextoVisualEtapa === 'encerrado' ? 'border-slate-500/40 bg-slate-500/[0.04]' : 'border-brand-green/20 bg-brand-darkgreen/10'}`}>
     {interno ? <NavegadorEntregaveis nomeEtapa={nomeEtapa} selecionado={detalheId} painelDireitoAberto={painelDireitoAberto} lista={lista}>{detalhe}</NavegadorEntregaveis> : <>{lista}{detalhe}</>}
     {explicarId && !protegido && <ExplicacaoConclusaoEntregavel contratoId={contratoId} entregavelId={explicarId} percentual={progressoFisico?.find(p=>p.entregavelId===explicarId)?.percentualExecucao} onFechar={()=>setExplicarId(null)}/>}
     {confirmarReabertura && <ConfirmacaoSimples titulo="Reabrir entregável concluído?"

@@ -455,7 +455,7 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
 
     {documentoDetalhe && createPortal(<ModalEtapa titulo={documentoDetalhe.nomeOriginal} contexto="Documento contratual" acoes={<>
       {podeEditarRegistro && !somenteLeitura && !documentoDetalhe.arquivadoEm && !documentoDetalhe.verificadoEm && documentoDetalhe.categoria !== 'CONTRATO_PRINCIPAL' && <BotaoEditarModal rotulo="Editar metadados do documento" onClick={() => { setDocumentoEdicao(documentoDetalhe); setCategoriaEdicao(documentoDetalhe.categoria); setDescricaoEdicao(documentoDetalhe.descricao ?? ''); setErroMetadados(''); }} />}
-      <MenuAcoesObjeto rotulo={documentoDetalhe.arquivadoEm || !!documentoDetalhe.verificadoEm ? 'Reabrir' : 'Fechar'} disabled={!permiteMutacao(documentoDetalhe) || salvandoMetadados}
+      <MenuAcoesObjeto rotulo={documentoDetalhe.arquivadoEm ? 'Reativar' : !!documentoDetalhe.verificadoEm ? 'Reabrir' : 'Fechar'} disabled={!permiteMutacao(documentoDetalhe) || salvandoMetadados}
         acaoDireta={documentoDetalhe.arquivadoEm && permiteReativar(documentoDetalhe) ? () => setDocumentoReativar(documentoDetalhe)
           : !documentoDetalhe.arquivadoEm && !!documentoDetalhe.verificadoEm && permiteReabrir(documentoDetalhe) ? () => setDocumentoReabrir(documentoDetalhe) : undefined}>
         {!documentoDetalhe.arquivadoEm && !documentoDetalhe.verificadoEm && permiteArquivar(documentoDetalhe) &&
@@ -504,7 +504,7 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
 
 
     <div className="space-y-3" aria-label="Filtros de documentos">
-      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(150px,230px)]">
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,360px)_minmax(150px,230px)_auto] sm:items-end sm:justify-start">
         <div className="min-w-0 space-y-1"><label htmlFor="busca-nome-documento" className="block text-sm font-medium">Buscar documento nesta página</label>
           <input id="busca-nome-documento" type="search" maxLength={120} className={campos} value={filtrosAtivos.busca}
             disabled={!habilitado || !preparado} onChange={e => atualizarFiltros({ ...filtrosAtivos, busca: e.target.value })}
@@ -515,6 +515,7 @@ export function PainelDocumentos({ contratoId, habilitado, podeAnexar,
             <option value="">Todas as categorias</option>
             {categorias.map(([valor, titulo]) => <option key={valor} value={valor}>{titulo}</option>)}
           </select></div>
+        <button type="button" className="pi-limpar-filtros" disabled={!habilitado||!preparado||(!filtrosAtivos.busca&&!filtrosAtivos.categoria)} onClick={()=>atualizarFiltros({...filtrosAtivos,busca:'',categoria:'',pagina:1})}>Limpar filtros</button>
       </div>
     </div>
     <div ref={resultadosRef} data-testid="regiao-resultados-documentos" aria-busy={consulta.carregando || !preparado} className="min-w-0 space-y-3">

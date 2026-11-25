@@ -674,7 +674,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
     camada="evidencia" larguraFormulario="evidencia" estadoContextual={estadoVisualEvidencia(estadoEvidencias[selecionada.id]?.status,estadoEvidencias[selecionada.id]?.reabertoEm,Boolean(selecionada.arquivadoEm))} ocupado={false} focoRetorno={focoRetornoEvidencia}
     textoFechar="Fechar ×" somenteIconeFechar bloqueadoPorSubmodal={edicaoAberta}
     acoes={<>
-      <MenuAcoesObjeto rotulo={selecionada.arquivadoEm || estadoEvidencias[selecionada.id]?.status === 'VERIFICADA' ? 'Reabrir' : 'Fechar'}
+      <MenuAcoesObjeto rotulo={selecionada.arquivadoEm ? 'Reativar' : estadoEvidencias[selecionada.id]?.status === 'VERIFICADA' ? 'Reabrir' : 'Fechar'}
         acaoDireta={selecionada.arquivadoEm && podeReativarEvidencia && !bloqueadoPorPai ? () => setConfirmarReativacao(selecionada.id)
           : !selecionada.arquivadoEm && (planejamentoHabilitado || regularizacaoAtiva) && podeReabrirEvidencia && estadoEvidencias[selecionada.id]?.status === 'VERIFICADA' && (!bloqueadoPorPai || regularizacaoAtiva) && !paiArquivado
             ? () => setConfirmarReabertura(selecionada.id) : undefined}>

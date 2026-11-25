@@ -1,4 +1,5 @@
 'use client';
+import { modalidadeEncerramento } from '@/lib/modalidade-encerramento';
 import { AbasRolaveis } from '@/app/components/abas-rolaveis';
 
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
@@ -96,6 +97,13 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
   const itemEditando = editor && editor !== 'nova' && !editor.startsWith('detalhe:') ? etapas?.find((e) => e.id === editor) : undefined;
   const idDetalhe = editor?.startsWith('detalhe:') ? editor.slice('detalhe:'.length) : interno ? retornoEdicao : null;
   const itemDetalhe = idDetalhe ? etapas?.find(e => e.id === idDetalhe) : undefined;
+  const sobreposicaoAtiva = Boolean(itemDetalhe && detalheEmPagina);
+  useEffect(() => {
+    if (!sobreposicaoAtiva || window.parent === window) return;
+    const informar = (aberta: boolean) => window.parent.postMessage({tipo:'pi:etapa-sobreposta', contratoId, aberta}, window.location.origin);
+    informar(true);
+    return () => informar(false);
+  }, [sobreposicaoAtiva, contratoId]);
   const consultaElegibilidade = useElegibilidadeEtapa(contratoId, itemDetalhe?.id ?? '', habilitado && !erroProtegido && !bloqueio && Boolean(itemDetalhe) && !contratoArquivado);
   const elegibilidade = !consultaElegibilidade.erro && !consultaElegibilidade.carregando && !consultaElegibilidade.atualizando ? consultaElegibilidade.dados : undefined;
   const destinoAtendido = useRef<typeof destinoInterno>(undefined);
@@ -123,6 +131,7 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
   const {ordem:ordemTabela,alternar:alternarOrdem}=useOrdemTabela();
   const [expandidas,setExpandidas]=useState<string[]>([]);
   const painelEtapaRef=useRef<HTMLDivElement>(null);
+  const areaEtapasRef=useRef<HTMLElement>(null);
   const filhosDaEtapa=(etapa:Etapa)=>(entregaveisQuery.dados??[]).filter(e=>e.etapaId===etapa.id&&e.contratoId===contratoId&&!e.arquivadoEm);
   const dadosFilho=(e:Entregavel)=>{
     const p=progressoContrato.progresso?.entregaveis.find(v=>v.entregavelId===e.id);
@@ -212,10 +221,10 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
     if (interno && gatilhoModal?.isConnected) requestAnimationFrame(() => gatilhoModal.focus({preventScroll:true}));
   }
 
-  function abrirModal(destino: string, gatilho: HTMLElement, comoModal = false) {
+  function abrirModal(destino: string, gatilho: HTMLElement) {
     if (editor === destino) { fecharModal(); return; }
     if (interno && destino.startsWith("detalhe:")) {
-      setDetalheModal(comoModal || consultaAvulsa); setDestinoSelecao(undefined); setGatilhoModal(gatilho); setEditor(destino); setErroAcao(''); return;
+      setDetalheModal(consultaAvulsa); setDestinoSelecao(undefined);
     }
     if (!historicoModal.current) {
       const marcador = `${identificadorModal}:${++sequenciaModal.current}`;
@@ -274,7 +283,7 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
       }
       // Voltar físico do mouse, Alt+Esquerda e botão do navegador chegam aqui.
       historicoModal.current = null;
-      setEditor(null);
+      setEditor(null); setDetalheEntregavelAberto(false); setRetornoEdicao(null); setDestinoSelecao(undefined);
       restaurarPosicaoModal();
     }
     window.addEventListener('popstate', voltarNoHistorico);
@@ -521,8 +530,8 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
     finally { setOcupadoArquivoEtapa(false); }
   }
 
-  return <section data-pi-etapas-internas={interno || undefined} data-pi-painel-contextual data-tec08-estado={estadoPainel} aria-labelledby="titulo-etapas" className={`min-w-0 space-y-4 rounded-2xl border bg-brand-darkgreen/10 p-4 md:p-6 ${contratoPendenteConclusao ? 'border-violet-500/35' : contratoArquivado ? 'border-amber-500/35' : 'border-brand-green/25'}`}>
-    <div hidden={consultaAvulsa || Boolean(itemDetalhe && detalheEmPagina)} inert={interno && Boolean(itemDetalhe) || undefined} aria-hidden={interno && Boolean(itemDetalhe) || undefined} className="space-y-3">
+  return <section ref={areaEtapasRef} data-pi-operacional-neutro data-pi-etapas-internas={interno || undefined} data-pi-etapa-no-espaco={Boolean(itemDetalhe && detalheEmPagina) || undefined} data-pi-painel-contextual data-tec08-estado={estadoPainel} aria-labelledby="titulo-etapas" className={`min-w-0 space-y-4 rounded-2xl border bg-brand-darkgreen/10 p-4 md:p-6 ${contratoPendenteConclusao ? 'border-violet-500/35' : contratoArquivado ? 'border-amber-500/35' : 'border-brand-green/25'}`}>
+    <div hidden={consultaAvulsa} inert={interno && Boolean(itemDetalhe) || undefined} aria-hidden={interno && Boolean(itemDetalhe) || undefined} className="space-y-3">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="pi-filtros-etapas min-w-0 space-y-2">
         <h3 id="titulo-etapas" className="sr-only">Planejamento das etapas do contrato</h3>
@@ -533,6 +542,7 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
     <div data-pi-controles-etapas className="flex flex-wrap items-center gap-2">
       <div className="pi-busca-operacional w-64 max-w-full"><input type="search" aria-label="Pesquisar etapa" placeholder="Pesquisar etapa..." maxLength={100} className="w-full rounded-lg border px-3 py-2 text-sm" value={buscaEtapa} onChange={e=>setBuscaEtapa(e.target.value)}/></div>
       <select aria-label={abaEtapas==='pendentes'?'Tipo de solicitação da etapa':'Situação da etapa'} className="pi-filtro-tabela" value={situacaoSelecionada} onChange={e=>setFiltroSituacao(v=>({...v,[abaEtapas]:e.target.value}))}><option value="">{abaEtapas==='pendentes'?'Todas as solicitações':'Todas as situações'}</option>{filtrosEtapas[abaEtapas].map(([valor,rotulo])=><option key={valor} value={valor}>{rotulo}</option>)}</select>
+      <button type="button" className="pi-limpar-filtros" disabled={!buscaEtapa && !situacaoSelecionada} onClick={()=>{setBuscaEtapa('');setFiltroSituacao({});}}>Limpar filtros</button>
     </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -579,11 +589,11 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
           <td><div className="pi-titulo-com-expansao"><button type="button" className="pi-chevron-tabela" disabled={!filhos.length} aria-expanded={aberto} aria-label={`${aberto?'Recolher':'Expandir'} entregáveis de ${etapa.nome}`} onClick={()=>setExpandidas(v=>v.includes(etapa.id)?v.filter(id=>id!==etapa.id):[...v,etapa.id])}><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-4 w-4" style={{transform:aberto?'rotate(180deg)':undefined}}><path d="m5 8 5 5 5-5"/></svg></button><button type="button" className="pi-titulo-tabela" onClick={e=>abrirModal(`detalhe:${etapa.id}`,e.currentTarget)} aria-label={`Abrir detalhes da etapa ${indice+1}: ${etapa.nome}`}><IconeTabela estado={m.estado}/><span className="min-w-0"><strong className="block truncate" title={etapa.nome}>{String(etapa.sequencia).padStart(2,'0')} · {etapa.nome}</strong><span className="pi-subtitulo-tabela block truncate">{rotuloCodigoPublico(etapa.codigoPublico)}{etapa.codigo?` · ${etapa.codigo}`:''}</span></span></button></div></td>
           <td><BarraTabela valor={m.execucao}/></td><td><AnelTabela nome="Entregáveis" fracao={m.entregaveis}/></td><td><AnelTabela nome="Ocorrências" fracao={m.ocorrencias}/></td><td><AnelTabela nome="Atividades" fracao={m.atividades} cor="text-emerald-600 dark:text-emerald-400"/></td><td><AnelTabela nome="Evidências" fracao={m.evidencias} cor="text-teal-600 dark:text-teal-400"/></td><td><ComprovacaoTabela fracao={m.comprovacao}/></td><td><StatusTabela estado={m.estado} rotulo={identidade.rotulo}/></td><td className="whitespace-nowrap">{etapa.terminoPrevisto?dataBR(etapa.terminoPrevisto):'—'}</td>
           <td className="pi-celula-acoes"><div className="pi-reserva-acoes">{!contratoBloqueado&&podeReordenarEtapa&&abaEtapas==='todas'&&!ordemTabela?<div className="pi-acoes-tabela"><button type="button" className="pi-acao-tabela" disabled={!ordemDestravada||reordenando||salvandoFormulario||indiceAtivo<=0} aria-label={`Subir etapa ${etapa.nome}`} onClick={()=>void mover(indiceAtivo,-1)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4"><path d="M10 15V5m-4 4 4-4 4 4" strokeLinecap="round" strokeLinejoin="round"/></svg></button><button type="button" className="pi-acao-tabela" disabled={!ordemDestravada||reordenando||salvandoFormulario||indiceAtivo<0||indiceAtivo===(ordenadas??[]).filter(e=>!e.arquivadoEm).length-1} aria-label={`Descer etapa ${etapa.nome}`} onClick={()=>void mover(indiceAtivo,1)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4"><path d="M10 5v10m-4-4 4 4 4-4" strokeLinecap="round" strokeLinejoin="round"/></svg></button></div>:<span className="pi-sem-dados">—</span>}</div></td>
-        </tr>{aberto&&filhos.length>0&&<tr className="pi-grupo-entregaveis"><td colSpan={10}><div className="pi-subtabela-wrap"><div className="pi-subtabela-titulo"><span>Entregáveis da etapa</span><span>{filhos.length}</span></div><table className="pi-tabela-operacional pi-subtabela" aria-label={`Entregáveis de ${etapa.nome}`}><colgroup>{Array.from({length:8},(_,i)=><col key={i}/>)}</colgroup><thead><tr>{[['titulo','Entregável'],['execucao','Execução'],['ocorrencias','Ocorrências'],['atividades','Atividades'],['evidencias','Evidências'],['comprovacao','Comprovação'],['status','Status'],['prazo','Prazo']].map(([campo,titulo])=><CabecalhoColuna key={campo} campo={campo} titulo={titulo} ordem={ordemTabela} alternar={alternarOrdem}/>)}</tr></thead><tbody>{ordenarTabela(filhos,ordemTabela,valorFilho).map(e=>{const f=dadosFilho(e);return <tr key={e.id} data-filho="true" className="pi-linha-filha"><td><button type="button" className="pi-titulo-tabela pi-titulo-filho" onClick={ev=>{abrirModal(`detalhe:${etapa.id}`,ev.currentTarget,true);setDestinoSelecao({etapaId:etapa.id,id:e.id});}}><IconeTabela estado={f.estado}/><span className="min-w-0"><strong className="block truncate" title={e.nome}>{e.nome}</strong><span className="pi-subtitulo-tabela block truncate">{ROTULOS_TIPO[e.tipo]}{f.participacao!=null?` · ${f.participacao.toLocaleString('pt-BR',{maximumFractionDigits:1})}% do contrato`:''}</span></span></button></td><td><BarraTabela valor={f.execucao}/></td><td><AnelTabela nome="Ocorrências" fracao={f.ocorrencias}/></td><td><AnelTabela nome="Atividades" fracao={f.atividades} cor="text-emerald-600 dark:text-emerald-400"/></td><td><AnelTabela nome="Evidências" fracao={f.evidencias} cor="text-teal-600 dark:text-teal-400"/></td><td><ComprovacaoTabela fracao={f.comprovacao}/></td><td><StatusTabela estado={f.estado} rotulo={rotuloEstadoEntregavel(e.statusExecucao,Boolean(e.arquivadoEm),Boolean(e.reabertoEm),Boolean(e.regularizacaoDocumentalSolicitada))}/><EtiquetaAtraso atrasado={e.atrasado} finalizadoComAtraso={e.finalizadoComAtraso}/></td><td className="whitespace-nowrap">{e.terminoPrevisto?dataBR(e.terminoPrevisto):'—'}</td></tr>;})}</tbody></table></div></td></tr>}</Fragment>;
+        </tr>{aberto&&filhos.length>0&&<tr className="pi-grupo-entregaveis"><td colSpan={10}><div className="pi-subtabela-wrap"><div className="pi-subtabela-titulo"><span>Entregáveis da etapa</span><span>{filhos.length}</span></div><table className="pi-tabela-operacional pi-subtabela" aria-label={`Entregáveis de ${etapa.nome}`}><colgroup>{Array.from({length:8},(_,i)=><col key={i}/>)}</colgroup><thead><tr>{[['titulo','Entregável'],['execucao','Execução'],['ocorrencias','Ocorrências'],['atividades','Atividades'],['evidencias','Evidências'],['comprovacao','Comprovação'],['status','Status'],['prazo','Prazo']].map(([campo,titulo])=><CabecalhoColuna key={campo} campo={campo} titulo={titulo} ordem={ordemTabela} alternar={alternarOrdem}/>)}</tr></thead><tbody>{ordenarTabela(filhos,ordemTabela,valorFilho).map(e=>{const f=dadosFilho(e);return <tr key={e.id} data-filho="true" className="pi-linha-filha"><td><button type="button" className="pi-titulo-tabela pi-titulo-filho" onClick={ev=>{abrirModal(`detalhe:${etapa.id}`,ev.currentTarget);setDestinoSelecao({etapaId:etapa.id,id:e.id});}}><IconeTabela estado={f.estado}/><span className="min-w-0"><strong className="block truncate" title={e.nome}>{e.nome}</strong><span className="pi-subtitulo-tabela block truncate">{ROTULOS_TIPO[e.tipo]}{f.participacao!=null?` · ${f.participacao.toLocaleString('pt-BR',{maximumFractionDigits:1})}% do contrato`:''}</span></span></button></td><td><BarraTabela valor={f.execucao}/></td><td><AnelTabela nome="Ocorrências" fracao={f.ocorrencias}/></td><td><AnelTabela nome="Atividades" fracao={f.atividades} cor="text-emerald-600 dark:text-emerald-400"/></td><td><AnelTabela nome="Evidências" fracao={f.evidencias} cor="text-teal-600 dark:text-teal-400"/></td><td><ComprovacaoTabela fracao={f.comprovacao}/></td><td><StatusTabela estado={f.estado} rotulo={rotuloEstadoEntregavel(e.statusExecucao,Boolean(e.arquivadoEm),Boolean(e.reabertoEm),Boolean(e.regularizacaoDocumentalSolicitada))}/><EtiquetaAtraso atrasado={e.atrasado} finalizadoComAtraso={e.finalizadoComAtraso}/></td><td className="whitespace-nowrap">{e.terminoPrevisto?dataBR(e.terminoPrevisto):'—'}</td></tr>;})}</tbody></table></div></td></tr>}</Fragment>;
       })}</tbody></table></div>}
     </div>
     {consultaAvulsa && !itemDetalhe && !editor && <ModalEtapa neutro titulo={consulta.erro || (consulta.dados && !destinoDisponivel)?"Etapa indisponível":"Consultar registro"} ocupado={false} onFechar={()=>onFecharConsultaDireta?.()} larguraFormulario="registro">{consulta.erro || (consulta.dados && !destinoDisponivel)?<p role="alert">{consulta.erro?'Não foi possível consultar a etapa.':'Etapa não encontrada ou não autorizada.'}</p>:<p role="status">Consultando registro…</p>}</ModalEtapa>}
-    {editor && ((editor === 'nova' && podeCriarEtapa) || (itemEditando && podeEditarEtapa) || !!itemDetalhe) && <div ref={painelEtapaRef} data-pi-etapa-dialog={Boolean(itemDetalhe && !detalheEmPagina) || undefined} data-pi-etapa-direta={Boolean(destinoSelecao?.id && !detalheEmPagina) || undefined}><ModalEtapa larguraFormulario={itemDetalhe?undefined:"etapa"} larguraDetalhe={Boolean(itemDetalhe)} interno={Boolean(itemDetalhe && detalheEmPagina)} retornoEsquerda={Boolean(itemDetalhe && detalheEmPagina)} mostrarXComVoltar={false}
+    {editor && ((editor === 'nova' && podeCriarEtapa) || (itemEditando && podeEditarEtapa) || !!itemDetalhe) && <div ref={painelEtapaRef} data-pi-etapa-dialog={Boolean(itemDetalhe && !detalheEmPagina) || undefined} data-pi-etapa-direta={Boolean(destinoSelecao?.id && !detalheEmPagina) || undefined}><ModalEtapa larguraFormulario={itemDetalhe?undefined:"etapa"} larguraDetalhe={Boolean(itemDetalhe)} ancora={itemDetalhe && detalheEmPagina ? areaEtapasRef : undefined} retornoEsquerda={Boolean(itemDetalhe && detalheEmPagina)} mostrarXComVoltar={false}
       titulo={itemDetalhe ? `${itemDetalhe.sequencia} · ${itemDetalhe.nome}` : editor === 'nova' ? 'Nova etapa' : `Editar etapa · ${itemEditando?.nome ?? ''}`}
       contexto={itemDetalhe ? 'Etapa do contrato' : 'Planejamento do contrato'}
       textoFechar="Fechar ×"
@@ -592,7 +602,7 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
       rotuloFechar={itemDetalhe ? 'Voltar às etapas' : retornoEdicao ? 'Fechar edição da etapa' : 'Fechar edição da etapa'}
       somenteIconeFechar alturaEstavel={Boolean(itemDetalhe)} arquivado={Boolean(itemDetalhe?.arquivadoEm)} concluido={Boolean(itemDetalhe && identidadeEtapa(itemDetalhe).estado === 'concluido')} revisao={Boolean(itemDetalhe?.reabertoEm && !itemDetalhe?.conclusaoSolicitadaEm && !itemDetalhe?.encerramentoSolicitadoEm)}
       estadoContextual={editor === 'nova' ? 'andamento' : itemEditando ? identidadeEtapa(itemEditando).estado : itemDetalhe ? identidadeEtapa(itemDetalhe).estado : 'normal'}
-      bloqueadoPorSubmodal={detalheEntregavelAberto || Boolean(destinoSelecao?.id)}
+      bloqueadoPorSubmodal={!detalheEmPagina && (detalheEntregavelAberto || Boolean(destinoSelecao?.id))}
       ocupado={salvandoFormulario} focoRetorno={gatilhoModal} onFechar={fecharNivelModal}
       acoes={itemDetalhe ? <>
         {podeEditarEtapa && !itemDetalhe.arquivadoEm && !itemDetalhe.conclusaoSolicitadaEm && !itemDetalhe.encerramentoSolicitadoEm && (Boolean(itemDetalhe.reabertoEm) || !['CONCLUIDA','CONCLUIDO_PARCIALMENTE','ENCERRADA','FINALIZADA'].includes(itemDetalhe.status)) && !contratoBloqueado &&
@@ -603,7 +613,7 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
             onClick={() => { setMotivoEtapa(''); setDevolverPendente({id:itemDetalhe.id,tipo:itemDetalhe.conclusaoSolicitadaEm?'conclusao':'encerramento'}); }}>Cancelar</button>
           <button type="button" className="rounded-lg border border-green-600/60 bg-green-600/20 px-3 py-2 text-xs font-semibold text-green-800 hover:bg-green-600/30 dark:text-green-200 disabled:opacity-35" disabled={ocupadoArquivoEtapa || (contratoBloqueado && !(permiteRegularizar && itemDetalhe.status === 'CONCLUIDO_PARCIALMENTE')) || !(itemDetalhe.conclusaoSolicitadaEm ? permissao('concluirEtapas') && elegibilidade?.podeAprovarConclusao : permissao('encerrarEtapas') && elegibilidade?.podeAprovarEncerramento)}
             onClick={() => itemDetalhe.conclusaoSolicitadaEm ? setAprovarConclusao(itemDetalhe.id) : setAprovarEncerramento(itemDetalhe.id)}>Aprovar</button>
-        </div> : <MenuAcoesObjeto rotulo={itemDetalhe.arquivadoEm || ['CONCLUIDA','CONCLUIDO_PARCIALMENTE','ENCERRADA','FINALIZADA'].includes(itemDetalhe.status) ? 'Reabrir' : 'Fechar'}
+        </div> : <MenuAcoesObjeto rotulo={itemDetalhe.arquivadoEm ? 'Reativar' : ['CONCLUIDA','CONCLUIDO_PARCIALMENTE','ENCERRADA','FINALIZADA'].includes(itemDetalhe.status) ? 'Reabrir' : 'Fechar'}
           disabled={ocupadoArquivoEtapa || salvandoFormulario}
           pendenteConclusao={Boolean(!['CONCLUIDA','CONCLUIDO_PARCIALMENTE','ENCERRADA','FINALIZADA'].includes(itemDetalhe.status) && (itemDetalhe.conclusaoSolicitadaEm || elegibilidade?.podeSolicitarConclusao))}
           acaoDireta={itemDetalhe.arquivadoEm && podeReativarEtapa && !contratoBloqueado ? () => { setMotivoEtapa(''); setConfirmarArquivoEtapa({id:itemDetalhe.id,acao:'reativar'}); }
@@ -615,10 +625,8 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
               title="Requer todos os entregáveis e evidências resolvidos" onClick={()=>{setErroAcao('');setParcialEtapa(false);setConfirmarConclusaoEtapa(itemDetalhe.id);}}>Solicitar conclusão</BotaoAcaoModal>
             <BotaoAcaoModal conclusaoParcial intencao="solicitar-conclusao" disabled={contratoBloqueado || !podeEditarEtapa || !elegibilidade?.podeSolicitarParcial}
               onClick={()=>{setErroAcao('');setParcialEtapa(true);setConfirmarConclusaoEtapa(itemDetalhe.id);}}>Solicitar conclusão parcial</BotaoAcaoModal>
-            <BotaoAcaoModal intencao="encerrar" disabled={contratoBloqueado || !podeEditarEtapa || !elegibilidade?.podeSolicitarEncerramento}
-              title="Encerramento administrativo com justificativa quando a execução integral não foi comprovada" onClick={()=>{setErroAcao('');setMotivoEtapa('');setConfirmarEncerramentoDireto(itemDetalhe.id);}}>Solicitar encerramento</BotaoAcaoModal>
-            <BotaoAcaoModal intencao="encerrar" disabled={contratoBloqueado || !permissao('concluirEtapas') || !elegibilidade?.podeFinalizar || ocupadoArquivoEtapa}
-              onClick={()=>{setErroAcao('');setMotivoEtapa('');setConfirmarFinalizacao(itemDetalhe.id);}}>Finalizar administrativamente</BotaoAcaoModal>
+            <BotaoAcaoModal intencao="encerrar" disabled={contratoBloqueado || ocupadoArquivoEtapa || !modalidadeEncerramento(Boolean(podeEditarEtapa && elegibilidade?.podeSolicitarEncerramento),Boolean(permissao('concluirEtapas') && elegibilidade?.podeFinalizar))}
+              onClick={()=>{setErroAcao('');setMotivoEtapa('');const acao=modalidadeEncerramento(Boolean(podeEditarEtapa && elegibilidade?.podeSolicitarEncerramento),Boolean(permissao('concluirEtapas') && elegibilidade?.podeFinalizar));if(acao==='finalizar')setConfirmarFinalizacao(itemDetalhe.id);else if(acao==='encerrar')setConfirmarEncerramentoDireto(itemDetalhe.id);}}>Encerrar etapa</BotaoAcaoModal>
           </>}
           {!!itemDetalhe.conclusaoSolicitadaEm && <>
             <BotaoAcaoModal intencao="concluir" disabled={!permissao('concluirEtapas')||(contratoBloqueado&&!(permiteRegularizar&&itemDetalhe.status==='CONCLUIDO_PARCIALMENTE'))} onClick={()=>setAprovarConclusao(itemDetalhe.id)}>Aprovar conclusão</BotaoAcaoModal>
@@ -682,7 +690,7 @@ export function PainelEtapas({ contratoId, modoCalculo = 'PONDERADO', habilitado
         onConfirmar={() => void executarEncerramentoDireto()} />
     </div>, document.body)}
     {confirmarFinalizacao && createPortal(<div className="relative z-[180]">
-      <ConfirmacaoSimples pendencias={erroAcao ? [erroAcao] : []} titulo="Finalizar administrativamente a etapa?" descricao="Os entregáveis têm decisões finais, incluindo encerramentos administrativos. O avanço físico realizado permanece inalterado."
+      <ConfirmacaoSimples pendencias={erroAcao ? [erroAcao] : []} titulo="Encerrar etapa?" descricao="O encerramento será efetivado nesta decisão, sem uma segunda aprovação. O avanço físico permanece inalterado."
         confirmar="Finalizar etapa" ocupado={ocupadoArquivoEtapa} estadoContextual="finalizado" justificativa={motivoEtapa} justificativaMinima={15} onJustificativaChange={setMotivoEtapa}
         onCancelar={()=>{setConfirmarFinalizacao(null);setMotivoEtapa('');}} onConfirmar={()=>void executarFinalizacaoEtapa()} />
     </div>,document.body)}

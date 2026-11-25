@@ -2,13 +2,13 @@
 
 :root {
   /* Modo Claro (Light Mode) - Padrão */
-  --bg-primary: #F0FFE3;
-  --bg-secondary: #E2F5D1;
-  --text-primary: #050607;
-  --accent-green: #5FD34A;
-  --accent-neon: #153019;
+  --bg-primary: #f8fafc;
+  --bg-secondary: #edf2f6;
+  --text-primary: #17212a;
+  --accent-green: #35616f;
+  --accent-neon: #365c6e;
   /* Contraste para textos sobre a cor principal e mensagens de erro. */
-  --text-on-accent-green: #050607;
+  --text-on-accent-green: #ffffff;
   --text-error: #b91c1c;
 }
 
@@ -16,10 +16,10 @@
   :root {
     /* Modo Escuro (Dark Mode) */
     --bg-primary: #050607; /* black */
-    --bg-secondary: #153019; /* dark_green */
-    --text-primary: #F0FFE3; /* white */
-    --accent-neon: #A6FF1A;  /* neon_green */
-    --accent-green: #5FD34A; /* green */
+    --bg-secondary: #1b242b; /* superfície secundária */
+    --text-primary: #e2e8ed; /* white */
+    --accent-neon: #a9c8d5;  /* destaque */
+    --accent-green: #35616f; /* ação principal */
     --text-error: #fca5a5;
   }
 }
@@ -185,12 +185,12 @@ html { scrollbar-gutter: stable; }
 /* Confirmações estão dentro do contexto colorido do contrato. Sua ação positiva
    precisa continuar legível até quando .contrato-detalhe-documental muda o tema. */
 button[data-tec08-confirmar]:not(:disabled):not(.bg-red-600) {
-  background-color: #5fd34a !important;
-  border-color: #5fd34a !important;
-  color: #050607 !important;
+  background-color: #35616f !important;
+  border-color: #799fac !important;
+  color: #fff !important;
 }
 button[data-tec08-confirmar]:not(:disabled):not(.bg-red-600):hover {
-  background-color: #83e66f !important;
+  background-color: #407888 !important;
 }
 button[data-tec08-confirmar]:disabled {
   background-color: #334155 !important;
@@ -315,11 +315,11 @@ button[data-tec08-confirmar][data-tec08-acao-aprovar]:not(:disabled):hover {back
    seus fundos/contrastes próprios definidos acima. */
 @media (prefers-color-scheme: light) {
   :root {
-    --bg-primary: #f7faf6;
-    --bg-secondary: #e8f1e7;
-    --text-primary: #17251c;
-    --accent-neon: #166534;
-    --accent-green: #5fd34a;
+    --bg-primary: #f8fafc;
+    --bg-secondary: #edf2f6;
+    --text-primary: #17212a;
+    --accent-neon: #365c6e;
+    --accent-green: #35616f;
     --text-error: #991b1b;
     --ui-arquivado: #854d0e;
     --ui-suspenso: #713f12;
@@ -330,16 +330,16 @@ button[data-tec08-confirmar][data-tec08-acao-aprovar]:not(:disabled):hover {back
   html { color-scheme: light; }
   body { background: var(--bg-primary); }
   :where(input, select, textarea) { color-scheme: light; }
-  :where(input, select, textarea):not(:disabled) { caret-color: #166534; }
+  :where(input, select, textarea):not(:disabled) { caret-color: #799fac; }
   :where(input, select, textarea):focus-visible {
-    outline-color: #166534;
+    outline-color: #799fac;
     outline-offset: 2px;
   }
   /* Divisórias leves ainda visíveis no fundo claro, sem pintar cartões. */
   :where(section, article, aside, [role="dialog"])[class*="border-brand-green/10"],
   :where(section, article, aside, [role="dialog"])[class*="border-brand-green/15"],
   :where(section, article, aside, [role="dialog"])[class*="border-brand-green/20"] {
-    border-color: rgb(22 101 52 / .25);
+    border-color: rgb(53 97 111 / .25);
   }
   [role="dialog"] { box-shadow: 0 16px 60px rgb(15 23 42 / .23); }
   [data-tec08-modal][class*="bg-black/"] { background-color: rgb(15 23 42 / .14); }
@@ -432,7 +432,7 @@ button[data-tec08-confirmar][data-tec08-acao-aprovar]:not(:disabled):hover {back
   }
   /* Botões de navegação inativos mantêm hover perceptível no claro. */
   [role="tablist"] button[role="tab"]:not([aria-selected="true"]):hover {
-    background-color: rgb(22 101 52 / .11) !important;
+    background-color: rgb(53 97 111 / .11) !important;
     color: #17251c !important;
   }
 }
@@ -441,13 +441,13 @@ button[data-tec08-confirmar][data-tec08-acao-aprovar]:not(:disabled):hover {back
  * O fundo da ação deve ser opaco e o texto deve ter contraste em ambos os temas. */
 .contrato-detalhe-documental button.bg-brand-green:not(:disabled):not([role="tab"]):not([data-tec08-contextual]),
 .contrato-detalhe-documental a.bg-brand-green:not([role="tab"]) {
-  background-color: #166534 !important;
+  background-color: #35616f !important;
   color: #ffffff !important;
-  border-color: #15803d !important;
+  border-color: #799fac !important;
 }
 .contrato-detalhe-documental button.bg-brand-green:not(:disabled):not([role="tab"]):not([data-tec08-contextual]):hover,
 .contrato-detalhe-documental a.bg-brand-green:not([role="tab"]):hover {
-  background-color: #15803d !important;
+  background-color: #407888 !important;
   color: #ffffff !important;
 }
 /* Anexação usa apenas a variável contextual no bloco final do design system. */
@@ -478,9 +478,9 @@ button[data-tec08-confirmar][data-tec08-acao-aprovar]:not(:disabled):hover {back
  * A identidade de uma evidência verificada não altera a do entregável ainda aberto.
  */
 .contrato-detalhe-documental {
-  --tec08-status-bg: #166534;
+  --tec08-status-bg: #35616f;
   --tec08-status-fg: #fff;
-  --tec08-status-border: #22c55e;
+  --tec08-status-border: #799fac;
 }
 .contrato-detalhe-documental[data-tec08-estado="revisao"] {
   --tec08-status-bg: #0f766e; --tec08-status-fg: #fff; --tec08-status-border: #14b8a6;
@@ -507,9 +507,9 @@ button[data-tec08-confirmar][data-tec08-acao-aprovar]:not(:disabled):hover {back
 }
 /* Um modal tem sua própria paleta. O bloco não usa a classe de estado do contrato. */
 [data-tec08-modal] > [data-tec08-entidade="modal"] {
-  --tec08-entidade-bg: #166534;
-  --tec08-entidade-texto: #a6ff1a;
-  --tec08-entidade-borda: #22c55e;
+  --tec08-entidade-bg: #35616f;
+  --tec08-entidade-texto: var(--text-primary);
+  --tec08-entidade-borda: #799fac;
 }
 [data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="revisao"] {
   --tec08-entidade-bg: #0f766e; --tec08-entidade-texto: #99f6e4; --tec08-entidade-borda: #14b8a6;
@@ -543,17 +543,17 @@ button[data-tec08-confirmar][data-tec08-acao-aprovar]:not(:disabled):hover {back
   color: white !important;
 }
 .contrato-detalhe-documental button[data-tec08-acao="anexar-documento"]:not(:disabled) {
-  background: #166534 !important; border-color: #15803d !important;
+  background: #35616f !important; border-color: #799fac !important;
 }
 .contrato-detalhe-documental button[data-tec08-acao="anexar-documento"]:not(:disabled):hover {
-  background: #15803d !important;
+  background: #407888 !important;
 }
 /* Barra de progresso incompleto segue o contexto da etapa, não roxo de conclusão. */
 [data-entregavel-estado="revisao"] .tec08-progresso-comprovacao {
   background-color: #0f766e !important;
 }
 @media (prefers-color-scheme: light) {
-  [data-tec08-modal] > [data-tec08-entidade="modal"] { --tec08-entidade-texto: #166534; }
+  [data-tec08-modal] > [data-tec08-entidade="modal"] { --tec08-entidade-texto: var(--text-primary); }
   [data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="revisao"] { --tec08-entidade-texto: #0f766e; }
   [data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="concluido"] { --tec08-entidade-texto: #5b21b6; }
   [data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="arquivado"] { --tec08-entidade-texto: #854d0e; }
@@ -633,7 +633,7 @@ button[data-tec08-confirmar][data-tec08-acao-aprovar]:not(:disabled):hover {back
 
 
 /* TEC08-05-01 — paleta semântica única, por entidade e por estado.
- * ATIVO/PLANEJADO: verde primário #5FD34A inclusive hover/selected.
+ * ATIVO/PLANEJADO: azul-acinzentado para ações e seleção.
  * REABERTO/REVISÃO: teal, CONCLUÍDO: violeta, SUSPENSO: amarelo,
  * ARQUIVADO: âmbar, CANCELADO: vermelho, ENCERRADO: cinza.
  * Escopos impedem que o estado do contrato contamine um modal de evidência
@@ -641,10 +641,10 @@ button[data-tec08-confirmar][data-tec08-acao-aprovar]:not(:disabled):hover {back
 .contrato-detalhe-documental,
 [data-tec08-contexto-operacional],
 [data-tec08-modal] > [data-tec08-entidade="modal"] {
-  --tec08-status-bg: #5fd34a;
-  --tec08-status-fg: #050607;
-  --tec08-status-border: #5fd34a;
-  --tec08-status-hover: #83e66f;
+  --tec08-status-bg: #35616f;
+  --tec08-status-fg: #fff;
+  --tec08-status-border: #799fac;
+  --tec08-status-hover: #407888;
   --tec08-status-heading: var(--accent-neon);
 }
 :is(.contrato-detalhe-documental, [data-tec08-entidade="modal"], [data-tec08-contexto-operacional])[data-tec08-estado="pendente"] {
@@ -711,7 +711,7 @@ button[data-tec08-confirmar][data-tec08-acao-aprovar]:not(:disabled):hover {back
   color: var(--accent-neon) !important;
 }
 /* Coloração local das etapas — título/borda, não ações de arquivar/excluir. */
-[data-etapa-estado="normal"] { border-color: rgb(95 211 74 / .4) !important; }
+[data-etapa-estado="normal"] { border-color: rgb(121 159 172 / .4) !important; }
 [data-etapa-estado="revisao"] { border-color: rgb(20 184 166 / .6) !important; }
 [data-etapa-estado="concluida"] { border-color: rgb(167 139 250 / .65) !important; }
 [data-etapa-estado="arquivada"] { border-color: rgb(217 119 6 / .65) !important; }
@@ -731,7 +731,7 @@ button[data-tec08-confirmar][data-tec08-acao-aprovar]:not(:disabled):hover {back
 }
 
 /* Cards de entregáveis e evidências: a cor é da entidade, não da aba aberta. */
-[data-entregavel-estado="normal"], [data-evidencia-estado="normal"] { --tec08-card-borda: rgb(95 211 74 / .5); }
+[data-entregavel-estado="normal"], [data-evidencia-estado="normal"] { --tec08-card-borda: rgb(121 159 172 / .5); }
 [data-entregavel-estado="revisao"], [data-evidencia-estado="revisao"] { --tec08-card-borda: rgb(20 184 166 / .65); }
 [data-entregavel-estado="concluido"], [data-evidencia-estado="concluido"] { --tec08-card-borda: rgb(167 139 250 / .65); }
 [data-entregavel-estado="arquivado"], [data-evidencia-estado="arquivado"] { --tec08-card-borda: rgb(217 119 6 / .65); }
@@ -831,7 +831,7 @@ button[data-tec08-confirmar][data-tec08-acao-aprovar]:not(:disabled):hover {back
 }
 /* Entidade filha: hover e ícone recebem somente o SEU estado. */
 [data-evidencia-estado="pendente"] { --tec08-card-borda: rgb(234 179 8 / .65); }
-[data-evidencia-estado="normal"] { --tec08-evidencia-tinta: var(--accent-neon); --tec08-evidencia-borda: #5fd34a; }
+[data-evidencia-estado="normal"] { --tec08-evidencia-tinta: var(--accent-neon); --tec08-evidencia-borda: #799fac; }
 [data-evidencia-estado="pendente"] { --tec08-evidencia-tinta: #fde047; --tec08-evidencia-borda: #eab308; }
 [data-evidencia-estado="revisao"] { --tec08-evidencia-tinta: #99f6e4; --tec08-evidencia-borda: #14b8a6; }
 [data-evidencia-estado="concluido"] { --tec08-evidencia-tinta: #c4b5fd; --tec08-evidencia-borda: #a78bfa; }
@@ -959,32 +959,32 @@ button[data-tec08-confirmar][data-tec08-acao-aprovar]:not(:disabled):hover {back
 }
 
 /* TEC08-05-01 / Consolidação 9 — edição é da entidade EXISTENTE; criação nasce
-   verde. Seletores usam contexto tipado e não modificam comandos de risco. */
+   neutra. Seletores usam contexto tipado e não modificam comandos de risco. */
 [data-tec08-formulario-contextual][data-tec08-criacao="true"],
 [data-tec08-criacao="true"] [data-tec08-formulario-contextual] {
-  --tec08-status-bg: #5fd34a;
-  --tec08-status-fg: #050607;
-  --tec08-status-border: #5fd34a;
-  --tec08-status-hover: #83e66f;
+  --tec08-status-bg: #35616f;
+  --tec08-status-fg: #fff;
+  --tec08-status-border: #799fac;
+  --tec08-status-hover: #407888;
   --tec08-status-heading: var(--accent-neon);
 }
 :is(.contrato-detalhe-documental, [data-tec08-entidade="modal"], [data-tec08-contexto-operacional])
 [data-tec08-acao-criar]:not(:disabled),
 [data-tec08-formulario-contextual][data-tec08-criacao="true"] button[type="submit"]:not(:disabled) {
-  background-color: #5fd34a !important;
-  color: #050607 !important;
-  border-color: #5fd34a !important;
+  background-color: #35616f !important;
+  color: #fff !important;
+  border-color: #799fac !important;
 }
 :is(.contrato-detalhe-documental, [data-tec08-entidade="modal"], [data-tec08-contexto-operacional])
 [data-tec08-acao-criar]:not(:disabled):hover,
 [data-tec08-formulario-contextual][data-tec08-criacao="true"] button[type="submit"]:not(:disabled):hover {
-  background-color: #83e66f !important;
+  background-color: #407888 !important;
 }
 /* Editar contrato, etapa, entregável ou evidência = situação real do registro.
    Apenas ações de edição, nunca Arquivar, Excluir, Reabrir ou verificações. */
 :is(.contrato-detalhe-documental, [data-tec08-entidade="modal"], [data-tec08-contexto-operacional], [data-entregavel-estado], [data-evidencia-estado])
 :is(button[title^="Editar"], button[aria-label^="Editar"], [data-tec08-salvar-contextual]):not(:disabled) {
-  border-color: var(--tec08-status-border, var(--tec08-evidencia-borda, #5fd34a)) !important;
+  border-color: var(--tec08-status-border, var(--tec08-evidencia-borda, #799fac)) !important;
   color: var(--tec08-status-heading, var(--tec08-evidencia-tinta, var(--accent-neon))) !important;
 }
 [data-tec08-entidade="modal"] [data-tec08-formulario-contextual]
@@ -1061,7 +1061,7 @@ section[aria-label^="Rastreabilidade"] {
   --tec08-status-border: var(--tec08-evidencia-borda);
   --tec08-status-heading: var(--tec08-evidencia-tinta);
 }
-[data-entregavel-estado="normal"] { --tec08-status-border: #5fd34a; --tec08-status-heading: var(--accent-neon); }
+[data-entregavel-estado="normal"] { --tec08-status-border: #799fac; --tec08-status-heading: var(--accent-neon); }
 [data-entregavel-estado="revisao"] { --tec08-status-border: #14b8a6; --tec08-status-heading: #99f6e4; }
 [data-entregavel-estado="concluido"] { --tec08-status-border: #a78bfa; --tec08-status-heading: #c4b5fd; }
 [data-entregavel-estado="arquivado"] { --tec08-status-border: #d97706; --tec08-status-heading: #fde68a; }
@@ -1109,7 +1109,7 @@ section[aria-label^="Rastreabilidade"] {
 }
 /* Cards de etapa — progresso e borda usam o STATUS DA ETAPA, não a comprovação
  * dos filhos e tampouco o status do contrato arquivado. */
-[data-etapa-estado="normal"] { --tec08-item-borda: #5fd34a; --tec08-item-tinta: #5fd34a; }
+[data-etapa-estado="normal"] { --tec08-item-borda: #799fac; --tec08-item-tinta: var(--text-primary); }
 [data-etapa-estado="revisao"] { --tec08-item-borda: #14b8a6; --tec08-item-tinta: #5eead4; }
 [data-etapa-estado="concluida"] { --tec08-item-borda: #a78bfa; --tec08-item-tinta: #c4b5fd; }
 [data-etapa-estado="encerrada"] { --tec08-item-borda: #64748b; --tec08-item-tinta: #cbd5e1; }
@@ -1138,7 +1138,7 @@ section[aria-label^="Rastreabilidade"] {
   color: var(--tec08-item-tinta) !important;
 }
 /* Entregáveis — cada card usa seu estado próprio. */
-[data-entregavel-estado="normal"] { --tec08-item-borda: #5fd34a; --tec08-item-tinta: #5fd34a; }
+[data-entregavel-estado="normal"] { --tec08-item-borda: #799fac; --tec08-item-tinta: var(--text-primary); }
 [data-entregavel-estado="revisao"] { --tec08-item-borda: #14b8a6; --tec08-item-tinta: #5eead4; }
 [data-entregavel-estado="concluido"] { --tec08-item-borda: #a78bfa; --tec08-item-tinta: #c4b5fd; }
 [data-entregavel-estado="arquivado"] { --tec08-item-borda: #d97706; --tec08-item-tinta: #fcd34d; }
@@ -1284,17 +1284,17 @@ section[aria-label^="Rastreabilidade"] {
 /* Cadastro é ação nova: mesmo verde primário no modo claro e escuro. */
 a[data-tec08-acao-criar="contrato"],
 [data-tec08-formulario-contextual][data-tec08-criacao="true"] [data-tec08-salvar-contextual]:not(:disabled) {
-  background-color: #5fd34a !important;
-  border-color: #5fd34a !important;
-  color: #050607 !important;
+  background-color: #35616f !important;
+  border-color: #799fac !important;
+  color: #fff !important;
 }
 a[data-tec08-acao-criar="contrato"]:hover,
 [data-tec08-formulario-contextual][data-tec08-criacao="true"] [data-tec08-salvar-contextual]:not(:disabled):hover {
-  background-color: #83e66f !important;
-  border-color: #83e66f !important;
+  background-color: #407888 !important;
+  border-color: #799fac !important;
 }
 a[data-tec08-acao-criar="contrato"]:focus-visible {
-  outline: 2px solid #5fd34a;
+  outline: 2px solid #799fac;
   outline-offset: 3px;
 }
 /* O histórico da evidência tem status PRÓPRIO, nunca herdado da etapa.
@@ -1358,21 +1358,21 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
 /* Os filtros do diario incorporado herdam a identidade do contrato/entregavel.
    A ação de criação recebe a identidade contextual no Patch 26. */
 [data-tec08-atividades-contrato] {
-  border-color: color-mix(in srgb, var(--tec08-status-border, #5fd34a) 25%, transparent);
+  border-color: color-mix(in srgb, var(--tec08-status-border, #799fac) 25%, transparent);
 }
 [data-tec08-atividades-contrato] :is(input, select),
 [data-tec08-atividades-contrato] [aria-label="Filtrar atividades do contrato"] {
-  border-color: color-mix(in srgb, var(--tec08-status-border, #5fd34a) 30%, transparent);
+  border-color: color-mix(in srgb, var(--tec08-status-border, #799fac) 30%, transparent);
 }
 [data-tec08-atividades-contrato] :is(input, select):focus-visible {
-  outline-color: var(--tec08-status-border, #5fd34a);
-  box-shadow: 0 0 0 1px var(--tec08-status-border, #5fd34a);
+  outline-color: var(--tec08-status-border, #799fac);
+  box-shadow: 0 0 0 1px var(--tec08-status-border, #799fac);
 }
 [data-tec08-atividades-contrato] ol {
-  border-color: color-mix(in srgb, var(--tec08-status-border, #5fd34a) 35%, transparent);
+  border-color: color-mix(in srgb, var(--tec08-status-border, #799fac) 35%, transparent);
 }
 [data-tec08-atividades-contrato] ol li::before {
-  border-color: var(--tec08-status-border, #5fd34a);
+  border-color: var(--tec08-status-border, #799fac);
 }
 
 /* Patch 14: spinner central e opacidade mínima somente no cartão acionado;
@@ -1403,7 +1403,7 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
   color: var(--tec08-status-heading) !important;
 }
 [data-tec08-atividades-contrato] [aria-label="Situação das atividades"] [role="tab"][aria-selected="true"] {
-  background-color: color-mix(in srgb, var(--tec08-status-border, #5fd34a) 18%, transparent);
+  background-color: color-mix(in srgb, var(--tec08-status-border, #35616f) 18%, transparent);
   color: var(--tec08-status-heading, var(--accent-neon));
   text-decoration: none;
 }
@@ -1421,15 +1421,15 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
   [data-tec08-secao-contextual])[data-tec08-estado="normal"],
 [data-etapa-estado="normal"], [data-entregavel-estado="normal"],
 [data-evidencia-estado="normal"], [data-atividade-estado="REGISTRADA"] {
-  --pi-cor-propria: #5fd34a;
-  --pi-texto-proprio: #86ef73;
+  --pi-cor-propria: #799fac;
+  --pi-texto-proprio: var(--text-primary);
 }
 :is(.contrato-detalhe-documental, [data-tec08-entidade="modal"],
   [data-tec08-contexto-operacional], [data-tec08-secao-filho],
   [data-tec08-secao-contextual])[data-tec08-estado="andamento"],
 [data-ocorrencia-estado="EM_ANDAMENTO"] {
-  --pi-cor-propria: #789446;
-  --pi-texto-proprio: #b8d28a;
+  --pi-cor-propria: #799fac;
+  --pi-texto-proprio: var(--text-primary);
 }
 :is(.contrato-detalhe-documental, [data-tec08-entidade="modal"],
   [data-tec08-contexto-operacional], [data-tec08-secao-filho],
@@ -1592,11 +1592,11 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
 [data-evidencia-estado="normal"],
 [data-atividade-estado="REGISTRADA"],
 :root {
-  --pi-cor-propria: #5fd34a !important;
-  --pi-texto-proprio: #166534 !important;
-  --pi-acao-bg: #166534;
+  --pi-cor-propria: #799fac !important;
+  --pi-texto-proprio: var(--text-primary) !important;
+  --pi-acao-bg: #35616f;
   --pi-acao-fg: #ffffff;
-  --pi-acao-hover: #15803d;
+  --pi-acao-hover: #407888;
   --tec08-status-heading: var(--pi-texto-proprio) !important;
   --tec08-status-border: var(--pi-cor-propria) !important;
   --tec08-status-bg: var(--pi-acao-bg) !important;
@@ -1609,15 +1609,15 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
 [data-entregavel-estado="normal"],
 [data-evidencia-estado="normal"],
 [data-atividade-estado="REGISTRADA"],
-:root { --pi-texto-proprio: #86ef73 !important; }
+:root { --pi-texto-proprio: var(--text-primary) !important; }
 }
 [data-tec08-estado="nao-iniciado"],
 [data-ocorrencia-estado="NAO_INICIADO"] {
-  --pi-cor-propria: #5fd34a !important;
-  --pi-texto-proprio: #166534 !important;
-  --pi-acao-bg: #166534;
+  --pi-cor-propria: #799fac !important;
+  --pi-texto-proprio: var(--text-primary) !important;
+  --pi-acao-bg: #35616f;
   --pi-acao-fg: #ffffff;
-  --pi-acao-hover: #15803d;
+  --pi-acao-hover: #407888;
   --tec08-status-heading: var(--pi-texto-proprio) !important;
   --tec08-status-border: var(--pi-cor-propria) !important;
   --tec08-status-bg: var(--pi-acao-bg) !important;
@@ -1626,15 +1626,15 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
 }
 @media (prefers-color-scheme: dark) {
 [data-tec08-estado="nao-iniciado"],
-[data-ocorrencia-estado="NAO_INICIADO"] { --pi-texto-proprio: #86ef73 !important; }
+[data-ocorrencia-estado="NAO_INICIADO"] { --pi-texto-proprio: var(--text-primary) !important; }
 }
 [data-tec08-estado="andamento"],
 [data-ocorrencia-estado="EM_ANDAMENTO"] {
-  --pi-cor-propria: #5fd34a !important;
-  --pi-texto-proprio: #166534 !important;
-  --pi-acao-bg: #166534;
+  --pi-cor-propria: #799fac !important;
+  --pi-texto-proprio: var(--text-primary) !important;
+  --pi-acao-bg: #35616f;
   --pi-acao-fg: #ffffff;
-  --pi-acao-hover: #15803d;
+  --pi-acao-hover: #407888;
   --tec08-status-heading: var(--pi-texto-proprio) !important;
   --tec08-status-border: var(--pi-cor-propria) !important;
   --tec08-status-bg: var(--pi-acao-bg) !important;
@@ -1643,7 +1643,7 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
 }
 @media (prefers-color-scheme: dark) {
 [data-tec08-estado="andamento"],
-[data-ocorrencia-estado="EM_ANDAMENTO"] { --pi-texto-proprio: #86ef73 !important; }
+[data-ocorrencia-estado="EM_ANDAMENTO"] { --pi-texto-proprio: var(--text-primary) !important; }
 }
 [data-tec08-estado="revisao"],
 [data-etapa-estado="revisao"],
@@ -1879,14 +1879,14 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
 /* HU09/TEC09 Patch13: paleta efetiva da entidade, inclusive em modais encadeados.
    Cancelar/ações destrutivas mantém vermelho e nunca herdam a cor da entidade. */
 [data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="nao-iniciado"] {
-  --tec08-status-bg: #166534; --tec08-status-fg: #fff;
-  --tec08-status-border: #5fd34a; --tec08-status-hover: #15803d;
-  --tec08-status-heading: #86ef73;
+  --tec08-status-bg: #35616f; --tec08-status-fg: #fff;
+  --tec08-status-border: #799fac; --tec08-status-hover: #407888;
+  --tec08-status-heading: var(--text-primary);
 }
 [data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado="andamento"] {
-  --tec08-status-bg: #166534; --tec08-status-fg: #fff;
-  --tec08-status-border: #5fd34a; --tec08-status-hover: #15803d;
-  --tec08-status-heading: #86ef73;
+  --tec08-status-bg: #35616f; --tec08-status-fg: #fff;
+  --tec08-status-border: #799fac; --tec08-status-hover: #407888;
+  --tec08-status-heading: var(--text-primary);
 }
 [data-tec08-modal] > [data-tec08-entidade="modal"] button[data-pi-acao="contextual"]:not(:disabled) {
   border-color: var(--tec08-status-border) !important;
@@ -1930,13 +1930,13 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
 
 /* Patch16: criação tem paleta própria; o estado do objeto pai não vaza ao formulário. */
 [data-tec08-modal] [data-tec08-criacao="true"] {
-  --pi-cor-propria: #56c943;
-  --pi-texto-proprio: #a6ff82;
-  --tec08-status-border: #56c943;
-  --tec08-status-heading: #a6ff82;
+  --pi-cor-propria: #799fac;
+  --pi-texto-proprio: var(--text-primary);
+  --tec08-status-border: #799fac;
+  --tec08-status-heading: var(--text-primary);
 }
-[data-tec08-modal] [data-tec08-criacao="true"] :is(h2,h3,legend) { color: #a6ff82; }
-[data-tec08-modal] [data-tec08-criacao="true"] :is(input,select,textarea):focus-visible { outline-color: #56c943; }
+[data-tec08-modal] [data-tec08-criacao="true"] :is(h2,h3,legend) { color: var(--text-primary); }
+[data-tec08-modal] [data-tec08-criacao="true"] :is(input,select,textarea):focus-visible { outline-color: #799fac; }
 /* O cartão arquivado preserva sua cor, inclusive após passar o mouse. */
 [data-tec08-item-clicavel][data-entregavel-estado="arquivado"] > a,
 [data-evidencia-estado="arquivado"],
@@ -1949,7 +1949,7 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
 [data-etapa-estado="arquivada"]:hover { background-color: color-mix(in srgb, #b45309 13%, var(--bg-primary)); }
 /* Ativar via teclado mantém foco visível contextual; mouse não cria flash branco. */
 [data-tec08-item-clicavel]:focus:not(:focus-visible) { outline: none; box-shadow: none; }
-[data-tec08-item-clicavel]:focus-visible { outline-color: var(--pi-cor-propria, #56c943); }
+[data-tec08-item-clicavel]:focus-visible { outline-color: var(--pi-cor-propria, #799fac); }
 /* Modais de confirmação usam a paleta do item sem afetar Cancelar/vermelho. */
 [role="dialog"][data-tec08-estado="revisao"] { border-color: #0d9488; }
 [role="dialog"][data-tec08-estado="arquivado"] { border-color: #d97706; }
@@ -1964,12 +1964,12 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
 }
 
 /* O modal contextual usa a situação contratual, nunca um verde genérico herdado. */
-.pi-contrato-contextual[data-tec08-estado] { border-color: var(--pi-cor-propria, #5fd34a) !important; }
+.pi-contrato-contextual[data-tec08-estado] { border-color: var(--pi-cor-propria, #799fac) !important; }
 .pi-contrato-contextual[data-tec08-estado] > header,
-.pi-contrato-contextual[data-tec08-estado] aside { border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 40%, transparent) !important; }
-.pi-contrato-contextual[data-tec08-estado] .pi-contrato-acento { color: var(--pi-texto-proprio, #5fd34a); border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 40%, transparent); }
-.pi-contrato-contextual[data-tec08-estado] aside > section { border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 45%, transparent) !important; }
-.pi-contrato-contextual[data-tec08-estado] aside > section > h3 { color: var(--pi-texto-proprio, #5fd34a) !important; }
+.pi-contrato-contextual[data-tec08-estado] aside { border-color: color-mix(in srgb, var(--pi-cor-propria, #799fac) 40%, transparent) !important; }
+.pi-contrato-contextual[data-tec08-estado] .pi-contrato-acento { color: var(--pi-texto-proprio, var(--text-primary)); border-color: color-mix(in srgb, var(--pi-cor-propria, #799fac) 40%, transparent); }
+.pi-contrato-contextual[data-tec08-estado] aside > section { border-color: color-mix(in srgb, var(--pi-cor-propria, #799fac) 45%, transparent) !important; }
+.pi-contrato-contextual[data-tec08-estado] aside > section > h3 { color: var(--pi-texto-proprio, var(--text-primary)) !important; }
 
 /* Decisões administrativas: cor da transição, nunca o verde genérico do cadastro.
    A cor atinge os campos de justificativa de qualquer entidade que use ModalEtapa. */
@@ -2015,7 +2015,7 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
  * Somente botões com intenção declarada recebem estas regras.
  */
 [data-pi-intencao] { --pi-acao-cor: #94a3b8; }
-[data-pi-intencao="criar"] { --pi-acao-cor: #4ade80; }
+[data-pi-intencao="criar"] { --pi-acao-cor: #a9c8d5; }
 [data-pi-intencao="editar"], [data-pi-intencao="reabrir"], [data-pi-intencao="reativar"] { --pi-acao-cor: #2dd4bf; }
 [data-pi-intencao="concluir"], [data-pi-intencao="solicitar-conclusao"], [data-pi-intencao="verificar"] { --pi-acao-cor: #a78bfa; }
 [data-pi-intencao="encerrar"], [data-pi-intencao="solicitar-encerramento"] { --pi-acao-cor: #c084fc; }
@@ -2039,7 +2039,7 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
   opacity: .60;
 }
 @media (prefers-color-scheme: light) {
-  [data-pi-intencao="criar"] { --pi-acao-cor: #15803d; }
+  [data-pi-intencao="criar"] { --pi-acao-cor: #799fac; }
   [data-pi-intencao="editar"], [data-pi-intencao="reabrir"], [data-pi-intencao="reativar"] { --pi-acao-cor: #0f766e; }
   [data-pi-intencao="concluir"], [data-pi-intencao="solicitar-conclusao"], [data-pi-intencao="verificar"] { --pi-acao-cor: #6d28d9; }
   [data-pi-intencao="encerrar"], [data-pi-intencao="solicitar-encerramento"] { --pi-acao-cor: #7e22ce; }
@@ -2096,21 +2096,21 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
    Cada botão de ocorrência possui sua própria classe semântica e não afeta
    este contêiner nem o painel lateral de registros do dia selecionado. */
 [data-pi-calendario-ocorrencias] .pi-agenda-superficie {
-  border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 45%, transparent) !important;
-  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 4%, var(--bg-primary)) !important;
+  border-color: color-mix(in srgb, var(--pi-cor-propria, #799fac) 45%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #35616f) 4%, var(--bg-primary)) !important;
 }
 [data-pi-calendario-ocorrencias] .pi-agenda-painel-dia {
-  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 6%, var(--bg-primary)) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #35616f) 6%, var(--bg-primary)) !important;
 }
 /* Superfícies independentes (incluindo fundo), com escopo explícito no próprio
    objeto. Se o componente passar data-tec08-estado, seu fundo não é repintado
    por data-tec08-estado do ancestral. */
 [data-tec08-entidade="modal"][data-tec08-estado] {
-  border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 70%, transparent) !important;
-  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 4%, var(--bg-primary)) !important;
+  border-color: color-mix(in srgb, var(--pi-cor-propria, #799fac) 70%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #35616f) 4%, var(--bg-primary)) !important;
 }
 [data-tec08-entidade="modal"][data-tec08-estado] > header {
-  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 9%, var(--bg-primary)) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #35616f) 9%, var(--bg-primary)) !important;
 }
 [data-tec08-secao-contextual][data-tec08-estado],
 [data-pi-superficie][data-tec08-estado] {
@@ -2130,13 +2130,13 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
 /* Seleção temporal pertence à agenda do entregável; pontos coloridos nas
    células representam SOMENTE as ocorrências individuais. */
 [data-pi-calendario-ocorrencias] .pi-agenda-dia-selecionado {
-  border-color: var(--pi-cor-propria, #5fd34a) !important;
-  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 12%, var(--bg-primary)) !important;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 45%, transparent);
+  border-color: var(--pi-cor-propria, #799fac) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #35616f) 12%, var(--bg-primary)) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--pi-cor-propria, #799fac) 45%, transparent);
 }
 [data-pi-calendario-ocorrencias] .pi-agenda-dia-atual {
-  border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 55%, transparent) !important;
-  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 7%, var(--bg-primary)) !important;
+  border-color: color-mix(in srgb, var(--pi-cor-propria, #799fac) 55%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #35616f) 7%, var(--bg-primary)) !important;
 }
 
 /* Patch40 — barras de rolagem neutras e legíveis em TODOS os modais,
@@ -2172,32 +2172,32 @@ select, input[type="date"], input[type="datetime-local"] { color-scheme: inherit
     input:not([type="checkbox"]):not([type="radio"]):not([aria-invalid="true"]),
     textarea:not([aria-invalid="true"]), select:not([aria-invalid="true"])
   ) {
-  border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 48%, transparent) !important;
-  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 3%, var(--bg-primary)) !important;
+  border-color: color-mix(in srgb, var(--pi-cor-propria, #799fac) 48%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #35616f) 3%, var(--bg-primary)) !important;
 }
 [data-tec08-entidade="modal"][data-tec08-estado] :is(input, textarea, select):focus-visible {
-  outline-color: var(--pi-cor-propria, #5fd34a) !important;
-  border-color: var(--pi-cor-propria, #5fd34a) !important;
-  --tw-ring-color: var(--pi-cor-propria, #5fd34a) !important;
+  outline-color: var(--pi-cor-propria, #799fac) !important;
+  border-color: var(--pi-cor-propria, #799fac) !important;
+  --tw-ring-color: var(--pi-cor-propria, #799fac) !important;
 }
 [data-tec08-entidade="modal"][data-tec08-estado] :is(
     [data-tec08-formulario-contextual],
     [data-tec08-secao-contextual]:not([data-tec08-estado]),
     [data-pi-superficie]:not([data-tec08-estado])
   ) {
-  border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 45%, transparent) !important;
-  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 5%, var(--bg-primary)) !important;
+  border-color: color-mix(in srgb, var(--pi-cor-propria, #799fac) 45%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #35616f) 5%, var(--bg-primary)) !important;
 }
 [data-tec08-entidade="modal"][data-tec08-estado] [data-tec08-formulario-contextual]
   :is(section:not([data-tec08-estado]), fieldset:not([data-tec08-estado])) {
-  border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 32%, transparent) !important;
-  background-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 2%, var(--bg-primary)) !important;
+  border-color: color-mix(in srgb, var(--pi-cor-propria, #799fac) 32%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pi-cor-propria, #35616f) 2%, var(--bg-primary)) !important;
 }
 /* Controles sem intenção especial herdam o foco, nunca sobrepõem Arquivar,
    Reabrir, Concluir ou Cancelar, cuja cor depende da própria ação. */
 [data-tec08-entidade="modal"][data-tec08-estado] [data-tec08-formulario-contextual]
   button:not([data-pi-intencao]):not([data-tec08-confirmar]):not([data-tec08-fechar-modal]):not([class*="red-"]):focus-visible {
-  outline-color: var(--pi-cor-propria, #5fd34a) !important;
+  outline-color: var(--pi-cor-propria, #799fac) !important;
 }
 /* A identidade do card de etapa em revisão é TEAL, nunca uma etapa "Reaberta"
    verde. Cartões internos com outro estado declaram seu próprio token. */
@@ -2229,12 +2229,12 @@ button[data-tec08-confirmar][data-pi-intencao-confirmacao="cancelado"]:not(:disa
 [data-tec08-entidade="modal"][data-tec08-estado] :is(
   [data-tec08-formulario-contextual], [data-tec08-secao-contextual], [data-pi-superficie]
 ) :is([class*="border-brand-green"], [class*="border-green-500"]):not([data-pi-intencao]):not([data-pi-acao]) {
-  border-color: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 50%, transparent) !important;
+  border-color: color-mix(in srgb, var(--pi-cor-propria, #799fac) 50%, transparent) !important;
 }
 [data-tec08-entidade="modal"][data-tec08-estado] :is(
   [data-tec08-formulario-contextual], [data-tec08-secao-contextual]
 ) :is([class*="text-brand-neon"], [class*="text-green-400"]):not([data-pi-intencao]):not([data-pi-acao]) {
-  color: var(--pi-texto-proprio, #86ef73) !important;
+  color: var(--pi-texto-proprio, var(--text-primary)) !important;
 }
 
 /* Bugfix Sprint 04 / Parte 06 — a INTENÇÃO da confirmação prevalece sobre
@@ -2290,10 +2290,10 @@ button[data-tec08-confirmar][data-tec08-acao-perigosa]:not(:disabled):hover:not(
 /* Sprint 04: o diálogo de confirmação expressa a ação de negócio, não a
  * identidade genérica de botão verde do legado. O estado específico vence. */
 button[data-tec08-confirmar][data-pi-intencao-confirmacao="cadastro"]:not(:disabled) {
-  background-color: #5fd34a !important; border-color: #5fd34a !important; color: #050607 !important;
+  background-color: #35616f !important; border-color: #799fac !important; color: #fff !important;
 }
 button[data-tec08-confirmar][data-pi-intencao-confirmacao="cadastro"]:not(:disabled):hover {
-  background-color: #83e66f !important; border-color: #83e66f !important;
+  background-color: #407888 !important; border-color: #799fac !important;
 }
 button[data-tec08-confirmar][data-pi-intencao-confirmacao="concluido"]:not(:disabled):hover {
   background-color: #7c3aed !important; border-color: #c4b5fd !important; color: #fff !important;
@@ -2302,13 +2302,13 @@ button[data-tec08-confirmar][data-pi-intencao-confirmacao="concluido"]:not(:disa
 /* R44: o planejamento tem a paleta de trabalho, não a de encerramento.
    A etiqueta continua Planejamento e o anel de execução vazio continua neutro. */
 :is([data-entregavel-estado="nao-iniciado"], [data-pi-entregavel][data-tec08-estado="nao-iniciado"]) {
-  --pi-cor-propria: #5fd34a !important;
-  --pi-texto-proprio: #166534 !important;
-  --pi-acao-bg: #166534;
+  --pi-cor-propria: #799fac !important;
+  --pi-texto-proprio: var(--text-primary) !important;
+  --pi-acao-bg: #35616f;
   --pi-acao-fg: #fff;
-  --pi-acao-hover: #15803d;
-  --tec08-card-borda: #5fd34a;
-  --tec08-item-borda: #5fd34a;
+  --pi-acao-hover: #407888;
+  --tec08-card-borda: #799fac;
+  --tec08-item-borda: #799fac;
   --tec08-item-tinta: var(--pi-texto-proprio);
   --tec08-status-heading: var(--pi-texto-proprio) !important;
   --tec08-status-border: var(--pi-cor-propria) !important;
@@ -2318,10 +2318,10 @@ button[data-tec08-confirmar][data-pi-intencao-confirmacao="concluido"]:not(:disa
 }
 @media (prefers-color-scheme: dark) {
   :is([data-entregavel-estado="nao-iniciado"], [data-pi-entregavel][data-tec08-estado="nao-iniciado"]) {
-    --pi-texto-proprio: #86ef73 !important;
+    --pi-texto-proprio: var(--text-primary) !important;
   }
 }
-[data-entregavel-estado="andamento"] { --tec08-item-borda: #5fd34a; --tec08-item-tinta: var(--pi-texto-proprio); }
+[data-entregavel-estado="andamento"] { --tec08-item-borda: #799fac; --tec08-item-tinta: var(--pi-texto-proprio); }
 [data-entregavel-estado="pendente"] { --tec08-item-borda: #d4a34b; --tec08-item-tinta: var(--pi-texto-proprio); }
 [data-entregavel-estado] > a [data-testid="resumo-vinculos-entregavel"] [role="img"] {
   background-color: color-mix(in srgb, #64748b 20%, transparent) !important;
@@ -2481,7 +2481,7 @@ button[data-tec08-confirmar][data-pi-intencao-confirmacao="concluido"]:not(:disa
   .pi-central-execucao { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); align-items: start; }
   .pi-central-cadastro { border-top: 0; border-inline-start: 1px solid color-mix(in srgb, currentColor 15%, transparent); padding-top: 0; padding-inline-start: 1.25rem; }
 }
-.pi-opcao-origem:has(input:checked) { border-color: var(--pi-cor-propria, #5fd34a); background: color-mix(in srgb, var(--pi-cor-propria, #5fd34a) 12%, transparent); }
+.pi-opcao-origem:has(input:checked) { border-color: var(--pi-cor-propria, #799fac); background: color-mix(in srgb, var(--pi-cor-propria, #35616f) 12%, transparent); }
 .pi-opcao-origem:has(input:focus-visible) { outline: 2px solid currentColor; outline-offset: 2px; }
 .pi-opcao-origem:has(input:disabled) { opacity: .5; }
 [data-pi-ordenacao] > button { background: transparent !important; border: 0 !important; box-shadow: none !important; text-decoration: none; }
@@ -4210,3 +4210,256 @@ button[data-pi-documento-acao][data-pi-acao="secundaria"]:not(:disabled) {
 .pi-geracao-unidade { min-width:0; max-width:100%; align-self:center; }
 .pi-form-geracao-recorrente .pi-rodape-formulario { border-color:var(--pi-form-borda,#34414a)!important; }
 @container (min-width:650px) { .pi-form-geracao-recorrente .pi-geracao-planejamento { grid-template-columns:repeat(4,minmax(0,1fr)); } }
+
+/* Integração final — controles de consulta e administração neutros. */
+:root {
+  --pi-admin-borda: #dce3ea;
+  --pi-admin-superficie: #f8fafc;
+  --pi-admin-hover: #edf2f6;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --pi-admin-borda: #34414a;
+  --pi-admin-superficie: #171f25;
+  --pi-admin-hover: #243139;
+} }
+.pi-limpar-filtros {
+  display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto;
+  min-height:36px; padding:6px 12px; border-radius:7px;
+  border:1px solid var(--pi-workspace-borda,var(--pi-admin-borda))!important;
+  background:transparent!important; color:var(--text-primary)!important;
+  font-size:12px; font-weight:500; white-space:nowrap; box-shadow:none!important;
+}
+.pi-limpar-filtros:not(:disabled):hover {background:color-mix(in srgb,var(--text-primary) 6%,transparent)!important;}
+.pi-limpar-filtros:disabled {opacity:.4;cursor:default;}
+.pi-limpar-filtros:focus-visible {outline:2px solid #7bafc3!important;outline-offset:2px;}
+.pi-carteira-controles .pi-limpar-filtros {justify-self:start;align-self:end;margin:0;}
+[data-pi-controles-etapas] {justify-content:flex-start;align-items:center;gap:8px;}
+[data-pi-diario] .pi-diario-ferramentas-compactas {gap:8px;justify-content:flex-start;}
+[data-pi-etapa-no-espaco] {width:100%;min-width:0;max-width:none;min-height:min(480px,65dvh);}
+[data-pi-etapa-no-espaco] > [data-pi-detalhe-interno], [data-pi-etapa-no-espaco] [data-pi-detalhe-interno] {width:100%;min-width:0;max-width:none;}
+/* A hierarquia continua no mesmo painel, abaixo da mesma navegação. */
+[data-pi-workspace-contrato]:has(#painel-etapas:not([hidden]) [data-pi-etapa-no-espaco]) > .pi-workspace-cabecalho {display:flex;}
+
+/* Confirmações: a superfície é neutra; somente a decisão tem cor semântica. */
+[role="dialog"][data-pi-confirmacao-padronizada],
+[role="dialog"][data-pi-decisao-padronizada] {
+  background:var(--pi-admin-superficie)!important; border-color:var(--pi-admin-borda)!important;
+  color:var(--text-primary)!important; outline:none!important; box-shadow:0 18px 65px rgb(0 0 0 / .28)!important;
+}
+[role="dialog"][data-pi-confirmacao-padronizada] h2,
+[role="dialog"][data-pi-decisao-padronizada] h2 {color:var(--text-primary)!important;}
+[role="dialog"][data-pi-decisao-padronizada] > header {background:transparent!important;border-color:var(--pi-admin-borda)!important;}
+[role="dialog"][data-pi-confirmacao-padronizada] :is(input,textarea,select),
+[role="dialog"][data-pi-decisao-padronizada] :is(input,textarea,select) {border-color:var(--pi-admin-borda)!important;background:var(--bg-primary)!important;color:var(--text-primary)!important;}
+[role="dialog"][data-pi-confirmacao-padronizada] button:not([data-tec08-confirmar]),
+[role="dialog"][data-pi-decisao-padronizada] [data-tec08-fechar-modal] {border-color:var(--pi-admin-borda)!important;background:transparent!important;color:var(--text-primary)!important;}
+[role="dialog"][data-pi-confirmacao-padronizada] button[data-tec08-confirmar][data-pi-intencao-confirmacao="normal"]:not([data-tec08-acao-aprovar]):not([data-tec08-acao-perigosa]):not([data-tec08-acao-roxa]) {background:#35616f!important;border-color:#477d8a!important;color:#fff!important;}
+[role="dialog"][data-pi-confirmacao-padronizada] button:focus-visible,
+[role="dialog"][data-pi-decisao-padronizada] button:focus-visible {outline:2px solid #7bafc3!important;outline-offset:2px!important;}
+
+[data-tec08-modal] > [role="dialog"][data-pi-decisao-padronizada][data-tec08-estado] {border-color:var(--pi-admin-borda)!important;background:var(--pi-admin-superficie)!important;}
+[data-tec08-modal] > [role="dialog"][data-pi-decisao-padronizada][data-tec08-estado] > header {background:transparent!important;border-color:var(--pi-admin-borda)!important;}
+[role="dialog"][data-pi-confirmacao-padronizada] :is(input,textarea,select):focus-visible,
+[data-tec08-modal] > [role="dialog"][data-pi-decisao-padronizada] :is(input,textarea,select):focus-visible {outline:2px solid #7bafc3!important;outline-offset:1px!important;}
+
+/* Integração final — detalhe sobreposto na geometria da área de etapas.
+   A lista continua montada por baixo e o scroll pertence à janela superior. */
+[data-tec08-modal][data-pi-sobreposicao-etapa] {
+  position:fixed; inset:0; z-index:100; display:block; padding:0;
+  overflow:hidden; background:rgb(0 0 0 / .10); backdrop-filter:blur(1.5px);
+}
+[data-tec08-modal][data-pi-sobreposicao-etapa] > [role="dialog"][data-pi-modal-ancorado][data-tec08-estado] {
+  position:absolute; left:var(--pi-ancora-x,12px); top:var(--pi-ancora-y,12px);
+  width:var(--pi-ancora-largura,calc(100% - 24px))!important;
+  max-width:none!important; height:var(--pi-ancora-altura,calc(100dvh - 24px))!important;
+  max-height:var(--pi-ancora-altura,calc(100dvh - 24px))!important;
+  margin:0; border:1px solid var(--pi-admin-borda)!important; border-radius:12px;
+  background:var(--pi-form-superficie,var(--bg-primary))!important;
+  box-shadow:0 10px 32px rgb(0 0 0 / .16)!important;
+}
+[data-tec08-modal][data-pi-sobreposicao-etapa] > [data-pi-modal-ancorado] > [data-tec08-corpo-modal] {
+  flex:1 1 0!important; min-height:0; overflow:auto; overscroll-behavior:contain;
+}
+[data-pi-modal-ancorado]:has(> [data-tec08-corpo-modal] > [data-pi-entregavel-selecionado="true"]) > header {display:none;}
+/* Controles operacionais não representam o estado de negócio. A cor de um
+   selo de atraso, de uma decisão perigosa ou de um indicador continua própria. */
+:is([data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado][data-pi-operacional-neutro],
+    [data-pi-operacional-neutro][data-tec08-contexto-operacional][data-tec08-estado],
+    [data-pi-operacional-neutro][data-pi-detalhe-interno][data-tec08-estado],
+    [data-pi-operacional-neutro][data-pi-painel-contextual][data-tec08-estado]) {
+  --pi-cor-propria:#799fac!important; --pi-texto-proprio:var(--text-primary)!important;
+  --tec08-status-border:#799fac!important; --tec08-status-heading:var(--text-primary)!important;
+  --tec08-status-bg:#35616f!important; --tec08-status-fg:#fff!important; --tec08-status-hover:#407888!important;
+  --tec08-borda-subtil:var(--pi-admin-borda)!important; --tec08-fundo-subtil:transparent!important;
+}
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado][data-pi-operacional-neutro] {
+  background:var(--pi-form-superficie,var(--bg-primary))!important; border-color:var(--pi-admin-borda)!important;
+}
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-tec08-estado][data-pi-operacional-neutro] > header {
+  background:color-mix(in srgb,var(--bg-primary) 97%,var(--text-primary))!important; border-color:var(--pi-admin-borda)!important;
+}
+:is([data-pi-operacional-neutro][data-tec08-estado], [data-tec08-modal] > [data-pi-operacional-neutro][data-tec08-entidade="modal"][data-tec08-estado]) [role="tablist"] {
+  background:transparent!important; border-color:var(--pi-admin-borda)!important; border-radius:8px;
+}
+:is([data-pi-operacional-neutro][data-tec08-estado], [data-tec08-modal] > [data-pi-operacional-neutro][data-tec08-entidade="modal"][data-tec08-estado]) [role="tablist"] > button[role="tab"] {
+  background:transparent!important; color:var(--text-secondary)!important; border-color:transparent!important; box-shadow:none!important;
+}
+:is([data-pi-operacional-neutro][data-tec08-estado], [data-tec08-modal] > [data-pi-operacional-neutro][data-tec08-entidade="modal"][data-tec08-estado]) [role="tablist"] > button[role="tab"][aria-selected="true"] {
+  background:color-mix(in srgb,var(--text-primary) 8%,var(--bg-primary))!important; color:var(--text-primary)!important;
+  border-color:var(--pi-admin-borda)!important; box-shadow:inset 0 -2px #8eacb9!important;
+}
+:is([data-pi-operacional-neutro][data-tec08-estado], [data-tec08-modal] > [data-pi-operacional-neutro][data-tec08-entidade="modal"][data-tec08-estado]) [role="tablist"] > button[role="tab"]:hover:not(:disabled):not([aria-selected="true"]) {
+  background:color-mix(in srgb,var(--text-primary) 5%,transparent)!important; color:var(--text-primary)!important;
+}
+:is([data-pi-operacional-neutro][data-tec08-estado], [data-tec08-modal] > [data-pi-operacional-neutro][data-tec08-entidade="modal"][data-tec08-estado]) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),select,textarea):not([aria-invalid="true"]) {
+  border-color:var(--pi-admin-borda)!important;
+  accent-color:#799fac;
+}
+:is([data-pi-operacional-neutro][data-tec08-estado], [data-tec08-modal] > [data-pi-operacional-neutro][data-tec08-entidade="modal"][data-tec08-estado]) :is(input,select,textarea):not([aria-invalid="true"]):focus-visible {
+  border-color:#799fac!important; outline-color:#799fac!important; box-shadow:none!important;
+}
+:is([data-pi-operacional-neutro][data-tec08-estado], [data-tec08-modal] > [data-pi-operacional-neutro][data-tec08-entidade="modal"][data-tec08-estado]) :is([data-pi-voltar-hierarquia],[data-pi-controle-modal="editar"],[data-tec08-fechar-modal]):not(:disabled) {
+  color:var(--text-primary)!important; border-color:var(--pi-admin-borda)!important; background:transparent!important;
+}
+:is([data-pi-operacional-neutro][data-tec08-estado], [data-tec08-modal] > [data-pi-operacional-neutro][data-tec08-entidade="modal"][data-tec08-estado]) :is([data-pi-voltar-hierarquia],[data-pi-controle-modal="editar"],[data-tec08-fechar-modal]):not(:disabled):hover {
+  color:var(--text-primary)!important; background:var(--pi-admin-hover)!important; border-color:var(--pi-admin-borda)!important;
+}
+:is([data-pi-operacional-neutro][data-tec08-estado], [data-tec08-modal] > [data-pi-operacional-neutro][data-tec08-entidade="modal"][data-tec08-estado]) :is(button[data-tec08-acao-criar],button[data-tec08-salvar-contextual],button[type="submit"],button.bg-brand-green):not(:disabled):not([data-pi-intencao]):not([data-tec08-decisao]):not([data-tec08-confirmar]):not([data-tec08-perigoso]) {
+  color:#fff!important; background:#35616f!important; border-color:#477d8a!important;
+}
+:is([data-pi-operacional-neutro][data-tec08-estado], [data-tec08-modal] > [data-pi-operacional-neutro][data-tec08-entidade="modal"][data-tec08-estado]) :is(button[data-tec08-acao-criar],button[data-tec08-salvar-contextual],button[type="submit"],button.bg-brand-green):not(:disabled):not([data-pi-intencao]):not([data-tec08-decisao]):not([data-tec08-confirmar]):not([data-tec08-perigoso]):hover {
+  background:#407888!important; border-color:#799fac!important; color:#fff!important;
+}
+/* A confirmação comum mantém a mesma cor no hover; risco e arquivamento
+   preservam a sinalização própria. Não herdar o verde do contrato. */
+[role="dialog"][data-pi-confirmacao-padronizada][data-tec08-estado] button[data-tec08-confirmar]:not(:disabled):not([data-tec08-acao-perigosa]):not([data-pi-intencao-confirmacao="arquivado"]):not([data-pi-intencao-confirmacao="cancelado"]):not([data-tec08-acao-aprovar]):not([data-tec08-acao-roxa]):not([data-pi-intencao-confirmacao="suspenso"]) {
+  background:#35616f!important; color:#fff!important; border-color:#477d8a!important;
+}
+[role="dialog"][data-pi-confirmacao-padronizada][data-tec08-estado] button[data-tec08-confirmar]:not(:disabled):not([data-tec08-acao-perigosa]):not([data-pi-intencao-confirmacao="arquivado"]):not([data-pi-intencao-confirmacao="cancelado"]):not([data-tec08-acao-aprovar]):not([data-tec08-acao-roxa]):not([data-pi-intencao-confirmacao="suspenso"]):hover {
+  background:#407888!important; color:#fff!important; border-color:#799fac!important;
+}
+/* O iframe é da mesma origem, mas o cabeçalho e o painel lateral estão no
+   documento pai. A mensagem validada mantém esses elementos ao fundo. */
+[data-pi-etapa-sobreposta] {backdrop-filter:blur(1.5px);}
+[data-pi-etapa-sobreposta] > .pi-modal-contrato-entrada > header,
+[data-pi-etapa-sobreposta] > .pi-modal-contrato-entrada > [data-pi-corpo-contrato] > [data-pi-painel-lateral] {filter:blur(1.5px); pointer-events:none;}
+
+/* Paleta de interação transversal. Os tokens de situação permanecem nos selos,
+   barras de progresso e ações semânticas explícitas, não nos controles comuns. */
+:root {
+  --pi-interacao-fundo: #35616f;
+  --pi-interacao-hover: #2e5664;
+  --pi-interacao-borda: #477d8a;
+  --pi-interacao-foco: #365c6e;
+  --pi-interacao-selecao: #e5edf2;
+  --pi-interacao-muted: #475569;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --pi-interacao-foco: #9bbcc9;
+    --pi-interacao-selecao: #26343d;
+    --pi-interacao-muted: #a0aeb9;
+  }
+}
+/* Campos, filtros e seletores em páginas, iframe do contrato e portais. */
+body :is([data-tec08-estado], [data-pi-formulario], [data-pi-painel-contextual], [role="dialog"], [data-tec08-formulario-contextual], [data-pi-operacional-neutro])
+  :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]),select,textarea):not([aria-invalid="true"]) {
+  border-color:var(--pi-admin-borda)!important;
+}
+body :is([data-tec08-estado], [data-pi-formulario], [data-pi-painel-contextual], [role="dialog"], [data-tec08-formulario-contextual], [data-pi-operacional-neutro])
+  :is(input,select,textarea):not([aria-invalid="true"]):focus-visible {
+  border-color:var(--pi-interacao-foco)!important;outline-color:var(--pi-interacao-foco)!important;
+  --tw-ring-color:var(--pi-interacao-foco)!important;box-shadow:none!important;
+}
+body :is(input[type="checkbox"],input[type="radio"],input[type="range"]) {accent-color:var(--pi-interacao-fundo);}
+body :is([role="menu"],[role="listbox"],.pi-responsavel-opcoes,.pi-combobox-opcoes) {
+  background:var(--pi-admin-superficie)!important;border-color:var(--pi-admin-borda)!important;color:var(--text-primary)!important;
+}
+body [role="listbox"] [role="option"]:is(:hover,[aria-selected="true"]),
+body [role="menu"] button:not([data-pi-intencao]):not([data-tec08-decisao]):not(:disabled):hover {
+  background:var(--pi-interacao-selecao)!important;color:var(--text-primary)!important;
+}
+/* Ações comuns têm a mesma cor em qualquer situação do objeto. */
+body :is([data-tec08-estado],[role="dialog"],[data-tec08-formulario-contextual],[data-pi-painel-contextual])
+  :is(button[data-pi-acao="primaria"],button[data-tec08-acao-criar],button[data-tec08-salvar-contextual],button.bg-brand-green:not([role="tab"])):not(:disabled):not([data-pi-intencao]):not([data-tec08-decisao]):not([data-tec08-confirmar]):not([data-tec08-acao-perigosa]):not([data-tec08-perigoso]):not(.pi-aprovar-registro) {
+  background:var(--pi-interacao-fundo)!important;border-color:var(--pi-interacao-borda)!important;color:white!important;
+}
+body :is([data-tec08-estado],[role="dialog"],[data-tec08-formulario-contextual],[data-pi-painel-contextual])
+  :is(button[data-pi-acao="primaria"],button[data-tec08-acao-criar],button[data-tec08-salvar-contextual],button.bg-brand-green:not([role="tab"])):not(:disabled):not([data-pi-intencao]):not([data-tec08-decisao]):not([data-tec08-confirmar]):not([data-tec08-acao-perigosa]):not([data-tec08-perigoso]):not(.pi-aprovar-registro):hover {
+  background:var(--pi-interacao-hover)!important;border-color:var(--pi-interacao-foco)!important;color:white!important;
+}
+body :is([data-tec08-estado],[role="dialog"],[data-pi-painel-contextual])
+  :is(button[data-pi-acao="secundaria"],button[data-pi-acao="contextual"],button[data-pi-controle-modal="editar"],button[data-pi-voltar-hierarquia],button[data-tec08-fechar-modal],button[data-pi-controle-fechamento]):not(:disabled):not([data-pi-intencao]):not([data-tec08-decisao]):not([data-tec08-confirmar]) {
+  background:transparent!important;color:var(--text-primary)!important;border-color:var(--pi-admin-borda)!important;
+}
+body :is([data-tec08-estado],[role="dialog"],[data-pi-painel-contextual])
+  :is(button[data-pi-acao="secundaria"],button[data-pi-acao="contextual"],button[data-pi-controle-modal="editar"],button[data-pi-voltar-hierarquia],button[data-tec08-fechar-modal],button[data-pi-controle-fechamento]):not(:disabled):not([data-pi-intencao]):not([data-tec08-decisao]):not([data-tec08-confirmar]):hover {
+  background:var(--pi-interacao-selecao)!important;color:var(--text-primary)!important;border-color:var(--pi-admin-borda)!important;
+}
+/* Navegação: a seleção de uma aba não é uma aprovação. Preserva layout de
+   cada tablist (linha, cartões ou abas compactas) e muda somente a paleta. */
+body :is([data-tec08-estado],[role="dialog"],[data-pi-operacional-neutro],[data-pi-painel-contextual]) [role="tablist"] {
+  background:transparent!important;border-color:var(--pi-admin-borda)!important;
+}
+body :is([data-tec08-estado],[role="dialog"],[data-pi-operacional-neutro],[data-pi-painel-contextual]) [role="tablist"] > button[role="tab"]:not(:disabled):not([aria-selected="true"]) {
+  color:var(--pi-interacao-muted)!important;background:transparent!important;border-color:transparent!important;
+}
+body :is([data-tec08-estado],[role="dialog"],[data-pi-operacional-neutro],[data-pi-painel-contextual]) [role="tablist"] > button[role="tab"][aria-selected="true"]:not(:disabled) {
+  color:var(--text-primary)!important;background:var(--pi-interacao-selecao)!important;border-color:var(--pi-admin-borda)!important;
+  box-shadow:inset 0 -2px var(--pi-interacao-foco)!important;
+}
+body :is([data-tec08-estado],[role="dialog"],[data-pi-operacional-neutro],[data-pi-painel-contextual]) [role="tablist"] > button[role="tab"]:not(:disabled):hover:not([aria-selected="true"]) {
+  color:var(--text-primary)!important;background:var(--pi-admin-hover)!important;
+}
+/* Foco acessível sem cor herdada da etapa, contrato ou evidência. */
+body :is([data-tec08-estado],[role="dialog"],[data-pi-painel-contextual]) :is(button,a,[role="tab"]):not([data-pi-intencao]):not([data-tec08-decisao]):not([data-tec08-confirmar]):focus-visible {
+  outline-color:var(--pi-interacao-foco)!important;
+}
+/* Confirmações convencionais, inclusive os diálogos antigos sem atributo de
+   padronização. Aprovação, arquivamento e risco mantêm sua decisão explícita. */
+body button[data-tec08-confirmar]:not(:disabled):not([data-tec08-acao-aprovar]):not([data-tec08-acao-roxa]):not([data-tec08-acao-perigosa]):not([data-pi-intencao-confirmacao="arquivado"]):not([data-pi-intencao-confirmacao="cancelado"]):not([data-pi-intencao-confirmacao="suspenso"]):not(.bg-red-600) {
+  background:var(--pi-interacao-fundo)!important;border-color:var(--pi-interacao-borda)!important;color:white!important;
+}
+body button[data-tec08-confirmar]:not(:disabled):not([data-tec08-acao-aprovar]):not([data-tec08-acao-roxa]):not([data-tec08-acao-perigosa]):not([data-pi-intencao-confirmacao="arquivado"]):not([data-pi-intencao-confirmacao="cancelado"]):not([data-pi-intencao-confirmacao="suspenso"]):not(.bg-red-600):hover {
+  background:var(--pi-interacao-hover)!important;border-color:var(--pi-interacao-borda)!important;color:white!important;
+}
+/* Os diálogos de confirmação usam a superfície comum mesmo com estado local. */
+body [data-tec08-modal] > [data-tec08-entidade="modal"][role="dialog"][data-tec08-estado] > header h2 {
+  color:var(--text-primary)!important;
+}
+body [role="dialog"][data-tec08-estado] :is([data-tec08-formulario-contextual],[data-pi-ficha-neutra]) {background:transparent!important;}
+
+/* Seletores pesquisáveis: reservar a área do ícone mesmo dentro dos
+   formulários que redefinem padding. O valor completo continua no input. */
+body input[data-pi-campo-com-icone] {
+  box-sizing: border-box;
+  width: 100%;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+}
+body input[data-pi-campo-com-icone="fim"] {
+  padding-inline-end: 2.5rem !important;
+}
+body input[data-pi-campo-com-icone="inicio"] {
+  padding-inline-start: 2.5rem !important;
+}
+body input[data-pi-campo-com-icone="separado"] {
+  width: 0;
+  flex: 1 1 0%;
+}
+body input[data-pi-campo-com-icone]:not(:focus) { text-overflow: ellipsis; }
+body input[data-pi-campo-com-icone]:focus { text-overflow: clip; }
+/* Opções longas quebram linha sem alargar o popup, inclusive em portais. */
+body [role="listbox"][data-pi-opcoes-texto] { min-inline-size: 0; max-inline-size: calc(100vw - 24px); overflow-x: hidden; }
+body [role="listbox"][data-pi-opcoes-texto] [role="option"],
+body [role="listbox"][data-pi-opcoes-texto] [role="option"] > span {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
+/* Selects nativos também não podem ampliar a coluna por causa de uma opção. */
+body select { min-inline-size: 0; max-inline-size: 100%; text-overflow: ellipsis; }

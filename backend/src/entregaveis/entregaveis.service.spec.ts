@@ -341,7 +341,7 @@ describe('B05 — precisão, vigência e versão do planejamento', () => {
     const e=exemplo(); e.nome='😀'.repeat(22); e.peso='0';
     expect(()=>validarPlanejamento(e)).not.toThrow();
     e.peso='33.3333'; expect(()=>validarPlanejamento(e)).not.toThrow();
-    e.nome='😀'.repeat(43); expect(()=>validarPlanejamento(e)).toThrow(BadRequestException);
+    e.nome='😀'.repeat(46); expect(()=>validarPlanejamento(e)).toThrow(BadRequestException);
   });
   it('verifica datas novas sem impedir metadados de planejamento histórico', () => {
     const e=exemplo(); const vigencia={inicioVigencia:'2026-11-01',terminoVigencia:'2026-11-30'};
@@ -360,7 +360,7 @@ describe('B05 — precisão, vigência e versão do planejamento', () => {
 });
 
 it('limita novos metadados aos contadores da interface', () => {
-  for (const [campo,limite] of [['codigo',15],['nome',42],['descricao',200],['observacoes',100],['unidadeMedida',40],['criterioConclusao',200]] as const) {
+  for (const [campo,limite] of [['codigo',15],['nome',45],['descricao',200],['observacoes',100],['unidadeMedida',40],['criterioConclusao',200]] as const) {
     const e=exemplo();
     e[campo]='x'.repeat(limite);
     expect(()=>validarMetadadosEntregavel(e,undefined,[campo])).not.toThrow();

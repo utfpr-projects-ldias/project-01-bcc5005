@@ -7,14 +7,10 @@ import { LinhaContrato, type IndicadoresOrdem } from './components/linha-contrat
 import { ConsultaOperacionalAvulsa } from './components/consulta-operacional-avulsa';
 import { PreviaContrato } from '@/app/atividades/components/cartao-atividade';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { ConfirmacaoSimples } from '@/app/components/confirmacao-simples';
-import { toastSucesso, toastAviso } from '@/app/components/toast-notificacoes';
 import { useRepositorioConsultas } from '@/app/components/provedor-consultas';
-import { chaveTexto } from '@/lib/repositorio-consultas';
 import { useMeuPerfil } from '@/hooks/use-meu-perfil';
 import { useListaContratos, usePendentesConclusao } from '@/hooks/use-contratos';
-import { sincronizarContrato } from '@/lib/sincronizar-contrato';
-import { reativarContrato, retomarContrato, excluirContratoArquivado, consultarElegibilidadeExclusao, type Contrato } from '@/lib/contratos';
+import { type Contrato } from '@/lib/contratos';
 import { AreaContratos, Aviso } from './components/area-contratos';
 import { lerEstadoCarteira, salvarEstadoCarteira, type AbaCarteira } from '@/lib/estado-lista-contratos';
 import { situacaoVisivelContrato, estadoContextualContrato } from '@/lib/estado-visivel-contrato';
@@ -30,60 +26,12 @@ const snapshotServidor = () => false;
 
 export default function ContratosListPage() {
   const cache = useRepositorioConsultas();
-  const [confirmacao, setConfirmacao] = useState<{ id: string; numero: string; tipo: 'reativar' | 'excluir' | 'retomar' } | null>(null);
-  const [ocupado, setOcupado] = useState(false);
   const [contratoModal, setContratoModal] = useState<{ id: string; foco: HTMLElement | null; destino?: {etapaId:string;entregavelId?:string} } | null>(null);
-  const [erroOperacao, setErroOperacao] = useState('');
   const [novoContrato, setNovoContrato] = useState(false);
   const [gatilhoNovoContrato, setGatilhoNovoContrato] = useState<HTMLElement | null>(null);
   const {ordem,alternar}=useOrdemTabela();
   const [metricas,setMetricas]=useState<Record<string,IndicadoresOrdem>>({});
   const receberMetricas=useCallback((id:string,v:IndicadoresOrdem)=>setMetricas(atual=>({...atual,[id]:v})),[]);
-  const [motivoDecisao, setMotivoDecisao] = useState('');
-  const [excluidos, setExcluidos] = useState<string[]>([]);
-  const [reativados, setReativados] = useState<string[]>([]);
-  async function prepararExclusao(c: Contrato) {
-    if (ocupado) return;
-    setOcupado(true); setErroOperacao('');
-    try {
-      const elegibilidade = await consultarElegibilidadeExclusao(c.id);
-      if (!elegibilidade.apto) { setErroOperacao(elegibilidade.motivo ?? 'Exclusão não permitida.'); return; }
-      setConfirmacao({id:c.id,numero:c.numeroContrato,tipo:'excluir'});
-    } catch (erro) { setErroOperacao(erro instanceof Error ? erro.message : 'Não foi possível consultar a elegibilidade.'); }
-    finally { setOcupado(false); }
-  }
-  async function confirmarAcao() {
-    if (!confirmacao || ocupado) return;
-    setOcupado(true); setErroOperacao('');
-    const { id, tipo } = confirmacao;
-    try {
-      if (tipo === 'retomar') {
-        const atualizado = await retomarContrato(id, motivoDecisao.trim());
-        cache.gravar(chaveTexto(['contratos', 'detalhe', id]), atualizado);
-        setReativados(anterior => [...anterior, id]);
-        toastSucesso('Contrato retomado na situação anterior.');
-      } else if (tipo === 'reativar') {
-        const atualizado = await reativarContrato(id, motivoDecisao.trim());
-        // Dados devolvidos pelo servidor prevalecem sobre o cache antigo do detalhe.
-        cache.gravar(chaveTexto(['contratos', 'detalhe', id]), atualizado);
-        setReativados(anterior => [...anterior, id]);
-        toastSucesso('Contrato reativado.');
-      } else {
-        const resultado = await excluirContratoArquivado(id);
-        if (!resultado.excluido) throw new Error('Não foi possível excluir o contrato.');
-        setExcluidos(anterior => [...anterior, id]);
-        if (resultado.arquivosPendentes > 0) toastAviso('Contrato excluído. A limpeza de alguns arquivos precisa ser concluída.');
-        else toastSucesso('Contrato excluído.');
-      }
-      setConfirmacao(null); setMotivoDecisao('');
-      sincronizarContrato(cache, id);
-      if (tipo === 'excluir') cache.invalidar(['contratos','detalhe',id]);
-      await lista.atualizar().catch(() => {});
-    } catch (erro) {
-      setErroOperacao(erro instanceof Error ? erro.message : 'Não foi possível concluir a ação.');
-    } finally { setOcupado(false); }
-  }
-
   const { dados: perfil, erro: erroPerfil } = useMeuPerfil();
   const lista = useListaContratos(!!perfil?.ativo);
   const pendentesQuery = usePendentesConclusao(!!perfil?.ativo);
@@ -147,13 +95,11 @@ export default function ContratosListPage() {
   }
 
   const visiveis = useMemo(() => contratos.filter(c => {
-    if (excluidos.includes(c.id) || ((filtroArquivo === 'arquivados' || filtroArquivo === 'suspensos') && reativados.includes(c.id))) return false;
     const pendente = idsPendentes.includes(c.id);
     const situacao = situacaoVisivelContrato(c, pendente);
     return (filtroArquivo === 'todos' || situacao === filtroArquivo)
       && correspondeStatusCarteira(c, filtro, pendente) && correspondeBuscaCarteira(c, busca, campoBusca);
-  }).sort((a,b) => b.inicioVigencia.localeCompare(a.inicioVigencia)||a.numeroContrato.localeCompare(b.numeroContrato,'pt-BR',{numeric:true})), [contratos, busca, campoBusca, filtro, filtroArquivo, idsPendentes, excluidos, reativados]);
-  const mostrarAcoes=visiveis.some(c=>Boolean(c.arquivadoEm));
+  }).sort((a,b) => b.inicioVigencia.localeCompare(a.inicioVigencia)||a.numeroContrato.localeCompare(b.numeroContrato,'pt-BR',{numeric:true})), [contratos, busca, campoBusca, filtro, filtroArquivo, idsPendentes]);
   const ordenados=ordenarTabela(visiveis,ordem,(c,campo)=>campo==='titulo'?c.numeroContrato:campo==='contratante'?c.orgaoContratante:campo==='vigencia'?c.inicioVigencia:campo==='status'?ordemEstados[estadoContextualContrato(c,idsPendentes.includes(c.id))]:metricas[c.id]?.[campo]);
   return <AreaContratos titulo="Gestão de Contratos">
     <section className="flex flex-wrap items-center justify-between gap-3" aria-label="Cabeçalho dos contratos" data-pi-carteira-cabecalho>
@@ -175,7 +121,6 @@ export default function ContratosListPage() {
         Cadastrar contrato
       </button>}
     </section>
-    {erroOperacao && <Aviso erro>{erroOperacao}</Aviso>}
     {erro && <div className="space-y-2"><Aviso erro>{erro}</Aviso><button type="button" onClick={() => void lista.atualizar().catch(() => {})} className="text-sm text-brand-neon underline">Tentar novamente</button></div>}
     {!perfil ? <Aviso>{erro || "Verificando perfil..."}</Aviso> : !estadoRestaurado || carregando ? <Aviso>Carregando contratos...</Aviso> : erro ? null : <>
       {<div className="pi-carteira-filtros" aria-label="Filtros de contratos">
@@ -193,7 +138,7 @@ export default function ContratosListPage() {
             <div className="relative">
               <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
                 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/50"><circle cx="11" cy="11" r="7"/><path d="m16 16 5 5"/></svg>
-              <input id="busca-contrato" type="search" maxLength={160} placeholder="Pesquisar contrato..." aria-label="Pesquisar contrato"
+              <input id="busca-contrato" type="search" data-pi-campo-com-icone="inicio" maxLength={160} placeholder="Pesquisar contrato..." aria-label="Pesquisar contrato"
                 className="h-10 w-full rounded-lg border border-brand-green/30 bg-background pl-9 pr-3 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-brand-neon"
                 value={busca} onChange={e => setBusca(e.target.value)} />
             </div>
@@ -206,26 +151,15 @@ export default function ContratosListPage() {
               {opcoesStatusCarteira(filtroArquivo).map(o => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}
             </select>
           </div>
-          {(busca || campoBusca !== 'todos' || filtro) && <button type="button" onClick={() => { setBusca(''); setCampoBusca('todos'); setFiltro(''); }}
-            className="pi-limpar-filtros h-10 shrink-0 rounded-lg border border-current/20 px-3 text-xs text-foreground/70 hover:bg-current/5">Limpar filtros</button>}
+          <button disabled={!busca && campoBusca === 'todos' && !filtro} type="button" onClick={() => { setBusca(''); setCampoBusca('todos'); setFiltro(''); }}
+            className="pi-limpar-filtros h-10 shrink-0 rounded-lg border border-current/20 px-3 text-xs text-foreground/70 hover:bg-current/5">Limpar filtros</button>
         </div>
       </div>}
       <div className="flex flex-wrap items-end justify-between gap-3"><p className="text-xs text-foreground/60">{visiveis.length} contrato(s) {filtroArquivo === 'arquivados' ? 'arquivado(s)' : filtroArquivo === 'concluidos' ? 'finalizado(s)' : filtroArquivo === 'pendentes' ? 'pendente(s) de conclusão' : filtroArquivo === 'revisao' ? 'em revisão' : filtroArquivo === 'cancelados' ? 'cancelado(s)' : filtroArquivo === 'suspensos' ? 'suspenso(s)' : filtroArquivo === 'todos' ? 'no total' : 'ativos'}</p></div>
       {filtroArquivo === 'pendentes' && contratos.some(c => c.conclusaoSolicitadaEm === undefined) && (buscandoPendentes || pendentesQuery.erro) ? <Aviso>{buscandoPendentes ? 'Consultando pendências de conclusão...' : 'Não foi possível consultar os contratos pendentes. Atualize a página.'}</Aviso> : !contratos.length ? <Aviso>Nenhum contrato cadastrado ou atribuído à sua conta.</Aviso> : !visiveis.length ? <Aviso>Nenhum resultado para os filtros escolhidos.</Aviso> :
-        <div className="pi-tabela-scroll"><table className="pi-tabela-operacional pi-tabela-carteira" aria-label="Contratos"><colgroup>{Array.from({length:9},(_,i)=><col key={i}/>)}{mostrarAcoes&&<col style={{width:"150px"}}/>}</colgroup><thead><tr>{[['titulo','Contrato'],['contratante','Contratante'],['vigencia','Vigência'],['execucao','Execução'],['etapas','Etapas'],['entregaveis','Entregáveis'],['evidencias','Evidências'],['comprovacao','Comprovação'],['status','Status']].map(([campo,titulo])=><CabecalhoColuna key={campo} campo={campo} titulo={titulo} ordem={ordem} alternar={alternar}/>)}{mostrarAcoes&&<th scope="col">Ações</th>}</tr></thead><tbody>{ordenados.map(c=><LinhaContrato key={c.id} contrato={c} pendente={idsPendentes.includes(c.id)} onIndicadores={receberMetricas} mostrarAcoes={mostrarAcoes} abrir={(el,destino)=>{preservarRetorno();setContratoModal({id:c.id,foco:el,destino});}} acoes={c.arquivadoEm&&perfil?.perfil==='ADMINISTRADOR'?<div className="pi-acoes-tabela"><button type="button" className="pi-acao-tabela text-emerald-600 dark:text-emerald-400" aria-label={`Reativar contrato ${c.numeroContrato}`} onClick={()=>{setErroOperacao('');setConfirmacao({id:c.id,numero:c.numeroContrato,tipo:'reativar'});}}>Reativar</button><button type="button" className="pi-acao-tabela text-red-600 dark:text-error-text" aria-label={`Excluir contrato ${c.numeroContrato}`} disabled={ocupado} onClick={()=>void prepararExclusao(c)}>Excluir</button></div>:undefined}/>)}</tbody></table></div>}
+        <div className="pi-tabela-scroll"><table className="pi-tabela-operacional pi-tabela-carteira" aria-label="Contratos"><colgroup>{Array.from({length:9},(_,i)=><col key={i}/>)}</colgroup><thead><tr>{[['titulo','Contrato'],['contratante','Contratante'],['vigencia','Vigência'],['execucao','Execução'],['etapas','Etapas'],['entregaveis','Entregáveis'],['evidencias','Evidências'],['comprovacao','Comprovação'],['status','Status']].map(([campo,titulo])=><CabecalhoColuna key={campo} campo={campo} titulo={titulo} ordem={ordem} alternar={alternar}/>)}</tr></thead><tbody>{ordenados.map(c=><LinhaContrato key={c.id} contrato={c} pendente={idsPendentes.includes(c.id)} onIndicadores={receberMetricas} abrir={(el,destino)=>{preservarRetorno();setContratoModal({id:c.id,foco:el,destino});}}/>)}</tbody></table></div>}
       {novoContrato && <ModalNovoContrato focoRetorno={gatilhoNovoContrato} onFechar={()=>setNovoContrato(false)} onCriado={async()=>{cache.invalidar(['contratos','lista']);await lista.atualizar().catch(()=>{});}}/>}
       {contratoModal && (contratoModal.destino ? <ConsultaOperacionalAvulsa contratoId={contratoModal.id} destino={contratoModal.destino} foco={contratoModal.foco} fechar={() => setContratoModal(null)}/> : <PreviaContrato contratoId={contratoModal.id} foco={contratoModal.foco} fechar={() => setContratoModal(null)} />)}
-      {confirmacao && <ConfirmacaoSimples
-        titulo={confirmacao.tipo === 'excluir' ? 'Excluir contrato arquivado?' : confirmacao.tipo === 'retomar' ? 'Retomar contrato suspenso?' : 'Reativar contrato?'}
-        descricao={confirmacao.tipo === 'excluir'
-          ? `Excluir definitivamente “${confirmacao.numero}” e todos os seus registros e arquivos? Esta ação não pode ser desfeita. O histórico de auditoria será preservado.`
-          : confirmacao.tipo === 'retomar' ? `Retomar “${confirmacao.numero}” mantendo prazos, documentos e progresso? A situação anterior será restaurada pela auditoria.`
-          : `Reativar o contrato “${confirmacao.numero}”? Ele voltará à lista de contratos ativos, preservando seus documentos e histórico.`}
-        confirmar={confirmacao.tipo === 'excluir' ? 'Excluir definitivamente' : confirmacao.tipo === 'retomar' ? 'Confirmar retomada' : 'Confirmar reativação'}
-        perigoso={confirmacao.tipo === 'excluir'} ocupado={ocupado}
-        justificativa={motivoDecisao} onJustificativaChange={confirmacao.tipo === 'excluir' ? undefined : setMotivoDecisao}
-        onCancelar={() => { if (!ocupado) setConfirmacao(null); }} onConfirmar={() => void confirmarAcao()}
-      />}
 
     </>}
   </AreaContratos>;

@@ -143,7 +143,7 @@ test('B05: precisão completa de peso, quantidade e delta do formulário', () =>
 });
 
 test('limites de cadastro de metadados coincidem com os contadores', () => {
-  for (const [campo, limite] of [['codigo',15],['nome',42],['descricao',200],['observacoes',100],['criterioConclusao',200]] as const) {
+  for (const [campo, limite] of [['codigo',15],['nome',45],['descricao',200],['observacoes',100],['criterioConclusao',200]] as const) {
     const r = modelo(campo==='criterioConclusao'?'MARCO':'UNICO');
     r[campo]='x'.repeat(limite);
     expect(validarEntregavel(r).sucesso).toBe(true);
