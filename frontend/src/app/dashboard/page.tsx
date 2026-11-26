@@ -15,7 +15,7 @@ const indicadores: {filtro:Exclude<FiltroDashboard,'todos'>;titulo:string;icone:
   {filtro:'planejamento',titulo:'Em planejamento',icone:'planejamento',tom:'neutro'},
   {filtro:'encerramento',titulo:'Vigência a vencer',icone:'prazo',tom:'ambar'},
   {filtro:'atrasados',titulo:'Contratos com atraso',icone:'alerta',tom:'vermelho'},
-  {filtro:'concluidos',titulo:'Contratos concluídos',icone:'concluido',tom:'violeta'},
+  {filtro:'concluidos',titulo:'Contratos finalizados',icone:'concluido',tom:'violeta'},
   {filtro:'pendentes',titulo:'Entregáveis pendentes',icone:'pendente',tom:'neutro'},
   {filtro:'proximas',titulo:'Próximas obrigações',icone:'proximas',tom:'ambar'},
 ];
@@ -43,6 +43,18 @@ export default function DashboardPage(){
   function filtrar(f:FiltroDashboard){setFiltro(f);setPagina(1);setSelecionado(null);setPrevia(null);}
   function limpar(){setTexto('');setBusca('');setDias(30);filtrar('todos');}
   function atualizar(){void q.atualizar().catch(()=>{});}
+  useEffect(()=>{
+    let ultima=Date.now();
+    const atualizarVisivel=()=>{
+      if(document.visibilityState==='hidden'||Date.now()-ultima<5000)return;
+      ultima=Date.now();
+      cache.invalidar(['dashboard']);
+    };
+    const intervalo=window.setInterval(atualizarVisivel,60_000);
+    window.addEventListener('focus',atualizarVisivel);
+    document.addEventListener('visibilitychange',atualizarVisivel);
+    return ()=>{window.clearInterval(intervalo);window.removeEventListener('focus',atualizarVisivel);document.removeEventListener('visibilitychange',atualizarVisivel);};
+  },[cache]);
   function abrir(linha:LinhaDashboard,modo:Selecao['modo'],gatilho:HTMLButtonElement){
     if(ocupado)return;
     gatilhoDetalhe.current=gatilho;
@@ -64,7 +76,6 @@ export default function DashboardPage(){
         <h2>Visão geral</h2>
         <div className="db-acoes">
           {d&&<time className="db-data" dateTime={d.hoje}>{dataPlanejada(d.hoje)}</time>}
-          <button type="button" className="db-botao db-atualizar" aria-label="Atualizar indicadores" onClick={atualizar}>Atualizar</button>
         </div>
       </header>
       <section aria-label="Indicadores da carteira" className="db-metricas" aria-busy={ocupado}>

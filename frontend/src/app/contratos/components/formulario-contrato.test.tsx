@@ -56,7 +56,7 @@ test('limites de caracteres e mensagens explicativas de modo de cálculo', () =>
   expect(screen.queryByLabelText('Modo de cálculo físico *')).not.toBeInTheDocument();
   expect(screen.getByText(/é configurado em Editar execução/)).toBeInTheDocument();
   fireEvent.click(screen.getByText(/Informações complementares/));
-  expect(screen.getByLabelText('Descrição')).toHaveAttribute('maxLength', '400');
+  expect(screen.getByLabelText('Descrição')).toHaveAttribute('maxLength', '300');
   expect(screen.getByLabelText('Observações')).toHaveAttribute('maxLength', '200');
 });
 
@@ -106,11 +106,11 @@ test('responsável ativo é exibido pelo e-mail e pode ser alterado por busca', 
   expect(screen.getByRole('combobox', { name: 'Responsável pelo contrato (opcional)' })).toBeInTheDocument();
 });
 
-test('limites de 32 caracteres e textos auxiliares alinhados', () => {
+test('limites de 40 caracteres e textos auxiliares alinhados', () => {
   render(<FormularioContrato responsaveis={[]} onSalvar={jest.fn()} />);
   fireEvent.click(screen.getByText(/Informações complementares/));
-  expect(screen.getByLabelText('Processo administrativo')).toHaveAttribute('maxLength', '32');
-  expect(screen.getByLabelText('Unidade responsável')).toHaveAttribute('maxLength', '32');
+  expect(screen.getByLabelText('Processo administrativo')).toHaveAttribute('maxLength', '40');
+  expect(screen.getByLabelText('Unidade responsável')).toHaveAttribute('maxLength', '40');
   expect(screen.getByText('Anotações administrativas complementares.')).toBeInTheDocument();
   expect(screen.queryByText('Detalhamento adicional do objeto e do contexto do contrato.')).not.toBeInTheDocument();
 });

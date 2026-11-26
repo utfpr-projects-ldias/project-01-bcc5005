@@ -35,8 +35,8 @@ function componentes(diretorio: string): string[] {
 test('cores semânticas estão ligadas aos tokens Tailwind v4', () => {
   expect(css).toMatch(/--color-on-brand-green:\s*var\(--text-on-accent-green\)/);
   expect(css).toMatch(/--color-error-text:\s*var\(--text-error\)/);
-  expect(claro['--accent-green']).toBe('#5FD34A'); // Identidade visual conservada.
-  expect(escuro['--accent-green']).toBe('#5FD34A');
+  expect(claro['--accent-green']).toBe('#35616f'); // Paleta operacional compartilhada.
+  expect(escuro['--accent-green']).toBe('#35616f');
 });
 
 test.each([['claro', claro], ['escuro', escuro]] as const)(

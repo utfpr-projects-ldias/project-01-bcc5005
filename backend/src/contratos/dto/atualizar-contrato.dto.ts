@@ -39,18 +39,18 @@ export class AtualizarContratoDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(32)
+  @MaxLength(40)
   processoAdministrativo?: string | null;
 
   @ValidateIf((_, v) => v !== undefined)
   @IsString()
   @IsNotEmpty()
-  @MaxLength(30)
+  @MaxLength(40)
   orgaoContratante?: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(32)
+  @MaxLength(40)
   unidadeResponsavel?: string | null;
 
   @ValidateIf((_, v) => v !== undefined)
@@ -61,7 +61,7 @@ export class AtualizarContratoDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(400)
+  @MaxLength(300)
   descricao?: string | null;
 
   @IsOptional()
@@ -89,7 +89,7 @@ export class AtualizarContratoDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(25)
+  @MaxLength(40)
   fiscalGestor?: string | null;
 
   @ValidateIf((_, v) => v !== undefined)

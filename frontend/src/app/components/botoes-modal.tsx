@@ -21,8 +21,23 @@ export function BotaoAcaoModal({ intencao, children, conclusaoParcial = false, c
     className={`flex min-h-9 w-full items-center justify-start gap-2 rounded-lg border bg-transparent px-3 py-2 text-left text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-current disabled:cursor-not-allowed disabled:!border-slate-500/20 disabled:!bg-slate-500/10 disabled:!text-foreground/40 ${CLASSES_ACAO_MENU[intencao]} ${className}`}>
     {(intencao === 'solicitar-conclusao' || intencao === 'concluir') && (conclusaoParcial ? <IconeConclusaoParcial className="h-4 w-4 shrink-0 text-violet-500"/> : <IconeConclusao className="h-4 w-4 shrink-0 text-violet-500" />)}
     {['encerrar','solicitar-encerramento','suspender','cancelar','excluir','reativar','verificar'].includes(intencao) && <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{intencao==='encerrar'||intencao==='solicitar-encerramento'?<><path d="M5 21V4m0 1c5-5 9 5 14 0v10c-5 5-9-5-14 0"/></>:intencao==='suspender'?<><circle cx="12" cy="12" r="9"/><path d="M10 8v8m4-8v8"/></>:intencao==='verificar'?<path d="m5 12 4 4L19 6"/>:intencao==='reativar'?<path d="m8 5 12 7-12 7z"/>:intencao==='excluir'?<path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/>:<><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/></>}</svg>}
-    {intencao === 'reabrir' && <IconeReabertura className="h-4 w-4 shrink-0 text-green-500" />}
+    {intencao === 'reabrir' && <IconeReabertura className="h-4 w-4 shrink-0 text-foreground" />}
     {intencao === 'arquivar' && <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-orange-500" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v11h14V9M10 13h4"/></svg>}
     {children}
+  </button>;
+}
+
+/** A exclusão é uma ação distinta do fechamento da janela. */
+export function BotaoExcluirModal({ rotulo, className = '', ...props }: Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'type' | 'children'> & { rotulo: string }) {
+  return <button {...props} type="button" title={rotulo} aria-label={rotulo} data-pi-excluir-modal className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-40 ${className}`}>
+    <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg>
+  </button>;
+}
+
+/** Arquivamento independente do menu de reabertura; preserva confirmação e autorização do chamador. */
+export function BotaoArquivarModal({ rotulo, className = '', ...props }: Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'type' | 'children'> & { rotulo: string }) {
+  return <button {...props} type="button" aria-label={rotulo} title={rotulo} data-pi-arquivar-modal data-pi-intencao="arquivar"
+    className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-40 ${className}`}>
+    <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v11h14V9M10 13h4"/></svg>
   </button>;
 }

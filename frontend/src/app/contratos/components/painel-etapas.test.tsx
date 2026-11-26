@@ -641,7 +641,7 @@ test.each([
   expect(within(filtros).getByRole('tab', { name: 'Ativas' })).toHaveAttribute('aria-selected', 'true');
 });
 
-test('etapa interna mantém a listagem montada e permite voltar sem diálogo de consulta', () => {
+test('etapa interna mantém a listagem montada em diálogo ancorado e permite voltar', () => {
   consultar.mockReturnValue(estado());
   elegibilidadeHook.mockImplementation((_c, id) => {
     const e = consultar().dados?.find((item: Etapa) => item.id === id);
@@ -654,13 +654,12 @@ test('etapa interna mantém a listagem montada e permite voltar sem diálogo de 
   });
   render(<PainelEtapas interno contratoId={contrato} habilitado podeGerenciar />);
   fireEvent.click(screen.getByRole('button',{name:'Abrir detalhes da etapa 1: Planejamento'}));
-  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  expect(screen.getByRole('region',{name:'1 · Planejamento'})).toBeInTheDocument();
+  expect(screen.getByRole('dialog',{name:'1 · Planejamento'})).toHaveAttribute('data-pi-modal-ancorado');
   expect(screen.queryByText('Selecione um entregável')).not.toBeInTheDocument();
   expect(screen.getByRole('complementary',{name:'Lista de entregáveis'})).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button',{name:'Voltar às etapas'}));
   expect(screen.getByRole('button',{name:'Abrir detalhes da etapa 1: Planejamento'})).toBeInTheDocument();
-  expect(screen.queryByRole('region',{name:'1 · Planejamento'})).not.toBeInTheDocument();
+  expect(screen.queryByRole('dialog',{name:'1 · Planejamento'})).not.toBeInTheDocument();
 });
 
 
@@ -670,7 +669,7 @@ test('B04: não habilita conclusão com elegibilidade negada pelo servidor', () 
   fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes da etapa 1: Planejamento' }));
   fireEvent.click(screen.getByRole('button', { name: 'Fechar: escolher ação' }));
   expect(within(screen.getByRole('menu', { name: 'Fechar' })).getByRole('button', { name: 'Solicitar conclusão' })).toBeDisabled();
-  expect(screen.getByText(/Resolva as solicitações e contribuições pendentes/)).toBeInTheDocument();
+  expect(screen.queryByText(/Resolva as solicitações e contribuições pendentes/)).not.toBeInTheDocument();
 });
 
 test('B04: finalização administrativa exige elegibilidade e justificativa', async () => {
@@ -680,11 +679,51 @@ test('B04: finalização administrativa exige elegibilidade e justificativa', as
   render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
   fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes da etapa 1: Planejamento' }));
   fireEvent.click(screen.getByRole('button', { name: 'Fechar: escolher ação' }));
-  fireEvent.click(within(screen.getByRole('menu', { name: 'Fechar' })).getByRole('button', { name: 'Finalizar administrativamente' }));
-  const dialog = screen.getByRole('dialog', { name: 'Finalizar administrativamente a etapa?' });
+  fireEvent.click(within(screen.getByRole('menu', { name: 'Fechar' })).getByRole('button', { name: 'Encerrar etapa' }));
+  const dialog = screen.getByRole('dialog', { name: 'Encerrar etapa?' });
   const confirmar = within(dialog).getByRole('button', { name: 'Finalizar etapa' });
   expect(confirmar).toBeDisabled();
   fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'Encerramento administrativo autorizado' } });
   fireEvent.click(confirmar);
   await waitFor(() => expect(finalizarEtapa).toHaveBeenCalledWith(contrato, base.id, 'Encerramento administrativo autorizado'));
+});
+
+
+test('mostra o motivo de impedimento de arquivamento no diálogo de confirmação', async () => {
+  (alterarArquivamentoEtapa as jest.Mock).mockRejectedValueOnce(new Error('Resolva a contribuição pendente.'));
+  render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar permissoes={{ arquivarEtapas: true } as never} />);
+  abrirArquivamentoPlanejamento();
+  const caixa = screen.getByRole('dialog', { name: 'Arquivar etapa?' });
+  fireEvent.click(within(caixa).getByRole('button', { name: 'Confirmar arquivamento' }));
+  expect(await within(caixa).findByText('Resolva a contribuição pendente.')).toBeInTheDocument();
+});
+
+test('etapa arquivada oferece lixeira separada do fechamento', () => {
+  consultar.mockReturnValue(estado([{...base, arquivadoEm:'2026-11-05T00:00:00Z'}]));
+  render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar permissoes={{ excluirEtapasArquivadas: true } as never} />);
+  fireEvent.click(screen.getByRole('tab', { name: 'Etapas arquivadas' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes da etapa 1: Planejamento' }));
+  const lixeira = screen.getByRole('button', { name: 'Excluir etapa arquivada' });
+  expect(lixeira).toHaveAttribute('data-pi-excluir-modal');
+  fireEvent.click(lixeira);
+  expect(screen.getByRole('dialog', { name: 'Excluir etapa arquivada?' })).toBeInTheDocument();
+});
+
+
+test.each([true,false])('etapa finalizada oferece arquivamento independente da reabertura (%s)', reabrir => {
+  consultar.mockReturnValue(estado([{...base, status:'CONCLUIDA'}]));
+  render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar permissoes={{arquivarEtapas:true,reabrirEtapas:reabrir} as never}/>);
+  fireEvent.click(screen.getByRole('tab', {name:/Finalizadas/}));
+  fireEvent.click(screen.getByRole('button', {name:'Abrir detalhes da etapa 1: Planejamento'}));
+  const detalhe = within(screen.getByRole('dialog', {name:/1 · Planejamento/}));
+  const arquivo = detalhe.getByRole('button', {name:'Arquivar etapa'});
+  expect(arquivo).toHaveAttribute('data-pi-arquivar-modal');
+  if (reabrir) {
+    const botao = detalhe.getByRole('button', {name:'Reabrir'});
+    expect(botao).not.toHaveAttribute('aria-haspopup');
+    expect(botao.querySelector('svg')).toHaveClass('pi-icone-reabrir-verde');
+  } else expect(detalhe.queryByRole('button', {name:'Reabrir'})).not.toBeInTheDocument();
+  fireEvent.click(arquivo);
+  expect(screen.getByRole('dialog', {name:'Arquivar etapa?'})).toBeInTheDocument();
+  expect(alterarArquivamentoEtapa).not.toHaveBeenCalled();
 });

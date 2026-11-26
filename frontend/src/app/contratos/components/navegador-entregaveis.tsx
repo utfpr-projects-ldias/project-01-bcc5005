@@ -43,7 +43,7 @@ export function NavegadorEntregaveis({ selecionado, lista, children }: {
       <aside ref={painel} aria-label="Lista de entregáveis" hidden={Boolean(selecionado)} inert={Boolean(selecionado) || undefined} data-pi-lista-entregaveis data-aberto={!selecionado} className="min-w-0 space-y-3">
         {lista}
       </aside>
-      <div data-pi-area-detalhe-entregavel tabIndex={-1} ref={detalhes} className="min-w-0" onChangeCapture={e => { if (e.target instanceof HTMLElement && detalhes.current?.contains(e.target) && e.target.closest('form') && !e.target.closest('[data-tec08-modal]')) sujo.current = true; }} onInputCapture={e => { if (e.target instanceof HTMLElement && detalhes.current?.contains(e.target) && e.target.closest('form') && !e.target.closest('[data-tec08-modal]')) sujo.current = true; }}>
+      <div data-pi-area-detalhe-entregavel tabIndex={-1} ref={detalhes} className="min-w-0" onChangeCapture={e => { if (e.target instanceof HTMLElement && detalhes.current?.contains(e.target) && e.target.closest('form') && !e.target.closest('[data-tec08-modal]:not([data-pi-sobreposicao-etapa])')) sujo.current = true; }} onInputCapture={e => { if (e.target instanceof HTMLElement && detalhes.current?.contains(e.target) && e.target.closest('form') && !e.target.closest('[data-tec08-modal]:not([data-pi-sobreposicao-etapa])')) sujo.current = true; }}>
         {selecionado ? children : null}
       </div>
     </div>

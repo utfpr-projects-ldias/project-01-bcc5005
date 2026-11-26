@@ -72,7 +72,7 @@ export function PainelMetasMarco({contratoId,entregavelId,permissoes,readOnly=fa
       {expandida===m.id&&<div className="space-y-3 border-t border-current/15 pt-3">
         {m.vinculos.length===0&&<p className="text-xs text-foreground/60">Nenhum vínculo solicitado.</p>}
         {m.vinculos.map(v=><div key={v.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-current/15 p-2 text-xs">
-          <div className="min-w-0"><span className="font-semibold">{v.status==='APROVADO'?v.elegivel?'Aprovado':'Revalidação necessária':v.status==='REJEITADO'?'Rejeitado · Em revisão':'Pendente de aprovação'}</span>
+          <div className="min-w-0"><span className="font-semibold">{v.status==='APROVADO'?v.elegivel?'Aprovado':'Revalidação necessária':v.status==='REJEITADO'?'Em revisão':'Pendente de aprovação'}</span>
             <p className="truncate text-foreground/55" title={v.ocorrenciaId||v.atividadeId||v.comprovanteId||''}>{v.ocorrenciaId||v.atividadeId||v.comprovanteId}</p></div>
           {v.status==='PENDENTE'&&permitido('aprovarVinculosMetasMarco')&&<div className="flex flex-wrap items-center gap-2">
             <label className="text-xs">Justificativa para rejeição (opcional)

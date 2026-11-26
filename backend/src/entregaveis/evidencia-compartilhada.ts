@@ -2,7 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { uuidValido } from '../autorizacao/politicas-operacionais.js';
 
 export type DestinoEvidencia = { entregavelId: string; esperadaId: string | null; quantidadeExecutada?:string; percentualExecucao?:string; ocorrenciaId?:string; ocorrenciaIds?:string[] };
-/** Cada destino é uma decisão independente; uma contribuição precisa ser explicitamente declarada. */
+/** Cada destino possui contribuição própria; a aprovação do arquivo é compartilhada. */
 export function destinosEvidencia(valor?: string): DestinoEvidencia[] {
   if (valor === undefined) return [];
   let dados: unknown;

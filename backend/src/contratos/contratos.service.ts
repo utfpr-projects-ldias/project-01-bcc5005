@@ -483,7 +483,7 @@ export class ContratosService {
       const documentos = bloqueado ? false : await documentacaoVerificada(manager, id);
       const pendencias = bloqueado ? ['O contrato não está aberto para solicitar conclusão.'] :
         await this.pendenciasParaConclusao(manager, id, documentos);
-      const podeEncerrarAntecipadamente = !solicitada && !bloqueado && FASES_OPERACIONAIS_CONTRATO.includes(contrato.status) && !await this.decisoesDescendentesPendentes(manager, id);
+      const podeEncerrarAntecipadamente = !solicitada && !bloqueado && FASES_OPERACIONAIS_CONTRATO.includes(contrato.status);
       const podeFinalizar = podeEncerrarAntecipadamente && await this.pendenciaFinalizacao(manager, id) === null;
       return { apto: pendencias.length === 0 && !solicitada, podeEncerrarAntecipadamente, podeFinalizar,
         pendencias, aptoParcial: contrato.status !== 'CONCLUIDO_PARCIALMENTE' && !bloqueado && !solicitada && pendencias.length > 0 && (await this.pendenciasParaConclusaoParcial(manager,id,documentos)).length === 0, solicitada };
@@ -539,7 +539,6 @@ export class ContratosService {
           throw new ConflictException('Solicitação legada sem modalidade identificável. Devolva para revisão e solicite novamente.');
         if (contrato.tipoEncerramentoSolicitado === 'FINALIZACAO')
           await this.exigirElegibilidadeFinalizacao(manager, id);
-        else await this.exigirSemDecisoesDescendentes(manager, id);
         const justificativa = contrato.motivoEncerramento?.trim() ?? '';
         if (justificativa.length < 15 || justificativa.length > 200)
           throw new ConflictException('Solicitação de encerramento sem justificativa válida');
@@ -742,7 +741,6 @@ export class ContratosService {
       if (contrato.arquivadoEm || contrato.conclusaoSolicitadaEm ||
         ['CONCLUIDO', 'CONCLUIDO_PARCIALMENTE', 'FINALIZADO', 'ENCERRADO', 'CANCELADO', 'SUSPENSO'].includes(contrato.status))
         throw new ConflictException('Contrato não está em situação elegível ao encerramento antecipado');
-      await this.exigirSemDecisoesDescendentes(manager, id);
       // Solicitar não é aprovar. Mantém a fase anterior e bloqueia novas operações pela trava de decisão existente.
       const anterior = { status: contrato.status, reabertoEm: contrato.reabertoEm ?? null,
         encerramentoSolicitado: false };

@@ -55,7 +55,6 @@ Na **raiz do repositório**, prepare o arquivo de ambiente:
 [ -f .env ] || cp .env.example .env
 openssl rand -hex 24
 openssl rand -hex 32
-nano .env
 ```
 
 Use os dois valores gerados para preencher `POSTGRES_PASSWORD` e `SUPERTOKENS_API_KEY` no `.env`, respectivamente. **Não versione o `.env` nem substitua um arquivo já configurado.**

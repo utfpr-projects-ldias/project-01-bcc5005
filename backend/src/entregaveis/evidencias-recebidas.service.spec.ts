@@ -625,3 +625,22 @@ test('não verifica evidência com hash divergente', async()=>{
   expect(a.comprovantes.save).not.toHaveBeenCalled();
   expect(a.auditoria.registrarNaTransacao).not.toHaveBeenCalled();
 });
+
+ test('aprovação iniciada no destino aplica a decisão aos demais vínculos do mesmo arquivo', async () => {
+   const a=cenario();
+   const grupoId='11111111-1111-4111-8111-111111111111';
+   const outro={id:'22222222-2222-4222-8222-222222222222',contratoId:'33333333-3333-4333-8333-333333333333',entregavelId:'44444444-4444-4444-8444-444444444444',esperadaId:'55555555-5555-4555-8555-555555555555',status:'PENDENTE_VERIFICACAO'};
+   a.comprovantes.findOne.mockResolvedValue({...a.status,grupoCompartilhadoId:grupoId});
+   a.vinculos.findOneBy.mockResolvedValue(Object.assign({contratoId,usuarioId:gestorId,podeEditar:false},{permissoesDetalhadas:{verificarComprovantes:true}}));
+   a.m.query.mockResolvedValueOnce([]).mockResolvedValueOnce([{id:comprovanteId,contratoId,entregavelId,esperadaId,status:'PENDENTE_VERIFICACAO'},outro] as never);
+   const verificarDestino=jest.spyOn(a.service as unknown as {verificarDestino:(...args:unknown[])=>Promise<unknown>},'verificarDestino').mockResolvedValue({status:'VERIFICADA'});
+   await a.service.verificar(contratoId,entregavelId,esperadaId,comprovanteId,gestor);
+   expect(verificarDestino).toHaveBeenNthCalledWith(1,a.m,contratoId,entregavelId,esperadaId,comprovanteId,gestor,{});
+   expect(verificarDestino).toHaveBeenNthCalledWith(2,a.m,outro.contratoId,outro.entregavelId,outro.esperadaId,outro.id,gestor,{}, {id:grupoId,storageKey:a.status.storageKey,sha256:a.status.sha256});
+   expect(a.vinculos.findOneBy).toHaveBeenCalledTimes(1);
+ });
+ test('edição geral sem permissão de compartilhar não lista destinos', async () => {
+   const a=cenario();
+   await expect(a.service.listarDestinos(contratoId,entregavelId,gestor)).resolves.toEqual([]);
+   expect(a.m.query).not.toHaveBeenCalled();
+ });

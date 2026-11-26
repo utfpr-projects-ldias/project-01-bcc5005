@@ -3,8 +3,8 @@ import path from 'node:path';
 
 const css = readFileSync(path.resolve(process.cwd(), 'src/app/globals.css'), 'utf8');
 
-test('ativa verde primário e outras situações são distintas nos dois temas', () => {
-  expect(css).toMatch(/--tec08-status-bg:\s*#5fd34a/);
+test('ativa azul-acinzentado e outras situações são distintas nos dois temas', () => {
+  expect(css).toMatch(/--tec08-status-bg:\s*#35616f/);
   for (const [estado, cor] of [['revisao', '#0f766e'], ['concluido', '#6d28d9'],
     ['suspenso', '#854d0e'], ['arquivado', '#92400e'], ['cancelado', '#991b1b'],
     ['encerrado', '#334155']] as const) {
@@ -67,12 +67,12 @@ test('Patch 8: evidência pendente é amarela no card e no painel de comprovante
 });
 
 
-test('Patch 26: superfícies e ações usam tokens do próprio contexto, incluindo não iniciada e verde-musgo', () => {
+test('Patch 26: superfícies e ações usam tokens do próprio contexto, incluindo não iniciada e azul-acinzentado', () => {
   expect(css).toContain('[data-tec08-estado="nao-iniciado"]');
   expect(css).toContain('[data-pi-painel-contextual]');
   expect(css).toContain('[data-pi-acao="secundaria"]');
   expect(css).toContain('[data-pi-acao="primaria"]');
-  expect(css).toContain('--pi-acao-bg: #166534');
+  expect(css).toContain('--pi-acao-bg: #35616f');
   expect(css).toContain('background-color: var(--pi-acao-bg) !important');
 });
 

@@ -136,12 +136,12 @@ test('desarquivar pede confirmação, audita via API e mantém aba Arquivados se
   fireEvent.click(screen.getByRole('tab', { name: 'Evidências arquivadas' }));
   expect(await screen.findByText(/Relatório/)).toBeInTheDocument();
   fireEvent.click(screen.getByLabelText('Abrir detalhes da evidência arquivada Relatório'));
-  fireEvent.click(screen.getByRole('button', { name: 'Reabrir' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Reativar' }));
   const confirmar = screen.getByRole('dialog', { name: 'Desarquivar evidência?' });
   expect(reativar).not.toHaveBeenCalled();
   fireEvent.click(within(confirmar).getByRole('button', { name: 'Cancelar' }));
   expect(reativar).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: 'Reabrir' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Reativar' }));
   const dialogo = screen.getByRole('dialog', { name: 'Desarquivar evidência?' });
   fireEvent.change(within(dialogo).getByRole('textbox', { name: /Justificativa obrigatória/ }), { target: { value: 'Retomar esta evidência para complementar o checklist.' } });
   fireEvent.click(within(dialogo).getByRole('button', { name: 'Confirmar desarquivamento' }));

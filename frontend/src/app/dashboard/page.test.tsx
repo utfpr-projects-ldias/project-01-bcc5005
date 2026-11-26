@@ -120,22 +120,21 @@ test('detalhe abre em modal, mantém carteira e alterna abas sem requisições',
 });
 
 
-test('filtros e atualização mantêm o botão Atualizar sem ícone ou mudança de estado visual',async()=>{
+test('dashboard atualiza automaticamente sem botão manual nem desmontar a carteira',async()=>{
   const pedido=pendente<CarteiraDashboard>();
   consultar.mockResolvedValueOnce(carteira).mockReturnValueOnce(pedido.promessa);
   renderComConsultas(<DashboardPage/>);
   await screen.findByText('Contrato A');
-  const atualizar=screen.getByRole('button',{name:'Atualizar indicadores'});
-  fireEvent.click(screen.getByRole('button',{name:/Contratos com atraso:/}));
-  await waitFor(()=>expect(consultar).toHaveBeenCalledTimes(2));
-  expect(screen.getByRole('button',{name:'Atualizar indicadores'})).toBe(atualizar);
-  expect(atualizar).toBeEnabled();
-  expect(atualizar.querySelector('svg')).toBeNull();
-  expect(atualizar).not.toHaveAttribute('aria-busy');
-  fireEvent.click(atualizar);
-  expect(consultar).toHaveBeenCalledTimes(2);
-  await act(async()=>{pedido.resolver(carteira);});
-  expect(atualizar).toBeEnabled();
+  const tabela=screen.getByRole('table',{name:'Carteira de contratos'});
+  expect(screen.queryByRole('button',{name:'Atualizar indicadores'})).not.toBeInTheDocument();
+  const agora=jest.spyOn(Date,'now').mockReturnValue(Date.now()+60_000);
+  try {
+    fireEvent.focus(window);
+    await waitFor(()=>expect(consultar).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole('table',{name:'Carteira de contratos'})).toBe(tabela);
+    await act(async()=>{pedido.resolver(carteira);});
+    expect(screen.getByRole('table',{name:'Carteira de contratos'})).toBe(tabela);
+  } finally { agora.mockRestore(); }
 });
 
 test('alertas da carteira abrem somente o diálogo com todos os alertas, sem navegar',async()=>{

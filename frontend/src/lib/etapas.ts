@@ -34,7 +34,7 @@ export type DadosEtapa = Pick<Etapa, 'nome' | 'codigo' | 'descricao' | 'inicioPr
 export type AtualizacaoEtapa = Partial<DadosEtapa> & { estadoAnterior?: string };
 export type ElegibilidadeEtapa = {
   podeSolicitarConclusao: boolean; podeSolicitarParcial: boolean; podeSolicitarEncerramento: boolean;
-  podeAprovarConclusao: boolean; podeAprovarEncerramento: boolean; podeFinalizar: boolean; decisoesPendentes: boolean;
+  podeAprovarConclusao: boolean; podeAprovarEncerramento: boolean; podeFinalizar: boolean; decisoesPendentes: boolean; podeReabrirDocumentacao?: boolean;
 };
 
 export class ErroEtapa extends Error {

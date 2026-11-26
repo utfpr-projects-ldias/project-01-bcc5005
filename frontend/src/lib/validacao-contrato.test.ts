@@ -25,7 +25,7 @@ test('Zod rejeita texto obrigatório vazio, descrições longas e status inventa
   expect(result.sucesso).toBe(false);
   if (!result.sucesso) {
     expect(result.erros.numeroContrato).toMatch(/obrigatório/);
-    expect(result.erros.descricao).toMatch(/400/);
+    expect(result.erros.descricao).toMatch(/300/);
     expect(result.erros.observacoes).toMatch(/200/);
     expect(result.erros.status).toBeDefined();
   }

@@ -44,7 +44,7 @@ export function ModalEvidenciasAtividade({ contratoId, atividadeId, atividadeTit
   return createPortal(<ModalEtapa titulo="Vincular evidência" contexto={atividadeTitulo} camada="edicao" larguraFormulario="evidencia"
     estadoContextual="normal" ocupado={salvando} onFechar={onFechar} rotuloFechar="Fechar vinculação de evidências">
     <div className="pi-vincular-evidencia-v19 space-y-3 text-sm">
-      <p className="text-foreground/75">Selecione uma evidência vinculável. A verificação permanece independente do vínculo.</p>
+      <p className="text-foreground/75">Selecione um comprovante existente. Somente após verificação ele contará para a comprovação.</p>
       {carregando && <p role="status">Consultando evidências...</p>}
       {erro && <p role="alert" className="rounded-lg border border-error-text/40 p-3 text-error-text">{erro}</p>}
       {!!vinculadas.length && <div className="space-y-2"><h3 className="font-semibold">Já vinculadas</h3>
@@ -53,7 +53,7 @@ export function ModalEvidenciasAtividade({ contratoId, atividadeId, atividadeTit
       {podeVincular && <>
         <label className="block text-sm font-medium">Pesquisar comprovante
           <input className="mt-1 w-full min-w-0 rounded-lg border border-current/30 bg-background px-3 py-2 text-sm" type="search" maxLength={120}
-            placeholder="Nome do arquivo ou tipo de evidência" value={pesquisa} onChange={e => setPesquisa(e.target.value)} />
+            placeholder="Digite o nome do arquivo..." value={pesquisa} onChange={e => setPesquisa(e.target.value)} />
         </label>
         <div className="max-h-48 space-y-1 overflow-auto rounded-lg border border-current/25 p-2" role="radiogroup" aria-label="Comprovantes disponíveis">
           {filtradas.map(c => <label key={c.id} className="flex min-w-0 cursor-pointer items-start gap-3 rounded-lg p-2 hover:bg-current/10">
@@ -64,7 +64,7 @@ export function ModalEvidenciasAtividade({ contratoId, atividadeId, atividadeTit
         </div>
       </>}
       <div className="flex flex-wrap justify-end gap-2 pt-3">
-        <button type="button" onClick={onFechar} disabled={salvando} className="rounded-lg border border-red-500/60 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-500/20 dark:text-red-300">Cancelar</button>
+        <button type="button" onClick={onFechar} disabled={salvando} className="rounded-lg border border-current/25 px-4 py-2 text-sm font-semibold text-foreground hover:bg-current/10">Cancelar</button>
         {podeVincular && <button type="button" onClick={() => void confirmar()} disabled={!selecionada || salvando}
           className="pi-vinculo-acao rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-40">
           {salvando ? 'Vinculando...' : 'Confirmar vínculo'}</button>}

@@ -63,7 +63,7 @@ export class AdministracaoUsuariosService {
     if (![PerfilUsuario.GESTOR, PerfilUsuario.COLABORADOR].includes(dto.perfil)) {
       throw new BadRequestException('Somente os perfis GESTOR e COLABORADOR podem ser provisionados');
     }
-    const nome = normalizarNomeCompleto(dto.nome);
+    const nome = normalizarNomeCompleto(dto.nome, 30);
     const email = dto.email.trim().toLowerCase();
     const jaExiste = await this.repositorio.findOneBy({ email });
     if (jaExiste) throw new ConflictException('E-mail já cadastrado');
@@ -140,7 +140,7 @@ export class AdministracaoUsuariosService {
 
   async alterarEmail(id: string, emailInformado: string, ator: UsuarioAutenticado) {
     const email = emailInformado.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 320) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 40) {
       throw new BadRequestException('E-mail inválido');
     }
     await this.carregarAlvo(id, ator);
@@ -150,7 +150,7 @@ export class AdministracaoUsuariosService {
   /** Senha e revogação usam bloqueio durável e revalidam autor/alvo sob lock. */
   async redefinirSenha(id: string, novaSenha: string, ator: UsuarioAutenticado): Promise<void> {
     await this.carregarAlvo(id, ator);
-    if (novaSenha.length < 12 || novaSenha.length > 128 ||
+    if (novaSenha.length < 12 || novaSenha.length > 30 ||
       !/^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^a-zA-Z0-9]).+$/.test(novaSenha)) {
       throw new BadRequestException('Senha fora da política mínima');
     }
@@ -175,7 +175,7 @@ export class AdministracaoUsuariosService {
     if (dto.ativo !== undefined && typeof dto.ativo !== 'boolean') {
       throw new BadRequestException('Situação inválida');
     }
-    const novoNome = dto.nome === undefined ? undefined : normalizarNomeCompleto(dto.nome);
+    const novoNome = dto.nome === undefined ? undefined : normalizarNomeCompleto(dto.nome, 30);
 
     return this.dataSource.transaction(async (manager) => {
       const repositorio = manager.getRepository(Usuario);

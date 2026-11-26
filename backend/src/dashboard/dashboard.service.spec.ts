@@ -14,8 +14,8 @@ const contrato=(id:string,numeroContrato:string)=>({id,numeroContrato,codigoPubl
 const gestor={id:'gestor',supertokensUserId:'st',email:'gestor@exemplo.com',perfil:PerfilUsuario.GESTOR} satisfies UsuarioAutenticado;
 const admin={...gestor,perfil:PerfilUsuario.ADMINISTRADOR};
 const filtro={busca:'',filtro:'todos',pagina:1,limiteDias:30};
-function cenario(){
-  const listar=jest.fn(async (ator:UsuarioAutenticado)=>ator.perfil===PerfilUsuario.ADMINISTRADOR?[contrato(A,'Carteira Alfa'),contrato(B,'Carteira Beta')]:[contrato(A,'Carteira Alfa')]);
+function cenario(contratos?: Contrato[]){
+  const listar=jest.fn(async (ator:UsuarioAutenticado)=>contratos ?? (ator.perfil===PerfilUsuario.ADMINISTRADOR?[contrato(A,'Carteira Alfa'),contrato(B,'Carteira Beta')]:[contrato(A,'Carteira Alfa')]));
   const consultar=jest.fn(async (_id:string)=>({avanco:null,configuracaoPendente:false,entregaveis:[]}));
   const resumoDocumental=jest.fn(async (_id:string)=>({}));
   const permitido=jest.fn(async (_ator:UsuarioAutenticado,_politica:unknown,_id:string)=>true);
@@ -28,3 +28,20 @@ describe('HU11 — escopo da carteira',()=>{
   it('administrador agrega ambos os contratos permitidos e busca é aplicada antes do motor',async()=>{const c=cenario();expect((await c.service.carteira(admin,filtro)).total).toBe(2);c.consultar.mockClear();expect((await c.service.carteira(admin,{...filtro,busca:'Carteira Beta'})).linhas.map(l=>l.contrato.id)).toEqual([B]);expect(c.consultar).not.toHaveBeenCalledWith(A);});
   it('se uma projeção for negada, não consulta seus dados',async()=>{const c=cenario();c.permitido.mockResolvedValue(false);expect((await c.service.carteira(gestor,filtro)).total).toBe(0);expect(c.consultar).not.toHaveBeenCalled();expect(c.findBy).not.toHaveBeenCalled();});
 });
+
+  it('finalizados inclui todas as modalidades e mantém contador e filtro consistentes', async () => {
+    const estados = [StatusContrato.CONCLUIDO, StatusContrato.CONCLUIDO_PARCIALMENTE, StatusContrato.FINALIZADO, StatusContrato.ENCERRADO];
+    const finais = estados.map((status, i) => ({...contrato(`final-${i}`, `Final ${i}`), status}));
+    const outros = [
+      ...[StatusContrato.EM_EXECUCAO, StatusContrato.EM_ENCERRAMENTO, StatusContrato.PLANEJAMENTO, StatusContrato.SUSPENSO, StatusContrato.CANCELADO].map((status, i) => ({...contrato(`outro-${i}`, `Outro ${i}`), status})),
+      {...contrato('reaberto','Reaberto'), status: StatusContrato.CONCLUIDO, reabertoEm: new Date()},
+      {...contrato('arquivado','Arquivado'), status: StatusContrato.ENCERRADO, arquivadoEm: new Date()},
+    ];
+    const {service} = cenario([...finais, ...outros]);
+    const todos = await service.carteira(admin, filtro);
+    const filtrados = await service.carteira(admin, {...filtro, filtro:'concluidos'});
+    expect(todos.indicadores.concluidos).toBe(4);
+    expect(filtrados.indicadores.concluidos).toBe(4);
+    expect(filtrados.total).toBe(4);
+    expect(filtrados.linhas.map(l => l.contrato.status)).toEqual(estados);
+  });

@@ -2,11 +2,13 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { PreviaContrato } from './cartao-atividade';
 
 jest.mock('@/app/components/provedor-consultas',()=>({useRepositorioConsultasOpcional:()=>null,useConsulta:()=>({dados:{apto:false,aptoParcial:true}})}));
+let mockArquivado = false;
+let mockAdministrador = false;
 jest.mock('@/hooks/use-contratos',()=>({
-  useListaContratos:()=>({dados:[{id:'c',status:'PLANEJAMENTO',codigoPublico:'001',objeto:'Contrato de QA'}]}),
+  useListaContratos:()=>({dados:[{id:'c',status:'PLANEJAMENTO',codigoPublico:'001',objeto:'Contrato de QA',arquivadoEm:mockArquivado?'2026-11-25':null}]}),
   useAcessoContrato:()=>({dados:{permissoes:{editarContrato:true}}}),
 }));
-jest.mock('@/hooks/use-meu-perfil',()=>({useMeuPerfil:()=>({dados:{perfil:'GESTOR',ativo:true}})}));
+jest.mock('@/hooks/use-meu-perfil',()=>({useMeuPerfil:()=>({dados:{perfil:mockAdministrador?'ADMINISTRADOR':'GESTOR',ativo:true}})}));
 jest.mock('@/hooks/use-progresso',()=>({useProgresso:()=>({progresso:{avanco:0,modoCalculo:'SIMPLES',entregaveis:[{entregavelId:'e',nome:'Entregável com título longo',percentualExecucao:0}]}})}));
 jest.mock('@/hooks/use-etapas',()=>({useEtapas:()=>({dados:[]})}));
 jest.mock('@/hooks/use-entregaveis',()=>({useEntregaveis:()=>({dados:[]}),useResumoDocumentalContrato:()=>({dados:{}})}));
@@ -45,4 +47,23 @@ test('R46: o pedido do iframe abre o mesmo painel; Esc não fecha o contrato', a
     expect(screen.getByRole('complementary')).toBe(painel);
     expect(screen.getByRole('dialog',{name:'Detalhes do contrato'})).toBeInTheDocument();
   } finally {view.unmount(); medida.mockRestore(); voltar.mockRestore();}
+});
+
+test('arquivado oferece Reativar e Excluir no cabeçalho, sem Fechar ou Reabrir',()=>{
+  mockArquivado=true;mockAdministrador=true;
+  const voltar=jest.spyOn(window.history,'back').mockImplementation(()=>{});
+  const view=render(<PreviaContrato contratoId="c" fechar={jest.fn()} foco={null}/>);
+  try {
+    const modal=screen.getByRole('dialog',{name:'Detalhes do contrato'});
+    expect(within(modal).getByRole('button',{name:'Reativar'})).toBeInTheDocument();
+    expect(within(modal).getByRole('button',{name:'Excluir'})).toBeInTheDocument();
+    expect(within(modal).queryByRole('button',{name:'Fechar: escolher ação'})).not.toBeInTheDocument();
+    expect(within(modal).queryByRole('button',{name:'Reabrir'})).not.toBeInTheDocument();
+    const frame=screen.getByTitle('Conteúdo do contrato') as HTMLIFrameElement;
+    fireEvent.load(frame);
+    const enviar=jest.spyOn(frame.contentWindow!, 'postMessage');
+    fireEvent.click(within(modal).getByRole('button',{name:'Reativar'}));
+    expect(enviar).toHaveBeenCalledWith({tipo:'pi:acao-contrato',contratoId:'c',acao:'reativar'},window.location.origin);
+    enviar.mockRestore();
+  }finally{view.unmount();voltar.mockRestore();mockArquivado=false;mockAdministrador=false;}
 });

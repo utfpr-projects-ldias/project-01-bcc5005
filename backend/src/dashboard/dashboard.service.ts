@@ -11,7 +11,7 @@ import { Ocorrencia } from '../ocorrencias/ocorrencia.entity.js';
 import { PoliticaAcessoService } from '../autorizacao/politica-acesso.service.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
 import { hojeCivil } from '../common/data-civil.js';
-import { projetarContrato, resumirCarteira, type LinhaDashboard } from './dashboard-modelo.js';
+import { finalizado, projetarContrato, resumirCarteira, type LinhaDashboard } from './dashboard-modelo.js';
 import type { Contrato } from '../contratos/contrato.entity.js';
 
 export type FiltroDashboard = { busca: string; filtro: string; pagina: number; limiteDias: number };
@@ -23,7 +23,7 @@ const corresponde = (l:LinhaDashboard,f:string,d:number) => {
     case 'planejamento': return l.ativo&&l.contrato.status==='PLANEJAMENTO';
     case 'encerramento': return l.ativo&&l.diasRestantes>=0&&l.diasRestantes<=d;
     case 'atrasados': return l.ativo&&l.atrasos>0;
-    case 'concluidos': return !l.contrato.arquivadoEm&&!l.contrato.reabertoEm&&['CONCLUIDO','CONCLUIDO_PARCIALMENTE'].includes(l.contrato.status);
+    case 'concluidos': return finalizado(l.contrato);
     case 'pendentes': return l.ativo&&l.entregaveis.pendentes>0;
     case 'proximas': return l.ativo&&l.proximas>0;
     default: return true;

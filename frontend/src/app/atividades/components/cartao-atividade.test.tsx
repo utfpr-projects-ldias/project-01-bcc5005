@@ -248,6 +248,11 @@ test('vínculos possuem quatro abas e contratos não usam filtro de verificaçã
  fireEvent.click(screen.getByRole('button',{name:/Vínculos/}));
  const lista=screen.getByRole('dialog',{name:'Vínculos da atividade'});
  expect(within(lista).queryByLabelText('Filtrar vínculos')).not.toBeInTheDocument();
- fireEvent.click(within(lista).getByRole('button',{name:'Evidências'}));
- expect(within(lista).getByLabelText('Filtrar vínculos')).toBeInTheDocument();
+ expect(within(lista).queryByLabelText('Filtrar por contrato')).not.toBeInTheDocument();
+ for (const aba of ['Entregáveis','Ocorrências','Evidências']) {
+   fireEvent.click(within(lista).getByRole('button',{name:aba}));
+   expect(within(lista).getByLabelText('Filtrar vínculos')).toBeInTheDocument();
+   expect(within(lista).getByLabelText('Filtrar por contrato')).toBeInTheDocument();
+   expect(within(lista).getByLabelText('Pesquisar vínculo')).toBeInTheDocument();
+ }
 });

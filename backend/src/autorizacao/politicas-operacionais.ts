@@ -53,6 +53,7 @@ export const POLITICAS_OPERACIONAIS = {
   'atividades:listar': { recurso: 'atividade', classe: 'leitura', escopo: 'contrato' },
   'atividades:visualizar': { recurso: 'atividade', classe: 'leitura', escopo: 'recurso' },
   'atividades:registrar': { recurso: 'atividade', classe: 'operacional', escopo: 'contrato' },
+  'atividades:compartilhar': { recurso: 'atividade', classe: 'operacional', escopo: 'contrato' },
   'atividades:editar': { recurso: 'atividade', classe: 'operacional', escopo: 'recurso' },
   'atividades:verificar': { recurso: 'atividade', classe: 'operacional', escopo: 'recurso' },
   'atividades:reabrir': { recurso: 'atividade', classe: 'operacional', escopo: 'recurso' },

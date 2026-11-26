@@ -1037,7 +1037,10 @@ export class OcorrenciasService implements OnModuleInit {
       if (!anteriores.length) throw new NotFoundException('Lançamento não encontrado');
       if (versaoEsperada!==undefined && anteriores[0].versao!==versaoEsperada) throw new ConflictException('O lançamento mudou. Atualize os dados antes de corrigir.');
       if (anteriores[0].bloqueadoEm) throw new ConflictException('Desbloqueie o lançamento antes de editar');
-      if(anteriores[0].situacao==='APROVADO') await protegerReferenciaManual(m,contratoId,lancamentoId,'QUANTIDADE');
+      if(anteriores[0].situacao==='APROVADO') {
+        await exigirPermissaoTransacional(m,contratoId,ator,'corrigirExecucaoAprovada');
+        await protegerReferenciaManual(m,contratoId,lancamentoId,'QUANTIDADE');
+      }
       const antiga=anteriores[0].quantidade;
       const saldoAtual=await resumoMedicao(m,o);
       const reservada=['APROVADO','PENDENTE'].includes(anteriores[0].situacao)?milesimos(antiga):0n;

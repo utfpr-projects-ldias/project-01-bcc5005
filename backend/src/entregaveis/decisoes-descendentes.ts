@@ -3,7 +3,7 @@ import type { Entregavel } from './entregavel.entity.js';
 import { resumoParcelas } from '../execucao/parcelas-execucao.js';
 import { quantidadeDiretaEvidencias } from './quantidade-evidencias.js';
 
-/** Não encerrar/arquivar um pai tornando impossível decidir uma operação filha.
+/** Não concluir ou encerrar um pai tornando impossível decidir uma operação filha.
  * Ocorrências meramente planejadas não são decisões pendentes. */
 export async function possuiDecisoesDescendentesPendentes(m: EntityManager, e: Entregavel): Promise<boolean> {
   const [r] = await m.query(`SELECT EXISTS (

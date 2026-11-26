@@ -60,8 +60,8 @@ function calendarioValido(data: string): boolean {
 
 function verificarDados(etapa: Pick<Etapa, 'nome' | 'codigo' | 'inicioPrevisto' | 'terminoPrevisto'>, nomeAnterior?: string, codigoAnterior?: string | null): void {
   // Nomes históricos maiores que o novo limite não são alterados ou truncados.
-  if (!etapa.nome.trim() || (etapa.nome.length > 36 && etapa.nome !== nomeAnterior)) {
-    throw new BadRequestException('Nome da etapa é obrigatório e deve ter até 36 caracteres');
+  if (!etapa.nome.trim() || ([...etapa.nome].length > 45 && etapa.nome !== nomeAnterior)) {
+    throw new BadRequestException('Nome da etapa é obrigatório e deve ter até 45 caracteres');
   }
   if (etapa.codigo !== null && (!etapa.codigo.trim() || (etapa.codigo.length > 15 && etapa.codigo !== codigoAnterior))) {
     throw new BadRequestException('Código da etapa inválido');
@@ -293,7 +293,7 @@ export class EtapasService {
 
   private async podeFinalizarFilhos(m: EntityManager, contratoId: string, etapaId: string): Promise<boolean> {
     const filhos = await m.findBy(Entregavel, { contratoId, etapaId, arquivadoEm: IsNull() });
-    if (!filhos.some(f => f.statusExecucao === 'FINALIZADO') || filhos.some(f => f.reabertoEm || f.regularizacaoDocumentalSolicitada || !['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(f.statusExecucao ?? ''))) return false;
+    if (!filhos.some(f => f.statusExecucao === 'FINALIZADO' || Boolean(f.motivoFinalizacao)) || filhos.some(f => f.reabertoEm || f.regularizacaoDocumentalSolicitada || !['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(f.statusExecucao ?? ''))) return false;
     if (await decisoesDescendentesEtapa(m, contratoId, etapaId, filhos)) return false;
     for (const filho of filhos.filter(f => f.statusExecucao !== 'FINALIZADO')) {
       if (!(await aptidaoFisicaParaConclusao(m, filho)).apto || (filho.tipo === 'MARCO' && !filho.dataEfetivaMarco)) return false;
@@ -315,19 +315,22 @@ export class EtapasService {
       const aberta = operacional && ![StatusEtapa.CONCLUIDA,StatusEtapa.CONCLUIDO_PARCIALMENTE,StatusEtapa.ENCERRADA,StatusEtapa.FINALIZADA].includes(etapa.status);
       if (!aberta && !regularizacao) return vazia;
       const decisoesPendentes = await decisoesDescendentesEtapa(m, contratoId, etapaId);
-      if (decisoesPendentes) return { ...vazia, decisoesPendentes };
+      if (decisoesPendentes) return { ...vazia, decisoesPendentes,
+        podeSolicitarEncerramento: aberta && !etapa.conclusaoSolicitadaEm && !etapa.encerramentoSolicitadoEm,
+        podeAprovarEncerramento: aberta && Boolean(etapa.encerramentoSolicitadoEm && !etapa.conclusaoSolicitadaEm) };
       const doc = await documentacaoVerificada(m, contratoId, etapaId);
       const integral = doc && !await this.filhosInaptos(m, contratoId, etapaId, false);
+      const podeReabrirDocumentacao = aberta && !etapa.reabertoEm && doc && Boolean((await m.query(`SELECT EXISTS(SELECT 1 FROM entregaveis e JOIN vw_comprovacao_entregavel_r40 v ON v.entregavel_id=e.id WHERE e.contrato_id=$1 AND e.etapa_id=$2 AND e.arquivado_em IS NULL AND v.obrigatorias+v.ocorrencias_exigidas>0) AS possui`,[contratoId,etapaId]))[0]?.possui);
       const inaptosParcial = await this.filhosInaptos(m, contratoId, etapaId, true);
       const parcial = !doc && !inaptosParcial;
       const semPedido = !etapa.conclusaoSolicitadaEm && !etapa.encerramentoSolicitadoEm;
-      const encerramento = aberta && inaptosParcial;
+      const encerramento = aberta;
       return { podeSolicitarConclusao: semPedido && (aberta || regularizacao) && integral,
         podeSolicitarParcial: semPedido && aberta && parcial,
         podeSolicitarEncerramento: semPedido && encerramento,
         podeAprovarConclusao: Boolean(etapa.conclusaoSolicitadaEm && !etapa.encerramentoSolicitadoEm && (etapa.conclusaoParcialSolicitada ? aberta && parcial : integral)),
         podeAprovarEncerramento: Boolean(etapa.encerramentoSolicitadoEm && !etapa.conclusaoSolicitadaEm && encerramento),
-        podeFinalizar: semPedido && aberta && await this.podeFinalizarFilhos(m, contratoId, etapaId), decisoesPendentes };
+        podeFinalizar: semPedido && aberta && await this.podeFinalizarFilhos(m, contratoId, etapaId), decisoesPendentes, podeReabrirDocumentacao: semPedido && podeReabrirDocumentacao };
     });
   }
 
@@ -370,10 +373,6 @@ export class EtapasService {
       if(!etapa)throw new NotFoundException('Etapa não encontrada');
       if(etapa.arquivadoEm || (!etapa.reabertoEm && ['CONCLUIDA','CONCLUIDO_PARCIALMENTE','ENCERRADA','FINALIZADA'].includes(etapa.status)))throw new ConflictException('Etapa indisponível');
       if(etapa.encerramentoSolicitadoEm||etapa.conclusaoSolicitadaEm)throw new ConflictException('Já existe solicitação pendente');
-      if (await decisoesDescendentesEtapa(manager, contratoId, etapaId))
-        throw new ConflictException('Resolva as decisões e contribuições pendentes dos filhos antes de encerrar a etapa');
-      if(!await this.filhosInaptos(manager,contratoId,etapaId,true))
-        throw new ConflictException('Etapa integralmente elegível: solicite conclusão em vez de encerramento');
       etapa.encerramentoSolicitadoEm=new Date();etapa.encerramentoSolicitadoPor=ator.id;etapa.encerramentoMotivo=justificativa;
       const salvo=await repo.save(etapa);
       await this.auditoria.registrarNaTransacao(manager,ator,{
@@ -463,10 +462,6 @@ export class EtapasService {
       if (etapa.arquivadoEm) throw new ConflictException('Reative a etapa antes de encerrar');
       if (['CONCLUIDA','CONCLUIDO_PARCIALMENTE','ENCERRADA','FINALIZADA'].includes(etapa.status) && !etapa.reabertoEm)
         throw new ConflictException('Etapa já finalizada; uma nova decisão exige reabertura');
-      if (await decisoesDescendentesEtapa(manager, contratoId, etapaId))
-        throw new ConflictException('Resolva as decisões e contribuições pendentes dos filhos antes de encerrar a etapa');
-      if (!await this.filhosInaptos(manager, contratoId, etapaId, true))
-        throw new ConflictException('Etapa agora elegível à conclusão. Devolva a solicitação de encerramento e solicite conclusão.');
       const anterior = { status: etapa.status, reabertoEm: etapa.reabertoEm, ...solicitacaoSnapshot(etapa) };
       etapa.status = StatusEtapa.ENCERRADA;
       etapa.reabertoEm = null;
@@ -625,17 +620,7 @@ export class EtapasService {
       if (!etapa) throw new NotFoundException('Etapa não encontrada');
       if (Boolean(etapa.arquivadoEm) === arquivar) throw new ConflictException('Etapa já está neste estado de arquivamento');
       const anterior = { arquivadoEm: etapa.arquivadoEm, sequencia: etapa.sequencia };
-      if (arquivar && !etapa.reabertoEm && [StatusEtapa.CONCLUIDA, StatusEtapa.CONCLUIDO_PARCIALMENTE, StatusEtapa.ENCERRADA, StatusEtapa.FINALIZADA].includes(etapa.status))
-        throw new ConflictException('Etapa concluída: reabra antes de arquivar');
-      if (arquivar && !etapa.reabertoEm) {
-        const [exigencias] = await manager.query(`SELECT EXISTS(SELECT 1 FROM entregaveis e JOIN vw_comprovacao_entregavel_r40 v ON v.entregavel_id=e.id
-          WHERE e.contrato_id=$1 AND e.etapa_id=$2 AND e.arquivado_em IS NULL AND v.obrigatorias+v.ocorrencias_exigidas>0) AS possui`,[contratoId,etapaId]);
-        if (exigencias?.possui && await documentacaoVerificada(manager, contratoId, etapaId))
-          throw new ConflictException('Etapa com documentação comprovada: reabra antes de arquivar');
-      }
-      if (arquivar && await decisoesDescendentesEtapa(manager, contratoId, etapaId))
-        throw new ConflictException('Decida as solicitações e contribuições dos filhos antes de arquivar a etapa');
-      if(etapa.conclusaoSolicitadaEm||etapa.encerramentoSolicitadoEm)throw new ConflictException('Resolva a solicitação da etapa antes de alterar o arquivamento');
+      // Arquivar pausa o trabalho sem decidir solicitações ou modificar seu estado.
       if(!arquivar&&contrato.modoCalculo==='PONDERADO'){
         const [peso]=await manager.query(`SELECT COALESCE(SUM(e.peso),0)>100 AS excede FROM entregaveis e JOIN etapas t ON t.id=e.etapa_id AND t.contrato_id=e.contrato_id WHERE e.contrato_id=$1 AND e.arquivado_em IS NULL AND (t.arquivado_em IS NULL OR t.id=$2)`,[contratoId,etapaId]);
         if(peso?.excede)throw new ConflictException('Reativar esta etapa ultrapassaria 100% dos pesos do contrato. Redistribua os pesos ativos primeiro.');

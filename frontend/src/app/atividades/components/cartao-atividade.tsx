@@ -1,18 +1,21 @@
 'use client';
+import { BotaoExcluirModal, BotaoAcaoModal, BotaoEditarModal } from '@/app/components/botoes-modal';
+import { modalidadeEncerramento } from '@/lib/modalidade-encerramento';
 import { consultarCompartilhada } from '@/lib/atividades-compartilhadas';
+import { BotaoVinculos } from '@/app/components/botao-vinculos';
 import { ContadoresVinculos } from '@/app/components/contadores-vinculos';
 import { EtiquetaAtraso } from '@/app/components/etiqueta-atraso';
 
 
 import { IconeReabertura } from '@/app/components/icones-ciclo-vida';
 
-import { BotaoAcaoModal } from '@/app/components/botoes-modal';
+
 import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useRepositorioConsultasOpcional, useConsulta } from '@/app/components/provedor-consultas';
 import { ModalEtapa } from '@/app/contratos/components/modal-etapa';
 import { MenuAcoesObjeto } from '@/app/components/menu-acoes-objeto';
-import { BotaoEditarModal } from '@/app/components/botoes-modal';
+
 import { IconeEngrenagem } from '@/app/components/icone-engrenagem';
 import { useMeuPerfil } from '@/hooks/use-meu-perfil';
 import { estadoContextualContrato } from '@/lib/estado-visivel-contrato';
@@ -108,10 +111,10 @@ export function PreviaContrato({ contratoId, fechar, foco, destinoInicial }: { c
   const regularizacaoElegivel = Boolean(contrato?.status === 'CONCLUIDO_PARCIALMENTE' && !contrato.arquivadoEm && !contrato.conclusaoSolicitadaEm && elegibilidade.dados?.apto && podeSolicitar);
   const arquivoPermitido = Boolean(admin && contrato && !contrato.arquivadoEm && !['SUSPENSO','CANCELADO'].includes(contrato.status) && !contrato.conclusaoSolicitadaEm && !contrato.encerramentoSolicitado);
   const enviarAcao = (acao: string) => iframeRef.current?.contentWindow?.postMessage({tipo:'pi:acao-contrato',contratoId,acao},window.location.origin);
-  const acaoReabrir = contrato?.conclusaoSolicitadaEm ? null : contrato?.status === 'CANCELADO' ? 'reverter-cancelamento'
+  const acaoReabrir = contrato?.arquivadoEm ? 'reativar' : contrato?.conclusaoSolicitadaEm ? null : contrato?.status === 'CANCELADO' ? 'reverter-cancelamento'
     : contrato?.status === 'SUSPENSO' ? 'retomar'
     : contrato && ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','ENCERRADO'].includes(contrato.status) ? 'reabrir' : null;
-  const podeReabrir = acaoReabrir === 'reverter-cancelamento' ? permitido('reverterCancelamentoContrato')
+  const podeReabrir = acaoReabrir === 'reativar' ? admin : acaoReabrir === 'reverter-cancelamento' ? permitido('reverterCancelamentoContrato')
     : acaoReabrir === 'retomar' ? permitido('retomarContrato')
     : acaoReabrir === 'reabrir' ? permitido('reabrirContrato') : false;
   const estadoModalContrato = estadoContextualContrato(contrato, Boolean(contrato?.conclusaoSolicitadaEm));
@@ -120,6 +123,7 @@ export function PreviaContrato({ contratoId, fechar, foco, destinoInicial }: { c
   const corpoRef = useRef<HTMLDivElement>(null);
   const [compacto, setCompacto] = useState(false);
   const [painelAberto, setPainelAberto] = useState(false);
+  const [etapaSobreposta, setEtapaSobreposta] = useState(false);
   const modoPainelRef = useRef({compacto, aberto:painelAberto});
   useLayoutEffect(() => { modoPainelRef.current = {compacto, aberto:painelAberto}; },[compacto,painelAberto]);
   const devolverFocoPainel = useRef(false);
@@ -204,7 +208,14 @@ export function PreviaContrato({ contratoId, fechar, foco, destinoInicial }: { c
         evento.preventDefault(); evento.stopImmediatePropagation();
         if (modoPainelRef.current.compacto && modoPainelRef.current.aberto) fecharPainelLateral(); else fecharPainel();
       };
-      const mouse=(evento:MouseEvent)=>{if(evento.button===3||evento.button===4){evento.preventDefault();fecharPainel();}};
+      const mouse=(evento:MouseEvent)=>{
+        if(evento.button!==3 || evento.defaultPrevented)return;
+        evento.preventDefault(); evento.stopImmediatePropagation();
+        if(janela.document.querySelector('[role="dialog"]:not([aria-hidden="true"]), [data-pi-detalhe-interno]')) {
+          (janela.document.activeElement??janela.document.body).dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));return;
+        }
+        fecharPainel();
+      };
       const fecharMenusPai=()=>window.dispatchEvent(new Event('pi:fechar-menus'));
       janela.addEventListener('keydown',teclado);janela.addEventListener('auxclick',mouse);janela.addEventListener('pointerdown',fecharMenusPai,true);
       limparEscutasIframe.current=()=>{try{janela.removeEventListener('keydown',teclado);janela.removeEventListener('auxclick',mouse);janela.removeEventListener('pointerdown',fecharMenusPai,true);}catch{/* documento substituído */}};
@@ -214,8 +225,8 @@ export function PreviaContrato({ contratoId, fechar, foco, destinoInicial }: { c
     function receber(evento: MessageEvent) {
       if (evento.origin !== window.location.origin || evento.source !== iframeRef.current?.contentWindow) return;
       if (evento.data?.contratoId !== contratoId) return;
-      if (evento.data?.tipo === 'pi:evidencia-compartilhada-atualizada') {
-        sincronizarEvidenciaCompartilhada(cacheContrato);
+      if (evento.data?.tipo === 'pi:etapa-sobreposta' && typeof evento.data.aberta === 'boolean') {
+        setEtapaSobreposta(evento.data.aberta);
         return;
       }
       if (evento.data?.tipo === 'pi:estrutura-operacional-atualizada') {
@@ -225,6 +236,10 @@ export function PreviaContrato({ contratoId, fechar, foco, destinoInicial }: { c
         cacheContrato?.invalidar(['etapas', 'contrato', contratoId]);
         cacheContrato?.invalidar(['entregaveis', 'contrato', contratoId]);
         return;
+      }
+      if (evento.data?.tipo === 'pi:contrato-excluido') {
+        if (cacheContrato) sincronizarContrato(cacheContrato, contratoId);
+        fecharAtual.current(); return;
       }
       if (evento.data?.tipo !== 'pi:contrato-atualizado') return;
       const atualizado = evento.data?.contrato as Contrato | undefined;
@@ -252,7 +267,16 @@ export function PreviaContrato({ contratoId, fechar, foco, destinoInicial }: { c
       } catch { /* iframe da mesma origem em operação normal */ }
       fecharPainel();
     };
-    const auxilio = (e: MouseEvent) => { if (e.button === 3 || e.button === 4) { e.preventDefault(); fecharPainel(); } };
+    const auxilio = (e: MouseEvent) => {
+      if (e.button !== 3 || e.defaultPrevented) return;
+      e.preventDefault();
+      try {const doc=iframeRef.current?.contentDocument;
+        if(doc?.querySelector('[role="dialog"]:not([aria-hidden="true"]), [data-pi-detalhe-interno]')) {
+          (doc.activeElement??doc.body).dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));return;
+        }
+      } catch { /* iframe indisponível */ }
+      fecharPainel();
+    };
     const marcador = `contrato-${contratoId}-${Date.now()}`;
     marcadorHistorico.current = marcador;
     window.history.pushState({ ...(window.history.state ?? {}), __previaContrato: marcador }, '', window.location.href);
@@ -288,30 +312,30 @@ export function PreviaContrato({ contratoId, fechar, foco, destinoInicial }: { c
   const avanco = progresso.progresso?.avanco;
   const cobertura = planejamento.indicadores?.documentacaoDisponivel ? planejamento.indicadores.comprovacao : undefined;
   const drawerAtivo = compacto && painelAberto;
-  return createPortal(<div className="fixed inset-0 z-[250] bg-black/65" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) fechar(); }}>
+  return createPortal(<div data-pi-etapa-sobreposta={etapaSobreposta || undefined} className="fixed inset-0 z-[250] bg-black/65" role="presentation" onMouseDown={e => { if (!etapaSobreposta && e.target === e.currentTarget) fechar(); }}>
     <section data-pi-consulta-direta={Boolean(destinoInicial)||undefined} aria-label={destinoInicial?.entregavelId?"Detalhes do entregável":destinoInicial?"Detalhes da etapa":"Detalhes do contrato"} role="dialog" aria-modal="true" data-tec08-estado={estadoModalContrato}
       className="pi-modal-contrato-entrada pi-contrato-contextual absolute inset-y-2 right-2 left-2 flex min-w-0 flex-col overflow-hidden rounded-2xl border bg-background shadow-[0_20px_90px_rgba(0,0,0,0.6)] sm:inset-y-4 sm:right-4 sm:left-4">
-      <header inert={drawerAtivo || undefined} className="sticky top-0 z-10 flex shrink-0 items-center justify-between gap-3 border-b bg-background px-3 py-3 sm:px-5">
+      <header inert={drawerAtivo || etapaSobreposta || undefined} className="sticky top-0 z-10 flex shrink-0 items-center justify-between gap-3 border-b bg-background px-3 py-3 sm:px-5">
         <div className="flex min-w-0 items-center gap-3"><span className="rounded-lg border p-2 pi-contrato-acento"><IconeContrato /></span>
           <div className="min-w-0"><h2 className="truncate font-semibold">{contrato?.codigoPublico ? `Contrato ${contrato.codigoPublico}` : 'Detalhes do contrato'}</h2>
             <p className="min-w-0 truncate text-xs text-foreground/65">{contrato?.objeto ?? 'Visão contextual do contrato'}</p></div></div>
         <div className="flex shrink-0 items-center justify-end gap-2">
           {acaoReabrir && podeReabrir ?
-            <div className="flex flex-wrap items-center justify-end gap-1"><button type="button" className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-slate-400/40 bg-slate-500/10 px-3 text-xs font-semibold text-foreground hover:bg-slate-500/20 focus-visible:outline-2 focus-visible:outline-green-500"
-              onClick={() => enviarAcao(acaoReabrir)}><IconeReabertura className="h-4 w-4 text-green-500" /> Reabrir</button>
+            <div className="flex flex-wrap items-center justify-end gap-1"><button type="button" className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-slate-400/40 bg-slate-500/10 px-3 text-xs font-semibold text-foreground hover:bg-slate-500/20 focus-visible:outline-2 focus-visible:outline-brand-neon"
+              disabled={!conteudoPronto} onClick={() => enviarAcao(acaoReabrir)}><IconeReabertura className="h-4 w-4" /> {acaoReabrir === 'reativar' ? 'Reativar' : 'Reabrir'}</button>
+              {acaoReabrir === 'reativar' && <BotaoExcluirModal rotulo="Excluir contrato arquivado" disabled={!conteudoPronto} onClick={() => enviarAcao('excluir')}/>}
               {regularizacaoElegivel && <BotaoAcaoModal intencao="solicitar-conclusao" onClick={()=>enviarAcao('solicitar-conclusao')}>Solicitar regularização documental</BotaoAcaoModal>}</div>
             : acaoReabrir === 'reabrir' && regularizacaoElegivel ? <BotaoAcaoModal intencao="solicitar-conclusao" onClick={()=>enviarAcao('solicitar-conclusao')}>Solicitar regularização documental</BotaoAcaoModal>
-            : !acaoReabrir && contrato?.conclusaoSolicitadaEm ? <div className="flex items-center gap-2" aria-label={contrato.encerramentoSolicitado ? 'Encerramento do contrato pendente' : 'Conclusão do contrato pendente'}>
+            : !acaoReabrir && contrato?.conclusaoSolicitadaEm ? <div className="flex items-center gap-2" data-pi-decisao-pendente aria-label={contrato.encerramentoSolicitado ? 'Encerramento do contrato pendente' : 'Conclusão do contrato pendente'}>
                 <button type="button" className="rounded-lg border border-red-500/60 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-500/20 dark:text-red-300 disabled:opacity-35"
-                  disabled={!permitido('concluirContrato')} onClick={()=>enviarAcao('devolver-conclusao')}>Rejeitar</button>
+                  disabled={!permitido('concluirContrato')} onClick={()=>enviarAcao('devolver-conclusao')}>Cancelar</button>
                 <button type="button" className="rounded-lg border border-green-600/60 bg-green-600/20 px-3 py-2 text-xs font-semibold text-green-800 hover:bg-green-600/30 dark:text-green-200 disabled:opacity-35"
                   disabled={!permitido('concluirContrato')} onClick={()=>enviarAcao('aprovar-conclusao')}>Aprovar</button>
               </div>
             : !acaoReabrir && <MenuAcoesObjeto rotulo="Fechar" disabled={!contrato} pendenteConclusao={Boolean(contrato?.conclusaoSolicitadaEm)}>
             <BotaoAcaoModal intencao="suspender" disabled={!encerramentoElegivel || !permitido('suspenderContrato')} onClick={() => enviarAcao('suspender')}>⏸ Suspender contrato</BotaoAcaoModal>
             <BotaoAcaoModal intencao="cancelar" disabled={!encerramentoElegivel || !permitido('cancelarContrato')} onClick={() => enviarAcao('cancelar')}>✕ Cancelar contrato</BotaoAcaoModal>
-            <BotaoAcaoModal intencao="encerrar" disabled={!encerramentoElegivel || elegibilidade.dados?.podeEncerrarAntecipadamente === false || Boolean(elegibilidade.dados?.apto) || !permitido('encerrarContrato')} onClick={() => enviarAcao('encerrar')}>Solicitar encerramento</BotaoAcaoModal>
-            {elegibilidade.dados?.podeFinalizar && permitido('concluirContrato') && <BotaoAcaoModal intencao="encerrar" disabled={!encerramentoElegivel} onClick={() => enviarAcao('finalizar')}>Solicitar finalização administrativa</BotaoAcaoModal>}
+            <BotaoAcaoModal intencao="encerrar" disabled={!encerramentoElegivel || !modalidadeEncerramento(permitido('encerrarContrato'),Boolean(elegibilidade.dados?.podeFinalizar && permitido('concluirContrato')))} onClick={() => {const acao=modalidadeEncerramento(permitido('encerrarContrato'),Boolean(elegibilidade.dados?.podeFinalizar && permitido('concluirContrato')));if(acao)enviarAcao(acao);}}>Solicitar encerramento</BotaoAcaoModal>
             <BotaoAcaoModal intencao="solicitar-conclusao" disabled={!encerramentoElegivel || !!contrato?.conclusaoSolicitadaEm || !elegibilidade.dados?.apto || !(admin || acessoContrato.dados?.permissoes?.editarContrato)}
               title={elegibilidade.dados?.pendencias?.[0] ?? 'Solicitar avaliação de conclusão integral'}
               onClick={() => enviarAcao('solicitar-conclusao')}>
@@ -335,7 +359,7 @@ export function PreviaContrato({ contratoId, fechar, foco, destinoInicial }: { c
           <iframe ref={iframeRef} title="Conteúdo do contrato" src={`/contratos/painel/${encodeURIComponent(contratoId)}?${new URLSearchParams({painel:"1",...(destinoInicial?{consultaDireta:"1",etapa:destinoInicial.etapaId,...(destinoInicial.entregavelId?{entregavel:destinoInicial.entregavelId}:{})}:{})}).toString()}`}
             onLoad={iframeCarregado} loading="eager" className={`absolute inset-0 h-full w-full border-0 bg-background transition-opacity duration-150 ${conteudoPronto ? 'opacity-100' : 'opacity-0'}`} />
         </div>
-        <PainelLateralContrato compacto={compacto} aberto={painelAberto} onFechar={()=>fecharPainelLateral()}>
+        <PainelLateralContrato bloqueado={etapaSobreposta} compacto={compacto} aberto={painelAberto} onFechar={()=>fecharPainelLateral()}>
           <section aria-label="Planejamento do contrato" data-pi-planejamento-lateral className="space-y-2 px-1 py-1"><div className="flex items-center justify-end gap-2">
             <div className="flex shrink-0 items-center gap-1">
             {(admin || acessoContrato.dados?.permissoes?.editarContrato || acessoContrato.dados?.permissoes?.configurarPesos) && <MenuAcoesObjeto rotulo="Configurações do contrato" somenteIcone icone={<IconeEngrenagem tamanho={20}/>}>
@@ -383,7 +407,7 @@ function ContadoresAtividade({grupoId,itens}:{grupoId?:string|null;itens:{rotulo
 }
 function ContadoresGrupoAtividade({grupoId,itens}:{grupoId:string;itens:{rotulo:string;total:number|null}[]}) {
  const consulta=useConsulta(['atividades','compartilhada',grupoId],()=>consultarCompartilhada(grupoId),{validadeMs:30000});
- return <ContadoresVinculos itens={itens.map(i=>i.rotulo==='Contratos'?{...i,total:consulta.dados?.total??null}:i)}/>;
+ return <ContadoresVinculos itens={itens.map((i,indice)=>({...i,total:indice===0?consulta.dados?.total??null:indice===1?consulta.dados?.vinculos?.entregaveis??null:indice===2?consulta.dados?.vinculos?.ocorrencias??null:consulta.dados?.vinculos?.evidencias??null}))}/>;
 }
 
 /** O MESMO cartão para diário, contrato, modal e entregável; ações autorizadas pela API. */
@@ -425,6 +449,7 @@ export function CartaoAtividade({ atividade, contratoId, permissoes, compacto = 
     setOcupado(true); setErro('');
     try {
       await transicionarAtividadeApi(contratoId, atividade.id, pendente, motivoValidado.data);
+      if(atividade.atividadeCompartilhadaId && ['aprovar-conclusao','solicitar-conclusao'].includes(pendente))sincronizarEvidenciaCompartilhada(cache,contratoId);
       cache?.invalidar(['atividades', contratoId]);
       // Verificar a última atividade pode concluir entregável e etapa no backend.
       // Atualizar também os detalhes, cards e resumos documentais relacionados.
@@ -440,7 +465,7 @@ export function CartaoAtividade({ atividade, contratoId, permissoes, compacto = 
     } catch (e) { setErro(e instanceof Error ? e.message : 'Não foi possível executar a operação.'); }
     finally { setOcupado(false); }
   }
-  const contadores = [{rotulo:'Contratos',total:atividade.atividadeCompartilhadaId?null:1},{rotulo:atividade.atividadeCompartilhadaId?'Entregáveis neste contrato':'Entregáveis',total:new Set(atividade.entregaveis.map(e=>e.id)).size},{rotulo:atividade.atividadeCompartilhadaId?'Ocorrências neste contrato':'Ocorrências',total:new Set([...(atividade.ocorrencias??[]).map(o=>o.id),...(atividade.ocorrenciaIds??[]),...(atividade.ocorrenciaId?[atividade.ocorrenciaId]:[])]).size},{rotulo:'Evidências',total:atividade.comprovantesVinculados??null}];
+  const contadores = [{rotulo:'Contratos',total:atividade.atividadeCompartilhadaId?null:1},{rotulo:'Entregáveis',total:new Set(atividade.entregaveis.map(e=>e.id)).size},{rotulo:'Ocorrências',total:new Set([...(atividade.ocorrencias??[]).map(o=>o.id),...(atividade.ocorrenciaIds??[]),...(atividade.ocorrenciaId?[atividade.ocorrenciaId]:[])]).size},{rotulo:'Evidências',total:atividade.comprovantesVinculados??null}];
   function abrirDetalheCard() {
     // Abre o diálogo real, sem camada intermediária de carregamento.
     setDetalheAberto(true);
@@ -501,7 +526,7 @@ export function CartaoAtividade({ atividade, contratoId, permissoes, compacto = 
             if (onEditar) onEditar(atividade, e.currentTarget);
             else { setGatilhoEdicao(e.currentTarget); setEdicaoAberta(true); }
           }} />}
-        {(['solicitar-conclusao','reabrir','arquivar','reativar','excluir'] as const).some(acaoDisponivel) && <MenuAcoesObjeto rotulo={estado === 'VERIFICADA' || estado === 'ARQUIVADA' ? 'Reabrir' : 'Fechar'}
+        {(['solicitar-conclusao','reabrir','arquivar','reativar','excluir'] as const).some(acaoDisponivel) && <MenuAcoesObjeto rotulo={estado === 'ARQUIVADA' ? 'Reativar' : estado === 'VERIFICADA' ? 'Reabrir' : 'Fechar'}
           pendenteConclusao={estado === 'PENDENTE_CONCLUSAO'}
           acaoDireta={estado === 'VERIFICADA' && acaoDisponivel('reabrir') ? () => solicitar('reabrir', null)
             : estado === 'ARQUIVADA' && acaoDisponivel('reativar') ? () => solicitar('reativar', null) : undefined}>
@@ -510,7 +535,7 @@ export function CartaoAtividade({ atividade, contratoId, permissoes, compacto = 
               onClick={e => solicitar(acao, e.currentTarget)}>{acao !== 'solicitar-conclusao' && acao !== 'reabrir' ? <Icone nome={acao}/> : null}{ROTULO[acao]}</BotaoAcaoModal>)}
         </MenuAcoesObjeto>}
         {estado === 'VERIFICADA' && acaoDisponivel('arquivar') && acaoDisponivel('reabrir') && <button type="button" onClick={() => solicitar('arquivar', null)} title="Arquivar atividade verificada" aria-label="Arquivar atividade verificada" className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-orange-500/45 bg-orange-500/10 text-orange-700 dark:text-orange-300 hover:bg-orange-500/20"><Icone nome="arquivar" /></button>}
-        {estado === 'ARQUIVADA' && acaoDisponivel('excluir') && <button type="button" onClick={() => solicitar('excluir', null)} title="Excluir atividade arquivada" aria-label="Excluir atividade arquivada" className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20">×</button>}
+        {estado === 'ARQUIVADA' && acaoDisponivel('excluir') && <BotaoExcluirModal rotulo="Excluir atividade arquivada" onClick={() => solicitar('excluir', null)}/>}
       </>}>
       <div className="space-y-4 text-sm" data-testid="detalhe-atividade-modal">
         {!!atividade.contribuicoesDiario?.length&&<details className="rounded-lg border border-current/15 p-3"><summary className="cursor-pointer font-medium">Contribuições físicas ({atividade.contribuicoesDiario.length})</summary><div className="mt-2 divide-y divide-current/10">{atividade.contribuicoesDiario.map((c,i)=><div key={`${c.entregavelId}:${c.ocorrenciaId}:${i}`} className="flex min-w-0 items-center justify-between gap-2 py-2"><span className="min-w-0 truncate" title={c.destino}>{c.destino}</span><strong className="shrink-0 tabular-nums">{c.valor.toLocaleString('pt-BR',{maximumFractionDigits:3})}{c.unidade==='%'?'%':` ${c.unidade}`} · {c.reconhecida?'Reconhecida':c.situacao==='PENDENTE'?'Pendente':'Não reconhecida'}</strong></div>)}</div></details>}
@@ -526,7 +551,7 @@ export function CartaoAtividade({ atividade, contratoId, permissoes, compacto = 
           <h3 className="text-sm font-semibold">Execução física</h3>
           {atividade.contribuicoesDiario.length===0?<p className="text-xs text-foreground/65">Sem contribuição física adicional.</p>:<ul className="divide-y divide-slate-500/15">{atividade.contribuicoesDiario.map((c,i)=><li key={`${c.entregavelId}:${c.ocorrenciaId}:${i}`} className="flex flex-wrap items-center justify-between gap-2 py-2"><div className="min-w-0"><p className="break-words font-medium">{c.destino}</p><p className="text-xs text-foreground/65">{c.reconhecida?'Reconhecida':c.situacao==='PENDENTE'?'Aguardando reconhecimento':'Não reconhecida'}{c.ocorrenciaId&&` · ${atividade.ocorrencias?.find(o=>o.id===c.ocorrenciaId)?.titulo??'Ocorrência vinculada'}`}</p></div><strong className="tabular-nums">{c.reconhecida?'+':''}{c.valor.toLocaleString('pt-BR',{maximumFractionDigits:3})}{c.unidade==='%'?'%':` ${c.unidade}`}</strong></li>)}</ul>}
         </section>}
-        <button type="button" className="pi-atividade-vinculos-resumo" onClick={()=>setListaEntregaveisAberta(true)}><span className="font-semibold">Vínculos</span><ContadoresAtividade grupoId={atividade.atividadeCompartilhadaId} itens={contadores}/><span aria-hidden="true">›</span></button>
+        <BotaoVinculos onClick={()=>setListaEntregaveisAberta(true)}><ContadoresAtividade grupoId={atividade.atividadeCompartilhadaId} itens={contadores}/></BotaoVinculos>
 
 
       </div>
