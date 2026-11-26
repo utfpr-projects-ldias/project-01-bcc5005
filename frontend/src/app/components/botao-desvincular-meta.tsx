@@ -1,0 +1,3 @@
+export function BotaoDesvincularMeta({onClick}:{onClick:()=>void}) {
+  return <button type="button" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-current/20 hover:bg-current/10 focus-visible:outline-2" title="Desvincular deste checklist" aria-label="Desvincular deste checklist" onClick={onClick}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m8 16 8-8M7 14l-2 2a4 4 0 0 0 5 6l3-3M17 10l2-2a4 4 0 0 0-5-6l-3 3M3 3l3 3m12 12 3 3"/></svg></button>;
+}

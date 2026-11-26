@@ -18,7 +18,6 @@ import { permissoesEfetivas } from '../autorizacao/permissoes-granulares.js';
 import type { UsuarioAutenticado } from '../autorizacao/usuario-autenticado.js';
 import { agregarFisico, arredondarFisico } from './motor-progresso.js';
 import { aptidaoFisicaParaConclusao } from '../entregaveis/conclusao-fisica.js';
-import { dataEfetivaValida } from '../common/data-civil.js';
 import type { AtualizarPesosDto } from './pesos.dto.js';
 import type { AtualizarPesoIndividualDto } from './peso-individual.dto.js';
 import type { AtualizarExecucaoDto } from './execucao.dto.js';
@@ -53,9 +52,9 @@ export class ExecucaoService {
     const configuracoes = idsAtivos.length ? await m.findBy(ConfiguracaoOcorrencias, { contratoId, entregavelId: In(idsAtivos) }) : [];
     const entregaveis = await Promise.all(ativos.map(async e => {
       const ocorrencias = agenda.filter(o => o.entregavelId === e.id);
-      const { previsto, realizado, fonte, percentualCalculado, statusEntregavel, atrasado, finalizadoComAtraso } = await resumirFisicoEntregavel(m, e, ocorrencias, configuracoes.find(cfg => cfg.entregavelId === e.id));
+      const { previsto, realizado, fonte, percentualCalculado, statusEntregavel, atrasado, finalizadoComAtraso, acompanhamento } = await resumirFisicoEntregavel(m, e, ocorrencias, configuracoes.find(cfg => cfg.entregavelId === e.id));
       const etapa = etapas.find(et => et.id === e.etapaId);
-      return { entregavelId: e.id, nome: e.nome, tipo: e.tipo, statusEntregavel, atrasado, finalizadoComAtraso, regularizacaoDocumentalSolicitada: Boolean(e.regularizacaoDocumentalSolicitada), reabertoEm: e.reabertoEm ?? null, realizado, previsto, fonte,
+      return { entregavelId: e.id, nome: e.nome, tipo: e.tipo, statusEntregavel, atrasado, finalizadoComAtraso, regularizacaoDocumentalSolicitada: Boolean(e.regularizacaoDocumentalSolicitada), reabertoEm: e.reabertoEm ?? null, realizado, previsto, fonte, ...(acompanhamento?{acompanhamento}:{}),
         percentualExecucao: percentualCalculado == null ? null : arredondarFisico(percentualCalculado), pesoOperacional: e.peso,
         dataEfetivaMarco: e.dataEfetivaMarco ?? null, inicioPrevisto: e.inicioPrevisto, terminoPrevisto: e.terminoPrevisto,
         situacaoAdministrativa: statusEntregavel,
@@ -231,10 +230,25 @@ export class ExecucaoService {
       if (!e || e.arquivadoEm) throw new NotFoundException('Entregável indisponível');
       const etapa = await m.findOneBy(Etapa, { id: e.etapaId, contratoId });
       if (!etapa || etapa.arquivadoEm || etapa.conclusaoSolicitadaEm || etapa.encerramentoSolicitadoEm || ['ENCERRADA','CONCLUIDA','CONCLUIDO_PARCIALMENTE','FINALIZADA'].includes(etapa.status) || ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? '')) throw new ConflictException('Etapa indisponível para execução');
+      if(e.tipo==='CONTINUO'){
+        const justificativa=dto.justificativaOperacional?.trim();
+        if(typeof dto.percentualManual!=='number'||!Number.isFinite(dto.percentualManual)||dto.percentualManual<0||dto.percentualManual>=100||!justificativa||justificativa.length<15||justificativa.length>500||dto.quantidadeRealizada!==undefined||dto.dataEfetivaMarco!==undefined)throw new ConflictException('O Contínuo exige reconhecimento operacional justificado, inferior a 100%. A conclusão reconhece o cumprimento integral.');
+        if(ator.perfil!=='ADMINISTRADOR'){
+          const v=await m.findOneBy(PermissaoContrato,{contratoId,usuarioId:ator.id});
+          if(!v||!permissoesEfetivas(ator.perfil,v.podeEditar,v.permissoesDetalhadas).concluirEntregaveis)throw new ForbiddenException('Sem permissão de reconhecimento operacional.');
+        }
+        const antes=e.percentualExecucao;
+        e.percentualExecucao=dto.percentualManual.toFixed(2);
+        await m.save(Entregavel,e);
+        await this.auditoria.registrarNaTransacao(m,ator,{acao:AcaoAuditoria.ENTREGAVEL_EXECUCAO_ATUALIZADA,entidadeTipo:'ENTREGAVEL',entidadeId:e.id,dadosAnteriores:{percentualExecucao:antes},dadosPosteriores:{percentualExecucao:e.percentualExecucao,criterioConclusao:e.criterioConclusao,justificativaOperacional:justificativa}});
+        if(dto.percentualManual>0)await iniciarHierarquiaOperacional(m,this.auditoria,ator,contratoId,id);
+        return this.resumo(m,contratoId);
+      }
+      if(dto.justificativaOperacional!==undefined)throw new BadRequestException('Reconhecimento operacional é exclusivo do Contínuo.');
       const antes = { percentualExecucao: e.percentualExecucao, quantidadeRealizada: e.quantidadeRealizada, dataEfetivaMarco: e.dataEfetivaMarco };
       if (Object.values(dto).filter(v => v !== undefined).length !== 1) throw new BadRequestException('Informe somente o campo físico do tipo de entregável');
       if (e.execucoesIntegradas && dto.percentualManual !== undefined) throw new ConflictException('Utilize os lançamentos da aba Geral para alterar a execução integrada.');
-      if ((e.tipo === 'UNICO' || e.tipo === 'CONTINUO') && typeof dto.percentualManual === 'number' && Number.isFinite(dto.percentualManual) && dto.percentualManual >= 0 && dto.percentualManual <= 100) e.percentualExecucao = dto.percentualManual.toFixed(2);
+      if (e.tipo === 'UNICO' && typeof dto.percentualManual === 'number' && Number.isFinite(dto.percentualManual) && dto.percentualManual >= 0 && dto.percentualManual <= 100) e.percentualExecucao = dto.percentualManual.toFixed(2);
       else if (e.tipo === 'QUANTITATIVO' && dto.quantidadeRealizada !== undefined) {
         if(e.quantidadeDiretaIntegrada)throw new ConflictException('Utilize as atividades ou evidências de execução direta, preservando a rastreabilidade.');
         const quantidade = dto.quantidadeRealizada;
@@ -244,7 +258,7 @@ export class ExecucaoService {
         if (ocorrencias > 0)
           throw new ConflictException('Este entregável já é medido por ocorrências. Registre nelas a execução para não contar duas vezes.');
         e.quantidadeRealizada = quantidade;
-      } else if (e.tipo === 'MARCO' && typeof dto.dataEfetivaMarco === 'string' && dataEfetivaValida(dto.dataEfetivaMarco)) e.dataEfetivaMarco = dto.dataEfetivaMarco;
+      } else if (e.tipo === 'MARCO' && dto.dataEfetivaMarco !== undefined) throw new ConflictException('A data efetiva do Marco é registrada na aprovação da conclusão.');
       else throw new BadRequestException('Campo de execução incompatível ou inválido');
       await m.save(Entregavel, e);
       await this.auditoria.registrarNaTransacao(m, ator, { acao: AcaoAuditoria.ENTREGAVEL_EXECUCAO_ATUALIZADA, entidadeTipo: 'ENTREGAVEL', entidadeId: e.id, dadosAnteriores: antes,

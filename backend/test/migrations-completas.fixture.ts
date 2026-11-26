@@ -1,3 +1,9 @@
+import { FrequenciaAcompanhamentoContinuo1798340000000 } from '../src/database/migrations/1798340000000-FrequenciaAcompanhamentoContinuo.js';
+import { ExecucaoManualMetaMarco1798330000000 } from '../src/database/migrations/1798330000000-ExecucaoManualMetaMarco.js';
+import { ConfirmacaoContinua1798320000000 } from '../src/database/migrations/1798320000000-ConfirmacaoContinua.js';
+import { AcompanhamentoContinuo1798310000000 } from '../src/database/migrations/1798310000000-AcompanhamentoContinuo.js';
+import { IntegridadeVinculoMetaEvidencia1798300000000 } from '../src/database/migrations/1798300000000-IntegridadeVinculoMetaEvidencia.js';
+import { MetasMarcoPonderadas1798290000000 } from '../src/database/migrations/1798290000000-MetasMarcoPonderadas.js';
 import { RastreabilidadeMedicaoB071798280000000 } from '../src/database/migrations/1798280000000-RastreabilidadeMedicaoB07.js';
 import { IntegridadeReferenciasExecucaoB011798270000000 } from '../src/database/migrations/1798270000000-IntegridadeReferenciasExecucaoB01.js';
 import { IntegridadeDocumentalB091798260000000 } from '../src/database/migrations/1798260000000-IntegridadeDocumentalB09.js';
@@ -153,4 +159,10 @@ export const migrationsCompletas = [
   IntegridadeDocumentalB091798260000000,
   IntegridadeReferenciasExecucaoB011798270000000,
   RastreabilidadeMedicaoB071798280000000,
+  MetasMarcoPonderadas1798290000000,
+  IntegridadeVinculoMetaEvidencia1798300000000,
+  AcompanhamentoContinuo1798310000000,
+  ConfirmacaoContinua1798320000000,
+  ExecucaoManualMetaMarco1798330000000,
+  FrequenciaAcompanhamentoContinuo1798340000000,
 ];

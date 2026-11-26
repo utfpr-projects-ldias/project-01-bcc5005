@@ -1,3 +1,6 @@
+import type { ConfirmacaoContinuo } from '../execucao/acompanhamento-continuo.js';
+import type { SolicitarConclusaoDto } from './dto/solicitar-conclusao.dto.js';
+import { avaliarMetasMarco } from '../metas-marco/metas-marco-gate.js';
 import { createHash } from 'node:crypto';
 import { exigirPermissaoTransacional } from '../autorizacao/permissao-transacional.js';
 import { uuidValido } from '../autorizacao/politicas-operacionais.js';
@@ -48,7 +51,7 @@ import { resumoMedicao } from '../ocorrencias/medicao-ocorrencia.js';
 const CAMPOS_MUTAVEIS = [
   'etapaId', 'nome', 'codigo', 'descricao', 'responsavelId',
   'inicioPrevisto', 'terminoPrevisto', 'quantidadePrevista', 'unidadeMedida',
-  'periodicidade', 'configuracaoPeriodicidade', 'peso', 'criterioConclusao', 'observacoes',
+  'periodicidade', 'configuracaoPeriodicidade', 'frequenciaAcompanhamento', 'peso', 'criterioConclusao', 'observacoes',
 ] as const;
 type Campo = typeof CAMPOS_MUTAVEIS[number];
 
@@ -89,6 +92,7 @@ export function validarPlanejamento(e: Entregavel, nomeAnterior?: string, campos
   validarMetadadosEntregavel(e, nomeAnterior, camposMetadados);
   if ((e.tipo === TipoEntregavel.MARCO || e.tipo === TipoEntregavel.CONTINUO) && !e.criterioConclusao?.trim())
     throw new BadRequestException('Marco e Contínuo exigem critério textual explícito de conclusão/controle operacional');
+  if (e.frequenciaAcompanhamento != null && (e.tipo !== TipoEntregavel.CONTINUO || !['DIARIA','SEMANAL','MENSAL'].includes(e.frequenciaAcompanhamento))) throw new BadRequestException('Frequência de acompanhamento válida apenas para entregáveis contínuos');
   if (!e.inicioPrevisto) throw new BadRequestException('Início previsto é obrigatório para todos os entregáveis');
   if (e.tipo === TipoEntregavel.CONTINUO && !e.terminoPrevisto)
     throw new BadRequestException('Entregável contínuo exige término previsto');
@@ -157,12 +161,12 @@ function visao(e: Entregavel, itens: EvidenciaEsperada[], incluirArquivadas = fa
     inicioPrevisto: e.inicioPrevisto, terminoPrevisto: e.terminoPrevisto,
     quantidadePrevista: e.quantidadePrevista, quantidadeRealizada: e.quantidadeRealizada, quantidadeDiretaIntegrada:Boolean(e.quantidadeDiretaIntegrada),
     unidadeMedida: e.unidadeMedida, periodicidade: e.periodicidade,
-    configuracaoPeriodicidade: e.configuracaoPeriodicidade, peso: e.peso,
+    configuracaoPeriodicidade: e.configuracaoPeriodicidade, frequenciaAcompanhamento: e.tipo===TipoEntregavel.CONTINUO?(e.frequenciaAcompanhamento??'DIARIA'):null, confirmacaoContinuo:e.confirmacaoContinuo??null, peso: e.peso,
     criterioConclusao: e.criterioConclusao, statusExecucao: e.statusExecucao ?? StatusExecucaoEntregavel.NAO_INICIADO, ...indicadoresPrazoEntregavel(e, e.statusExecucao ?? StatusExecucaoEntregavel.NAO_INICIADO), regularizacaoDocumentalSolicitada: Boolean(e.regularizacaoDocumentalSolicitada), motivoFinalizacao: e.motivoFinalizacao ?? null,
     percentualExecucao: e.percentualExecucao, situacaoComprovacao: e.situacaoComprovacao,
     observacoes: e.observacoes, arquivadoEm: e.arquivadoEm ?? null, reabertoEm: e.reabertoEm ?? null,
     evidenciasEsperadas: itens.filter((item) => incluirArquivadas || !item.arquivadoEm).map((item) => ({
-      id: item.id, codigoPublico: item.codigoPublico, tipoEvidencia: item.tipoEvidencia, descricao: item.descricao,
+      id: item.id, codigoPublico: item.codigoPublico, dataAcompanhamento:item.dataAcompanhamento??null, tipoEvidencia: item.tipoEvidencia, descricao: item.descricao,
       obrigatoria: item.obrigatoria, arquivadoEm: item.arquivadoEm ?? null, reabertoEm: item.reabertoEm ?? null,
     })),
   };
@@ -340,10 +344,10 @@ export class EntregaveisService implements OnModuleInit {
     return contrato;
   }
 
-  private async validarEtapa(m: EntityManager, contratoId: string, etapaId: string, somenteLeitura = false): Promise<void> {
+  private async validarEtapa(m: EntityManager, contratoId: string, etapaId: string, somenteLeitura = false, regularizacaoMetadados = false): Promise<void> {
     const etapa = await m.getRepository(Etapa).findOneBy({ id: etapaId, contratoId });
     if (!etapa) throw new NotFoundException('Etapa não encontrada neste contrato');
-    if (!somenteLeitura && (etapa.conclusaoSolicitadaEm || etapa.encerramentoSolicitadoEm || etapa.arquivadoEm || (etapa.status === 'CONCLUIDA' || etapa.status === 'CONCLUIDO_PARCIALMENTE') || etapa.status === 'ENCERRADA' ||
+    if (!somenteLeitura && (etapa.conclusaoSolicitadaEm || etapa.encerramentoSolicitadoEm || etapa.arquivadoEm || (etapa.status === 'CONCLUIDA' || etapa.status === 'CONCLUIDO_PARCIALMENTE' && !regularizacaoMetadados) || etapa.status === 'ENCERRADA' ||
       etapa.status === 'FINALIZADA'))
       throw new ConflictException('Etapa finalizada ou com decisão pendente: reabra ou resolva a solicitação antes de alterar entregáveis');
   }
@@ -565,6 +569,7 @@ export class EntregaveisService implements OnModuleInit {
           inicioPrevisto: dto.inicioPrevisto ?? null, terminoPrevisto: dto.terminoPrevisto ?? null,
           quantidadePrevista: dto.quantidadePrevista ?? null, unidadeMedida: dto.unidadeMedida?.trim() ?? null,
           periodicidade: dto.periodicidade ?? null,
+          frequenciaAcompanhamento: dto.frequenciaAcompanhamento ?? (dto.tipo===TipoEntregavel.CONTINUO?'DIARIA':null),
           configuracaoPeriodicidade: (dto.configuracaoPeriodicidade ?? null) as Entregavel['configuracaoPeriodicidade'],
           peso: dto.peso ?? null, criterioConclusao: dto.criterioConclusao?.trim() ?? null,
           observacoes: dto.observacoes?.trim() ?? null,
@@ -606,6 +611,7 @@ export class EntregaveisService implements OnModuleInit {
       if (!regularizacao && !['PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL'].includes(e.statusExecucao ?? ''))
         throw new ConflictException('A conclusão deve ser solicitada antes da aprovação');
       await this.validarRegularizacao(m, e, regularizacao, contrato);
+      if(e.tipo===TipoEntregavel.CONTINUO&&!regularizacao&&(!e.confirmacaoContinuo||e.confirmacaoContinuo.criterio!==e.criterioConclusao?.trim()))throw new ConflictException('A solicitação não contém confirmação válida do critério atual. Devolva e solicite novamente.');
       const fisico = await aptidaoFisicaParaConclusao(m, e);
       if (!fisico.apto) throw new ConflictException(fisico.motivo);
       if (await possuiDecisoesDescendentesPendentes(m, e))
@@ -660,6 +666,7 @@ export class EntregaveisService implements OnModuleInit {
   }
 
   private async documentacaoIntegralDisponivel(m: EntityManager, e: Entregavel, exigencias: number): Promise<boolean> {
+    if (e.tipo === TipoEntregavel.MARCO && !(await avaliarMetasMarco(m,e.contratoId,e.id)).apto) return false;
     if (exigencias === 0) return true;
     if (!await documentacaoVerificada(m, e.contratoId, e.etapaId, e.id)) return false;
     const [r] = await m.query(`SELECT EXISTS (SELECT 1 FROM evidencias_esperadas WHERE entregavel_id=$1 AND arquivado_em IS NULL AND obrigatoria IS TRUE AND reaberto_em IS NOT NULL) AS pendentes`, [e.id]);
@@ -704,6 +711,7 @@ export class EntregaveisService implements OnModuleInit {
       const exigencias = await requisitosDocumentaisObrigatorios(m, id);
       const documentacaoCompleta = await this.documentacaoIntegralDisponivel(m, e, exigencias);
       if (!documentacaoCompleta) {
+        if(e.tipo===TipoEntregavel.MARCO){const metas=await avaliarMetasMarco(m,contratoId,id);for(const meta of metas.metas.filter(x=>!x.pronto))pendencias.push(`${meta.titulo}: regularização documental da meta necessária.`);}
         const itens = await m.query(`SELECT ev.tipo_evidencia AS tipo, ev.reaberto_em AS reaberto, u.status
           FROM evidencias_esperadas ev LEFT JOIN LATERAL (SELECT c.status,c.verificado_em FROM comprovantes_evidencia c
           WHERE c.evidencia_esperada_id=ev.id AND c.contrato_id=$1 ORDER BY c.criado_em DESC,c.id DESC LIMIT 1) u ON TRUE
@@ -735,7 +743,9 @@ export class EntregaveisService implements OnModuleInit {
       if (descendentesPendentes) impedimentos.push('Há registros aguardando decisão.');
       const podeSolicitarConclusao = solicitar && apto && (abertoParaConclusao || (regularizacao && !pendenteConclusao)) && documentacaoCompleta;
       const podeSolicitarParcial = solicitar && apto && abertoParaConclusao && !documentacaoCompleta;
-      const podeAprovar = aprovar && apto && (e.regularizacaoDocumentalSolicitada || e.statusExecucao === 'PENDENTE_CONCLUSAO' ? documentacaoCompleta : e.statusExecucao === 'PENDENTE_CONCLUSAO_PARCIAL' && !documentacaoCompleta);
+      const confirmacaoValida=e.tipo!==TipoEntregavel.CONTINUO||regularizacao||Boolean(e.confirmacaoContinuo&&e.confirmacaoContinuo.criterio===e.criterioConclusao?.trim());
+      if(pendenteConclusao&&!confirmacaoValida)impedimentos.push('Solicitação sem confirmação válida do critério. Devolva para nova solicitação.');
+      const podeAprovar = aprovar && apto && confirmacaoValida && (e.regularizacaoDocumentalSolicitada || e.statusExecucao === 'PENDENTE_CONCLUSAO' ? documentacaoCompleta : e.statusExecucao === 'PENDENTE_CONCLUSAO_PARCIAL' && !documentacaoCompleta);
       return { podeSolicitarConclusao, podeSolicitarParcial, podeAprovar: Boolean(podeAprovar),
         podeSolicitarEncerramento: solicitar && encerramentoApto && aberto,
         podeAprovarEncerramento: aprovar && encerramentoApto && e.statusExecucao === 'PENDENTE_ENCERRAMENTO',
@@ -744,8 +754,20 @@ export class EntregaveisService implements OnModuleInit {
     });
   }
 
+  private confirmarCriterioContinuo(e: Entregavel, ator: UsuarioAutenticado, dto: SolicitarConclusaoDto): ConfirmacaoContinuo|null {
+    if(e.tipo!==TipoEntregavel.CONTINUO){
+      if(dto.confirmacaoCumprimento!==undefined||dto.observacoesConclusao!==undefined)throw new BadRequestException('Confirmação de cumprimento exclusiva do Contínuo.');
+      return null;
+    }
+    const criterio=e.criterioConclusao?.trim();
+    if(dto.confirmacaoCumprimento!==true||!criterio)throw new BadRequestException('Confirme expressamente o cumprimento do critério de conclusão durante a vigência.');
+    const observacoes=dto.observacoesConclusao?.trim()||null;
+    if(observacoes&&observacoes.length>500)throw new BadRequestException('Observações de conclusão: máximo de 500 caracteres.');
+    return {autorId:ator.id,em:new Date().toISOString(),criterio,observacoes};
+  }
+
   /** Solicitação não substitui a aprovação do Gestor/Administrador. */
-  async solicitarConclusao(contratoId: string, id: string, ator: UsuarioAutenticado) {
+  async solicitarConclusao(contratoId: string, id: string, ator: UsuarioAutenticado, dto: SolicitarConclusaoDto = {}) {
     return this.dataSource.transaction(async m => {
       await exigirPermissaoTransacional(m, contratoId, ator, 'editarEntregaveis');
       const contrato = await this.bloquearContrato(m, contratoId, true, true);
@@ -764,19 +786,20 @@ export class EntregaveisService implements OnModuleInit {
       if (!await this.documentacaoIntegralDisponivel(m, e, await requisitosDocumentaisObrigatorios(m, id)))
         throw new ConflictException('Existem evidências pendentes de verificação');
       const anterior = { statusExecucao: e.statusExecucao, regularizacaoDocumentalSolicitada: Boolean(e.regularizacaoDocumentalSolicitada) };
+      if (!regularizacao) e.confirmacaoContinuo=this.confirmarCriterioContinuo(e,ator,dto);
       if (regularizacao) e.regularizacaoDocumentalSolicitada = true;
       else e.statusExecucao = 'PENDENTE_CONCLUSAO' as Entregavel['statusExecucao'];
       const salvo = await m.save(Entregavel, e);
       await this.auditoria.registrarNaTransacao(m, ator, { acao: AcaoAuditoria.ENTREGAVEL_STATUS_ALTERADO,
         entidadeTipo: 'ENTREGAVEL', entidadeId: id, dadosAnteriores: anterior,
-        dadosPosteriores: { statusExecucao: salvo.statusExecucao, regularizacaoDocumentalSolicitada: Boolean(salvo.regularizacaoDocumentalSolicitada), solicitadoPor: ator.id } });
+        dadosPosteriores: { statusExecucao: salvo.statusExecucao, regularizacaoDocumentalSolicitada: Boolean(salvo.regularizacaoDocumentalSolicitada), solicitadoPor: ator.id, ...(salvo.confirmacaoContinuo?{confirmacaoContinuo:salvo.confirmacaoContinuo}:{}) } });
       return { ...visao(salvo, await this.itens(m, id)) };
     });
   }
 
   /** A conclusão parcial só difere no estado documental; exige 100% físico
    * e decisão autorizada, sem conferir status administrativo de FINALIZADO. */
-  async solicitarConclusaoParcial(contratoId: string, id: string, ator: UsuarioAutenticado) {
+  async solicitarConclusaoParcial(contratoId: string, id: string, ator: UsuarioAutenticado, dto: SolicitarConclusaoDto = {}) {
     return this.dataSource.transaction(async m => {
       await exigirPermissaoTransacional(m, contratoId, ator, 'editarEntregaveis');
       await this.bloquearContrato(m, contratoId, true);
@@ -797,12 +820,13 @@ export class EntregaveisService implements OnModuleInit {
       if (await this.documentacaoIntegralDisponivel(m, e, await requisitosDocumentaisObrigatorios(m, id)))
         throw new ConflictException('Não há exigência documental pendente; solicite conclusão integral');
       const anterior = { statusExecucao: e.statusExecucao, situacaoComprovacao: e.situacaoComprovacao };
+      e.confirmacaoContinuo=this.confirmarCriterioContinuo(e,ator,dto);
       e.statusExecucao = 'PENDENTE_CONCLUSAO_PARCIAL' as Entregavel['statusExecucao'];
       const salvo = await m.save(Entregavel, e);
       await this.auditoria.registrarNaTransacao(m, ator, {
         acao: AcaoAuditoria.ENTREGAVEL_STATUS_ALTERADO, entidadeTipo: 'ENTREGAVEL', entidadeId: id,
         dadosAnteriores: anterior,
-        dadosPosteriores: { statusExecucao: salvo.statusExecucao, solicitacao: 'PARCIAL', solicitadoPor: ator.id },
+        dadosPosteriores: { statusExecucao: salvo.statusExecucao, solicitacao: 'PARCIAL', solicitadoPor: ator.id, ...(salvo.confirmacaoContinuo?{confirmacaoContinuo:salvo.confirmacaoContinuo}:{}) },
       });
       return visao(salvo, await this.itens(m, id));
     });
@@ -840,6 +864,7 @@ export class EntregaveisService implements OnModuleInit {
           e.statusExecucao = fisico.statusEntregavel;
         } else e.statusExecucao = StatusExecucaoEntregavel.EM_ANDAMENTO;
         e.reabertoEm = new Date();
+        if(e.tipo===TipoEntregavel.CONTINUO)e.confirmacaoContinuo=null;
         e.motivoFinalizacao = null;
       }
       const salvo = await m.save(Entregavel, e);
@@ -931,6 +956,7 @@ export class EntregaveisService implements OnModuleInit {
       e.motivoFinalizacao = null; e.finalizadoEm = null;
       e.regularizacaoDocumentalSolicitada = false;
       e.reabertoEm = new Date();
+      if(e.tipo===TipoEntregavel.CONTINUO)e.confirmacaoContinuo=null;
       await repo.save(e);
       await this.auditoria.registrarNaTransacao(m, ator, {
         acao: AcaoAuditoria.ENTREGAVEL_REABERTO, entidadeTipo: 'ENTREGAVEL', entidadeId: id,
@@ -956,7 +982,6 @@ export class EntregaveisService implements OnModuleInit {
         await exigirPermissaoTransacional(m, contratoId, ator, 'editarEntregaveis');
         const contrato = await this.bloquearContrato(m, contratoId);
         const e = await this.registro(m, contratoId, id);
-        await this.validarEtapa(m, contratoId, e.etapaId);
         if (dto.versaoPlanejamento !== undefined && dto.versaoPlanejamento !== versaoPlanejamentoEntregavel(e))
           throw new ConflictException('O planejamento mudou desde que o formulário foi aberto. Feche e abra novamente para revisar os dados.');
         const camposInformados = chavesDefinidas(dto).filter(campo => campo !== 'versaoPlanejamento');
@@ -964,7 +989,9 @@ export class EntregaveisService implements OnModuleInit {
         const somenteMetadados = camposInformados.every(campo => camposMetadados.has(campo));
         const decisaoPendente = Boolean(e.regularizacaoDocumentalSolicitada || ['PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? ''));
         const finalizado = decisaoPendente || (!e.reabertoEm && ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(e.statusExecucao ?? ''));
-        if (finalizado)
+        const metadadosRegularizacao = e.statusExecucao === 'CONCLUIDO_PARCIALMENTE' && !e.arquivadoEm && camposInformados.every(campo => ['nome','codigo','descricao','observacoes'].includes(campo));
+        await this.validarEtapa(m, contratoId, e.etapaId, false, metadadosRegularizacao);
+        if (finalizado && !metadadosRegularizacao)
           throw new ConflictException('Entregável com decisão pendente ou finalizado. Devolva a solicitação ou reabra antes de editar.');
         if (dto.tipo !== undefined && dto.tipo !== e.tipo)
           throw new ConflictException('O tipo do entregável é imutável. Para utilizar outro tipo, crie um novo entregável.');
@@ -1025,9 +1052,15 @@ export class EntregaveisService implements OnModuleInit {
             }
           }
         }
+        if (e.tipo !== antes.tipo && antes.tipo === 'MARCO' && (await m.query('SELECT 1 FROM metas_marco WHERE entregavel_id=$1 AND contrato_id=$2 LIMIT 1',[e.id,contratoId])).length) throw new ConflictException('Preserve o tipo do Marco com metas cadastradas.');
         if (e.tipo !== antes.tipo && (e.execucoesIntegradas || e.percentualExecucao != null || e.quantidadeRealizada != null || e.dataEfetivaMarco != null)) throw new ConflictException('Tipo não pode mudar após registrar execução física. Preserve o histórico.');
+        if (e.tipo===TipoEntregavel.CONTINUO && dto.frequenciaAcompanhamento===null) e.frequenciaAcompanhamento='DIARIA';
         validarPlanejamento(e, nomeAnterior, CAMPOS_MUTAVEIS.filter(campo => e[campo] !== anterior[campo]));
         validarVigenciaPlanejamento(e, contrato, antes);
+        if(e.tipo===TipoEntregavel.CONTINUO&&(e.inicioPrevisto!==prazoAnterior.inicioPrevisto||e.terminoPrevisto!==prazoAnterior.terminoPrevisto)){
+          const [fora]=await m.query(`SELECT EXISTS (SELECT 1 FROM atividades a JOIN atividade_entregaveis ae ON ae."atividadeId"=a.id AND ae."contratoId"=a."contratoId" WHERE a."contratoId"=$1 AND ae."entregavelId"=$2 AND a."excluidaEm" IS NULL AND (a."dataHora" AT TIME ZONE 'America/Sao_Paulo')::date NOT BETWEEN $3::date AND $4::date) OR EXISTS (SELECT 1 FROM evidencias_esperadas WHERE entregavel_id=$2 AND data_acompanhamento NOT BETWEEN $3::date AND $4::date) AS existe`,[contratoId,id,e.inicioPrevisto,e.terminoPrevisto]);
+          if(fora?.existe)throw new ConflictException('A nova vigência excluiria datas de registros vinculados. Regularize os registros antes de alterar o período.');
+        }
         if (e.tipo === TipoEntregavel.RECORRENTE && mudaAgenda) calcularPeriodosRecorrentes(e.inicioPrevisto!, e.terminoPrevisto!, e.periodicidade!);
         if (e.tipo === TipoEntregavel.QUANTITATIVO && dto.quantidadePrevista !== undefined && milesimos(e.quantidadePrevista) < milesimos(anterior.quantidadePrevista as string | null)) {
           if (milesimos(e.quantidadeRealizada) > milesimos(e.quantidadePrevista))
@@ -1082,7 +1115,7 @@ export class EntregaveisService implements OnModuleInit {
   private async salvarChecklist(m: EntityManager, contratoId: string, id: string, itens: SubstituirChecklistDto['itens'],
     ator: UsuarioAutenticado) {
         const repo = m.getRepository(EvidenciaEsperada);
-        const anteriores = await this.itens(m, id);
+        const anteriores = (await this.itens(m, id)).filter(item=>!item.dataAcompanhamento);
         const porId = new Map(anteriores.map((item) => [item.id, item]));
         const enviados = new Set<string>();
         if (!Array.isArray(itens) || itens.length > 10)

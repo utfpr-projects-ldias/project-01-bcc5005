@@ -28,7 +28,9 @@ const ESCOPOS_PERMISSOES: readonly GrupoPermissoes[] = [
     { icone: '▣', nome: 'Arquivamento e exclusão', chaves: ['arquivarEtapas', 'reativarEtapas', 'excluirEtapasArquivadas'] },
   ] },
   { titulo: 'Entregáveis', secoes: [
-    { icone: '◆', nome: 'Metas de Marcos', chaves: ['criarMetasMarco', 'editarMetasMarco', 'vincularMetasMarco', 'aprovarVinculosMetasMarco'] },
+    { icone: '◆', nome: 'Marco · planejamento e vínculos', chaves: ['criarMetasMarco', 'editarMetasMarco', 'vincularMetasMarco'] },
+    { icone: '✓', nome: 'Marco · conclusão e revisão de metas', chaves: ['solicitarMetasMarco', 'aprovarVinculosMetasMarco', 'reabrirMetasMarco'] },
+    { icone: '▣', nome: 'Marco · arquivamento de metas', chaves: ['arquivarMetasMarco', 'reativarMetasMarco'] },
     { icone: '✎', nome: 'Cadastro', chaves: ['criarEntregaveis', 'editarEntregaveis'] },
     { icone: '✓', nome: 'Conclusão e revisão', chaves: ['concluirEntregaveis', 'reabrirEntregaveis'] },
     { icone: '▣', nome: 'Arquivamento e exclusão', chaves: ['arquivarEntregaveis', 'reativarEntregaveis', 'excluirEntregaveisArquivados'] },

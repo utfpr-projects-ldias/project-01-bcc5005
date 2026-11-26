@@ -12,9 +12,10 @@ test('filtra planejamento e andamento sem misturar solicitações', () => {
   expect(etapaNaAba(e({status:'EM_ANDAMENTO'}),'todas','EM_ANDAMENTO')).toBe(true);
   expect(etapaNaAba(e({conclusaoSolicitadaEm:'2026-11-25'}),'todas','PLANEJADA')).toBe(false);
 });
-test('revisão usa estado efetivo na visão ativa e situação subjacente na aba de revisão', () => {
+test('revisão pertence exclusivamente à sua aba e usa a fase subjacente', () => {
   const revisao=e({reabertoEm:'2026-11-25',status:'EM_ANDAMENTO'});
-  expect(etapaNaAba(revisao,'todas','EM_REVISAO')).toBe(true);
+  expect(etapaNaAba(revisao,'todas')).toBe(false);
+  expect(etapaNaAba(revisao,'todas','EM_REVISAO')).toBe(false);
   expect(etapaNaAba(revisao,'todas','EM_ANDAMENTO')).toBe(false);
   expect(etapaNaAba(revisao,'revisao','EM_ANDAMENTO')).toBe(true);
   expect(etapaNaAba(revisao,'revisao','PLANEJADA')).toBe(false);

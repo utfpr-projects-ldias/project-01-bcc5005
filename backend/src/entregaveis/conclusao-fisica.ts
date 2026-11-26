@@ -1,3 +1,4 @@
+import { resumoContinuo } from '../execucao/resumo-continuo.js';
 import { milesimos, percentualQuantidade } from '../common/quantidade-exata.js';
 import { quantidadeDiretaEvidencias } from './quantidade-evidencias.js';
 import { percentualComParcelas, resumoParcelas } from '../execucao/parcelas-execucao.js';
@@ -11,7 +12,7 @@ import { calcularFisico } from '../execucao/motor-progresso.js';
 import { calcularPeriodosRecorrentes } from '../ocorrencias/ocorrencias.service.js';
 import { avaliarAgendaRecorrente, avaliarPesosAgenda } from '../ocorrencias/avaliar-agenda-recorrente.js';
 import { ConfiguracaoOcorrencias } from '../ocorrencias/configuracao-ocorrencias.entity.js';
-import { dataEfetivaValida, hojeCivil } from '../common/data-civil.js';
+import { dataEfetivaValida } from '../common/data-civil.js';
 
 /** Gate compartilhado pelos caminhos explícito e automáticos de conclusão.
  * Não presume que comprovação documental implique execução física de 100%.
@@ -24,6 +25,7 @@ export async function aptidaoFisicaParaConclusao(
   const atuais = await m.findBy(Ocorrencia, {
     contratoId: e.contratoId, entregavelId: e.id, substituidaEm: IsNull(),
   });
+  if(e.tipo===TipoEntregavel.CONTINUO){const r=await resumoContinuo(m,e,atuais);return {apto:r.apto,percentual:r.percentualOficial,motivo:r.apto?'':!r.vigenciaAtingida?'Aguarde o término da vigência do Contínuo.':!r.semDatasInvalidas?'Regularize registros sem data de acompanhamento válida.':'Resolva os registros operacionais pendentes antes de concluir.'};}
   if (e.execucoesIntegradas) {
     const parcelas = await resumoParcelas(m,e);
     if (parcelas.itens.some(i => i.situacao === 'PENDENTE' && !i.referenciaId && i.centesimos > 0))
@@ -33,19 +35,13 @@ export async function aptidaoFisicaParaConclusao(
     return negar('Informe uma data efetiva válida e não futura para o Marco');
   const metas = e.tipo === TipoEntregavel.MARCO ? await avaliarMetasMarco(m, e.contratoId, e.id) : null;
   // RB-03: em ÚNICO a ocorrência é opcional; se existir, precisa estar concluída.
-  if ((e.tipo === TipoEntregavel.RECORRENTE || (e.tipo === TipoEntregavel.MARCO && !metas?.total)) && !atuais.length)
+  if (e.tipo === TipoEntregavel.RECORRENTE && !atuais.length)
     return negar('Este tipo de entregável exige ocorrências aprovadas');
-  if (metas?.total && !metas.apto) return negar('Aprove todos os vínculos exigidos nas metas do Marco');
-  if ((e.tipo === TipoEntregavel.CONTINUO && atuais.length > 1) || (e.tipo === TipoEntregavel.MARCO && !metas?.total && atuais.length !== 1))
-    return negar('Este tipo de entregável exige uma ocorrência principal');
-  if (!(e.tipo === TipoEntregavel.MARCO && metas?.total) && atuais.some(o => !['CONCLUIDO','CONCLUIDO_PARCIALMENTE'].includes(o.status)))
+  if (metas && !metas.fisicoApto) return negar('Configure metas com pesos totalizando 100% e reconheça a execução física de todas as metas do Marco.');
+  if (atuais.some(o => !['CONCLUIDO','CONCLUIDO_PARCIALMENTE'].includes(o.status)))
     return negar('Conclua todas as ocorrências ativas do entregável; encerramentos administrativos não contam como execução');
-  if (e.tipo === TipoEntregavel.CONTINUO && e.terminoPrevisto &&
-      hojeCivil() < e.terminoPrevisto)
-    return negar('A conclusão da obrigação contínua somente pode ser solicitada após o término previsto');
-
   const atuaisMedidos = await Promise.all(atuais.map(o => medicaoAprovadaAtual(m, o)));
-  if (!(e.tipo === TipoEntregavel.MARCO && metas?.total) && atuais.some((o,i) => (o.modoRegistro === 'DESCRITIVO' || o.metaQuantidade != null || o.execucoesPercentuais) && !atuaisMedidos[i].apta))
+  if (atuais.some((o,i) => (o.modoRegistro === 'DESCRITIVO' || o.metaQuantidade != null || o.execucoesPercentuais) && !atuaisMedidos[i].apta))
     return negar('A medição aprovada deixou de atender aos critérios físicos. Regularize a ocorrência.');
   let percentual: number | null;
   if (e.tipo === TipoEntregavel.RECORRENTE) {
@@ -76,7 +72,7 @@ export async function aptidaoFisicaParaConclusao(
       ? (await Promise.all(medidas.map(o => medicaoReconhecidaAtual(m,o)))).reduce((n,q) => n + milesimos(q),0n)
       : e.quantidadeRealizada == null ? null : milesimos(e.quantidadeRealizada);
     percentual = realizada == null || e.quantidadePrevista == null ? null : percentualQuantidade(realizada, milesimos(e.quantidadePrevista), false);
-  } else if (e.tipo === TipoEntregavel.MARCO && metas?.total && metas.apto) {
+  } else if (e.tipo === TipoEntregavel.MARCO && metas?.total && metas.fisicoApto) {
     // O preparo completo autoriza solicitar conclusão, mas o progresso oficial
     // permanece 0% até a aprovação registrar a data efetiva do Marco.
     percentual = 100;

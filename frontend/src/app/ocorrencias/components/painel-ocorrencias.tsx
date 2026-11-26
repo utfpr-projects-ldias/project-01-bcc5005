@@ -29,10 +29,11 @@ import { sincronizarEvidenciaCompartilhada } from '@/lib/sincronizar-evidencia-c
 import { useProgresso } from '@/hooks/use-progresso';
 import { SeletorEntregavel } from './seletor-entregavel';
 import { CalendarioOcorrencias } from './calendario-ocorrencias';
+import { BotaoDesvincularMeta } from '@/app/components/botao-desvincular-meta';
 import { MenuAcoesObjeto } from '@/app/components/menu-acoes-objeto';
 import { BotaoEditarModal, BotaoAcaoModal } from '@/app/components/botoes-modal';
 import { estadoDoObjeto } from '@/lib/identidade-operacional';
-import { IconeConclusao, IconeConclusaoParcial } from '@/app/components/icones-ciclo-vida';
+import { IconeConclusao, IconeReabertura } from '@/app/components/icones-ciclo-vida';
 import { IconeEngrenagem } from '@/app/components/icone-engrenagem';
 import { ExecucaoOcorrencia, ResumoLateralOcorrencia, EvidenciasOcorrencia, HistoricoOcorrencia } from './execucao-ocorrencia';
 import { editarExigenciasOcorrencia, editarMetaOcorrencia, editarPesoOcorrencia } from '@/hooks/use-ocorrencias';
@@ -108,7 +109,7 @@ function tituloApresentacao(o: Ocorrencia, periodicidade?: string | null) {
   return o.titulo;
 }
 /** Painel compartilhado: mesma agenda por contrato na rota global e na aba do contrato. */
-export function PainelOcorrencias({ contratoId, somenteLeitura = false, regularizacaoDocumental = false, embutido = false, somenteDetalhe = false, estadoContextual = 'normal', entregavelIdInicial = '', abrirOcorrenciaId = null, aoFecharOcorrenciaSelecionada, ocultarCadastro = false, calendarioExterno = false, calendarioInicial, cadastroInicial, aoFecharCadastro, navegacaoCadastro }: { contratoId: string; somenteLeitura?: boolean; regularizacaoDocumental?: boolean; embutido?: boolean; somenteDetalhe?: boolean; estadoContextual?: EstadoContextual; entregavelIdInicial?: string; abrirOcorrenciaId?:string|null; aoFecharOcorrenciaSelecionada?:()=>void; ocultarCadastro?:boolean; calendarioExterno?:boolean; calendarioInicial?:ReactNode; cadastroInicial?:{gatilho:HTMLElement;metaQuantidade?:string}; aoFecharCadastro?:()=>void; navegacaoCadastro?:NavegacaoCadastroRegistro }) {
+export function PainelOcorrencias({ contratoId, somenteLeitura = false, regularizacaoDocumental = false, embutido = false, somenteDetalhe = false, estadoContextual = 'normal', entregavelIdInicial = '', abrirOcorrenciaId = null, aoFecharOcorrenciaSelecionada, ocultarCadastro = false, calendarioExterno = false, calendarioInicial, cadastroInicial, aoFecharCadastro, navegacaoCadastro, acaoDesvincularMeta }:  { contratoId: string; somenteLeitura?: boolean; regularizacaoDocumental?: boolean; embutido?: boolean; somenteDetalhe?: boolean; estadoContextual?: EstadoContextual; entregavelIdInicial?: string; abrirOcorrenciaId?:string|null; aoFecharOcorrenciaSelecionada?:()=>void; ocultarCadastro?:boolean; calendarioExterno?:boolean; calendarioInicial?:ReactNode; cadastroInicial?:{gatilho:HTMLElement;dataInicial?:string;metaQuantidade?:string;metaMarco?:{id:string;tipo:'DESCRITIVA'|'QUANTITATIVA';unidadeMedida:string|null}}; aoFecharCadastro?:()=>void; navegacaoCadastro?:NavegacaoCadastroRegistro; acaoDesvincularMeta?:()=>void }) {
   const contextoEntregavel = Boolean(entregavelIdInicial);
   const [entregavelFiltro, setEntregavelFiltro] = useState(entregavelIdInicial);
   const [etapaFiltro, setEtapaFiltro] = useState('');
@@ -201,8 +202,7 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, regulari
   const planejamentoDisponivel = planejamentoCarregado && !entregaveisConsulta.atualizando && !etapasConsulta.atualizando;
   const abertos = planejamentoCarregado ? entregaveis.filter(e => !e.arquivadoEm && !e.regularizacaoDocumentalSolicitada && !['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? '') && etapasAbertas.has(e.etapaId)) : [];
   const agenda = useOcorrencias(contratoId);
-  const entregaveisManuais = abertos.filter(e => e.tipo !== 'RECORRENTE' && !e.quantidadeDiretaIntegrada && (!(e.tipo==='CONTINUO'||e.tipo==='MARCO')||!agenda.ocorrencias.some(o=>o.entregavelId===e.id&&!o.substituidaEm)));
-  const tipoCadastroSelecionado = entregaveis.find(e => e.id === form.entregavelId)?.tipo;
+  const entregaveisManuais = abertos.filter(e => e.tipo !== 'RECORRENTE' && !e.quantidadeDiretaIntegrada);
   const entregaveisDoFormulario = entregaveisManuais;
   const entregaveisRecorrentes = abertos.filter(e => e.tipo === 'RECORRENTE');
   const recorrenteSelecionado = entregaveisRecorrentes.find(e => e.id === entregavelRecorrente);
@@ -269,7 +269,7 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, regulari
   const metaCumprida = detalhe?.metaAtingida ?? (detalhe?.metaQuantidade != null && Number(detalhe.metaQuantidade)>0 && milesimosApi(detalhe.quantidadeExecutadaExata??detalhe.quantidadeExecutada) >= milesimosApi(detalhe.metaQuantidade));
   const entregavelContinuo = entregaveis.find(e => e.id === detalhe?.entregavelId);
   const periodoCumprido = entregavelContinuo?.tipo !== 'CONTINUO' ||
-    !entregavelContinuo.terminoPrevisto || diaLocalBrasil() >= entregavelContinuo.terminoPrevisto;
+    !(detalhe?.dataPrevista??detalhe?.periodoFim??detalhe?.periodoInicio) || diaLocalBrasil() >= (detalhe?.dataPrevista??detalhe?.periodoFim??detalhe?.periodoInicio)!;
   const podeSolicitarConclusao = Boolean(detalhe && (detalhe.requisitosAtendidos ?? !semAtividadeVerificada) && metaCumprida && periodoCumprido);
   const podeSolicitarParcial = Boolean(detalhe && detalhe.criteriosOperacionaisAtendidos && detalhe.documentacaoAtendida === false && metaCumprida && periodoCumprido);
   const podeCriar = podeCriarBase && entregaveisManuais.length > 0;
@@ -406,8 +406,8 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, regulari
     if(!ativo||cadastroInicialAberto.current)return;
     cadastroInicialAberto.current=true;
     if (!podeCriar || !podeCadastrarNesteContexto) {setAlertaElegibilidade(true);return;}
-    setDataUnica(false);setFocoRetorno(cadastroInicial.gatilho);
-    setForm({...vazio(),entregavelId:entregavelIdInicial,modoRegistro:contextoDoEntregavel?.tipo==='QUANTITATIVO'?'QUANTITATIVO':'DESCRITIVO',metaQuantidade:cadastroInicial.metaQuantidade??''});
+    setDataUnica(Boolean(cadastroInicial.dataInicial));setFocoRetorno(cadastroInicial.gatilho);
+    setForm({...vazio(),periodoInicio:cadastroInicial.dataInicial??'',periodoFim:cadastroInicial.dataInicial??'',dataPrevista:cadastroInicial.dataInicial??'',entregavelId:entregavelIdInicial,modoRegistro:contextoDoEntregavel?.tipo==='QUANTITATIVO'||cadastroInicial.metaMarco?.tipo==='QUANTITATIVA'?'QUANTITATIVO':'DESCRITIVO',metaQuantidade:cadastroInicial.metaQuantidade??''});
     setModalCadastro(true);
     });return()=>{ativo=false;};
   },[cadastroInicial,planejamentoDisponivel,podeCriar,podeCadastrarNesteContexto,entregavelIdInicial,contextoDoEntregavel?.tipo,perfilConsulta.carregando,perfilConsulta.atualizando,acesso.carregando,acesso.atualizando]);
@@ -542,6 +542,7 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, regulari
     try {
       const criada=await agenda.criarOcorrenciaManual({
         entregavelId: form.entregavelId, titulo: form.titulo.trim(), modoRegistro: form.modoRegistro,
+        ...(cadastroInicial?.metaMarco?{metaMarcoId:cadastroInicial.metaMarco.id}:{}),
         minimoAtividadesVerificadas:form.minimoAtividadesVerificadas,minimoEvidenciasVerificadas:form.minimoEvidenciasVerificadas,
         minimoFotos:form.minimoFotos,minimoRelatorios:form.minimoRelatorios,minimoEvidenciasLivres:form.minimoEvidenciasLivres,
         evidenciaExigida:form.evidenciaExigida,permiteEncerramentoExcepcional:form.permiteEncerramentoExcepcional,
@@ -552,6 +553,7 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, regulari
         ...(form.observacoes.trim() ? { observacoes: form.observacoes.trim() } : {}),
       });
       setModalCadastro(false); setSucesso('Ocorrência registrada. Configure agora atividades, evidências e execução no detalhe.'); setForm(vazio()); avisarAtualizacaoContratual();
+      if(cadastroInicial?.metaMarco){aoFecharCadastro?.();return;}
       if(criada?.id){setDetalhe(criada);setAbaDetalhe('DETALHES');setEditando(false);}
     } catch (falha) { setErro(falha instanceof Error ? falha.message : 'Não foi possível registrar a ocorrência.'); }
     finally { setOcupado(false); }
@@ -743,7 +745,7 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, regulari
             {(o.periodoInicio || o.dataPrevista) && <time dateTime={o.periodoInicio || o.dataPrevista || ''}>
               {dataBR(o.periodoInicio || o.dataPrevista)}{o.periodoFim && o.periodoFim !== o.periodoInicio ? ` – ${dataBR(o.periodoFim)}` : ''}
             </time>}
-            {o.modoRegistro === 'QUANTITATIVO' && o.metaQuantidade != null && <strong className="text-base tabular-nums">{quantidadeApiParaBR(o.metaQuantidade)} {unidades[o.entregavelId] || 'unidades'}</strong>}
+            {o.modoRegistro === 'QUANTITATIVO' && o.metaQuantidade != null && <strong className="text-base tabular-nums">{quantidadeApiParaBR(o.metaQuantidade)} {o.unidadeMedidaMarco||unidades[o.entregavelId] || 'unidades'}</strong>}
             <EtiquetaAtraso atrasado={o.atrasado} finalizadoComAtraso={o.finalizadoComAtraso} feminino/><PesoOcorrencia ocorrencia={o}/>
           </span><MetricasCartaoOcorrencia ocorrencia={o}/>
         </button>
@@ -871,12 +873,12 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, regulari
           </div>}
           {!podeEditar && <p className="text-xs">A conciliação requer permissão de editar entregáveis neste contrato.</p>}
         </div>}
-        {form.entregavelId && <p role="note" className="text-xs text-foreground/70">{tipoCadastroSelecionado === 'QUANTITATIVO' ? 'Informe a meta planejada. Registre a execução depois de criar a ocorrência.' : 'Registro descritivo. Descreva o serviço e vincule as atividades realizadas.'}</p>}
+        {form.entregavelId && <p role="note" className="text-xs text-foreground/70">{form.modoRegistro === 'QUANTITATIVO' ? 'Informe a meta planejada. Registre a execução depois de criar a ocorrência.' : 'Registro descritivo. Descreva o serviço e vincule as atividades realizadas.'}</p>}
         <div className="pi-form-colunas"><section className="min-w-0 space-y-3">
         <div className={`grid items-start gap-3 ${form.modoRegistro==='QUANTITATIVO'?'sm:grid-cols-2':''}`}><label className="block min-w-0 text-sm font-medium">Título *<input className={CAMPO} required maxLength={50} placeholder="Ex.: Manutenção do laboratório A" value={form.titulo} onChange={e => setForm(v => ({ ...v, titulo: e.target.value }))}/><span className="block text-right text-[11px] text-foreground/60">{form.titulo.length}/50</span></label>
-        {form.modoRegistro === 'QUANTITATIVO' && <label className="block text-sm font-medium">Meta prevista{unidades[form.entregavelId] ? ` (${unidades[form.entregavelId]})` : ' (quantidade)'} *
+        {form.modoRegistro === 'QUANTITATIVO' && <label className="block text-sm font-medium">Meta prevista{cadastroInicial?.metaMarco?.unidadeMedida ? ` (${cadastroInicial.metaMarco.unidadeMedida})` : unidades[form.entregavelId] ? ` (${unidades[form.entregavelId]})` : ' (quantidade)'} *
           <input type="text" inputMode="decimal" maxLength={23} required className={CAMPO} value={form.metaQuantidade} onChange={e => setForm(v => ({ ...v, metaQuantidade: e.target.value }))} placeholder="Ex.: 20" />
-        </label>}{form.modoRegistro==='QUANTITATIVO'&&<ParticipacaoOcorrencia key={form.entregavelId} total={metaTotal(form.entregavelId)} outras={metasOutras(form.entregavelId)} meta={form.metaQuantidade} onMeta={metaQuantidade=>setForm(v=>({...v,metaQuantidade}))} disabled={!agendaConfiavel}/>}</div>
+        </label>}{form.modoRegistro==='QUANTITATIVO'&&!cadastroInicial?.metaMarco&&<ParticipacaoOcorrencia key={form.entregavelId} total={metaTotal(form.entregavelId)} outras={metasOutras(form.entregavelId)} meta={form.metaQuantidade} onMeta={metaQuantidade=>setForm(v=>({...v,metaQuantidade}))} disabled={!agendaConfiavel}/>}</div>
         <fieldset className="space-y-2 border-t border-current/15 pt-2">
           <legend className="px-1 text-sm font-semibold">Período da ocorrência (opcional)</legend>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-brand-green" checked={dataUnica} onChange={e => setDataUnica(e.target.checked)}/> Ocorrência prevista para um único dia</label>
@@ -908,7 +910,7 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, regulari
       {!editando && podeSolicitarRegularizacao && !detalhe.regularizacaoDocumentalSolicitada && <BotaoAcaoModal intencao="solicitar-conclusao" disabled={ocupado || !podeSolicitarConclusao} onClick={() => void transicionar('solicitar-conclusao')}>Solicitar regularização documental</BotaoAcaoModal>}
       {!editando && !detalhe.substituidaEm && podeReabrir && !detalhe.regularizacaoDocumentalSolicitada && ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','ENCERRADA'].includes(detalhe.status) &&
         <MenuAcoesObjeto rotulo="Reabrir" disabled={ocupado} acaoDireta={() => {setFocoReabertura(null);setMotivoReabertura('');setMostrarReabertura(true);}} />}
-      {!editando && !detalhe.substituidaEm && podeEditar && abertos.some(e=>e.id===detalhe.entregavelId) && ['NAO_INICIADO','EM_ANDAMENTO','EM_REVISAO'].includes(detalhe.status) && <MenuAcoesObjeto rotulo="Fechar" disabled={ocupado} icone={podeSolicitarConclusao?<IconeConclusao className="h-4 w-4 text-violet-400"/>:podeSolicitarParcial?<IconeConclusaoParcial className="h-4 w-4 text-violet-400"/>:undefined}>
+      {!editando && !detalhe.substituidaEm && podeEditar && abertos.some(e=>e.id===detalhe.entregavelId) && ['NAO_INICIADO','EM_ANDAMENTO','EM_REVISAO'].includes(detalhe.status) && <MenuAcoesObjeto rotulo="Fechar" disabled={ocupado}>
           <BotaoAcaoModal intencao="solicitar-conclusao" disabled={ocupado || !podeSolicitarConclusao}
             title={semAtividadeVerificada ? 'Os requisitos configurados precisam estar atendidos para solicitar aprovação.' : undefined}
             onClick={() => void transicionar('solicitar-conclusao')}>Solicitar conclusão</BotaoAcaoModal>
@@ -922,6 +924,7 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, regulari
         {(podeReabrir || podeCancelarRegularizacao) && <button type="button" className="rounded-lg border border-red-500/50 bg-red-600/15 px-3 py-2 text-sm font-semibold text-red-200 transition hover:bg-red-600/25 disabled:opacity-40" disabled={ocupado} onClick={e => { setFocoReabertura(e.currentTarget); setMotivoReabertura(''); setMostrarReabertura(true); }} title="Cancelar a solicitação e devolver à revisão">✕ Cancelar</button>}
         {(podeConcluir || podeDecidirRegularizacao) && <button type="button" className={`rounded-lg border px-3 py-2 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-40 ${detalhe.status === 'PENDENTE_ENCERRAMENTO' ? 'border-green-600 bg-green-700' : 'border-green-600 bg-green-700'}`} disabled={ocupado} onClick={() => void transicionar(detalhe.status === 'PENDENTE_ENCERRAMENTO' ? 'aprovar-encerramento' : 'concluir')}>✓ Aprovar</button>}
       </>}
+      {!editando&&acaoDesvincularMeta&&!detalhe.substituidaEm&&['NAO_INICIADO','EM_ANDAMENTO','EM_REVISAO'].includes(detalhe.status)&&<BotaoDesvincularMeta onClick={acaoDesvincularMeta}/>}
     </>}>
       {erro && <p role="alert" className="text-sm text-error-text">{erro}</p>}
       {!editando ? <div className="pi-ocorrencia-workspace" key={detalhe.id}>
@@ -930,7 +933,7 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, regulari
             {([['DETALHES','Manual'],['ATIVIDADES','Atividades'],['EVIDENCIAS','Evidências'],['HISTORICO','Histórico']] as const).filter(([id])=>id!=='HISTORICO'||podeConsultarHistorico).map(([id,rotulo])=><button key={id} role="tab" type="button" aria-selected={abaDetalhe===id} onClick={()=>setAbaDetalhe(id)}>{id==='DETALHES'&&<span aria-hidden="true">✎ </span>}{rotulo}</button>)}
           </div>
           <div hidden={abaDetalhe!=='DETALHES'} className="min-w-0">
-            <ExecucaoOcorrencia key={`${contratoId}:${detalhe.id}`} usuarioId={perfil?.id} contratoId={contratoId} ocorrencia={detalhe} unidade={unidades[detalhe.entregavelId]||'unidades'} podeRegistrar={podeRegistrarMedicao&&abertos.some(e=>e.id===detalhe.entregavelId)} podeCorrigir={podeCorrigirMedicao&&abertos.some(e=>e.id===detalhe.entregavelId)} podeCorrigirAprovada={permitir('corrigirExecucaoAprovada')} podeBloquear={podeBloquearMedicao&&abertos.some(e=>e.id===detalhe.entregavelId)} podeExcluir={podeExcluirMedicao&&abertos.some(e=>e.id===detalhe.entregavelId)} podeAprovar={permitir('aprovarExecucaoManual')&&abertos.some(e=>e.id===detalhe.entregavelId)} onAtualizar={atualizarDetalheOcorrencia}/>
+            <ExecucaoOcorrencia key={`${contratoId}:${detalhe.id}`} usuarioId={perfil?.id} contratoId={contratoId} ocorrencia={detalhe} unidade={detalhe.unidadeMedidaMarco||unidades[detalhe.entregavelId]||'unidades'} podeRegistrar={podeRegistrarMedicao&&abertos.some(e=>e.id===detalhe.entregavelId)} podeCorrigir={podeCorrigirMedicao&&abertos.some(e=>e.id===detalhe.entregavelId)} podeCorrigirAprovada={permitir('corrigirExecucaoAprovada')} podeBloquear={podeBloquearMedicao&&abertos.some(e=>e.id===detalhe.entregavelId)} podeExcluir={podeExcluirMedicao&&abertos.some(e=>e.id===detalhe.entregavelId)} podeAprovar={permitir('aprovarExecucaoManual')&&abertos.some(e=>e.id===detalhe.entregavelId)} onAtualizar={atualizarDetalheOcorrencia}/>
           </div>
           {abaDetalhe==='ATIVIDADES' && <section className="pi-lista-vinculos-v18 space-y-3" aria-label="Atividades vinculadas à ocorrência">
 
@@ -940,7 +943,7 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, regulari
           {abaDetalhe==='HISTORICO' && podeConsultarHistorico && <HistoricoOcorrencia contratoId={contratoId} ocorrenciaId={detalhe.id}/>}
           {abaDetalhe==='ATIVIDADES' && <button type="button" className="pi-ocorrencia-vincular" aria-label="Vincular atividade à ocorrência" disabled={ocupado||!podeVincularAtividade} onClick={abrirVinculo}>+ Vincular atividade</button>}
         </div>
-        <ResumoLateralOcorrencia ocorrencia={detalhe} unidade={unidades[detalhe.entregavelId]||'unidades'} entregavel={nomes[detalhe.entregavelId]??'Entregável'} periodo={descricaoPeriodo(detalhe,periodos[detalhe.entregavelId])} />
+        <ResumoLateralOcorrencia ocorrencia={detalhe} unidade={detalhe.unidadeMedidaMarco||unidades[detalhe.entregavelId]||'unidades'} entregavel={nomes[detalhe.entregavelId]??'Entregável'} periodo={descricaoPeriodo(detalhe,periodos[detalhe.entregavelId])} />
       </div> : <form data-pi-formulario className="pi-form-edicao-ocorrencia pi-form-revisao-ocorrencia" onSubmit={salvarEdicao}>
 
         <div className="pi-ocorrencia-dados">
@@ -951,7 +954,7 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, regulari
           <input type="text" inputMode="decimal" maxLength={23} disabled={!podeEditarMeta} className={CAMPO} value={formEdicao.metaQuantidade} onChange={e => setFormEdicao(v=>({...v,metaQuantidade:e.target.value}))}/>
 
         </label>}
-        {detalhe.origem==='MANUAL_QUANTITATIVA'&&detalhe.metaQuantidade!=null&&<ParticipacaoOcorrencia key={detalhe.id} total={metaTotal(detalhe.entregavelId)} outras={metasOutras(detalhe.entregavelId,detalhe.id)} meta={formEdicao.metaQuantidade} onMeta={metaQuantidade=>setFormEdicao(v=>({...v,metaQuantidade}))} disabled={!podeEditarMeta||!agendaConfiavel}/>}
+        {detalhe.origem==='MANUAL_QUANTITATIVA'&&detalhe.metaQuantidade!=null&&!detalhe.metaMarcoOrigemId&&<ParticipacaoOcorrencia key={detalhe.id} total={metaTotal(detalhe.entregavelId)} outras={metasOutras(detalhe.entregavelId,detalhe.id)} meta={formEdicao.metaQuantidade} onMeta={metaQuantidade=>setFormEdicao(v=>({...v,metaQuantidade}))} disabled={!podeEditarMeta||!agendaConfiavel}/>}
         {detalhe.origem==='RECORRENTE' && <label className="block text-sm">Peso deste período (%)
           <CampoPercentual decimalBR disabled={!podeEditarPeso} valor={pesoPeriodoEdicao} onValor={setPesoPeriodoEdicao} placeholder="Igual" className={CAMPO}/><span className="block text-xs text-foreground/65">Disponível: {Math.max(0,100-agenda.ocorrencias.filter(o=>o.entregavelId===detalhe.entregavelId&&o.id!==detalhe.id&&!o.substituidaEm).reduce((a,o)=>a+Number(o.pesoPeriodo??0),0)-Number(pesoPeriodoEdicao.replace(',','.')||0)).toLocaleString('pt-BR',{maximumFractionDigits:2})}%</span>
         </label>}
@@ -1036,7 +1039,7 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, regulari
         ? <div className="flex flex-wrap items-center gap-2">
           {atividadeDetalhe.status === 'REGISTRADA' && podeSolicitarAtividade && <button type="button"
             className="min-h-9 rounded-lg border border-violet-500/65 bg-violet-500/10 px-3 text-xs font-semibold text-violet-700 hover:bg-violet-500/20 dark:text-violet-200"
-            disabled={verificandoAtividade} onClick={() => void verificarAtividadeVinculada()}>Solicitar conclusão</button>}
+            disabled={verificandoAtividade} onClick={() => void verificarAtividadeVinculada()}><IconeConclusao className="inline-block mr-1 h-4 w-4 align-middle"/>Solicitar conclusão</button>}
           {atividadeDetalhe.status === 'PENDENTE_CONCLUSAO' && podeSolicitarAtividade && <button type="button"
             className="min-h-9 rounded-lg border border-red-500/65 bg-red-500/10 px-3 text-xs font-semibold text-red-700 dark:text-red-300"
             disabled={verificandoAtividade} onClick={() => {setAcaoAtividadePendente('cancelar-solicitacao');setMotivoAcaoAtividade('');}}>Cancelar</button>}
@@ -1045,7 +1048,7 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, regulari
             disabled={verificandoAtividade} onClick={() => void verificarAtividadeVinculada()}>Aprovar</button>}
           {atividadeDetalhe.status === 'VERIFICADA' && (administrador || acesso.dados?.permissoes?.reabrirAtividades) && <button type="button"
             className="min-h-9 rounded-lg border border-slate-400/40 bg-slate-500/10 px-3 text-xs font-semibold text-foreground hover:bg-slate-500/20"
-            disabled={verificandoAtividade} onClick={() => {setAcaoAtividadePendente('reabrir');setMotivoAcaoAtividade('');}}>↻ Reabrir</button>}
+            disabled={verificandoAtividade} onClick={() => {setAcaoAtividadePendente('reabrir');setMotivoAcaoAtividade('');}}><IconeReabertura className="inline-block mr-1 h-4 w-4 align-middle"/>Reabrir</button>}
           {atividadeDetalhe.status === 'REGISTRADA' && podeVincularAtividade && <button type="button"
             className="min-h-9 rounded-lg border border-red-500/50 bg-red-500/5 px-3 text-xs font-semibold text-red-700 hover:bg-red-500/15 dark:text-red-300"
             disabled={verificandoAtividade} onClick={() => {setAcaoAtividadePendente('desvincular');setMotivoAcaoAtividade('');}}>Desvincular</button>}

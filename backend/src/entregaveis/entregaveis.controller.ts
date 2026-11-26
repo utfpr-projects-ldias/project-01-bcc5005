@@ -1,3 +1,4 @@
+import { SolicitarConclusaoDto } from './dto/solicitar-conclusao.dto.js';
 import {
   BadRequestException, Body, Controller, DefaultValuePipe, ParseIntPipe, Get, HttpCode, HttpStatus, Param, Patch, Post, Put,
   Query, Req, UsePipes, ValidationPipe,
@@ -94,14 +95,14 @@ export class EntregaveisController {
 
   @Patch(':entregavelId/solicitar-conclusao')
   @ExigirPoliticaOperacional('entregaveis:solicitar-conclusao', { tipo: 'recurso', recurso: 'entregavel', parametro: 'entregavelId', parametroContratoPai: 'contratoId' })
-  solicitarConclusao(@Param('contratoId') c: string, @Param('entregavelId') id: string, @Req() req: RequisicaoAutorizada) {
-    return this.service.solicitarConclusao(c, id, req.usuarioDominio!);
+  solicitarConclusao(@Param('contratoId') c: string, @Param('entregavelId') id: string, @Body() dto: SolicitarConclusaoDto, @Req() req: RequisicaoAutorizada) {
+    return this.service.solicitarConclusao(c, id, req.usuarioDominio!, dto);
   }
 
   @Patch(':entregavelId/solicitar-conclusao-parcial')
   @ExigirPoliticaOperacional('entregaveis:editar', { tipo: 'recurso', recurso: 'entregavel', parametro: 'entregavelId', parametroContratoPai: 'contratoId' })
-  solicitarConclusaoParcial(@Param('contratoId') c: string, @Param('entregavelId') id: string, @Req() req: RequisicaoAutorizada) {
-    return this.service.solicitarConclusaoParcial(c, id, req.usuarioDominio!);
+  solicitarConclusaoParcial(@Param('contratoId') c: string, @Param('entregavelId') id: string, @Body() dto: SolicitarConclusaoDto, @Req() req: RequisicaoAutorizada) {
+    return this.service.solicitarConclusaoParcial(c, id, req.usuarioDominio!, dto);
   }
 
   @Patch(':entregavelId/solicitar-encerramento')

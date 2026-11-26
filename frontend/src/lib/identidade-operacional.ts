@@ -58,13 +58,16 @@ export const CLASSES_ACAO_MENU: Record<IntencaoAcao, string> = {
 };
 
 /** Rótulo operacional único para lista, modal e tela de detalhe. */
-export function rotuloEstadoEntregavel(status?: string | null, arquivado?: boolean, reaberto?: boolean, regularizacaoSolicitada?: boolean, encerradoAdministrativamente?: boolean | null): string {
+export function rotuloEstadoEntregavel(status?: string | null, arquivado?: boolean, reaberto?: boolean, regularizacaoSolicitada?: boolean, encerradoAdministrativamente?: boolean | null, comAtrasosContinuo = false): string {
   if (arquivado) return 'Arquivado';
   if (regularizacaoSolicitada) return 'Pendente de regularização documental';
   if (status === 'PENDENTE_ENCERRAMENTO') return 'Pendente de encerramento';
   if (status === 'PENDENTE_CONCLUSAO_PARCIAL') return 'Pendente de conclusão parcial';
   if (status === 'PENDENTE_CONCLUSAO') return 'Pendente de conclusão';
   if (reaberto) return 'Em revisão';
+  if (comAtrasosContinuo && status === 'CONCLUIDO_PARCIALMENTE') return encerradoAdministrativamente ? 'Concluído parcialmente com atrasos · Encerrado' : 'Concluído parcialmente com atrasos';
+  if (comAtrasosContinuo && status === 'CONCLUIDO') return encerradoAdministrativamente ? 'Concluído com atrasos · Encerrado' : 'Concluído com atrasos';
+  if (comAtrasosContinuo && status === 'FINALIZADO') return 'Encerrado com atrasos';
   if (status === 'CONCLUIDO_PARCIALMENTE') return encerradoAdministrativamente ? 'Concluído parcialmente · Encerrado' : 'Concluído parcialmente';
   if (status === 'CONCLUIDO') return encerradoAdministrativamente ? 'Concluído · Encerrado' : 'Concluído';
   if (status === 'FINALIZADO') return 'Encerrado';

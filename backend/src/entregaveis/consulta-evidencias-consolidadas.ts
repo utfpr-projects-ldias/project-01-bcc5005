@@ -30,8 +30,8 @@ export function consultaEvidenciasConsolidadas(contratoId: string, filtros: Reco
   }
   try {
     if (filtros.dataInicio && filtros.dataFim && filtros.dataInicio>filtros.dataFim) throw new RangeError();
-    if (filtros.dataInicio) condicoes.push(`COALESCE(ult.criado_em,ev.criado_em)>=${param(inicioDiaCivilUtc(filtros.dataInicio).toISOString())}::timestamptz`);
-    if (filtros.dataFim) condicoes.push(`COALESCE(ult.criado_em,ev.criado_em)<${param(inicioDiaCivilUtc(proximoDiaCivil(filtros.dataFim)).toISOString())}::timestamptz`);
+    if (filtros.dataInicio) condicoes.push(`COALESCE((COALESCE(ev.data_acompanhamento,CASE WHEN e.tipo='CONTINUO' THEN e.termino_previsto END))::timestamp AT TIME ZONE 'America/Sao_Paulo',ult.criado_em,ev.criado_em)>=${param(inicioDiaCivilUtc(filtros.dataInicio).toISOString())}::timestamptz`);
+    if (filtros.dataFim) condicoes.push(`COALESCE((COALESCE(ev.data_acompanhamento,CASE WHEN e.tipo='CONTINUO' THEN e.termino_previsto END))::timestamp AT TIME ZONE 'America/Sao_Paulo',ult.criado_em,ev.criado_em)<${param(inicioDiaCivilUtc(proximoDiaCivil(filtros.dataFim)).toISOString())}::timestamptz`);
   } catch { throw new BadRequestException('Período inválido'); }
   const sqlAtividades=`SELECT a.titulo FROM atividades a WHERE a."contratoId"=e.contrato_id AND a."excluidaEm" IS NULL AND (EXISTS(SELECT 1 FROM atividade_comprovantes ac WHERE ac.atividade_id=a.id AND ac.contrato_id=e.contrato_id AND ac.comprovante_id=ult.id) OR (ult.id IS NULL AND a.id::text=ANY(string_to_array(ev.rascunho_envio->>'atividadesVinculadas',',')) AND EXISTS(SELECT 1 FROM atividade_entregaveis ae WHERE ae."atividadeId"=a.id AND ae."entregavelId"=e.id)))`;
   const sqlOcorrencias=`SELECT o.titulo FROM ocorrencias o WHERE o.contrato_id=e.contrato_id AND (o.id=ult.ocorrencia_quantidade_id OR EXISTS (SELECT 1 FROM ocorrencia_comprovantes oc WHERE oc.contrato_id=e.contrato_id AND oc.comprovante_id=ult.id AND oc.ocorrencia_id=o.id) OR (ult.id IS NULL AND o.entregavel_id=e.id AND o.substituida_em IS NULL AND (o.id::text=ANY(string_to_array(ev.rascunho_envio->>'ocorrenciasVinculadas',',')) OR o.id::text=ev.rascunho_envio->>'ocorrenciaQuantidadeId' OR o.id::text=ev.rascunho_envio->>'ocorrenciaExecucaoId')))`;
@@ -42,7 +42,7 @@ export function consultaEvidenciasConsolidadas(contratoId: string, filtros: Reco
       WHERE c.evidencia_esperada_id=ev.id AND c.contrato_id=e.contrato_id AND c.entregavel_id=e.id ORDER BY c.criado_em DESC,c.id DESC LIMIT 1) ult ON TRUE
     WHERE ${condicoes.join(' AND ')}`;
   const dados=`SELECT ev.id, e.id AS "entregavelId", e.nome AS "entregavel", et.nome AS "etapa", ev.tipo_evidencia AS "tipoEvidencia",ev.descricao,ev.obrigatoria,ev.arquivado_em AS "arquivadoEm",
-    (${statusAtual}) AS status,ult.id AS "comprovanteId",ult.nome_original AS "nomeOriginal",COALESCE(ult.criado_em,ev.criado_em) AS "criadoEm",ev.criado_em AS "criadoEmCadastro",ult.criado_em AS "enviadoEm",ult.tamanho,
+    (${statusAtual}) AS status,ult.id AS "comprovanteId",ult.nome_original AS "nomeOriginal",COALESCE(ult.criado_em,ev.criado_em) AS "criadoEm",ev.data_acompanhamento AS "dataAcompanhamento",CASE WHEN e.tipo='CONTINUO' THEN COALESCE(ev.data_acompanhamento,e.termino_previsto)::text END AS "dataReferencia",ev.criado_em AS "criadoEmCadastro",ult.criado_em AS "enviadoEm",ult.tamanho,
     ARRAY(${sqlAtividades} ORDER BY a.titulo,a.id) AS atividades, ARRAY(${sqlOcorrencias} ORDER BY o.titulo,o.id) AS ocorrencias
     ${base} ORDER BY COALESCE(ult.criado_em,ev.criado_em) DESC NULLS LAST,ev.id LIMIT $${parametros.length+1} OFFSET $${parametros.length+2}`;
   return { page,limit,contagem:`SELECT count(*)::int AS total ${base}`,dados,parametros,paginados:[...parametros,limit,(page-1)*limit] };

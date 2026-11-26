@@ -46,7 +46,7 @@ export function ModalNovoContrato({ onFechar, onCriado, focoRetorno }: {
       {consulta.dados?.incompleta&&<p className="rounded-lg border border-amber-500/35 p-3 text-xs">A lista de funcionários foi limitada. Você pode selecionar sua própria conta ou outro usuário ativo encontrado.</p>}
       {erro&&<p role="alert" className="mb-3 rounded-lg border border-red-500/40 p-3 text-sm text-red-300">{erro}</p>}
       <FormularioContrato responsaveis={responsaveis} salvando={salvando} onCancelar={onFechar} onSalvar={async dados=>{setErro('');setPendente(dados);}}/>
-      {pendente&&<ConfirmacaoSimples titulo="Confirmar cadastro do contrato?" descricao={`Cadastrar o contrato ${pendente.numeroContrato}? O cadastro será salvo e você permanecerá na lista de contratos.`}
+      {pendente&&<ConfirmacaoSimples titulo="Confirmar cadastro?" descricao={`Cadastrar o contrato ${pendente.numeroContrato}?`} aviso="O avanço percentual da execução do contrato e o método de cálculo podem ser configurados em Editar execução, no painel do contrato."
         confirmar="Cadastrar contrato" neutro ocupado={salvando} onCancelar={()=>setPendente(null)} onConfirmar={()=>void confirmar()}/>}
     </>}
   </ModalEtapa>,document.body);

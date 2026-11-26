@@ -29,7 +29,7 @@ const civilBR = (v: string | null | undefined) => v && /^\d{4}-\d{2}-\d{2}$/.tes
 const statusVisivel = (e: ProgressoEntregavel) => e.statusFisico;
 const statusFisico = (e: ProgressoEntregavel) => statusVisivel(e) === 'CONCLUIDO' ? 'Execução integral' : statusVisivel(e) === 'EM_ANDAMENTO' ? 'Em andamento' : statusVisivel(e) === 'NAO_INICIADO' ? 'Sem avanço físico' : 'Aguardando dados';
 const estadoFisico = (e: ProgressoEntregavel): EstadoContextual => estadoDoObjeto({objeto:'entregavel',status:e.statusEntregavel,reaberto:Boolean(e.reabertoEm),pendenteConclusao:Boolean(e.regularizacaoDocumentalSolicitada)});
-const textoFonte = (e: ProgressoEntregavel) => e.fonte === 'EVIDENCIAS_DIRETAS' ? 'Lançamentos, atividades e evidências de execução direta' : e.fonte === 'AGENDA' ? 'Agenda de ocorrências recorrentes' : e.fonte === 'OCORRENCIAS' ? 'Ocorrências quantitativas' : e.fonte === 'CONFLITO_QUANTIDADE' ? 'Quantidade precisa de conciliação' : 'Registro de execução do entregável';
+const textoFonte = (e: ProgressoEntregavel) => e.fonte==='ACOMPANHAMENTO_CONTINUO'?'Períodos operacionais confirmados':e.fonte === 'EVIDENCIAS_DIRETAS' ? 'Lançamentos, atividades e evidências de execução direta' : e.fonte === 'AGENDA' ? 'Agenda de ocorrências recorrentes' : e.fonte === 'OCORRENCIAS' ? 'Ocorrências quantitativas' : e.fonte === 'CONFLITO_QUANTIDADE' ? 'Quantidade precisa de conciliação' : 'Registro de execução do entregável';
 const numero = (valor: string | null) => valor == null ? 'Não informado' : Number(valor).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
 
 export type Props = { ocultarConfiguracao?: boolean; contratoId: string; entregavelId?: string; estadoContextual?: EstadoContextual; onAbrirEntregavel?: (id: string, origem: HTMLElement) => void; somenteLeitura?: boolean; onExecucaoAlterada?: () => void };
@@ -79,7 +79,7 @@ export function PainelExecucao({ contratoId, entregavelId, estadoContextual = 'n
     } else if (e.tipo === 'MARCO') {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(texto)) { setErro('Selecione uma data efetiva válida.'); return; }
       payload = { dataEfetivaMarco: texto };
-    } else if (e.tipo === 'UNICO' || e.tipo === 'CONTINUO') {
+    } else if (e.tipo === 'UNICO') {
       if (!/^\d{1,3}(?:\.\d{1,2})?$/.test(texto) || Number(texto) > 100) { setErro('Informe um percentual de 0 a 100, com até duas casas decimais.'); return; }
       payload = { percentualManual: Number(texto) };
     } else return;
@@ -110,7 +110,7 @@ export function PainelExecucao({ contratoId, entregavelId, estadoContextual = 'n
   // entregável nem abrir um segundo modal de execução idêntico.
   if (entregavelId) {
     const e = lista[0];
-    const podeRegistrar = Boolean(e && podeEditar && e.editavel && e.tipo !== 'RECORRENTE' && !['OCORRENCIAS','CONFLITO_QUANTIDADE','EVIDENCIAS_DIRETAS'].includes(e.fonte));
+    const podeRegistrar = Boolean(e && podeEditar && e.editavel && !['RECORRENTE','CONTINUO'].includes(e.tipo) && !['OCORRENCIAS','CONFLITO_QUANTIDADE','EVIDENCIAS_DIRETAS'].includes(e.fonte));
     return <section aria-label="Execução física" data-tec08-contexto-operacional data-pi-painel-contextual data-tec08-estado={estadoContextual}
       data-tec09-painel-execucao className="min-w-0 space-y-4 rounded-xl border p-3 sm:p-4">
       <header className="space-y-1"><h3 data-pi-titulo className="text-lg font-semibold">Execução física</h3>
@@ -119,7 +119,7 @@ export function PainelExecucao({ contratoId, entregavelId, estadoContextual = 'n
       {consulta.erro && <p role="alert" className="text-sm text-error-text">{consulta.erro}</p>}
       {e && <>
         <div data-pi-superficie data-tec08-secao-contextual className="flex flex-wrap items-center gap-2 rounded-xl border p-3" data-tec08-estado={estadoFisico(e)}>
-          <span className="text-xs text-foreground/65">{rotulosTipo[e.tipo]} · {rotuloEstadoEntregavel(e.statusEntregavel,false,Boolean(e.reabertoEm),Boolean(e.regularizacaoDocumentalSolicitada))} · {statusFisico(e)}</span><EtiquetaAtraso atrasado={e.atrasado} finalizadoComAtraso={e.finalizadoComAtraso}/>
+          <span className="text-xs text-foreground/65">{rotulosTipo[e.tipo]} · {rotuloEstadoEntregavel(e.statusEntregavel,false,Boolean(e.reabertoEm),Boolean(e.regularizacaoDocumentalSolicitada),false,e.tipo==='CONTINUO'&&Boolean(e.finalizadoComAtraso))} · {statusFisico(e)}</span><EtiquetaAtraso atrasado={e.atrasado} finalizadoComAtraso={e.tipo!=='CONTINUO'&&e.finalizadoComAtraso}/>
           <span className="ml-auto text-xl font-bold text-foreground">{percent(e.percentualExecucao)}</span>
         </div>
         <div className="space-y-3">
@@ -139,7 +139,7 @@ export function PainelExecucao({ contratoId, entregavelId, estadoContextual = 'n
             </label>
             <div className="flex justify-end"><button type="submit" data-pi-acao="primaria" disabled={salvando} className={PRIMARIO}>{salvando ? 'Salvando...' : 'Salvar execução'}</button></div>
           </form>}
-          {!podeRegistrar && <p className="text-xs text-foreground/60">{e.tipo === 'RECORRENTE' || e.fonte === 'OCORRENCIAS' ? 'Atualize a execução por meio das ocorrências vinculadas.' : 'Edição indisponível para seu perfil ou para a situação atual do entregável.'}</p>}
+          {!podeRegistrar && <p className="text-xs text-foreground/60">{e.tipo==='CONTINUO'?'Confirme os períodos no detalhe do entregável.':e.tipo === 'RECORRENTE' || e.fonte === 'OCORRENCIAS' ? 'Atualize a execução por meio das ocorrências vinculadas.' : 'Edição indisponível para seu perfil ou para a situação atual do entregável.'}</p>}
         </div>
       </>}
     </section>;
@@ -181,7 +181,7 @@ export function PainelExecucao({ contratoId, entregavelId, estadoContextual = 'n
             <ProgressoCircular valor={e.percentualExecucao} nome={e.nome} tamanho="grande" corFisica />
             <div className="pi-card-entregavel-info min-w-0 flex-1 space-y-1">
             <h5 data-pi-titulo className="break-words text-base font-semibold">{e.nome}</h5>
-            <p className="text-xs text-foreground/70">{rotulosTipo[e.tipo]} · {rotuloEstadoEntregavel(e.statusEntregavel,false,Boolean(e.reabertoEm),Boolean(e.regularizacaoDocumentalSolicitada))} · {statusFisico(e)}</p><EtiquetaAtraso atrasado={e.atrasado} finalizadoComAtraso={e.finalizadoComAtraso}/>
+            <p className="text-xs text-foreground/70">{rotulosTipo[e.tipo]} · {rotuloEstadoEntregavel(e.statusEntregavel,false,Boolean(e.reabertoEm),Boolean(e.regularizacaoDocumentalSolicitada),false,e.tipo==='CONTINUO'&&Boolean(e.finalizadoComAtraso))} · {statusFisico(e)}</p><EtiquetaAtraso atrasado={e.atrasado} finalizadoComAtraso={e.tipo!=='CONTINUO'&&e.finalizadoComAtraso}/>
             {e.statusEntregavel === 'FINALIZADO' && <span className="inline-flex rounded-full border border-purple-500/60 bg-purple-500/20 px-2 py-1 text-xs font-semibold text-purple-700 dark:text-purple-200">Encerrado</span>}
 
             <p className="text-xs text-foreground/70">{textoFonte(e)}</p>
@@ -200,7 +200,7 @@ export function PainelExecucao({ contratoId, entregavelId, estadoContextual = 'n
 
 
     {detalhe && !onAbrirEntregavel && <ModalEtapa alturaEstavel titulo={detalhe.nome} contexto="Execução física do entregável" estadoContextual={estadoFisico(detalhe)} ocupado={salvando} focoRetorno={gatilho} onFechar={fechar} rotuloFechar="Fechar detalhes da execução"
-      acoes={podeEditar && detalhe.editavel && detalhe.tipo !== 'RECORRENTE' && !['OCORRENCIAS', 'CONFLITO_QUANTIDADE','EVIDENCIAS_DIRETAS'].includes(detalhe.fonte) && !editandoExecucao ?
+      acoes={podeEditar && detalhe.editavel && !['RECORRENTE','CONTINUO'].includes(detalhe.tipo) && !['OCORRENCIAS', 'CONFLITO_QUANTIDADE','EVIDENCIAS_DIRETAS'].includes(detalhe.fonte) && !editandoExecucao ?
         <BotaoEditarModal rotulo="Editar execução" onClick={() => setEditandoExecucao(true)} /> : undefined}>
       <div className="space-y-4" data-tec08-estado={estadoFisico(detalhe)} data-tec08-secao-contextual>
         <div className="flex gap-1 rounded-xl border border-current/20 p-1" role="tablist" aria-label="Detalhes de execução do entregável">
@@ -209,7 +209,7 @@ export function PainelExecucao({ contratoId, entregavelId, estadoContextual = 'n
         </div>
         <div role="tabpanel" hidden={abaDetalhe !== 'AVANCO'} className={abaDetalhe !== 'AVANCO' ? 'hidden' : 'space-y-3'}>
         <div data-pi-superficie className="rounded-xl border p-4">
-          <p className="text-xs text-foreground/65">{rotulosTipo[detalhe.tipo]} · {rotuloEstadoEntregavel(detalhe.statusEntregavel,false,Boolean(detalhe.reabertoEm),Boolean(detalhe.regularizacaoDocumentalSolicitada))} · {statusFisico(detalhe)}</p><EtiquetaAtraso atrasado={detalhe.atrasado} finalizadoComAtraso={detalhe.finalizadoComAtraso}/>
+          <p className="text-xs text-foreground/65">{rotulosTipo[detalhe.tipo]} · {rotuloEstadoEntregavel(detalhe.statusEntregavel,false,Boolean(detalhe.reabertoEm),Boolean(detalhe.regularizacaoDocumentalSolicitada),false,detalhe.tipo==='CONTINUO'&&Boolean(detalhe.finalizadoComAtraso))} · {statusFisico(detalhe)}</p><EtiquetaAtraso atrasado={detalhe.atrasado} finalizadoComAtraso={detalhe.tipo!=='CONTINUO'&&detalhe.finalizadoComAtraso}/>
           <p data-pi-titulo className="mt-2 text-3xl font-bold">{percent(detalhe.percentualExecucao)}</p>
           <p className="mt-2 text-sm text-foreground/75">{textoFonte(detalhe)}</p>
         </div>
@@ -223,7 +223,7 @@ export function PainelExecucao({ contratoId, entregavelId, estadoContextual = 'n
         </dl>
     {erro && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-error-text">{erro}</p>}
         {mensagem && <p role="status" className="rounded-lg border border-current/30 p-3 text-sm">{mensagem}</p>}
-        {editandoExecucao && podeEditar && detalhe.editavel && detalhe.tipo !== 'RECORRENTE' && !['OCORRENCIAS', 'CONFLITO_QUANTIDADE','EVIDENCIAS_DIRETAS'].includes(detalhe.fonte) && <form data-pi-formulario className="space-y-3 rounded-xl border border-current/20 p-4" onSubmit={ev => void salvarExecucao(ev, detalhe)}>
+        {editandoExecucao && podeEditar && detalhe.editavel && !['RECORRENTE','CONTINUO'].includes(detalhe.tipo) && !['OCORRENCIAS', 'CONFLITO_QUANTIDADE','EVIDENCIAS_DIRETAS'].includes(detalhe.fonte) && <form data-pi-formulario className="space-y-3 rounded-xl border border-current/20 p-4" onSubmit={ev => void salvarExecucao(ev, detalhe)}>
           <h4 data-pi-titulo className="text-sm font-semibold">Atualizar execução</h4>
           <label htmlFor={`${idPrefixo}-valor`} className="block text-sm font-medium">{detalhe.tipo === 'MARCO' ? 'Data em que o marco foi alcançado' : detalhe.tipo === 'QUANTITATIVO' ? 'Quantidade efetivamente realizada' : 'Percentual físico realizado (0 a 100)'}
             <input id={`${idPrefixo}-valor`} type={detalhe.tipo === 'MARCO' ? 'date' : 'text'} maxLength={detalhe.tipo === 'MARCO' ? undefined : 18} inputMode={detalhe.tipo === 'MARCO' ? undefined : 'decimal'} value={valor} onChange={ev => setValor(ev.target.value)} required placeholder={detalhe.tipo === 'MARCO' ? undefined : detalhe.tipo === 'QUANTITATIVO' ? 'Ex.: 15,500' : 'Ex.: 75,50'} className={INPUT} />
@@ -274,7 +274,7 @@ function EditorPesos({dados,salvarPesos,alterarModo,onFechar,onOcupado,fecharRef
   return <form data-pi-formulario data-pi-editar-execucao className="min-w-0 space-y-4" onSubmit={e=>void salvar(e)}>
     <fieldset className="grid gap-2 sm:grid-cols-2"><legend className="mb-2 text-sm font-semibold">Modo de cálculo</legend>{(['SIMPLES','PONDERADO'] as const).map(m=><label key={m} className="pi-opcao-origem flex cursor-pointer items-start gap-3 rounded-lg border border-slate-500/25 px-3 py-2.5"><input type="radio" name="modo-calculo" checked={modo===m} disabled={ocupado} onChange={()=>setModo(m)} className="mt-1 accent-brand-green"/><span><strong className="block text-sm">{m==='SIMPLES'?'Média simples':'Média ponderada'}</strong><span className="text-xs text-foreground/65">{m==='SIMPLES'?'Participação equivalente dos entregáveis.':'Participação definida por peso operacional.'}</span></span></label>)}</fieldset>
     <dl className="grid grid-cols-2 gap-3 border-y border-slate-500/20 py-3 sm:grid-cols-4">{[['Execução física',percent(dados.avanco)],['Entregáveis',dados.entregaveis.length],...(modo==='PONDERADO'?[['Pesos distribuídos',percent(distribuicao.soma)],['Restante',percent(Math.max(0,100-distribuicao.soma))]]:[])].map(([rotulo,valor])=><div key={rotulo}><dt className="text-xs text-foreground/60">{rotulo}</dt><dd className="mt-1 text-xl font-semibold tabular-nums">{valor}</dd></div>)}</dl>
-    <div role="list" aria-label="Pesos por entregável" className="divide-y divide-slate-500/20">{dados.entregaveis.map(e=><div role="listitem" key={e.entregavelId} className="flex min-w-0 flex-wrap items-center gap-3 py-3"><ProgressoCircular valor={e.percentualExecucao} nome={e.nome} corFisica/><div className="min-w-0 flex-1"><p title={e.nome} className="truncate font-semibold text-sm">{e.nome}</p><p className="text-xs text-foreground/65">{rotulosTipo[e.tipo]} · {rotuloEstadoEntregavel(e.statusEntregavel,false,Boolean(e.reabertoEm),Boolean(e.regularizacaoDocumentalSolicitada))}</p></div>{e.percentualExecucao!=null&&(modo==='SIMPLES'||valido)&&<span className="shrink-0 text-xs text-foreground/65">{(e.percentualExecucao*(modo==='SIMPLES'?1/dados.entregaveis.length:Number(decimalParaApi(pesos[e.entregavelId]??'0'))/100)).toLocaleString('pt-BR',{maximumFractionDigits:3})} p.p. no contrato</span>}{modo==='PONDERADO'?<label className="flex shrink-0 items-center gap-2 text-xs">Peso <input aria-label={`Peso operacional de ${e.nome}`} className="w-28 rounded-lg border border-slate-500/30 bg-transparent px-2 py-2 text-sm tabular-nums focus-visible:outline-2 focus-visible:outline-current" inputMode="decimal" value={pesos[e.entregavelId]??''} disabled={ocupado} onChange={ev=>setPesos(p=>({...p,[e.entregavelId]:decimalDigitado(ev.target.value,100,4)}))}/> %</label>:<strong className="shrink-0 text-sm tabular-nums">{percent(100/dados.entregaveis.length)} do contrato</strong>}</div>)}{!dados.entregaveis.length&&<p className="py-3 text-sm text-foreground/60">Nenhum entregável cadastrado.</p>}</div>
+    <div role="list" aria-label="Pesos por entregável" className="divide-y divide-slate-500/20">{dados.entregaveis.map(e=><div role="listitem" key={e.entregavelId} className="flex min-w-0 flex-wrap items-center gap-3 py-3"><ProgressoCircular valor={e.percentualExecucao} nome={e.nome} corFisica/><div className="min-w-0 flex-1"><p title={e.nome} className="truncate font-semibold text-sm">{e.nome}</p><p className="text-xs text-foreground/65">{rotulosTipo[e.tipo]} · {rotuloEstadoEntregavel(e.statusEntregavel,false,Boolean(e.reabertoEm),Boolean(e.regularizacaoDocumentalSolicitada),false,e.tipo==='CONTINUO'&&Boolean(e.finalizadoComAtraso))}</p></div>{e.percentualExecucao!=null&&(modo==='SIMPLES'||valido)&&<span className="shrink-0 text-xs text-foreground/65">{(e.percentualExecucao*(modo==='SIMPLES'?1/dados.entregaveis.length:Number(decimalParaApi(pesos[e.entregavelId]??'0'))/100)).toLocaleString('pt-BR',{maximumFractionDigits:3})} p.p. no contrato</span>}{modo==='PONDERADO'?<label className="flex shrink-0 items-center gap-2 text-xs">Peso <input aria-label={`Peso operacional de ${e.nome}`} className="w-28 rounded-lg border border-slate-500/30 bg-transparent px-2 py-2 text-sm tabular-nums focus-visible:outline-2 focus-visible:outline-current" inputMode="decimal" value={pesos[e.entregavelId]??''} disabled={ocupado} onChange={ev=>setPesos(p=>({...p,[e.entregavelId]:decimalDigitado(ev.target.value,100,4)}))}/> %</label>:<strong className="shrink-0 text-sm tabular-nums">{percent(100/dados.entregaveis.length)} do contrato</strong>}</div>)}{!dados.entregaveis.length&&<p className="py-3 text-sm text-foreground/60">Nenhum entregável cadastrado.</p>}</div>
     {modo==='PONDERADO'&&valido&&!distribuicao.valida&&<p role="status" className="text-xs text-amber-500">Distribuição incompleta: o peso restante contribui com 0%. Complete 100% antes da conclusão do contrato.</p>}{modo==='PONDERADO'&&!valido&&<p role="status" className="text-xs text-amber-500">Informe pesos válidos, sem ultrapassar 100%.</p>}{desatualizado&&<p role="alert" className="text-sm text-error-text">O planejamento mudou. Feche e abra a configuração para consultar a versão atual.</p>}{erro&&<p role="alert" className="text-sm text-error-text">{erro}</p>}
     <footer className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t border-slate-500/20 bg-background py-3"><button type="button" disabled={ocupado} className={CANCELAR_PESOS} onClick={solicitarFechamento}>Cancelar</button><button type="submit" data-pi-acao="primaria" disabled={ocupado||!valido||desatualizado||!mudou} className={`${PRIMARIO} bg-brand-green text-on-brand-green`}>{ocupado?'Salvando…':'Salvar alterações'}</button></footer>
   </form>;

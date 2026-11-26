@@ -22,7 +22,7 @@ export function FormularioEtapa({ inicial, onSalvar, onCancelar, onSalvandoMudou
   const [erros, setErros] = useState<ErrosCamposEtapa>({});
   const [erroGeral, setErroGeral] = useState('');
   const [salvando, setSalvando] = useState(false);
-  const somenteMetadados = false; // Etapa finalizada exige reabertura antes de abrir o formulário.
+  const somenteMetadados = inicial?.status === 'CONCLUIDO_PARCIALMENTE';
   function mudar<K extends Campo>(campo: K, valor: DadosEtapa[K]) {
     setDados((atual) => ({ ...atual, [campo]: valor }));
     setErros((atual) => ({ ...atual, [campo]: undefined }));
@@ -60,7 +60,7 @@ export function FormularioEtapa({ inicial, onSalvar, onCancelar, onSalvandoMudou
   }
   return <form data-tec08-formulario-contextual data-tec08-edicao={inicial ? "true" : undefined} data-tec08-criacao={inicial ? undefined : "true"} noValidate aria-label={inicial ? `Editar etapa ${inicial.nome}` : 'Criar etapa'} onSubmit={(e) => void enviar(e)}
     className="pi-form-etapa min-w-0 space-y-3">
-    {somenteMetadados && <p className="text-sm text-foreground/65">Etapa finalizada: prazos e situação exigem reabertura autorizada.</p>}
+    {somenteMetadados && <p className="text-sm text-foreground/65">Regularização documental: apenas os dados descritivos podem ser editados.</p>}
     <h4 className="pi-titulo-formulario">Identificação</h4>
     <div className="grid gap-3 sm:grid-cols-[minmax(8rem,11rem)_minmax(0,1fr)]">
       <div><label htmlFor="etapa-codigo" className="mb-1 block text-sm font-medium">Código</label>

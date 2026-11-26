@@ -22,8 +22,8 @@ export function PainelEpicosMarco({ contratoId, somenteLeitura=false }: {contrat
       .then(resultados=>{if(!ativo)return;const mapa:Record<string,ResumoMetasMarco>={};for(const r of resultados)if(r.status==='fulfilled')mapa[r.value.id]=r.value.resumo;setResumos(mapa);});
     return()=>{ativo=false;};
   },[contratoId,ids]);
-  return <section className="space-y-4 rounded-xl border border-current/20 p-4" aria-label="Épicos: Marcos do contrato">
-    <header><h3 className="font-semibold">Épicos</h3><p className="mt-1 text-xs text-foreground/65">Marcos planejados por entregável.</p></header>
+  return <section className="space-y-4 rounded-xl border border-current/20 p-4" aria-label="Metas dos Marcos do contrato">
+    <header><h3 className="font-semibold">Metas dos Marcos</h3><p className="mt-1 text-xs text-foreground/65">Marcos planejados por entregável.</p></header>
     {entregaveis.carregando&&<p role="status" className="text-sm">Consultando Marcos...</p>}
     {marcos.length===0&&!entregaveis.carregando&&<p className="text-sm text-foreground/60">Este contrato ainda não possui entregáveis do tipo Marco.</p>}
     <div className="space-y-3">{marcos.map(e=>{const r=resumos[e.id];const porcentagem=r?.percentualPreparacao??0;
@@ -33,7 +33,7 @@ export function PainelEpicosMarco({ contratoId, somenteLeitura=false }: {contrat
           <button type="button" aria-expanded={selecionado===e.id} onClick={()=>setSelecionado(v=>v===e.id?null:e.id)} className="rounded-lg border border-violet-500/40 px-3 py-2 text-xs font-semibold">{selecionado===e.id?'Ocultar metas':'Ver metas'}</button></div>
         <div className="flex justify-between text-xs"><span>Preparação</span><strong>{porcentagem.toLocaleString('pt-BR',{maximumFractionDigits:2})}%</strong></div>
         <div role="progressbar" aria-label={`Preparação de ${e.nome}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={porcentagem} className="h-2 overflow-hidden rounded-full bg-current/10"><div className="h-full rounded-full bg-violet-500" style={{width:`${Math.max(0,Math.min(100,porcentagem))}%`}}/></div>
-        {selecionado===e.id&&<PainelMetasMarco contratoId={contratoId} entregavelId={e.id} permissoes={acesso.dados?.permissoes} readOnly={somenteLeitura||Boolean(['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao??''))} onAtualizar={()=>{void entregaveis.atualizar();void listarMetasMarco(contratoId,e.id).then(r=>setResumos(v=>({...v,[e.id]:r}))).catch(()=>{});}}/>}
+        {selecionado===e.id&&<PainelMetasMarco contratoId={contratoId} entregavelId={e.id} nomeMarco={e.nome} prazo={e.terminoPrevisto??e.inicioPrevisto} permissoes={acesso.dados?.permissoes} readOnly={somenteLeitura||Boolean(['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao??'')||e.regularizacaoDocumentalSolicitada)} regularizacaoDocumental={!somenteLeitura&&e.statusExecucao==='CONCLUIDO_PARCIALMENTE'&&!e.regularizacaoDocumentalSolicitada} onAtualizar={()=>{void entregaveis.atualizar();void listarMetasMarco(contratoId,e.id).then(r=>setResumos(v=>({...v,[e.id]:r}))).catch(()=>{});}}/>}
       </article>;
     })}</div>
   </section>;

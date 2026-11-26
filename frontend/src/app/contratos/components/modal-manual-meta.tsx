@@ -1,0 +1,37 @@
+'use client';
+import { useRef, useState, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
+import { useMeuPerfil } from '@/hooks/use-meu-perfil';
+import { usePedidoExecucaoPendente, type PedidoExecucaoPendente } from '@/hooks/use-pedido-execucao-pendente';
+import { CampoDataCivil } from '@/app/components/campo-data-civil';
+import { ModalEtapa, type NavegacaoCadastroRegistro } from './modal-etapa';
+import { criarManualMeta, corrigirManualMeta, decidirManualMeta, type ExecucaoManualMeta, type MetaMarco } from '@/lib/metas-marco';
+import { milesimosApi, formatarMilesimos } from '@/lib/numero-quantidade-br';
+const campo='mt-1 block w-full min-w-0 rounded-lg border border-current/25 bg-transparent px-3 py-2 text-sm';
+const botao='rounded-lg border border-current/25 px-3 py-2 text-sm font-semibold disabled:opacity-40';
+const hoje=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+export function ModalManualMeta({contratoId:c,entregavelId:e,meta,registro,origem,navegacaoCadastro,podeRegistrar,podeAprovar,podeCorrigirAprovada,onFechar,onAtualizar}:{contratoId:string;entregavelId:string;meta:MetaMarco;registro?:ExecucaoManualMeta;origem:HTMLElement;navegacaoCadastro?:NavegacaoCadastroRegistro;podeRegistrar:boolean;podeAprovar:boolean;podeCorrigirAprovada:boolean;onFechar:()=>void;onAtualizar:()=>Promise<void>}){
+ const [editando,setEditando]=useState(!registro),[valor,setValor]=useState(registro?.quantidade.replace('.',',')??''),[data,setData]=useState(registro?.data??hoje()),[observacao,setObservacao]=useState(registro?.observacao??''),[motivo,setMotivo]=useState(''),[erro,setErro]=useState(''),[ocupado,setOcupado]=useState(false);
+ const perfil=useMeuPerfil();
+ const {pedido,definir,pronto}=usePedidoExecucaoPendente(!registro&&perfil.dados?.id?`${perfil.dados.id}:${c}:${e}:manual-meta:${meta.id}`:null);
+ const trava=useRef(false);
+ const limite=milesimosApi(meta.quantidadePrevista??'0')-milesimosApi(meta.quantidadeComprometida??meta.quantidadeRealizada)+(registro&&registro.status!=='REJEITADO'?milesimosApi(registro.quantidade):0n);
+ const saldo=limite>0n?limite:0n, digitado=milesimosApi(valor.replace(',','.'));
+ const podeEditar=podeRegistrar&&(!registro||registro.status!=='APROVADO'||podeCorrigirAprovada);
+ const valido=/^\d{1,15}(?:[.,]\d{1,3})?$/.test(valor)&&digitado>0n&&digitado<=saldo&&!!data&&data<=hoje()&&(!registro||motivo.trim().length>=15);
+ async function mutar(fn:()=>Promise<unknown>,criacao=false){if(trava.current)return;trava.current=true;setOcupado(true);setErro('');try{await fn();if(criacao)definir(null);await onAtualizar();onFechar();}catch(x){const status=(x as {status?:number})?.status;if(criacao&&status!==undefined&&status>=400&&status<500)definir(null);setErro(x instanceof Error?x.message:'Não foi possível realizar a operação.');}finally{trava.current=false;setOcupado(false);}}
+ function salvar(ev:FormEvent){ev.preventDefault();if(trava.current||!podeEditar||!registro&&!pronto||!valido&&!pedido)return;const d={valor:valor.replace(',','.'),data,observacao:observacao.trim()};if(registro){void mutar(()=>corrigirManualMeta(c,e,meta.id,registro.id,{...d,motivo:motivo.trim(),versaoEsperada:registro.versao}));return;}const p:PedidoExecucaoPendente=pedido??{id:crypto.randomUUID(),...d,endpoint:'META_MARCO',ocorrenciaId:null};if(p.endpoint!=='META_MARCO')return;definir(p);void mutar(()=>criarManualMeta(c,e,meta.id,{id:p.id,valor:p.valor,data:p.data,observacao:p.observacao}),true);}
+ const decisao=(d:'APROVADO'|'REJEITADO')=>{if(!registro||!podeAprovar||registro.status!=='PENDENTE'||(d==='REJEITADO'&&!motivo.trim()))return;void mutar(()=>decidirManualMeta(c,e,meta.id,registro.id,{decisao:d,motivo:motivo.trim(),versaoEsperada:registro.versao}));};
+ const travado=ocupado||Boolean(pedido);
+ return createPortal(<ModalEtapa titulo={registro?'Execução manual':'Novo registro'} contexto={meta.titulo} camada="edicao" larguraFormulario="registro-manual" navegacaoCadastro={navegacaoCadastro} ocupado={ocupado} focoRetorno={origem} onFechar={onFechar}>
+ <form data-pi-formulario className="space-y-4 min-w-0" onSubmit={salvar}>
+ {registro&&!editando?<><div className="space-y-2"><p className="font-semibold">{formatarMilesimos(milesimosApi(registro.quantidade))} {meta.unidadeMedida}</p><p className="text-sm">Data: {registro.data.split('-').reverse().join('/')}</p><p className="text-sm">{registro.status==='APROVADO'?'Aprovada':registro.status==='REJEITADO'?'Rejeitada':'Pendente de verificação'}</p>{registro.observacao&&<p className="text-sm break-words">{registro.observacao}</p>}{registro.motivo&&<p className="text-sm break-words">{registro.motivo}</p>}</div>{podeAprovar&&registro.status==='PENDENTE'&&<label className="block text-sm">Justificativa para rejeição<textarea className={campo} rows={2} maxLength={300} value={motivo} onChange={ev=>setMotivo(ev.target.value)} disabled={ocupado}/></label>}<div className="flex flex-wrap justify-end gap-2">{podeEditar&&<button type="button" className={botao} disabled={ocupado} onClick={()=>{setEditando(true);setMotivo('');}}>{registro.status==='APROVADO'?'Reabrir':'Editar registro'}</button>}{podeAprovar&&registro.status==='PENDENTE'&&<><button type="button" className={botao} disabled={ocupado||!motivo.trim()} onClick={()=>decisao('REJEITADO')}>Rejeitar</button><button type="button" className={botao} data-pi-acao="primaria" disabled={ocupado} onClick={()=>decisao('APROVADO')}>Aprovar</button></>}</div></>:<>
+ <div className="pi-manual-meta-campos"><label><span>Data da execução *</span><CampoDataCivil className={campo} required value={pedido?.data??data} max={hoje()} disabled={travado} onChange={ev=>setData(ev.target.value)}/></label><label><span>Quantidade executada *</span><input className={campo} inputMode="decimal" required maxLength={19} disabled={travado||!podeEditar} value={pedido?.valor.replace('.',',')??valor} onChange={ev=>{if(/^\d{0,15}(?:[.,]\d{0,3})?$/.test(ev.target.value))setValor(ev.target.value);}}/><small className="text-foreground/65 break-words">({meta.unidadeMedida})</small><small className="text-foreground/65 break-words">Disponível: {formatarMilesimos(saldo)}</small></label></div>
+ <label className="block text-sm">Observações (opcional)<textarea className={campo} rows={2} maxLength={300} disabled={travado} value={pedido?.observacao??observacao} onChange={ev=>setObservacao(ev.target.value)}/></label>
+ {registro&&<label className="block text-sm">Justificativa da correção *<textarea className={campo} rows={2} maxLength={200} disabled={ocupado} value={motivo} onChange={ev=>setMotivo(ev.target.value)}/></label>}
+ {pedido&&<p role="status" className="text-sm">Resultado não confirmado. Reenvie o pedido original para evitar duplicação.</p>}
+ <p className="text-xs text-foreground/65">O lançamento é associado diretamente à meta e só contribui após aprovação.</p>
+ <div className="flex justify-end gap-2 border-t border-current/15 pt-3"><button type="button" className={botao} disabled={ocupado} onClick={registro?()=>setEditando(false):onFechar}>Cancelar</button><button type="submit" data-pi-acao="primaria" className={botao} disabled={ocupado||!podeEditar||(!registro&&!pronto)||!valido&&!pedido}>{ocupado?'Salvando…':pedido?'Confirmar reenvio':registro?'Salvar correção':'Cadastrar'}</button></div></>}
+ {erro&&<p role="alert" className="text-sm text-error-text">{erro}</p>}
+ </form></ModalEtapa>,document.body);
+}

@@ -448,3 +448,17 @@ test.each([
   fireEvent.click(screen.getByRole('button', { name: 'Fechar edição da etapa' }));
   expect(fechar).toHaveBeenCalledTimes(1);
 });
+
+test.each(['etapa', 'entregavel'] as const)('identifica acabamento do detalhe %s sem marcar submodais', acabamentoDetalhe => {
+  const {unmount} = render(<ModalEtapa titulo="Detalhe" ocupado={false} onFechar={jest.fn()} acabamentoDetalhe={acabamentoDetalhe}><p>Conteúdo</p></ModalEtapa>);
+  expect(screen.getByRole('dialog')).toHaveAttribute('data-pi-acabamento-detalhe', acabamentoDetalhe);
+  unmount();
+  render(<ModalEtapa titulo="Formulário" ocupado={false} onFechar={jest.fn()}><p>Conteúdo</p></ModalEtapa>);
+  expect(screen.getByRole('dialog')).not.toHaveAttribute('data-pi-acabamento-detalhe');
+});
+
+test('aplica marcador também à região interna do entregável, sem criar outro diálogo', () => {
+  render(<ModalEtapa titulo="Entregável interno" interno acabamentoDetalhe="entregavel" ocupado={false} onFechar={jest.fn()}><p>Conteúdo</p></ModalEtapa>);
+  expect(screen.getByRole('region', {name:'Entregável interno'})).toHaveAttribute('data-pi-acabamento-detalhe','entregavel');
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+});

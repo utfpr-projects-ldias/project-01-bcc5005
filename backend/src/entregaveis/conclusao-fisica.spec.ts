@@ -51,7 +51,7 @@ describe('Regularização: conclusão física é independente do checklist e exi
     e.dataEfetivaMarco = '2026-11-11';
     const resultado = await aptidaoFisicaParaConclusao(manager([o]) as never, e);
     expect(resultado.apto).toBe(false);
-    expect(resultado.motivo).toMatch(/ocorrências ativas/);
+    expect(resultado.motivo).toMatch(/metas do Marco/);
   });
   it('recorrente sem agenda completa não pode ser encerrado', async () => {
     const resultado = await aptidaoFisicaParaConclusao(manager() as never, entrada(TipoEntregavel.RECORRENTE));

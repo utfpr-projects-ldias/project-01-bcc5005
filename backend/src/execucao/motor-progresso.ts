@@ -18,7 +18,7 @@ export function calcularFisico(e: EntradaFisica): number | null {
     case 'RECORRENTE': return proporcao(e.ocorrenciasConcluidas, e.ocorrenciasPrevistas);
     case 'MARCO': return e.dataEfetivaMarco ? 100 : 0;
     case 'UNICO': return e.percentualManual == null ? 0 : valido(e.percentualManual) && e.percentualManual <= 100 ? e.percentualManual : null;
-    case 'CONTINUO': return valido(e.percentualManual) && e.percentualManual <= 100 ? e.percentualManual : null;
+    case 'CONTINUO': return null; // calculado exclusivamente por resumoContinuo
   }
 }
 /** Pesos NUMERIC(7,4): soma em unidades inteiras, não tolerância de ponto flutuante. */

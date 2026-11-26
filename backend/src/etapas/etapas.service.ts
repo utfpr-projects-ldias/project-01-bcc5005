@@ -234,10 +234,11 @@ export class EtapasService {
         if (dto.estadoAnterior !== undefined && dto.estadoAnterior !== estadoEdicaoEtapa(etapa))
           throw new ConflictException('A etapa mudou desde a abertura do formulário. Reabra a edição para atualizar os dados.');
         if (etapa.arquivadoEm) throw new ConflictException('Reative a etapa antes de editar');
-        if (etapa.conclusaoSolicitadaEm || etapa.encerramentoSolicitadoEm) throw new ConflictException('Existe solicitação pendente; devolva a decisão antes de editar a etapa');
-        // Decisão de produto: finalização formal bloqueia TODA edição, inclusive textos.
-        // Um novo ciclo exige reabertura explícita e auditável.
-        if (!etapa.reabertoEm && [StatusEtapa.CONCLUIDA, StatusEtapa.CONCLUIDO_PARCIALMENTE, StatusEtapa.ENCERRADA, StatusEtapa.FINALIZADA].includes(etapa.status))
+        const metadadosRegularizacao = etapa.status === StatusEtapa.CONCLUIDO_PARCIALMENTE && !etapa.encerramentoSolicitadoEm && Object.entries(dto).every(([campo,valor]) => valor === undefined || ['estadoAnterior','nome','codigo','descricao','observacoes'].includes(campo));
+        if (!metadadosRegularizacao && (etapa.conclusaoSolicitadaEm || etapa.encerramentoSolicitadoEm)) throw new ConflictException('Existe solicitação pendente; devolva a decisão antes de editar a etapa');
+        // Regularização permite somente correção descritiva. A conclusão integral e
+        // o encerramento continuam a exigir reabertura explícita e auditável.
+        if (!metadadosRegularizacao && !etapa.reabertoEm && [StatusEtapa.CONCLUIDA, StatusEtapa.CONCLUIDO_PARCIALMENTE, StatusEtapa.ENCERRADA, StatusEtapa.FINALIZADA].includes(etapa.status))
           throw new ConflictException('Etapa finalizada. Reabra para revisão antes de editar.');
         const nomeAnterior = etapa.nome;
         const codigoAnterior = etapa.codigo;

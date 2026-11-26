@@ -83,3 +83,10 @@ test('edição não inclui decisões críticas para nenhum perfil', () => {
     }
   }
 });
+
+test('Marco: edição operacional do colaborador permite vínculos, sem planejamento ou decisões',()=>{
+ const c=permissoesPadraoVinculo('COLABORADOR','edicao'),g=permissoesPadraoVinculo('GESTOR','edicao');
+ expect(c.vincularMetasMarco).toBe(true);expect(c.criarMetasMarco).toBe(false);expect(c.solicitarMetasMarco).toBe(false);
+ expect(g.criarMetasMarco).toBe(true);expect(g.editarMetasMarco).toBe(true);expect(g.solicitarMetasMarco).toBe(true);
+ for(const p of [c,g]){expect(p.reabrirMetasMarco).toBe(false);expect(p.arquivarMetasMarco).toBe(false);expect(p.reativarMetasMarco).toBe(false);expect(p.aprovarVinculosMetasMarco).toBe(false);}
+});

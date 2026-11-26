@@ -21,3 +21,10 @@ describe('HU11 — projeção do dashboard',()=>{
   it('limiar de proximidade é configurável',()=>{expect(projetar(vazio,{},contrato,[],3).alertas.some(a=>a.tipo==='ENCERRAMENTO_PROXIMO')).toBe(false);expect(projetar().alertas.some(a=>a.tipo==='ENCERRAMENTO_PROXIMO')).toBe(true);});
   it('não agrega cancelados, arquivados nem cálculos pendentes na média ativa',()=>{const p={...vazio,avanco:80,entregaveis:[{...item,percentualExecucao:80}]};const l=projetar(p);const c=projetar(p,{}, {...contrato,status:StatusContrato.CANCELADO});const a=projetar(p,{}, {...contrato,arquivadoEm:new Date()});const i=projetar({...p,configuracaoPendente:true});expect(resumirCarteira([l,c,a,i],7)).toMatchObject({ativos:2,avanco:80,baseAvanco:1});});
 });
+
+it('fim da vigência do Contínuo não constitui atraso administrativo no dashboard',()=>{
+ const l=projetar({...vazio,entregaveis:[{...item,tipo:'CONTINUO',atrasado:false}]},doc);
+ expect(l.prazos[0]).toMatchObject({aberto:true,atrasado:false});
+ expect(l.alertas.some(a=>a.id==='e'&&['ATRASO','PRAZO_PROXIMO'].includes(a.tipo))).toBe(false);
+ expect(l.atrasos).toBe(0);
+});

@@ -42,7 +42,7 @@ export default function DetalheEntregavelPage() {
   const contextoAtivo = Boolean(acessoValido && raiz?.id === contratoId && pai?.contratoId === contratoId && !contrato.erro && !etapas.erro && !raiz.arquivadoEm && !raiz.conclusaoSolicitadaEm && !['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','ENCERRADO','SUSPENSO','CANCELADO'].includes(raiz.status) && !pai.arquivadoEm && !pai.conclusaoSolicitadaEm && !pai.encerramentoSolicitadoEm && !['CONCLUIDA','CONCLUIDO_PARCIALMENTE','ENCERRADA','FINALIZADA'].includes(pai.status));
   const bloqueado = !contextoAtivo || Boolean(atual?.arquivadoEm || atual?.regularizacaoDocumentalSolicitada || ['PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(atual?.statusExecucao ?? '') || (!atual?.reabertoEm && ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(atual?.statusExecucao ?? '')));
   const podeEditar = !bloqueado && Boolean(permissoes?.editarEntregaveis);
-  const regularizacao = Boolean(acessoValido && raiz?.id === contratoId && pai?.contratoId === contratoId && !contrato.erro && !etapas.erro && !raiz.arquivadoEm && !raiz.conclusaoSolicitadaEm && !['CONCLUIDO','FINALIZADO','ENCERRADO','SUSPENSO','CANCELADO'].includes(raiz.status) && !pai.arquivadoEm && !pai.conclusaoSolicitadaEm && !pai.encerramentoSolicitadoEm && !['CONCLUIDA','ENCERRADA','FINALIZADA'].includes(pai.status) && atual?.statusExecucao === 'CONCLUIDO_PARCIALMENTE' && !atual.arquivadoEm && !atual.regularizacaoDocumentalSolicitada);
+  const regularizacao = Boolean(acessoValido && raiz?.id === contratoId && pai?.contratoId === contratoId && !contrato.erro && !etapas.erro && !raiz.arquivadoEm && !raiz.conclusaoSolicitadaEm && !['CONCLUIDO','FINALIZADO','ENCERRADO','SUSPENSO','CANCELADO'].includes(raiz.status) && !pai.arquivadoEm && !pai.conclusaoSolicitadaEm && !pai.encerramentoSolicitadoEm && !['CONCLUIDA','ENCERRADA','FINALIZADA'].includes(pai.status) && atual?.statusExecucao === 'CONCLUIDO_PARCIALMENTE' && !atual.arquivadoEm);
   async function salvar(dados: DadosPlanejamentoEntregavel, base?: Entregavel) {
     if (!podeEditar || !base || base.id !== entregavelId || base.contratoId !== contratoId)
       throw new ErroEntregavel(409, 'O entregável não permite edição no estado atual.');
@@ -62,7 +62,7 @@ export default function DetalheEntregavelPage() {
     {Boolean(erro) && <Aviso erro>{erro instanceof Error ? erro.message : 'Falha na consulta do entregável.'}</Aviso>}
     {!perfil.carregando && !erro && !habilitado && <Aviso erro>Conta sem autorização para consultar entregáveis.</Aviso>}
     {!perfil.carregando && habilitado && !consulta.carregando && !erro && !item && <Aviso erro>Entregável não encontrado neste contrato.</Aviso>}
-    {item && <div className="flex flex-wrap items-center gap-2"><h2 className="break-words text-lg font-semibold text-brand-neon">{item.nome}</h2><span className="text-xs font-semibold text-foreground/70">{rotuloEstadoEntregavel(item.statusExecucao,Boolean(item.arquivadoEm),Boolean(item.reabertoEm),Boolean(item.regularizacaoDocumentalSolicitada))}</span><EtiquetaAtraso atrasado={item.atrasado} finalizadoComAtraso={item.finalizadoComAtraso}/></div>}
+    {item && <div className="flex flex-wrap items-center gap-2"><h2 className="break-words text-lg font-semibold text-brand-neon">{item.nome}</h2><span className="text-xs font-semibold text-foreground/70">{rotuloEstadoEntregavel(item.statusExecucao,Boolean(item.arquivadoEm),Boolean(item.reabertoEm),Boolean(item.regularizacaoDocumentalSolicitada),false,item.tipo==='CONTINUO'&&Boolean(item.finalizadoComAtraso))}</span><EtiquetaAtraso atrasado={item.atrasado} finalizadoComAtraso={item.tipo!=='CONTINUO'&&item.finalizadoComAtraso}/></div>}
 
     {item && podeEditar && <div className="flex justify-end"><button type="button" disabled={salvando} aria-expanded={editando}
       aria-controls="edicao-entregavel" onClick={() => { setEditando((anterior) => !anterior); }}
@@ -71,20 +71,20 @@ export default function DetalheEntregavelPage() {
 
     </button></div>}
     {item && podeEditar && editando && <div id="edicao-entregavel" className="etapa-form-expandido">
-      <FormularioEntregavel key={item.id} contratoId={contratoId} etapaId={item.etapaId} inicial={item} onSalvar={salvar}
+      <FormularioEntregavel vigencia={raiz?{...raiz,inicioEtapa:pai?.inicioPrevisto,terminoEtapa:pai?.terminoPrevisto}:undefined} key={item.id} contratoId={contratoId} etapaId={item.etapaId} inicial={item} onSalvar={salvar}
         pesosContrato={pesos.dados} modoCalculo={execucao.progresso?.modoCalculo ?? 'SIMPLES'}
         onCancelar={() => setEditando(false)} onSalvandoMudou={setSalvando}
         podeConfigurarPesos={Boolean(permissoes?.configurarPesos)}
         podeReplanejarOcorrencias={Boolean(permissoes?.configurarAgendaOcorrencias)} />
     </div>}
     {item && (!editando || !podeEditar) && <ConteudoEntregavel item={item} bloqueadoPorPai={bloqueado} somenteLeituraExecucao={bloqueado} regularizacaoDocumental={regularizacao} permissoesExecucao={bloqueado && !regularizacao ? undefined : permissoes}
-      podeEditarEsperada={!bloqueado && Boolean(permissoes?.editarEvidencias)}
-      podeCriarEvidencia={!bloqueado && Boolean(permissoes?.criarEvidencias)}
+      podeEditarEsperada={(!bloqueado || regularizacao) && Boolean(permissoes?.editarEvidencias)}
+      podeCriarEvidencia={(!bloqueado || regularizacao) && Boolean(permissoes?.criarEvidencias)}
       podeArquivarEvidencia={!bloqueado && Boolean(permissoes?.arquivarEvidencias)}
       podeReativarEvidencia={!bloqueado && Boolean(permissoes?.reativarEvidencias)}
-      podeReabrirEvidencia={(!bloqueado || regularizacao) && Boolean(permissoes?.reabrirEvidencias)}
+      podeReabrirEvidencia={(!bloqueado || regularizacao && !atual?.regularizacaoDocumentalSolicitada) && Boolean(permissoes?.reabrirEvidencias)}
       podeExcluirEvidenciaArquivada={!bloqueado && Boolean(permissoes?.excluirEvidenciasArquivadas)}
-      podeAlterarObrigatoriedade={!bloqueado && Boolean(permissoes?.alterarObrigatoriedade)}
+      podeAlterarObrigatoriedade={(!bloqueado || regularizacao) && Boolean(permissoes?.alterarObrigatoriedade)}
       podeEnviarComprovantes={(!bloqueado || regularizacao) && Boolean(permissoes?.enviarComprovantes)} podeVerHistorico
       aoAtualizarEsperada={() => { if (cache) sincronizarContrato(cache, contratoId); void consulta.atualizar().catch(() => {}); }} />}
   </AreaContratos>;

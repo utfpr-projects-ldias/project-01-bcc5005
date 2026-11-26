@@ -78,6 +78,8 @@ import { StatusOcorrencia } from './status-ocorrencia.enum.js';
   '"quantidade_realizada" IS NULL OR "quantidade_realizada" >= 0',
 )
 export class Ocorrencia {
+  @Column({name:'unidade_medida_marco',type:'varchar',length:40,nullable:true}) unidadeMedidaMarco?:string|null;
+  @Column({name:'meta_marco_origem_id',type:'uuid',nullable:true}) metaMarcoOrigemId?:string|null;
   @Column({name:"execucoes_percentuais", type:"boolean", default:false})
   execucoesPercentuais?: boolean;
   @PrimaryGeneratedColumn('uuid')

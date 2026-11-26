@@ -1,3 +1,4 @@
+import { exigirRegistroMetaEditavel } from '../metas-marco/proteger-registro-meta.js';
 import { FASES_OPERACIONAIS_CONTRATO } from '../contratos/fases-operacionais.js';
 import { exigirPermissaoTransacional } from '../autorizacao/permissao-transacional.js';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
@@ -173,6 +174,7 @@ export class AtividadeCompartilhadaService {
       if(registros.length<2)throw new ConflictException('A atividade não possui outro contrato compartilhado');
       const registro=await manager.findOne(AtividadeEntity,{where:{id:alvo.id,contratoId},lock:{mode:'pessimistic_write'}});
       if(!registro||registro.excluidaEm||registro.atividadeCompartilhadaId!==id||registro.status!=='REGISTRADA')throw new ConflictException('Reabra a atividade antes de desvincular o contrato');
+      await exigirRegistroMetaEditavel(manager,contratoId,'ATIVIDADE',registro.id);
       registro.atividadeCompartilhadaId=null;
       await manager.save(AtividadeEntity,registro);
       await this.auditoria.registrarNaTransacao(manager,ator,{acao:AcaoAuditoria.ATIVIDADE_VINCULOS_ALTERADOS,entidadeTipo:'ATIVIDADE',entidadeId:registro.id,dadosAnteriores:{atividadeCompartilhadaId:id,contratoId},dadosPosteriores:{atividadeCompartilhadaId:null,contratoId,operacao:'DESVINCULAR_CONTRATO'}});

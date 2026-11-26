@@ -436,14 +436,14 @@ test('arquivamento da etapa bloqueia ações, mas não recolore entregável conc
 });
 
 
-test('Ativos mostra pendentes e revisões, sem duplicar concluídos e arquivados', () => {
+test('Ativos não duplica revisões, concluídos e arquivados', () => {
   render(<EntregaveisDaEtapa {...props} dados={[
     { ...e, id: 'reaberto', nome: 'Entrega reaberta', reabertoEm: '2026-11-09T10:00:00Z', statusExecucao: 'EM_ANDAMENTO' },
     { ...e, id: 'concluido', nome: 'Entrega concluída', statusExecucao: 'CONCLUIDO' },
     { ...e, id: 'arquivado', nome: 'Entrega arquivada', arquivadoEm: '2026-11-09T11:00:00Z' },
   ]} />);
   expect(screen.getByRole('tab', { name: 'Ativos' })).toHaveAttribute('aria-selected', 'true');
-  expect(screen.getByRole('button', { name: 'Entrega reaberta' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Entrega reaberta' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Entrega concluída' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Entrega arquivada' })).not.toBeInTheDocument();
 });
@@ -546,7 +546,8 @@ test('filtros de situação por aba, tipos independentes e limpeza conjunta', ()
   expect(within(screen.getByRole('combobox',{name:'Situação do entregável'})).getByRole('option',{name:'Concluído'})).toBeInTheDocument();
   expect(screen.getByRole('button',{name:'Entrega concluída'})).toBeInTheDocument();
   fireEvent.click(screen.getByRole('tab',{name:'Em revisão'}));
-  expect(within(screen.getByRole('combobox',{name:'Situação do entregável'})).getByRole('option',{name:'Em revisão'})).toBeInTheDocument();
+  expect(within(screen.getByRole('combobox',{name:'Situação do entregável'})).getByRole('option',{name:'Em andamento'})).toBeInTheDocument();
+  expect(within(screen.getByRole('combobox',{name:'Situação do entregável'})).queryByRole('option',{name:'Em revisão'})).not.toBeInTheDocument();
   expect(screen.getByRole('button',{name:'Entrega revista'})).toBeInTheDocument();
 });
 

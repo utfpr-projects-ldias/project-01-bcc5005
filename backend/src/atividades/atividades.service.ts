@@ -1,3 +1,5 @@
+import { dataAcompanhamentoValida } from '../execucao/acompanhamento-continuo.js';
+import { exigirRegistroMetaEditavel } from '../metas-marco/proteger-registro-meta.js';
 import { FASES_OPERACIONAIS_CONTRATO } from '../contratos/fases-operacionais.js';
 import type { EditarReferenciasAtividadeDto } from './dto/referencias-atividade.dto.js';
 import { exigirPermissaoTransacional } from '../autorizacao/permissao-transacional.js';
@@ -97,6 +99,9 @@ export class AtividadesService implements OnModuleInit {
       await exigirPermissaoTransacional(m, contratoId, ator, 'editarExecucaoFisica');
   }
 
+  private validarDatasContinuo(entregaveis:Entregavel[],dataHora:Date){
+    for(const e of entregaveis)if(e.tipo==='CONTINUO'&&!dataAcompanhamentoValida(hojeCivil(dataHora),e.inicioPrevisto,e.terminoPrevisto))throw new BadRequestException('A data da atividade deve pertencer à vigência de cada Contínuo vinculado.');
+  }
   private async verificarEntregaveis(manager: EntityManager, contratoId: string, ids: string[]): Promise<Entregavel[]> {
     if (!ids.length || new Set(ids.map(i => i.toLowerCase())).size !== ids.length) {
       throw new BadRequestException('Selecione entregáveis distintos do contrato');
@@ -135,6 +140,7 @@ export class AtividadesService implements OnModuleInit {
     if ([StatusOcorrencia.PENDENTE_CONCLUSAO, StatusOcorrencia.PENDENTE_CONCLUSAO_PARCIAL, StatusOcorrencia.CONCLUIDO, StatusOcorrencia.CONCLUIDO_PARCIALMENTE, StatusOcorrencia.PENDENTE_ENCERRAMENTO, StatusOcorrencia.ENCERRADA].includes(o.status)) {
       throw new ConflictException(`A ocorrência “${(o.titulo??o.id).slice(0,80)}” está em ${o.status.toLocaleLowerCase('pt-BR').replaceAll('_',' ')}. ${o.status.startsWith('PENDENTE_')?'Cancele a solicitação vigente':'Reabra a ocorrência'} antes de alterar ou reabrir a atividade. Esta proteção também se aplica ao administrador.`);
     }
+    await exigirRegistroMetaEditavel(manager,contratoId,'OCORRENCIA',o.id);
     if (quantidade != null && (o.modoRegistro !== 'QUANTITATIVO' || o.metaQuantidade == null)) {
       throw new BadRequestException('Quantidade só pode ser informada para ocorrência com meta quantitativa');
     }
@@ -211,7 +217,7 @@ export class AtividadesService implements OnModuleInit {
           OR (ref.origem='EVIDENCIA' AND EXISTS(SELECT 1 FROM comprovantes_evidencia c JOIN evidencias_esperadas ev ON ev.id=c.evidencia_esperada_id WHERE c.id=ref.origem_id AND ev.arquivado_em IS NULL AND c.status='VERIFICADA' AND ev.reaberto_em IS NULL AND NOT EXISTS(SELECT 1 FROM comprovantes_evidencia n WHERE n.evidencia_esperada_id=c.evidencia_esperada_id AND (n.criado_em,n.id)>(c.criado_em,c.id)))))
       UNION ALL
       SELECT 1 FROM vinculos_metas_marco v JOIN metas_marco mm ON mm.id=v.meta_id AND mm.contrato_id=v.contrato_id
-      WHERE v.contrato_id=$1 AND v.atividade_id=$2 AND v.status='APROVADO' AND mm.arquivado_em IS NULL
+      WHERE v.contrato_id=$1 AND v.atividade_id=$2 AND v.status='APROVADO' AND mm.estado<>'ABERTA' AND mm.arquivado_em IS NULL
       ) AS dependente`, [registro.contratoId,registro.id,`atividade:${registro.id}`]) as {dependente:boolean}[];
     if (r?.dependente) throw new ConflictException('Esta execução possui comprovações referenciadas. Reabra primeiro as comprovações verificadas ou regularize os vínculos de metas aprovados que dependem desta execução.');
   }
@@ -250,7 +256,7 @@ export class AtividadesService implements OnModuleInit {
     const entregavel = await manager.findOneBy(Entregavel, { id: o.entregavelId, contratoId: o.contratoId });
     if (!entregavel) throw new NotFoundException('Entregável da ocorrência indisponível');
     const novo = proximoStatusAutomatico(o,r,
-      conclusaoTemporalPermitida(entregavel.tipo, entregavel.terminoPrevisto)) as StatusOcorrencia;
+      conclusaoTemporalPermitida(entregavel.tipo, o.dataPrevista??o.periodoFim??o.periodoInicio)) as StatusOcorrencia;
     if (o.status === novo) return;
     const anterior=o.status;o.status=novo;
     await manager.save(Ocorrencia,o);
@@ -291,6 +297,7 @@ export class AtividadesService implements OnModuleInit {
     await this.autorizarMutacao(manager, contratoId, ator, 'registrarAtividades', dto);
     const dataHora = instante(dto.dataHora);
     const entregaveis = await this.verificarEntregaveis(manager, contratoId, dto.entregavelIds);
+    this.validarDatasContinuo(entregaveis,dataHora);
       await this.validarOcorrencia(manager, contratoId, dto.ocorrenciaId, entregaveis, dto.quantidadeExecucao);
       const idsOcorrencias = dto.ocorrenciaIds ?? (dto.ocorrenciaId ? [dto.ocorrenciaId] : []);
       const ocorrencias = await this.verificarOcorrencias(manager, contratoId, idsOcorrencias,
@@ -549,6 +556,7 @@ export class AtividadesService implements OnModuleInit {
       await m.findOne(Contrato,{where:{id:contratoId},lock:{mode:'pessimistic_write'}});
       const bloqueada=await m.findOne(AtividadeEntity,{where:{id,contratoId},lock:{mode:'pessimistic_write'}});
       if(!bloqueada||bloqueada.excluidaEm)throw new NotFoundException('Atividade não encontrada');
+      await exigirRegistroMetaEditavel(m,contratoId,'ATIVIDADE',id);
       const a=await m.findOne(AtividadeEntity,{where:{id,contratoId},relations:{entregaveis:true,ocorrencias:true}});
       if(!a||a.status!=='REGISTRADA')throw new ConflictException('Reabra a atividade antes de corrigir suas referências.');
       if(a.atividadeCompartilhadaId&&(dto.quantitativas?.length||dto.percentuais?.length))throw new ConflictException('Referências de comprovação devem ser declaradas em uma atividade local.');
@@ -603,6 +611,7 @@ export class AtividadesService implements OnModuleInit {
         where: { id, contratoId }, lock: { mode: 'pessimistic_write' },
       });
       if (!bloqueada || bloqueada.excluidaEm) throw new NotFoundException('Atividade não encontrada');
+      await exigirRegistroMetaEditavel(manager,contratoId,'ATIVIDADE',id);
       const registro = await manager.findOne(AtividadeEntity, {
         where: { id, contratoId }, relations: { entregaveis: true, ocorrencias: true },
       });
@@ -682,6 +691,7 @@ export class AtividadesService implements OnModuleInit {
         await this.validarOcorrencia(manager, contratoId, secundaria.id, registro.entregaveis);
       if (dto.titulo !== undefined) registro.titulo = dto.titulo.trim();
       if (dto.dataHora !== undefined) registro.dataHora = instante(dto.dataHora);
+      if(dto.dataHora!==undefined||dto.entregavelIds!==undefined)this.validarDatasContinuo(registro.entregaveis,registro.dataHora);
       if (dto.descricao !== undefined) registro.descricao = dto.descricao.trim();
       if (dto.tipo !== undefined) registro.tipo = dto.tipo.trim();
       if (dto.responsavelId !== undefined) {
@@ -803,6 +813,7 @@ export class AtividadesService implements OnModuleInit {
         where: { id, contratoId }, lock: { mode: 'pessimistic_write' },
       });
       if (!bloqueada || bloqueada.excluidaEm) throw new NotFoundException('Atividade não encontrada');
+      await exigirRegistroMetaEditavel(manager,contratoId,'ATIVIDADE',id);
       const registro = await manager.findOne(AtividadeEntity, {
         where: { id, contratoId }, relations: { entregaveis: true, ocorrencias: true },
       });
@@ -944,6 +955,7 @@ export class AtividadesService implements OnModuleInit {
         where: { id, contratoId }, lock: { mode: 'pessimistic_write' },
       });
       if (!bloqueada || bloqueada.excluidaEm) throw new NotFoundException('Atividade não encontrada');
+      await exigirRegistroMetaEditavel(manager,contratoId,'ATIVIDADE',id);
       const registro = await manager.findOne(AtividadeEntity, {
         where: { id, contratoId }, relations: { entregaveis: true, ocorrencias: true },
       });

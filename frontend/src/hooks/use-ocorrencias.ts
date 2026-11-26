@@ -7,7 +7,7 @@ import { avisarMudancaAgendaOcorrencias } from '@/lib/inicio-temporal-ocorrencia
 export type StatusOcorrencia = 'NAO_INICIADO' | 'EM_ANDAMENTO' | 'PENDENTE_CONCLUSAO' | 'PENDENTE_ENCERRAMENTO' | 'EM_REVISAO' | 'CONCLUIDO' | 'CONCLUIDO_PARCIALMENTE' | 'PENDENTE_CONCLUSAO_PARCIAL' | 'ENCERRADA';
 export type OrigemOcorrencia = 'RECORRENTE' | 'MANUAL_QUANTITATIVA' | 'MANUAL_DESCRITIVA';
 export type Ocorrencia = {
-  id: string; contratoId: string; entregavelId: string; titulo: string;
+  id: string; contratoId: string; entregavelId: string; titulo: string; unidadeMedidaMarco?:string|null; metaMarcoOrigemId?:string|null;
   periodoInicio: string | null; periodoFim: string | null;
   dataPrevista: string | null; dataRealizada: string | null;
   regularizacaoDocumentalSolicitada?: boolean;
@@ -22,7 +22,7 @@ export type Ocorrencia = {
   quantidadeRealizada: string | null; metaQuantidade?: string | null; quantidadeExecutada?: string | null; quantidadeAprovada?: string | null; observacoes: string | null; substituidaEm?: string | null; atividades?: { id: string; titulo: string; status: string }[];
 };
 export type NovaOcorrenciaManual = {
-  entregavelId: string; titulo: string; periodoInicio?: string;
+  entregavelId: string; titulo: string; periodoInicio?: string; metaMarcoId?:string;
   periodoFim?: string; dataPrevista?: string;
   quantidadeRealizada?: string; metaQuantidade?: string; exigeAtividade?:boolean; minimoAtividadesVerificadas?:number; minimoEvidenciasVerificadas?:number; minimoFotos?:number|null; minimoRelatorios?:number|null; minimoEvidenciasLivres?:number|null; pesoPeriodo?:string|null; evidenciaExigida?:'NENHUMA'|'FOTO'|'RELATORIO'|'AMBOS'; permiteEncerramentoExcepcional?:boolean; modoRegistro?: 'QUANTITATIVO' | 'DESCRITIVO'; observacoes?: string;
 };

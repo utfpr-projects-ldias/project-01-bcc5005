@@ -2,7 +2,7 @@
 import { Children, Fragment, isValidElement, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useCamadaInterativa } from '@/lib/camadas-interativas';
 import { createPortal } from 'react-dom';
-import { IconeConclusao, IconeReabertura } from './icones-ciclo-vida';
+import { IconeConclusao, IconeConclusaoParcial, IconeReabertura } from './icones-ciclo-vida';
 
 function temAcaoDisponivel(conteudo: ReactNode): boolean {
   return Children.toArray(conteudo).some(filho => {
@@ -11,6 +11,28 @@ function temAcaoDisponivel(conteudo: ReactNode): boolean {
     }
     return filho !== null && filho !== undefined;
   });
+}
+
+/** Inspeciona apenas ações declaradas no menu (incluindo fragments), nunca rótulos ou status isolados.
+ * Uma opção de consulta de impedimentos usa intenção neutra e não equivale a uma conclusão disponível.
+ */
+export function acoesCicloDisponiveis(conteudo: ReactNode): { integral: boolean; parcial: boolean; reabrir: boolean } {
+  const resultado = { integral: false, parcial: false, reabrir: false };
+  for (const filho of Children.toArray(conteudo)) {
+    if (!isValidElement(filho)) continue;
+    const p = filho.props as { children?: ReactNode; disabled?: boolean; intencao?: string; conclusaoParcial?: boolean };
+    if (p.disabled) continue;
+    if (filho.type === Fragment) {
+      const internas = acoesCicloDisponiveis(p.children);
+      resultado.integral ||= internas.integral;
+      resultado.parcial ||= internas.parcial;
+      resultado.reabrir ||= internas.reabrir;
+    } else if (p.intencao === 'solicitar-conclusao' || p.intencao === 'concluir') {
+      if (p.conclusaoParcial) resultado.parcial = true;
+      else resultado.integral = true;
+    } else if (p.intencao === 'reabrir') resultado.reabrir = true;
+  }
+  return resultado;
 }
 
 /** Menu universal: só exibe ações autorizadas recebidas do módulo. Não altera permissões nem regras da API. */
@@ -24,6 +46,14 @@ export function MenuAcoesObjeto({ children, rotulo = 'Fechar', disabled = false,
   const [aberto, setAberto] = useState(false);
   const temOpcoes = Boolean(acaoDireta) || temAcaoDisponivel(children);
   const reabertura = /^(reabrir|reativar)/i.test(rotulo);
+  const disponiveis = acoesCicloDisponiveis(children);
+  // A ação direta tem precedência: o ícone deve representar o que o botão executa.
+  const reabrirDireto = Boolean(acaoDireta && /^reabrir/i.test(rotulo));
+  const tipoIcone = acaoDireta ? (reabrirDireto ? 'reabertura' : 'neutro')
+    : disponiveis.integral ? 'conclusao'
+    : disponiveis.parcial ? 'conclusao-parcial'
+    : disponiveis.reabrir ? 'reabertura'
+    : pendenteConclusao && !reabertura ? 'conclusao' : 'neutro';
   const botao = useRef<HTMLButtonElement>(null);
   const painel = useRef<HTMLDivElement>(null);
   useCamadaInterativa(aberto, () => painel.current, () => { setAberto(false); botao.current?.focus({preventScroll:true}); }, 1000);
@@ -74,7 +104,7 @@ export function MenuAcoesObjeto({ children, rotulo = 'Fechar', disabled = false,
          setAberto(v => !v);
        }}
       className={somenteIcone ? "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg hover:bg-current/10 focus-visible:outline-2 focus-visible:outline-current disabled:opacity-40" : `inline-flex min-h-9 shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-2 disabled:opacity-50 ${'border-slate-400/40 bg-slate-500/10 text-foreground hover:bg-slate-500/20 focus-visible:outline-violet-400'}`}>
-      {icone ?? (pendenteConclusao ? <IconeConclusao className="h-[17px] w-[17px] shrink-0 text-violet-400" /> : (reabertura || acaoDireta) ? <IconeReabertura className={`h-[17px] w-[17px] shrink-0 ${/^reabrir/i.test(rotulo) ? 'pi-icone-reabrir-verde' : ''}`} /> : <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>)}
+      {icone ?? (tipoIcone === 'conclusao' ? <IconeConclusao className="h-[17px] w-[17px] shrink-0" /> : tipoIcone === 'conclusao-parcial' ? <IconeConclusaoParcial className="h-[17px] w-[17px] shrink-0" /> : (tipoIcone === 'reabertura' || reabertura || acaoDireta) ? <IconeReabertura neutro={tipoIcone !== 'reabertura'} className="h-[17px] w-[17px] shrink-0" /> : <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>)}
       {!somenteIcone && rotulo}
       {!somenteIcone && !acaoDireta && <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m6 9 6 6 6-6"/></svg>}
     </button>
