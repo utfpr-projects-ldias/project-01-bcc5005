@@ -5,7 +5,7 @@ import { solicitarNavegacaoInterna } from './navegacao-interna';
 import { EtiquetaAtraso } from '@/app/components/etiqueta-atraso';
 
 import { chaveTexto } from '@/lib/repositorio-consultas';
-import { resultadoFinalizacao } from '@/lib/finalizados';
+import { abaDoEntregavel, filtrosEntregaveis, situacaoFiltroEntregavel } from '@/lib/filtros-entregaveis';
 import { estadoDoObjeto, rotuloEstadoEntregavel } from '@/lib/identidade-operacional';
 import { AbasRolaveis } from '@/app/components/abas-rolaveis';
 import { createPortal } from 'react-dom';
@@ -295,16 +295,11 @@ export function EntregaveisDaEtapa({ estadoProprioEtapa, contratoId, etapaId, vi
   const ordenados = [...visiveis].sort((a, b) =>
     (a.inicioPrevisto ?? '9999-12-31').localeCompare(b.inicioPrevisto ?? '9999-12-31') ||
     (a.codigoPublico ?? 0) - (b.codigoPublico ?? 0) || a.nome.localeCompare(b.nome, 'pt-BR'));
-  const pendente = (e: Entregavel) => Boolean(e.regularizacaoDocumentalSolicitada || ['PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? ''));
-  const finalizados = ordenados.filter(e => resultadoFinalizacao('entregavel', e.statusExecucao) !== null && !e.reabertoEm && !pendente(e));
-  const filtradosPorSituacao = abaEntregaveis === 'comprovados' ? finalizados :
-    abaEntregaveis === 'pendentes' ? ordenados.filter(pendente) :
-    abaEntregaveis === 'revisao' ? ordenados.filter(e => Boolean(e.reabertoEm) && !pendente(e)) :
-    ordenados.filter(e => !pendente(e) && (Boolean(e.reabertoEm) || resultadoFinalizacao('entregavel', e.statusExecucao) === null));
+  const filtradosPorSituacao = ordenados.filter(e => abaDoEntregavel(e) === abaEntregaveis);
   const corresponde = (e: Entregavel) => `${e.nome} ${e.codigo ?? ''} ${e.codigoPublico ?? ''}`.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR').includes(pesquisa.trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR'));
-  const rotuloSituacao = (e: Entregavel) => rotuloEstadoEntregavel(e.statusExecucao, Boolean(e.arquivadoEm), Boolean(e.reabertoEm), Boolean(e.regularizacaoDocumentalSolicitada), Boolean(e.motivoFinalizacao));
+  const rotuloSituacao = situacaoFiltroEntregavel;
   const baseDaAba = mostrarArquivados ? arquivados : filtradosPorSituacao;
-  const opcoesSituacao = [...new Set(baseDaAba.map(rotuloSituacao))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const opcoesSituacao = filtrosEntregaveis[abaEntregaveis];
   const filtroSalvo = filtrosSituacao[abaEntregaveis] ?? '';
   const situacaoSelecionada = opcoesSituacao.includes(filtroSalvo) ? filtroSalvo : '';
   const exibidos = baseDaAba.filter(e=>corresponde(e)&&(!filtroTipo||e.tipo===filtroTipo)&&(!situacaoSelecionada||rotuloSituacao(e)===situacaoSelecionada));

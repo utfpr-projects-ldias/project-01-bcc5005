@@ -2117,15 +2117,7 @@ a[data-tec08-acao-criar="contrato"]:focus-visible {
   border-color: color-mix(in srgb, var(--pi-cor-propria) 52%, transparent) !important;
   background-color: color-mix(in srgb, var(--pi-cor-propria) 7%, var(--bg-primary)) !important;
 }
-[data-pi-controle-fechamento="pendente-conclusao"] {
-  color: #c4b5fd !important;
-  border-color: rgb(167 139 250 / .7) !important;
-  background-color: rgb(139 92 246 / .16) !important;
-}
-[data-pi-controle-fechamento="pendente-conclusao"]:hover,
-[data-pi-controle-fechamento="pendente-conclusao"]:focus-visible {
-  background-color: rgb(139 92 246 / .25) !important;
-}
+/* O estado do menu não altera o fundo: a tinta pertence apenas ao ícone. */
 
 /* Seleção temporal pertence à agenda do entregável; pontos coloridos nas
    células representam SOMENTE as ocorrências individuais. */
@@ -4583,11 +4575,6 @@ body :is([data-pi-operacional-neutro], .pi-contrato-contextual, .contrato-detalh
 body [data-pi-decisao-pendente] { display:inline-flex; flex-wrap:nowrap; align-items:center; gap:8px; }
 body [data-pi-decisao-pendente] > button { min-height:36px; width:auto; flex-shrink:0; white-space:nowrap; }
 
-/* Reabrir: apenas o glifo, independente da paleta do botão. */
-svg.pi-icone-reabrir-verde { color: #16a34a !important; fill: currentColor !important; }
-.dark svg.pi-icone-reabrir-verde { color: #4ade80 !important; }
-
-
 .pi-vinculos-filtros-v21 { display:flex; flex-wrap:wrap; align-items:start; gap:10px; min-width:0; }
 .pi-vinculos-filtros-v21 > .pi-busca-vinculos { flex:1 1 16rem; min-width:min(100%,12rem); }
 .pi-vinculos-filtro-contrato { flex:1 1 11rem; min-width:min(100%,10rem); max-width:100%; }
@@ -4681,11 +4668,6 @@ body .pi-barra-planejamento-filtros .pi-limpar-filtros { flex:0 0 auto; width:au
 body button[data-pi-arquivar-modal]:not(:disabled) { background-color:#9a3412!important; border-color:#c2410c!important; color:#fff!important; }
 body button[data-pi-arquivar-modal]:not(:disabled):hover { background-color:#c2410c!important; border-color:#ea580c!important; }
 body button[data-pi-arquivar-modal] svg { color:inherit!important; }
-/* O glifo de reabertura permanece verde, sem alterar o fundo neutro do botão. */
-body button:not(:disabled) svg.pi-icone-reabrir-verde { color:#16a34a!important; fill:currentColor!important; }
-body button:not(:disabled) svg.pi-icone-reabrir-verde path { fill:currentColor!important; }
-@media (prefers-color-scheme: dark) { body button:not(:disabled) svg.pi-icone-reabrir-verde { color:#4ade80!important; } }
-.dark body button:not(:disabled) svg.pi-icone-reabrir-verde, body.dark button:not(:disabled) svg.pi-icone-reabrir-verde { color:#4ade80!important; }
 /* Somente os seletores do Novo registro usam rótulo curto em uma linha. */
 body [role="listbox"][data-pi-opcoes-compactas] [role="option"] { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; overflow-wrap:normal; }
 
@@ -4724,3 +4706,65 @@ body [role="listbox"][data-pi-opcoes-compactas] [role="option"] { white-space:no
   .pi-vinculos-estavel { min-height:340px; }
 }
 .pi-vinculos-estavel .pi-busca-vinculos > span.relative { width:100%; justify-self:stretch; }
+
+/* Ajustes de vigência e execução: nenhum efeito nos modais de vínculos. */
+.pi-form-contrato .pi-form-contrato-planejamento { align-items:start; gap:20px; }
+.pi-vigencia-contrato { container-type:inline-size; }
+.pi-vigencia-abas { display:flex; flex-wrap:wrap; gap:4px; border-bottom:1px solid var(--pi-form-borda); margin-bottom:12px; }
+.pi-vigencia-abas > button { min-width:0; flex:0 1 auto; border:0!important; border-bottom:2px solid transparent!important; border-radius:0!important; background:transparent!important; padding:8px 12px!important; color:var(--text-secondary)!important; }
+.pi-vigencia-abas > button[aria-pressed=true] { color:var(--text-primary)!important; border-bottom-color:#91b5c4!important; font-weight:600; }
+.pi-vigencia-abas > button:hover { color:var(--text-primary)!important; }
+.pi-vigencia-contrato .pi-datas-pareadas { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.pi-vigencia-contrato .pi-datas-pareadas > div { min-width:0; }
+.pi-vigencia-contrato .pi-datas-pareadas :is(.pi-data-civil,input) { box-sizing:border-box; width:100%; }
+@container (max-width:340px) { .pi-vigencia-contrato .pi-datas-pareadas { grid-template-columns:minmax(0,1fr); } }
+.pi-workspace-execucao .pi-central-execucao, .pi-workspace-execucao .pi-central-indicadores { min-height:0; }
+.pi-workspace-execucao .pi-central-indicadores { gap:14px; }
+.pi-workspace-execucao .pi-central-indicadores > * { margin-block:0!important; }
+.pi-workspace-execucao .pi-execucao-atalhos { margin-top:0!important; padding-top:12px; border-top:1px solid var(--pi-workspace-borda); gap:8px; }
+.pi-workspace-execucao .pi-ver-todos-registros { white-space:normal; text-align:right; }
+.pi-marco-execucao { display:grid; gap:12px; padding:12px; border:1px solid var(--pi-workspace-borda); border-radius:9px; min-width:0; container-type:inline-size; }
+.pi-marco-execucao-cabecalho { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:6px; font-size:12px; color:var(--text-secondary); }
+.pi-marco-execucao-cabecalho strong { color:var(--text-primary); font-variant-numeric:tabular-nums; }
+.pi-marco-execucao-form { display:grid; gap:6px; }
+.pi-marco-execucao-campos { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:stretch; }
+.pi-marco-execucao-campos > .pi-data-civil { width:100%!important; max-width:none!important; min-width:0; min-height:38px; display:flex!important; }
+.pi-marco-execucao-campos > button { min-height:38px; white-space:nowrap; padding-inline:10px; }
+@container (max-width:280px) { .pi-marco-execucao-campos { grid-template-columns:minmax(0,1fr); } }
+[data-pi-modal-ancorado]:has(> [data-tec08-corpo-modal] > [data-pi-entregavel-selecionado="true"]) > [data-tec08-corpo-modal] { padding:0!important; }
+[data-pi-entregavel-selecionado="true"] { padding:0!important; margin:0!important; }
+[data-pi-entregavel-selecionado="true"] .pi-entregaveis-area[data-selecionado="true"] { min-height:0; gap:0; }
+[data-pi-entregavel-selecionado="true"] [data-pi-area-detalhe-entregavel] > [data-pi-detalhe-interno] > header { position:sticky; top:0; z-index:2; background:var(--bg-primary)!important; padding:14px 16px!important; }
+[data-pi-entregavel-selecionado="true"] [data-pi-area-detalhe-entregavel] > [data-pi-detalhe-interno] > div { padding:12px 16px!important; }
+
+/* Filtro de situação: largura medida pelo rótulo atual, sem caixa preenchida. */
+.pi-carteira-controles .pi-seletor-status-carteira { display:inline-grid; grid-template-columns:minmax(0,max-content) 14px; align-items:center; position:relative; max-width:100%; min-height:40px; gap:6px; padding:0 8px; border-left:1px solid var(--text-secondary); border-bottom:1px solid var(--text-secondary); font-size:.875rem; font-weight:700; color:var(--text-primary); }
+.pi-seletor-status-carteira .pi-medida-status-carteira { visibility:hidden; white-space:nowrap; overflow:hidden; min-width:0; }
+body .pi-carteira-controles .pi-seletor-status-carteira #filtro-status { appearance:none!important; position:absolute; inset:0; width:100%!important; height:100%; min-width:0; border:0!important; border-radius:0!important; background:transparent!important; box-shadow:none!important; padding:0 28px 0 8px!important; font:inherit; color:inherit; text-overflow:ellipsis; text-decoration:underline; cursor:pointer; }
+.pi-seletor-status-carteira svg { grid-column:2; width:14px; height:14px; pointer-events:none; }
+.pi-seletor-status-carteira select option { background:var(--pi-workspace-superficie,var(--bg-primary)); color:var(--text-primary); font-weight:400; }
+.pi-carteira-controles .pi-filtro-status { grid-column:1/-1; grid-row:2; justify-self:start; max-width:calc(100% - 140px); }
+.pi-carteira-controles .pi-limpar-filtros { grid-column:1/-1; grid-row:2; justify-self:end; }
+@media (max-width:480px) { .pi-carteira-controles .pi-filtro-status { grid-column:1/-1; max-width:100%; } .pi-carteira-controles .pi-limpar-filtros { grid-row:3; } }
+
+/* Ciclo de vida: semântica aplicada exclusivamente ao desenho SVG.
+   Não recolore texto, borda, fundo, chevron ou outros ícones do botão. */
+:root {
+  --pi-icone-conclusao: #7c3aed;
+  --pi-icone-reabertura: #15803d;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --pi-icone-conclusao: #c4b5fd; --pi-icone-reabertura: #4ade80; }
+}
+.dark { --pi-icone-conclusao: #c4b5fd; --pi-icone-reabertura: #4ade80; }
+body button svg[data-pi-icone-ciclo] { --pi-icone-tinta: var(--pi-icone-conclusao); }
+body button svg[data-pi-icone-ciclo="reabertura"] { --pi-icone-tinta: var(--pi-icone-reabertura); }
+body button:not(:disabled) svg[data-pi-icone-ciclo] { color:var(--pi-icone-tinta)!important; }
+body button:not(:disabled) svg[data-pi-icone-ciclo="conclusao"] path,
+body button:not(:disabled) svg[data-pi-icone-ciclo="reabertura"] path { fill:var(--pi-icone-tinta)!important; }
+body button:not(:disabled) svg[data-pi-icone-ciclo="conclusao-parcial"] circle { fill:none!important;stroke:var(--pi-icone-tinta)!important; }
+body button:disabled svg[data-pi-icone-ciclo] { color:inherit!important; }
+body button:disabled svg:is([data-pi-icone-ciclo="conclusao"],[data-pi-icone-ciclo="reabertura"]) path { fill:currentColor!important; }
+body button:disabled svg[data-pi-icone-ciclo="conclusao-parcial"] circle { fill:none!important;stroke:currentColor!important; }
+/* Os botões de decisão que já possuem fundo violeta precisam de um glifo claro. */
+body button[data-tec08-decisao] svg[data-pi-icone-ciclo="conclusao"] { --pi-icone-tinta: #ddd6fe; }

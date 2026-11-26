@@ -161,13 +161,15 @@ test('carteira alterna a situação por abas e mantém busca longa independente 
   expect(screen.getByLabelText('Pesquisar contrato')).toBeInTheDocument();
 });
 
-test('filtros compactos: selects com mesma largura e abas junto ao título Contratos', async () => {
+test('filtros compactos: situação com largura do rótulo e abas junto ao título Contratos', async () => {
   listar.mockResolvedValue([]);
   await act(async () => { renderComConsultas(<ContratosListPage />); });
   const titulo = screen.getByRole('heading', { name: 'Contratos', level: 2 });
   expect(titulo.parentElement).toContainElement(screen.getByRole('tablist', { name: 'Situação dos contratos' }));
   expect(screen.getByLabelText('Buscar por').parentElement).toHaveClass('pi-filtro-campo');
-  expect(screen.getByLabelText('Filtrar por situação').parentElement).toHaveClass('pi-filtro-status');
+  expect(screen.getByLabelText('Filtrar por situação').closest('.pi-filtro-status')).not.toBeNull();
+  expect(screen.getByLabelText('Filtrar por situação').parentElement).toHaveClass('pi-seletor-status-carteira');
+  expect(screen.getByLabelText('Filtrar por situação').parentElement?.querySelector('.pi-medida-status-carteira')).toHaveTextContent('Todos os status');
   expect(screen.getByLabelText('Pesquisar contrato').closest('.pi-filtro-pesquisa')).not.toBeNull();
   expect(screen.getByRole('button', { name: 'Cadastrar contrato' })).toBeEnabled();
   expect(screen.queryByRole('button', { name: 'Ordenar contratos' })).not.toBeInTheDocument();

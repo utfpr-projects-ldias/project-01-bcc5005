@@ -32,7 +32,7 @@ import { CalendarioOcorrencias } from './calendario-ocorrencias';
 import { MenuAcoesObjeto } from '@/app/components/menu-acoes-objeto';
 import { BotaoEditarModal, BotaoAcaoModal } from '@/app/components/botoes-modal';
 import { estadoDoObjeto } from '@/lib/identidade-operacional';
-import { IconeConclusao, IconeConclusaoParcial } from '@/app/components/icones-ciclo-vida';
+import { IconeConclusao, IconeReabertura } from '@/app/components/icones-ciclo-vida';
 import { IconeEngrenagem } from '@/app/components/icone-engrenagem';
 import { ExecucaoOcorrencia, ResumoLateralOcorrencia, EvidenciasOcorrencia, HistoricoOcorrencia } from './execucao-ocorrencia';
 import { editarExigenciasOcorrencia, editarMetaOcorrencia, editarPesoOcorrencia } from '@/hooks/use-ocorrencias';
@@ -908,7 +908,7 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, regulari
       {!editando && podeSolicitarRegularizacao && !detalhe.regularizacaoDocumentalSolicitada && <BotaoAcaoModal intencao="solicitar-conclusao" disabled={ocupado || !podeSolicitarConclusao} onClick={() => void transicionar('solicitar-conclusao')}>Solicitar regularização documental</BotaoAcaoModal>}
       {!editando && !detalhe.substituidaEm && podeReabrir && !detalhe.regularizacaoDocumentalSolicitada && ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','ENCERRADA'].includes(detalhe.status) &&
         <MenuAcoesObjeto rotulo="Reabrir" disabled={ocupado} acaoDireta={() => {setFocoReabertura(null);setMotivoReabertura('');setMostrarReabertura(true);}} />}
-      {!editando && !detalhe.substituidaEm && podeEditar && abertos.some(e=>e.id===detalhe.entregavelId) && ['NAO_INICIADO','EM_ANDAMENTO','EM_REVISAO'].includes(detalhe.status) && <MenuAcoesObjeto rotulo="Fechar" disabled={ocupado} icone={podeSolicitarConclusao?<IconeConclusao className="h-4 w-4 text-violet-400"/>:podeSolicitarParcial?<IconeConclusaoParcial className="h-4 w-4 text-violet-400"/>:undefined}>
+      {!editando && !detalhe.substituidaEm && podeEditar && abertos.some(e=>e.id===detalhe.entregavelId) && ['NAO_INICIADO','EM_ANDAMENTO','EM_REVISAO'].includes(detalhe.status) && <MenuAcoesObjeto rotulo="Fechar" disabled={ocupado}>
           <BotaoAcaoModal intencao="solicitar-conclusao" disabled={ocupado || !podeSolicitarConclusao}
             title={semAtividadeVerificada ? 'Os requisitos configurados precisam estar atendidos para solicitar aprovação.' : undefined}
             onClick={() => void transicionar('solicitar-conclusao')}>Solicitar conclusão</BotaoAcaoModal>
@@ -1036,7 +1036,7 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, regulari
         ? <div className="flex flex-wrap items-center gap-2">
           {atividadeDetalhe.status === 'REGISTRADA' && podeSolicitarAtividade && <button type="button"
             className="min-h-9 rounded-lg border border-violet-500/65 bg-violet-500/10 px-3 text-xs font-semibold text-violet-700 hover:bg-violet-500/20 dark:text-violet-200"
-            disabled={verificandoAtividade} onClick={() => void verificarAtividadeVinculada()}>Solicitar conclusão</button>}
+            disabled={verificandoAtividade} onClick={() => void verificarAtividadeVinculada()}><IconeConclusao className="inline-block mr-1 h-4 w-4 align-middle"/>Solicitar conclusão</button>}
           {atividadeDetalhe.status === 'PENDENTE_CONCLUSAO' && podeSolicitarAtividade && <button type="button"
             className="min-h-9 rounded-lg border border-red-500/65 bg-red-500/10 px-3 text-xs font-semibold text-red-700 dark:text-red-300"
             disabled={verificandoAtividade} onClick={() => {setAcaoAtividadePendente('cancelar-solicitacao');setMotivoAcaoAtividade('');}}>Cancelar</button>}
@@ -1045,7 +1045,7 @@ export function PainelOcorrencias({ contratoId, somenteLeitura = false, regulari
             disabled={verificandoAtividade} onClick={() => void verificarAtividadeVinculada()}>Aprovar</button>}
           {atividadeDetalhe.status === 'VERIFICADA' && (administrador || acesso.dados?.permissoes?.reabrirAtividades) && <button type="button"
             className="min-h-9 rounded-lg border border-slate-400/40 bg-slate-500/10 px-3 text-xs font-semibold text-foreground hover:bg-slate-500/20"
-            disabled={verificandoAtividade} onClick={() => {setAcaoAtividadePendente('reabrir');setMotivoAcaoAtividade('');}}>↻ Reabrir</button>}
+            disabled={verificandoAtividade} onClick={() => {setAcaoAtividadePendente('reabrir');setMotivoAcaoAtividade('');}}><IconeReabertura className="inline-block mr-1 h-4 w-4 align-middle"/>Reabrir</button>}
           {atividadeDetalhe.status === 'REGISTRADA' && podeVincularAtividade && <button type="button"
             className="min-h-9 rounded-lg border border-red-500/50 bg-red-500/5 px-3 text-xs font-semibold text-red-700 hover:bg-red-500/15 dark:text-red-300"
             disabled={verificandoAtividade} onClick={() => {setAcaoAtividadePendente('desvincular');setMotivoAcaoAtividade('');}}>Desvincular</button>}

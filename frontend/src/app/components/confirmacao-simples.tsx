@@ -10,6 +10,7 @@ import { contextoDaDecisao, coresDecisao } from "@/lib/cores-decisoes";
 type Props = {
   titulo: string;
   descricao: string;
+  aviso?: string;
   confirmar: string;
   ocupado?: boolean;
   perigoso?: boolean;
@@ -37,7 +38,7 @@ type Props = {
 };
 
 /** Confirmação da própria interface, sem window.confirm ou dependência externa. */
-export function ConfirmacaoSimples({ titulo, descricao, confirmar, ocupado = false, perigoso = false, descarte = false, confirmacaoRoxa = false, aprovarVerde = false, estadoContextual = 'normal', preservarCorOrigem = false, onCancelar, onConfirmar, justificativa, onJustificativaChange, justificativaMinima = 15, quantidade, quantidadeMaxima, unidadeMedida, onQuantidadeChange, pendencias = [], somenteConsulta = false, somenteConfirmar = false, neutro = false, compactoConclusao = false }: Props) {
+export function ConfirmacaoSimples({ titulo, descricao, aviso, confirmar, ocupado = false, perigoso = false, descarte = false, confirmacaoRoxa = false, aprovarVerde = false, estadoContextual = 'normal', preservarCorOrigem = false, onCancelar, onConfirmar, justificativa, onJustificativaChange, justificativaMinima = 15, quantidade, quantidadeMaxima, unidadeMedida, onQuantidadeChange, pendencias = [], somenteConsulta = false, somenteConfirmar = false, neutro = false, compactoConclusao = false }: Props) {
   const modalId = useId();
   const quantidadeValida = !onQuantidadeChange || (quantidade != null && (unidadeMedida==='%'?/^\d{1,3}(?:\.\d{1,2})?$/:/^(?:\d{1,15})(?:\.\d{1,3})?$/).test(quantidade) &&
     Number(quantidade) > 0 && (quantidadeMaxima == null || Number(quantidade) <= Number(quantidadeMaxima)));
@@ -80,11 +81,12 @@ export function ConfirmacaoSimples({ titulo, descricao, confirmar, ocupado = fal
   if (typeof document === "undefined") return null;
   return createPortal(
     <div className="fixed inset-0 z-[240] flex items-center justify-center bg-black/25 backdrop-blur-[1px] p-4" onKeyDown={evento => { evento.stopPropagation(); teclado(evento); }}>
-      <div ref={dialogoRef} tabIndex={-1} role="dialog" aria-modal="true" data-tec08-estado={estadoDaAcao} aria-labelledby={`${modalId}-titulo`} aria-describedby={`${modalId}-descricao`}
+      <div ref={dialogoRef} tabIndex={-1} role="dialog" aria-modal="true" data-tec08-estado={estadoDaAcao} aria-labelledby={`${modalId}-titulo`} aria-describedby={`${modalId}-descricao${aviso ? ` ${modalId}-aviso` : ""}`}
         data-pi-confirmacao-padronizada data-pi-confirmacao-neutra={neutro || undefined} data-pi-confirmacao-descarte={descarte || undefined} className={`max-h-[90dvh] overflow-y-auto w-full min-w-0 ${descarte ? 'max-w-md' : compactoConclusao ? 'max-w-lg' : 'max-w-sm'} rounded-2xl border ${cores.borda} bg-background p-5 text-foreground shadow-2xl [overflow-wrap:anywhere]`}>
         {descarte && <span aria-hidden="true" className="pi-icone-descarte"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8v5m0 3v.1M10.3 4.5 3 18a1.6 1.6 0 0 0 1.4 2.4h15.2A1.6 1.6 0 0 0 21 18L13.7 4.5a1.9 1.9 0 0 0-3.4 0Z"/></svg></span>}
         <h2 id={`${modalId}-titulo`} className={`text-lg font-semibold ${cores.texto}`}>{titulo}</h2>
         <p id={`${modalId}-descricao`} className="mt-2 break-words text-sm text-foreground/75">{descricao}</p>
+        {aviso && <p id={`${modalId}-aviso`} className="mt-3 text-xs text-amber-700 dark:text-amber-300">{aviso}</p>}
         {pendencias.length > 0 && <ul className="mt-3 space-y-1 rounded-lg border border-current/15 p-3 text-xs text-foreground/80" aria-label="Pendências">{pendencias.map((p,i) => <li key={i}>{p}</li>)}</ul>}
         {onJustificativaChange && <label className="mt-4 block text-sm font-medium text-foreground" htmlFor={`${modalId}-justificativa`}>
           Justificativa obrigatória ({justificativaMinima} a 200 caracteres)
@@ -107,7 +109,7 @@ export function ConfirmacaoSimples({ titulo, descricao, confirmar, ocupado = fal
             className={`inline-flex min-h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold transition disabled:opacity-50 focus-visible:outline-2 ${cores.foco} border ${cores.borda} hover:bg-current/10`}>{somenteConsulta ? "Fechar" : descarte ? "Continuar editando" : "Cancelar"}</button>}
           {!somenteConsulta && <button type="button" aria-busy={ocupado} disabled={ocupado || !quantidadeValida || Boolean(onJustificativaChange && ((justificativa ?? '').trim().length < justificativaMinima || (justificativa ?? '').trim().length > 200))} onClick={onConfirmar}
             data-tec08-confirmar="true" data-tec08-acao-perigosa={perigoso && !confirmacaoArquivo || undefined} data-pi-intencao-confirmacao={confirmacaoArquivo ? 'arquivado' : cadastroNeutro ? 'normal' : estadoDaAcao} data-tec08-acao-roxa={confirmacaoRoxa || undefined} data-tec08-acao-aprovar={aprovarVerde || undefined} className={`inline-flex min-h-9 shrink-0 items-center justify-center ${compactoConclusao ? 'whitespace-normal' : 'whitespace-nowrap'} rounded-lg border px-3 py-2 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-65 ${corBotao} ${cores.foco}`}>
-            {compactoConclusao && confirmacaoRoxa && <IconeConclusao className="mr-1 h-4 w-4 shrink-0"/>}{ocupado ? "Aguarde..." : confirmar}
+            {compactoConclusao && confirmacaoRoxa && <IconeConclusao neutro className="mr-1 h-4 w-4 shrink-0"/>}{ocupado ? "Aguarde..." : confirmar}
           </button>}
         </div>
       </div>

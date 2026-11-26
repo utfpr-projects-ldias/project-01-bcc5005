@@ -340,10 +340,10 @@ export class EntregaveisService implements OnModuleInit {
     return contrato;
   }
 
-  private async validarEtapa(m: EntityManager, contratoId: string, etapaId: string, somenteLeitura = false): Promise<void> {
+  private async validarEtapa(m: EntityManager, contratoId: string, etapaId: string, somenteLeitura = false, regularizacaoMetadados = false): Promise<void> {
     const etapa = await m.getRepository(Etapa).findOneBy({ id: etapaId, contratoId });
     if (!etapa) throw new NotFoundException('Etapa não encontrada neste contrato');
-    if (!somenteLeitura && (etapa.conclusaoSolicitadaEm || etapa.encerramentoSolicitadoEm || etapa.arquivadoEm || (etapa.status === 'CONCLUIDA' || etapa.status === 'CONCLUIDO_PARCIALMENTE') || etapa.status === 'ENCERRADA' ||
+    if (!somenteLeitura && (etapa.conclusaoSolicitadaEm || etapa.encerramentoSolicitadoEm || etapa.arquivadoEm || (etapa.status === 'CONCLUIDA' || etapa.status === 'CONCLUIDO_PARCIALMENTE' && !regularizacaoMetadados) || etapa.status === 'ENCERRADA' ||
       etapa.status === 'FINALIZADA'))
       throw new ConflictException('Etapa finalizada ou com decisão pendente: reabra ou resolva a solicitação antes de alterar entregáveis');
   }
@@ -956,7 +956,6 @@ export class EntregaveisService implements OnModuleInit {
         await exigirPermissaoTransacional(m, contratoId, ator, 'editarEntregaveis');
         const contrato = await this.bloquearContrato(m, contratoId);
         const e = await this.registro(m, contratoId, id);
-        await this.validarEtapa(m, contratoId, e.etapaId);
         if (dto.versaoPlanejamento !== undefined && dto.versaoPlanejamento !== versaoPlanejamentoEntregavel(e))
           throw new ConflictException('O planejamento mudou desde que o formulário foi aberto. Feche e abra novamente para revisar os dados.');
         const camposInformados = chavesDefinidas(dto).filter(campo => campo !== 'versaoPlanejamento');
@@ -964,7 +963,9 @@ export class EntregaveisService implements OnModuleInit {
         const somenteMetadados = camposInformados.every(campo => camposMetadados.has(campo));
         const decisaoPendente = Boolean(e.regularizacaoDocumentalSolicitada || ['PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? ''));
         const finalizado = decisaoPendente || (!e.reabertoEm && ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(e.statusExecucao ?? ''));
-        if (finalizado)
+        const metadadosRegularizacao = e.statusExecucao === 'CONCLUIDO_PARCIALMENTE' && !e.arquivadoEm && camposInformados.every(campo => ['nome','codigo','descricao','observacoes'].includes(campo));
+        await this.validarEtapa(m, contratoId, e.etapaId, false, metadadosRegularizacao);
+        if (finalizado && !metadadosRegularizacao)
           throw new ConflictException('Entregável com decisão pendente ou finalizado. Devolva a solicitação ou reabra antes de editar.');
         if (dto.tipo !== undefined && dto.tipo !== e.tipo)
           throw new ConflictException('O tipo do entregável é imutável. Para utilizar outro tipo, crie um novo entregável.');

@@ -138,8 +138,8 @@ export default function DetalheContratoPage() {
   // Nunca desmontar todo o detalhe durante uma revalidação com dados já confirmados.
   // As mutações atualizam a entrada exata de cache antes da nova consulta, evitando
   // uma piscada em que o cartão recém-reativado volta a parecer arquivado.
-  const carregando = verificando || (!!perfil?.ativo && (contratoQuery.carregando || acessoQuery.carregando));
-  const contrato = !erroConsulta && perfil?.ativo ? contratoQuery.dados : undefined;
+  const carregando = (!perfil && verificando) || (!!perfil?.ativo && ((!contratoQuery.dados && contratoQuery.carregando) || (!acessoQuery.dados && acessoQuery.carregando)));
+  const contrato = !erroConsulta && perfil?.ativo && acessoQuery.dados ? contratoQuery.dados : undefined;
   const contratoIdTemporal = contrato?.id;
   useEffect(() => {
     if (!contratoIdTemporal) return;
@@ -170,10 +170,12 @@ export default function DetalheContratoPage() {
     };
   }, [contratoIdTemporal, cache]);
   // O status operacional é independente da comprovação documental.
-  const etapasDocumentais = useEtapas(id, Boolean(contrato));
-  const entregaveisDocumentais = useEntregaveis(id, Boolean(contrato));
-  const resumoDocumental = useResumoDocumentalContrato(id, Boolean(contrato));
-  const principalQuery = useDocumentos(id, 'CONTRATO_PRINCIPAL', 1, Boolean(contrato));
+  // As consultas são protegidas na API e podem começar junto com a ficha.
+  const consultarDados = Boolean(perfil?.ativo && id && !erroConsulta);
+  const etapasDocumentais = useEtapas(id, consultarDados);
+  const entregaveisDocumentais = useEntregaveis(id, consultarDados);
+  const resumoDocumental = useResumoDocumentalContrato(id, consultarDados);
+  const principalQuery = useDocumentos(id, 'CONTRATO_PRINCIPAL', 1, consultarDados);
   const elegibilidadeQuery = useConsulta(['contratos','elegibilidade-conclusao',id],
     (signal) => consultarElegibilidadeConclusao(id, signal), {habilitada: Boolean(contrato), validadeMs: 8000});
   const principalVerificado = Boolean(Array.isArray(principalQuery.dados?.itens) &&
@@ -743,21 +745,21 @@ export default function DetalheContratoPage() {
               title={contrato.encerramentoSolicitado ? 'Aprovar encerramento' : contrato.conclusaoParcialSolicitada ? 'Aprovar conclusão parcial' : principalQuery.carregando ? 'Consultando a situação do PDF principal' : !principalVerificado ? pendenciaPrincipal : 'Aprovar conclusão do contrato'}
               aria-label={contrato.encerramentoSolicitado ? "Aprovar encerramento do contrato" : "Aprovar conclusão do contrato"}
               aria-describedby={!pdfAptoParaDecisao ? 'aviso-pdf-principal-conclusao' : undefined}
-              className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-300 ${pdfAptoParaDecisao ? 'border-violet-500 bg-violet-700 text-white hover:bg-violet-600' : 'border-violet-500/45 bg-violet-950/20 text-violet-200/40 disabled:cursor-not-allowed'}`}><IconeConclusao className="h-4 w-4 shrink-0 text-violet-300" /> Aprovar</button>
+              className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-300 ${pdfAptoParaDecisao ? 'border-violet-500 bg-violet-700 text-white hover:bg-violet-600' : 'border-violet-500/45 bg-violet-950/20 text-violet-200/40 disabled:cursor-not-allowed'}`}><IconeConclusao className="h-4 w-4 shrink-0" /> Aprovar</button>
           </> : contrato.arquivadoEm ? null : (concluido || encerrado || finalizado) && (administrador || acessoQuery.dados?.permissoes?.reabrirContrato) ? (
             <button type="button" onClick={() => setConfirmarReabertura(true)} disabled={alterandoArquivo}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-400/40 bg-slate-500/10 px-3 text-xs font-semibold text-foreground hover:bg-slate-500/20 focus-visible:outline-2 focus-visible:outline-brand-neon disabled:opacity-50" aria-label="Reabrir contrato concluído"><IconeReabertura className="h-4 w-4 shrink-0 pi-icone-reabrir-verde" /> Reabrir</button>
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-400/40 bg-slate-500/10 px-3 text-xs font-semibold text-foreground hover:bg-slate-500/20 focus-visible:outline-2 focus-visible:outline-brand-neon disabled:opacity-50" aria-label="Reabrir contrato concluído"><IconeReabertura className="h-4 w-4 shrink-0" /> Reabrir</button>
           ) : podeFecharRevisao && podeEditar ? (
             <button type="button" data-tec08-decisao="fechamento" aria-label={tituloFechamento} disabled={alterandoArquivo}
               onClick={() => setConfirmarFechamentoRevisao(true)}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-violet-400/55 bg-violet-700 px-3 text-xs font-semibold text-white hover:bg-violet-600 focus-visible:outline-2 focus-visible:outline-violet-300 disabled:opacity-50"><IconeConclusao className="h-4 w-4 shrink-0 text-violet-400" />{tituloFechamento}</button>
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-violet-400/55 bg-violet-700 px-3 text-xs font-semibold text-white hover:bg-violet-600 focus-visible:outline-2 focus-visible:outline-violet-300 disabled:opacity-50"><IconeConclusao className="h-4 w-4 shrink-0" />{tituloFechamento}</button>
           ) : suspenso ? (
             podeRetomar && <button type="button" onClick={() => setConfirmarRetomada(true)} disabled={alterandoArquivo}
               aria-label="Retomar contrato suspenso" title="Retomar preservando prazos e progresso"
               className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-amber-500/55 bg-amber-500/10 px-3 text-xs font-semibold text-amber-900 hover:bg-amber-500/20 dark:text-amber-100 disabled:opacity-50">⏵ Retomar contrato</button>
           ) : cancelado ? (
             podeReverterCancelamento && <button type="button" onClick={() => setConfirmarReversaoCancelamento(true)} disabled={alterandoArquivo}
-              aria-label="Reabrir contrato cancelado" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-red-500/50 bg-red-950 px-3 text-xs font-semibold text-red-100 hover:bg-red-900 disabled:opacity-50">⟳ Reabrir</button>
+              aria-label="Reabrir contrato cancelado" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-red-500/50 bg-red-950 px-3 text-xs font-semibold text-red-100 hover:bg-red-900 disabled:opacity-50"><IconeReabertura className="h-4 w-4 shrink-0"/> Reabrir</button>
           ) : null}
           {/* Controles de manutenção ficam sempre no mesmo bloco da barra superior.
               Encerramento é selecionado no formulário, nunca por botão separado. */}

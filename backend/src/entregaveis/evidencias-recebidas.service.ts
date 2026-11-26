@@ -52,6 +52,11 @@ function resumoRascunho(dto: EnviarComprovanteDto) {
     atividades:idsVinculadosEnvio(dto.atividadesVinculadas),totalDestinos:destinosEvidencia(dto.destinosCompartilhados).length};
 }
 
+/** Durante decisão pendente, somente documentação complementar independente. */
+function declaracaoComplementar(dto?: EnviarComprovanteDto | null): boolean {
+  return !dto || Object.entries(dto).every(([chave, valor]) => chave === 'descricao' || valor == null || valor === '');
+}
+
 function publico(c: ComprovanteEvidencia) {
   return { id: c.id, grupoCompartilhadoId: c.grupoCompartilhadoId ?? null, autorId: c.autorId, nomeOriginal: c.nomeOriginal, tipoMime: c.tipoMime,
     tamanho: c.tamanho, descricao: c.descricao, status: c.status, verificadoPor: c.verificadoPor,
@@ -154,8 +159,8 @@ export class EvidenciasRecebidasService {
     return { entregavel, esperada };
 
   }
-  private validarPlanejamentoAtivo(entregavel: Entregavel, esperada: EvidenciaEsperada): void {
-    if (entregavel.regularizacaoDocumentalSolicitada || ['CONCLUIDO','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(entregavel.statusExecucao ?? '')) throw new ConflictException('Entregável concluído: reabra antes de alterar evidências');
+  private validarPlanejamentoAtivo(entregavel: Entregavel, esperada: EvidenciaEsperada, complementar = false): void {
+    if ((entregavel.regularizacaoDocumentalSolicitada && !(complementar && entregavel.statusExecucao === 'CONCLUIDO_PARCIALMENTE' && esperada.obrigatoria === false)) || ['CONCLUIDO','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(entregavel.statusExecucao ?? '')) throw new ConflictException('Entregável concluído: reabra antes de alterar evidências');
     if (entregavel.arquivadoEm || esperada.arquivadoEm)
       throw new ConflictException('Item arquivado: reative-o antes de enviar, editar ou verificar comprovantes');
   }
@@ -171,6 +176,13 @@ export class EvidenciasRecebidasService {
       throw new ConflictException('A etapa permite apenas regularização documental de entregáveis parcialmente concluídos, sem decisão pendente');
     if ((['CONCLUIDA', 'ENCERRADA', 'FINALIZADA'].includes(etapa.status)) && !etapa.reabertoEm)
       throw new ConflictException('Etapa concluída: reabra a etapa antes de alterar evidências');
+  }
+  private async exigirComplementar(m: EntityManager, e: Entregavel, ev: EvidenciaEsperada, versao?: ComprovanteEvidencia | null, declaracao?: EnviarComprovanteDto | null) {
+    if (ev.obrigatoria !== false || !declaracaoComplementar(declaracao) || versao?.quantidadeDeclarada != null || versao?.grupoCompartilhadoId || versao?.ocorrenciaQuantidadeId || versao?.referenciaExecucao || versao?.origemQuantidade)
+      throw new ConflictException('Durante a regularização, somente evidências opcionais sem contribuição ou vínculos podem ser alteradas.');
+    if (versao && ((await this.vinculosLocais(m,e.contratoId,e.id,versao.id)).length ||
+      (await m.query(`SELECT 1 FROM execucoes_entregavel WHERE contrato_id=$1 AND entregavel_id=$2 AND origem='EVIDENCIA' AND origem_id=$3 LIMIT 1`,[e.contratoId,e.id,versao.id])).length))
+      throw new ConflictException('Preserve a execução e os vínculos existentes durante a regularização.');
   }
   private async contratoEditavel(m: EntityManager, contratoId: string) {
     const contrato = await m.getRepository(Contrato).createQueryBuilder('c')
@@ -256,13 +268,17 @@ export class EvidenciasRecebidasService {
       ? (await this.db.manager.getRepository(Ocorrencia).findBy({ contratoId, entregavelId })).filter(o => !o.substituidaEm && o.modoRegistro === 'QUANTITATIVO')
         .map(o => ({ id: o.id, titulo: o.titulo, status: o.status })) : [];
     const vinculosAtuais = await this.vinculosLocais(this.db.manager,contratoId,entregavelId,ultima?.id,declaracao);
+    const parcial = entregavel.statusExecucao === 'CONCLUIDO_PARCIALMENTE';
+    const complementar = parcial && esperada.obrigatoria === false && declaracaoComplementar(declaracao) &&
+      !ultima?.grupoCompartilhadoId && ultima?.quantidadeDeclarada == null && !ultima?.ocorrenciaQuantidadeId && !ultima?.referenciaExecucao && !ultima?.origemQuantidade &&
+      !parcelas.some(p => p.origemId === ultima?.id) && vinculosAtuais.length === 0;
     const contextoPermiteAlterar = Boolean(contrato && !contrato.arquivadoEm && !contrato.conclusaoSolicitadaEm &&
       !['CONCLUIDO','ENCERRADO','FINALIZADO','SUSPENSO','CANCELADO'].includes(contrato.status) &&
       !(contrato.status === 'CONCLUIDO_PARCIALMENTE' && contrato.conclusaoSolicitadaEm) &&
       (!entregavel.etapaId || (etapaPai && !etapaPai.arquivadoEm && !etapaPai.conclusaoSolicitadaEm && !etapaPai.encerramentoSolicitadoEm &&
         !(etapaPai.status === StatusEtapa.CONCLUIDO_PARCIALMENTE && (etapaPai.conclusaoSolicitadaEm || entregavel.statusExecucao !== 'CONCLUIDO_PARCIALMENTE')) &&
         (!['CONCLUIDA','ENCERRADA','FINALIZADA'].includes(etapaPai.status) || etapaPai.reabertoEm))) &&
-      !entregavel.arquivadoEm && !esperada.arquivadoEm && !entregavel.regularizacaoDocumentalSolicitada &&
+      !entregavel.arquivadoEm && !esperada.arquivadoEm && (!entregavel.regularizacaoDocumentalSolicitada || complementar) &&
       !['CONCLUIDO','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(entregavel.statusExecucao ?? ''));
     const permissaoContribuicao = ator.perfil === PerfilUsuario.ADMINISTRADOR ? null : await this.db.manager.getRepository(PermissaoContrato).findOneBy({contratoId,usuarioId:ator.id});
     const efetivasContribuicao = permissaoContribuicao && permissoesEfetivas(ator.perfil,permissaoContribuicao.podeEditar,permissaoContribuicao.permissoesDetalhadas);
@@ -271,9 +287,10 @@ export class EvidenciasRecebidasService {
     const podeEditarContribuicao = Boolean(contextoPermiteAlterar && (ator.perfil === PerfilUsuario.ADMINISTRADOR || (efetivasContribuicao?.editarExecucaoFisica && (!ocorrenciaContribuicao || (efetivasContribuicao.vincularEvidenciasOcorrencia && efetivasContribuicao.registrarExecucaoOcorrencia)))) && (!ultima || ['PENDENTE_VERIFICACAO','REJEITADA'].includes(ultima.status)) && ultima?.origemQuantidade!=='COMPROVACAO' && declaracao?.origemQuantidade!=='COMPROVACAO' && !declaracao?.comprovaExecucaoId && !parcelaAtual?.referenciaId && entregavel.statusExecucao!=='CONCLUIDO_PARCIALMENTE');
     return {
       contextoPermiteAlterar:contextoPermiteAlterar&&!declaracao?.origemCompartilhadaId,
+      podeEditarMetadadosComplementares: Boolean(contextoPermiteAlterar && complementar && ultima?.status !== 'VERIFICADA'),
       podeEditarContribuicao:podeEditarContribuicao&&!declaracao?.origemCompartilhadaId, vinculosAtuais,
       contrato:contrato?.numeroContrato, entregavel:entregavel.nome,
-      podeEditarVinculos:Boolean(contextoPermiteAlterar && !declaracao?.origemCompartilhadaId && contrato?.status!=='CONCLUIDO_PARCIALMENTE' && (!ultima||ultima.status!=='VERIFICADA') && (ator.perfil===PerfilUsuario.ADMINISTRADOR || efetivasContribuicao?.editarEvidencias && (efetivasContribuicao.vincularEvidenciasOcorrencia || efetivasContribuicao.editarAtividades))),
+      podeEditarVinculos:Boolean(contextoPermiteAlterar && !parcial && !declaracao?.origemCompartilhadaId && contrato?.status!=='CONCLUIDO_PARCIALMENTE' && (!ultima||ultima.status!=='VERIFICADA') && (ator.perfil===PerfilUsuario.ADMINISTRADOR || efetivasContribuicao?.editarEvidencias && (efetivasContribuicao.vincularEvidenciasOcorrencia || efetivasContribuicao.editarAtividades))),
       aguardandoEnvioCompartilhado:Boolean(declaracao?.origemCompartilhadaId),
       compartilhamentosPreliminares:declaracao&&(declaracao.origemCompartilhadaId||destinosEvidencia(declaracao.destinosCompartilhados).length)?await this.vinculosPreliminares(this.db.manager,declaracao.origemCompartilhadaId??esperadaId,ator):[],
       declaracaoPreliminar: declaracao ? {quantidadeDeclarada:declaracao.quantidadeExecutada??null,percentualDeclarado:declaracao.percentualExecucao??null,ocorrenciaQuantidadeId:declaracao.ocorrenciaQuantidadeId??null,ocorrenciaPercentualId:declaracao.ocorrenciaExecucaoId??null,origemQuantidade:declaracao.origemQuantidade??null,referenciaPercentualId:declaracao.comprovaExecucaoId??null} : null,
@@ -319,6 +336,7 @@ export class EvidenciasRecebidasService {
         })(),
       })),
       podeVerificar: Boolean(contextoPermiteAlterar && ultima && ['PENDENTE_VERIFICACAO','REJEITADA'].includes(ultima.status) &&
+        (!parcial || ultima.origemQuantidade !== 'NOVA_EXECUCAO' && !(parcelaAtual?.centesimos && !parcelaAtual.referenciaId)) &&
         await this.verificadorAutorizado(this.db.manager, ator, entregavel)),
     };
   }
@@ -471,11 +489,13 @@ export class EvidenciasRecebidasService {
       const e = await m.getRepository(Entregavel).findOneBy({ id: entregavelId, contratoId });
       if (!e) throw new NotFoundException('Entregável não encontrado neste contrato');
       this.exigirRegularizacao(contrato,e);
-      if (e.arquivadoEm || e.regularizacaoDocumentalSolicitada) throw new ConflictException('Entregável arquivado ou aguardando decisão documental');
+      const parcial = e.statusExecucao === 'CONCLUIDO_PARCIALMENTE';
+      if (e.arquivadoEm || (e.regularizacaoDocumentalSolicitada && !parcial)) throw new ConflictException('Entregável arquivado ou aguardando decisão documental');
+      if (parcial && (dto.obrigatoria !== false || !declaracaoComplementar(dto.rascunhoEnvio))) throw new ConflictException('Cadastre somente evidências opcionais sem contribuição durante a regularização.');
       await this.etapaAtiva(m, e);
       // Evidências previamente verificadas não fecham automaticamente o planejamento.
       // Apenas o estado explícito CONCLUIDO/FINALIZADO bloqueia uma nova exigência.
-      if (['CONCLUIDO', 'CONCLUIDO_PARCIALMENTE', 'FINALIZADO', 'PENDENTE_CONCLUSAO', 'PENDENTE_CONCLUSAO_PARCIAL', 'PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? ''))
+      if (['CONCLUIDO', 'FINALIZADO', 'PENDENTE_CONCLUSAO', 'PENDENTE_CONCLUSAO_PARCIAL', 'PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao ?? ''))
         throw new ConflictException('Entregável fechado ou aguardando aprovação: reabra antes de cadastrar outra evidência');
       if (dto.obrigatoria === false && !await this.alterarObrigatoriedadePermitido(m, contratoId, ator))
         throw new ForbiddenException('Somente Administrador ou usuário delegado pode cadastrar evidência opcional');
@@ -506,7 +526,8 @@ export class EvidenciasRecebidasService {
       const contrato = await this.contratoEditavel(m, contratoId);
       const { entregavel, esperada } = await this.contexto(m, contratoId, entregavelId, esperadaId);
       this.exigirRegularizacao(contrato,entregavel);
-      this.validarPlanejamentoAtivo(entregavel, esperada);
+      const parcial = entregavel.statusExecucao === 'CONCLUIDO_PARCIALMENTE';
+      this.validarPlanejamentoAtivo(entregavel, esperada, parcial);
       await this.etapaAtiva(m, entregavel);
       // Um documento já verificado não pode ter seus critérios alterados sem reabertura explícita.
       const ultima = await m.getRepository(ComprovanteEvidencia).findOne({
@@ -515,6 +536,10 @@ export class EvidenciasRecebidasService {
       if (ultima?.status === 'VERIFICADA') throw new ConflictException('Evidência verificada: reabra antes de editar');
       const rascunhoAnterior = !ultima ? await this.rascunho(m,esperadaId,entregavelId) : null;
       if(rascunhoAnterior?.origemCompartilhadaId)throw new ConflictException('Edite esta evidência no registro de origem até o envio do comprovante.');
+      if (parcial) {
+        if (dto.rascunhoEnvio !== undefined || (dto.obrigatoria !== undefined && dto.obrigatoria !== esperada.obrigatoria)) throw new ConflictException('A regularização não permite alterar contribuições ou obrigatoriedade.');
+        if (contrato.status === 'CONCLUIDO_PARCIALMENTE' || entregavel.regularizacaoDocumentalSolicitada || esperada.obrigatoria === false) await this.exigirComplementar(m,entregavel,esperada,ultima,rascunhoAnterior);
+      }
       const destinosAnteriores=destinosEvidencia(rascunhoAnterior?.destinosCompartilhados);
       if(destinosAnteriores.length&&dto.tipoEvidencia!==undefined&&dto.tipoEvidencia.trim()!==esperada.tipoEvidencia)throw new ConflictException('Mantenha o tipo da evidência compartilhada.');
       if (dto.rascunhoEnvio !== undefined) {
@@ -560,6 +585,7 @@ export class EvidenciasRecebidasService {
       const contrato = await this.contratoEditavel(m, contratoId);
       const {entregavel:e,esperada}=await this.contexto(m,contratoId,entregavelId,esperadaId);
       this.exigirRegularizacao(contrato,e);
+      if (contrato.status === 'CONCLUIDO_PARCIALMENTE') throw new ConflictException('A regularização documental não permite alterar vínculos do contrato parcialmente concluído.');
       this.validarPlanejamentoAtivo(e,esperada); await this.etapaAtiva(m,e);
       const c=await m.getRepository(ComprovanteEvidencia).createQueryBuilder('c').setLock('pessimistic_write').where('c.evidenciaEsperadaId = :esperadaId',{esperadaId}).orderBy('c.criadoEm','DESC').addOrderBy('c.id','DESC').getOne();
       if((c?.id??null)!==(dto.comprovanteId??null))throw new ConflictException('A versão mudou. Atualize a evidência.');
@@ -683,7 +709,7 @@ export class EvidenciasRecebidasService {
     let repetido = false;
     // Verificar escopo antes de criar blob; repetir sob lock na transação.
     const antes = await this.contexto(this.db.manager, contratoId, entregavelId, esperadaId);
-    this.validarPlanejamentoAtivo(antes.entregavel, antes.esperada);
+    this.validarPlanejamentoAtivo(antes.entregavel, antes.esperada, true);
     await this.etapaAtiva(this.db.manager, antes.entregavel);
     const rascunho = await this.rascunho(this.db.manager,esperadaId,entregavelId);
     if(rascunho?.origemCompartilhadaId)throw new ConflictException('O comprovante compartilhado deve ser anexado no registro de origem.');
@@ -736,7 +762,7 @@ export class EvidenciasRecebidasService {
         const atual = await this.contexto(m, contratoId, entregavelId, esperadaId);
         this.exigirRegularizacao(contratosBloqueados.get(contratoId)!,atual.entregavel);
         if (JSON.stringify(await this.rascunho(m,esperadaId,entregavelId)) !== JSON.stringify(rascunho)) throw new ConflictException('A declaração foi alterada. Atualize a evidência e tente novamente.');
-        this.validarPlanejamentoAtivo(atual.entregavel, atual.esperada);
+        this.validarPlanejamentoAtivo(atual.entregavel, atual.esperada, true);
         await this.etapaAtiva(m, atual.entregavel);
         validarTipo(atual.esperada.tipoEvidencia);
         const repo = m.getRepository(ComprovanteEvidencia);
@@ -745,6 +771,7 @@ export class EvidenciasRecebidasService {
         const ultima = await repo.createQueryBuilder('c').setLock('pessimistic_write')
           .where('c.evidenciaEsperadaId = :esperadaId', { esperadaId })
           .orderBy('c.criadoEm', 'DESC').addOrderBy('c.id', 'DESC').getOne();
+        if (atual.entregavel.regularizacaoDocumentalSolicitada) await this.exigirComplementar(m,atual.entregavel,atual.esperada,ultima,dto);
         if (ultima?.status === 'VERIFICADA')
           throw new ConflictException('Comprovante verificado. Solicite a reabertura da evidência antes de substituir o arquivo.');
         // Troca de arquivo não é uma edição implícita de execução ou vínculos.
@@ -934,7 +961,7 @@ export class EvidenciasRecebidasService {
       const contrato = await this.contratoEditavel(m, contratoId);
       const { entregavel, esperada } = await this.contexto(m, contratoId, entregavelId, esperadaId);
       this.exigirRegularizacao(contrato,entregavel);
-      this.validarPlanejamentoAtivo(entregavel, esperada);
+      this.validarPlanejamentoAtivo(entregavel, esperada, true);
       await this.etapaAtiva(m, entregavel);
       const repo = m.getRepository(ComprovanteEvidencia);
       const ultima = await repo.createQueryBuilder('c').addSelect('c.storageKey').setLock('pessimistic_write').where('c.evidenciaEsperadaId = :esperadaId', { esperadaId })
@@ -942,6 +969,7 @@ export class EvidenciasRecebidasService {
       if (!ultima || ultima.id !== comprovanteId || ultima.contratoId !== contratoId || ultima.entregavelId !== entregavelId)
         throw new ConflictException('Só o envio mais recente pode ser verificado');
       if (!['PENDENTE_VERIFICACAO','REJEITADA'].includes(ultima.status)) throw new ConflictException('Comprovante já verificado');
+      if (entregavel.regularizacaoDocumentalSolicitada) await this.exigirComplementar(m,entregavel,esperada,ultima);
       if (grupoAutorizado) {
         if (ultima.grupoCompartilhadoId !== grupoAutorizado.id || ultima.storageKey !== grupoAutorizado.storageKey || ultima.sha256 !== grupoAutorizado.sha256) throw new ConflictException('O vínculo compartilhado mudou. Atualize a evidência.');
       } else if (!await this.verificadorAutorizado(m, ator, entregavel)) throw new ForbiddenException('Sem permissão para verificar esta evidência');
@@ -958,6 +986,7 @@ export class EvidenciasRecebidasService {
         await validarContribuicaoEvidencia(m, entregavel, ultima);
       }
       const parcela = entregavel.execucoesIntegradas ? await m.findOneBy(ExecucaoLancamento,{contratoId,entregavelId,origem:'EVIDENCIA',origemId:ultima.id}) : null;
+      if (entregavel.statusExecucao === 'CONCLUIDO_PARCIALMENTE' && (ultima.origemQuantidade === 'NOVA_EXECUCAO' || (parcela?.centesimos && !parcela.referenciaId))) throw new ConflictException('A regularização não pode acrescentar execução física.');
       if (parcela?.referenciaId) {
         const origem = (await resumoParcelas(m, entregavel)).itens.find(i => i.id === parcela.referenciaId);
         if (!origem || origem.reconhecido <= 0 || origem.ocorrenciaId !== parcela.ocorrenciaId)
@@ -1016,7 +1045,7 @@ export class EvidenciasRecebidasService {
       const contrato = await this.contratoEditavel(m, contratoId);
       const { entregavel, esperada } = await this.contexto(m, contratoId, entregavelId, esperadaId);
       this.exigirRegularizacao(contrato,entregavel);
-      this.validarPlanejamentoAtivo(entregavel, esperada);
+      this.validarPlanejamentoAtivo(entregavel, esperada, true);
       await this.etapaAtiva(m, entregavel);
       if (!await this.verificadorAutorizado(m, ator, entregavel))
         throw new ForbiddenException('Sem permissão para rejeitar esta evidência');
@@ -1027,6 +1056,7 @@ export class EvidenciasRecebidasService {
       if (!ultima || ultima.id !== comprovanteId || ultima.contratoId !== contratoId ||
           ultima.entregavelId !== entregavelId || ultima.status === 'REJEITADA')
         throw new ConflictException('Somente a versão vigente pode ser rejeitada');
+      if (entregavel.regularizacaoDocumentalSolicitada) await this.exigirComplementar(m,entregavel,esperada,ultima);
       if (ultima.status === 'VERIFICADA') await this.protegerDecisoesDeOcorrencia(m,contratoId,ultima.id,true);
       if (entregavel.statusExecucao==='CONCLUIDO_PARCIALMENTE' && ultima.status==='VERIFICADA') throw new ConflictException('Reabra o entregável antes de invalidar uma prova reconhecida.');
       const parcela = entregavel.execucoesIntegradas ? await m.findOneBy(ExecucaoLancamento,{contratoId,entregavelId,origem:'EVIDENCIA',origemId:ultima.id}) : null;

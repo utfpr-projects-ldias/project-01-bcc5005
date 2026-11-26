@@ -41,7 +41,7 @@ export type DetalheEvidencia = {
   historico?: EventoRastreabilidadeEvidencia[];
   compartilhamentos?: VinculoCompartilhado[];
   vinculosAtuais?: VinculoLocalEvidencia[];
-  contrato?:string; entregavel?:string; podeEditarVinculos?:boolean;
+  contrato?:string; entregavel?:string; podeEditarVinculos?:boolean; podeEditarMetadadosComplementares?:boolean;
   arquivadoEm?: string | null; reabertoEm?: string | null; entregavelArquivadoEm?: string | null;
 };
 /** Validação em runtime: a resposta HTTP pode estar incompleta mesmo quando foi tipada em TypeScript.

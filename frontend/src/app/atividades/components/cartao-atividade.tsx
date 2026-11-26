@@ -322,7 +322,7 @@ export function PreviaContrato({ contratoId, fechar, foco, destinoInicial }: { c
         <div className="flex shrink-0 items-center justify-end gap-2">
           {acaoReabrir && podeReabrir ?
             <div className="flex flex-wrap items-center justify-end gap-1"><button type="button" className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-slate-400/40 bg-slate-500/10 px-3 text-xs font-semibold text-foreground hover:bg-slate-500/20 focus-visible:outline-2 focus-visible:outline-brand-neon"
-              disabled={!conteudoPronto} onClick={() => enviarAcao(acaoReabrir)}><IconeReabertura className="h-4 w-4" /> {acaoReabrir === 'reativar' ? 'Reativar' : 'Reabrir'}</button>
+              disabled={!conteudoPronto} onClick={() => enviarAcao(acaoReabrir)}><IconeReabertura neutro={acaoReabrir === 'reativar'} className="h-4 w-4" /> {acaoReabrir === 'reativar' ? 'Reativar' : 'Reabrir'}</button>
               {acaoReabrir === 'reativar' && <BotaoExcluirModal rotulo="Excluir contrato arquivado" disabled={!conteudoPronto} onClick={() => enviarAcao('excluir')}/>}
               {regularizacaoElegivel && <BotaoAcaoModal intencao="solicitar-conclusao" onClick={()=>enviarAcao('solicitar-conclusao')}>Solicitar regularização documental</BotaoAcaoModal>}</div>
             : acaoReabrir === 'reabrir' && regularizacaoElegivel ? <BotaoAcaoModal intencao="solicitar-conclusao" onClick={()=>enviarAcao('solicitar-conclusao')}>Solicitar regularização documental</BotaoAcaoModal>
@@ -355,7 +355,7 @@ export function PreviaContrato({ contratoId, fechar, foco, destinoInicial }: { c
       </header>
       <div ref={corpoRef} data-pi-corpo-contrato className="relative flex min-h-0 flex-1 flex-row overflow-hidden">
         <div inert={drawerAtivo || undefined} className="relative flex min-h-0 min-w-0 flex-1 bg-background">
-          {!conteudoPronto && <div role="status" className="sr-only">Consultando contrato.</div>}
+          {!conteudoPronto && <div role="status" className="absolute inset-0 grid place-items-center text-sm text-foreground/65">Carregando contrato…</div>}
           <iframe ref={iframeRef} title="Conteúdo do contrato" src={`/contratos/painel/${encodeURIComponent(contratoId)}?${new URLSearchParams({painel:"1",...(destinoInicial?{consultaDireta:"1",etapa:destinoInicial.etapaId,...(destinoInicial.entregavelId?{entregavel:destinoInicial.entregavelId}:{})}:{})}).toString()}`}
             onLoad={iframeCarregado} loading="eager" className={`absolute inset-0 h-full w-full border-0 bg-background transition-opacity duration-150 ${conteudoPronto ? 'opacity-100' : 'opacity-0'}`} />
         </div>

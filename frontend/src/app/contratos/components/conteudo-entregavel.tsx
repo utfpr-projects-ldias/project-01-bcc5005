@@ -83,9 +83,10 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
   // Estado persistido do entregável prevalece sobre qualquer permissão de envio.
   const concluidoSemReabertura = ['CONCLUIDO', 'CONCLUIDO_PARCIALMENTE', 'FINALIZADO', 'PENDENTE_CONCLUSAO', 'PENDENTE_CONCLUSAO_PARCIAL', 'PENDENTE_ENCERRAMENTO'].includes(item.statusExecucao ?? '') && !item.reabertoEm;
   const documentosBloqueados = ['CONCLUIDO','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(item.statusExecucao ?? '') && !item.reabertoEm;
-  const regularizacaoAtiva = regularizacaoDocumental && item.statusExecucao === 'CONCLUIDO_PARCIALMENTE' && !item.regularizacaoDocumentalSolicitada;
+  const regularizacaoAtiva = regularizacaoDocumental && item.statusExecucao === 'CONCLUIDO_PARCIALMENTE';
   const comprovantesHabilitados = podeEnviarComprovantes && (!bloqueadoPorPai || regularizacaoAtiva) && !paiArquivado && !paiConcluido && !item.arquivadoEm && !documentosBloqueados;
   const planejamentoHabilitado = !bloqueadoPorPai && !paiArquivado && !paiConcluido && !item.arquivadoEm && !concluidoSemReabertura;
+  const cadastroDocumentalHabilitado = planejamentoHabilitado || (regularizacaoAtiva && !paiArquivado && !paiConcluido && !item.arquivadoEm && podeAlterarObrigatoriedade);
   const [historicoExpandido, setHistoricoExpandido] = useState(false);
   const chaveEvidencias = `${item.contratoId}:${item.id}:${item.evidenciasEsperadas.map(e => e.id).join(',')}:${versaoEstado}`;
   const [consultaStatus, setConsultaStatus] = useState<{ chave: string; status: Record<string, { status: StatusComprovante; arquivo: string | null; reabertoEm?: string | null; vinculos: ReturnType<typeof itensVinculosEvidencia> }> }>({ chave: '', status: {} });
@@ -144,7 +145,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
   const [arquivandoItem, setArquivandoItem] = useState(false);
   async function executarReaberturaEvidencia() {
     const id = confirmarReabertura;
-    if (!id || arquivandoItem || (bloqueadoPorPai && !regularizacaoAtiva) || !podeReabrirEvidencia) return;
+    if (!id || arquivandoItem || item.regularizacaoDocumentalSolicitada || (bloqueadoPorPai && !regularizacaoAtiva) || !podeReabrirEvidencia) return;
     setArquivandoItem(true); setErroArquivo('');
     try {
       await reabrirEvidencia(item.contratoId, item.id, id, motivoEvidencia.trim());
@@ -215,7 +216,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
   function cadastrarOrigem(origem:OrigemExecucao,dados:CadastroExecucao,gatilho:HTMLElement,navegacao?:RetornoCadastroRegistro){
     setErroExecucao('');
     setNavegacaoRegistro(navegacao?{...navegacao,ativa:origem,gatilho}:null);
-    if(origem==='EVIDENCIA'){setContribuicaoCadastro(dados);setVinculosCadastro({ocorrencias:dados.ocorrenciaId&&dados.origemQuantidade!=='COMPROVACAO'&&!dados.comprovaExecucaoId?[dados.ocorrenciaId]:[],atividades:[]});abrirCadastro();}
+    if(origem==='EVIDENCIA'){setContribuicaoCadastro(regularizacaoAtiva?{}:dados);setVinculosCadastro({ocorrencias:!regularizacaoAtiva&&dados.ocorrenciaId&&dados.origemQuantidade!=='COMPROVACAO'&&!dados.comprovaExecucaoId?[dados.ocorrenciaId]:[],atividades:[]});abrirCadastro();}
     else if(origem==='ATIVIDADE')setCadastroAtividade({dados,gatilho});
     else if(origem==='OCORRENCIA')setCadastroOcorrencia({gatilho,metaQuantidade:dados.metaQuantidade});
   }
@@ -283,7 +284,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
   }, [registrarVoltaEvidencia, aoFecharAvulso]);
   async function adicionarEvidencia(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (salvandoNova || !planejamentoHabilitado || !(podeCriarEvidencia ?? podeEditarEsperada)) return;
+    if (salvandoNova || !cadastroDocumentalHabilitado || !(podeCriarEvidencia ?? podeEditarEsperada)) return;
     if (novoArquivo && !comprovantesHabilitados) {setErroCadastro('Seu perfil ou a situação do entregável não permite anexar arquivos.');return;}
     if ([contribuicaoCadastro.percentual,contribuicaoCadastro.quantidade].some(v=>v!==undefined&&(!v.trim()||!Number.isFinite(Number(v.replace(',','.')))||Number(v.replace(',','.'))<=0)) || Number(contribuicaoCadastro.percentual?.replace(',','.'))>100) {setErroCadastro('Informe uma contribuição válida e positiva.');return;}
     if (novoArquivo && !arquivoCompativelEvidencia(novoTipo, novoArquivo)) { setErroCadastro('O arquivo não corresponde ao tipo Foto ou Relatório selecionado.'); return; }
@@ -307,8 +308,8 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
       if (!id) {
         const criada = await criarEvidenciaEsperada(item.contratoId, item.id, {
           tipoEvidencia: novoTipo.trim(), descricao: novaDescricao.trim() || null,
-          obrigatoria: podeAlterarObrigatoriedade ? novaObrigatoria : true,
-          ...(Object.keys(rascunho).length?{rascunhoEnvio:rascunho}:{}),
+          obrigatoria: regularizacaoAtiva ? false : podeAlterarObrigatoriedade ? novaObrigatoria : true,
+          ...(!regularizacaoAtiva && Object.keys(rascunho).length?{rascunhoEnvio:rascunho}:{}),
         });
         id = criada.id;
         setNovaEvidenciaCriadaId(id);
@@ -479,7 +480,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
       {historicoExpandido && <HistoricoEntregavel contratoId={item.contratoId} entregavelId={item.id} versao={versaoEstado} ocultarTitulo />}
     </details>}
     </details>
-    <div className="pi-workspace-entregavel"><aside className="pi-workspace-execucao" aria-label="Resumo da execução"><ExecucoesEntregavel key={`${item.id}:${origemRegistro??''}`} origemRegistro={origemRegistro} focoCadastroAvulso={focoAvulso} aoFecharCadastroAvulso={aoFecharAvulso} item={item} aba="geral" somenteLeitura={somenteLeituraExecucao||!planejamentoHabilitado} podeEvidencia={Boolean((podeCriarEvidencia??podeEditarEsperada)&&item.evidenciasEsperadas.length<10)} podeEnviar={comprovantesHabilitados} onCadastro={cadastrarOrigem} onAbrir={abrirOrigem} onAtualizar={atualizarExecucaoIntegrada} onGeral={()=>setListaExecucoes(true)} onOcorrencias={()=>{if(aoFecharAvulso){aoFecharAvulso();return;}setOcorrenciasVisitadas(true);setSecaoSelecionada('ocorrencias');setListaAberta('ocorrencias');}}/></aside><div className="pi-workspace-registros min-w-0">
+    <div className="pi-workspace-entregavel"><aside className="pi-workspace-execucao" aria-label="Resumo da execução"><ExecucoesEntregavel key={`${item.id}:${origemRegistro??''}`} origemRegistro={origemRegistro} focoCadastroAvulso={focoAvulso} aoFecharCadastroAvulso={aoFecharAvulso} item={item} aba="geral" somenteLeitura={somenteLeituraExecucao||!planejamentoHabilitado} podeEvidencia={Boolean(cadastroDocumentalHabilitado&&(podeCriarEvidencia??podeEditarEsperada)&&item.evidenciasEsperadas.length<10)} regularizacaoDocumental={regularizacaoAtiva} podeEnviar={comprovantesHabilitados} onCadastro={cadastrarOrigem} onAbrir={abrirOrigem} onAtualizar={atualizarExecucaoIntegrada} onGeral={()=>setListaExecucoes(true)} onOcorrencias={()=>{if(aoFecharAvulso){aoFecharAvulso();return;}setOcorrenciasVisitadas(true);setSecaoSelecionada('ocorrencias');setListaAberta('ocorrencias');}}/></aside><div className="pi-workspace-registros min-w-0">
     <nav aria-label="Seções do entregável" className="flex min-w-0 items-center justify-start">
       <div role="tablist" aria-label="Conteúdo do entregável" className="pi-navegacao-registros inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-lg border-b border-current/15 p-1">
         {<button type="button" role="tab" id={`secao-ocorrencias-${item.id}`} aria-controls={`conteudo-ocorrencias-${item.id}`}
@@ -513,12 +514,12 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
     {erroExecucao&&<p role="alert" className="text-error-text">{erroExecucao}</p>}
     <div className="pi-ver-registros"><button type="button" onClick={()=>{if(secaoSelecionada==='execucoes')setListaExecucoes(true);else {setOcorrenciasVisitadas(true);setListaAberta(secaoSelecionada);}}}>Ver {secaoSelecionada==='ocorrencias'?'ocorrências':secaoSelecionada==='atividades'?'atividades':secaoSelecionada==='evidencias'?'evidências':'execuções'} <span aria-hidden="true">›</span></button></div>
     {listaExecucoes&&createPortal(<ModalEtapa titulo="Registros de execução" contexto={item.nome} camada="aninhada" larguraDetalhe consultaRegistros ocupado={false} onFechar={()=>setListaExecucoes(false)}><div role="tabpanel" id={`conteudo-${secaoSelecionada}-${item.id}`} aria-labelledby={`secao-${secaoSelecionada}-${item.id}`}>
-      <ExecucoesEntregavel key={`${item.id}:historico`} item={item} aba="execucoes" somenteLeitura={somenteLeituraExecucao||!planejamentoHabilitado} podeEvidencia={Boolean((podeCriarEvidencia??podeEditarEsperada)&&item.evidenciasEsperadas.length<10)} podeEnviar={comprovantesHabilitados} onCadastro={cadastrarOrigem} onAbrir={abrirOrigem} onAtualizar={atualizarExecucaoIntegrada} onGeral={()=>setSecaoSelecionada('execucoes')} onOcorrencias={()=>{setOcorrenciasVisitadas(true);setSecaoSelecionada('ocorrencias');}}/>
+      <ExecucoesEntregavel key={`${item.id}:historico`} item={item} aba="execucoes" somenteLeitura={somenteLeituraExecucao||!planejamentoHabilitado} podeEvidencia={Boolean(cadastroDocumentalHabilitado&&(podeCriarEvidencia??podeEditarEsperada)&&item.evidenciasEsperadas.length<10)} regularizacaoDocumental={regularizacaoAtiva} podeEnviar={comprovantesHabilitados} onCadastro={cadastrarOrigem} onAbrir={abrirOrigem} onAtualizar={atualizarExecucaoIntegrada} onGeral={()=>setSecaoSelecionada('execucoes')} onOcorrencias={()=>{setOcorrenciasVisitadas(true);setSecaoSelecionada('ocorrencias');}}/>
       {erroExecucao&&<p role="alert" className="text-error-text">{erroExecucao}</p>}
     </div></ModalEtapa>,document.body)}
     {listaAberta==='ocorrencias' && ocorrenciasVisitadas && createPortal(<ModalEtapa titulo="Registros de ocorrências" contexto={item.nome} camada="aninhada" larguraDetalhe consultaRegistros ocupado={false} onFechar={()=>setListaAberta(null)}><div id={`conteudo-ocorrencias-${item.id}`} role="tabpanel" aria-labelledby={`secao-ocorrencias-${item.id}`} className="min-w-0">
       <PainelOcorrenciasEntregavel key={item.id} contratoId={item.contratoId} entregavelIdInicial={item.id}
-        estadoContextual={estadoProprioEntregavel} regularizacaoDocumental={regularizacaoAtiva}
+        estadoContextual={estadoProprioEntregavel} regularizacaoDocumental={regularizacaoAtiva && !item.regularizacaoDocumentalSolicitada}
         somenteLeitura={bloqueadoPorPai || paiArquivado || paiConcluido || Boolean(item.arquivadoEm)} ocultarCadastro={contextoModal} calendarioExterno embutido />
     </div></ModalEtapa>,document.body)}
     {listaAberta === 'evidencias' && createPortal(<ModalEtapa titulo="Evidências" contexto={item.nome} camada="aninhada" larguraDetalhe consultaRegistros ocupado={false} onFechar={()=>{setListaAberta(null);}}><div id={`conteudo-evidencias-${item.id}`} role="tabpanel" aria-labelledby={`secao-evidencias-${item.id}`} className="min-w-0">
@@ -526,7 +527,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
       <header className="space-y-2">
         <div className="flex flex-wrap items-start justify-between gap-3">
         <h2 className="text-lg font-semibold" data-tec08-titulo-secao-evidencias>Evidências</h2>
-        {!contextoModal && abaChecklist === 'ativas' && planejamentoHabilitado && (podeCriarEvidencia ?? podeEditarEsperada) && <button type="button" aria-expanded={criandoEvidencia} disabled={item.evidenciasEsperadas.length >= 10 && !criandoEvidencia}
+        {!contextoModal && abaChecklist === 'ativas' && cadastroDocumentalHabilitado && (podeCriarEvidencia ?? podeEditarEsperada) && <button type="button" aria-expanded={criandoEvidencia} disabled={item.evidenciasEsperadas.length >= 10 && !criandoEvidencia}
           onClick={abrirCadastro} data-tec08-acao-criar
           className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-lg bg-brand-green px-3 py-2 text-xs font-semibold text-on-brand-green hover:brightness-110">
           <span className="mr-1.5 inline-flex align-middle"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 9h8M12 13v5M9.5 15.5h5"/></svg></span>{criandoEvidencia ? 'Cancelar cadastro' : item.evidenciasEsperadas.length >= 10 ? 'Limite de evidências' : 'Nova evidência'}
@@ -667,10 +668,10 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
         {!cacheExecucao&&contribuicaoCadastro.percentual!==undefined&&<label className="block text-sm font-medium">Percentual de execução declarado (%)<input required inputMode="decimal" className="mt-1 block w-40 max-w-full rounded-lg border border-current/25 bg-transparent p-2" value={contribuicaoCadastro.percentual} onChange={e=>setContribuicaoCadastro(v=>({...v,percentual:e.target.value}))}/></label>}
         {!cacheExecucao&&contribuicaoCadastro.quantidade!==undefined&&<label className="block text-sm font-medium">Quantidade executada ({item.unidadeMedida??'unidades'})<input required inputMode="decimal" className="mt-1 block w-40 max-w-full rounded-lg border border-current/25 bg-transparent p-2" value={contribuicaoCadastro.quantidade} onChange={e=>setContribuicaoCadastro(v=>({...v,quantidade:e.target.value}))}/></label>}
         {(contribuicaoCadastro.comprovaExecucaoId||contribuicaoCadastro.origemQuantidade==='COMPROVACAO')&&<p className="text-xs text-foreground/70">Comprova uma execução existente, sem acrescentar progresso.</p>}
-        {podeAlterarObrigatoriedade ? <label className="flex items-center gap-2"><input type="checkbox" checked={novaObrigatoria}
+        {regularizacaoAtiva ? <p className="text-xs text-foreground/70">Evidência complementar (opcional), sem contribuição de execução.</p> : podeAlterarObrigatoriedade ? <label className="flex items-center gap-2"><input type="checkbox" checked={novaObrigatoria}
           onChange={e => setNovaObrigatoria(e.target.checked)} /> Obrigatória</label> :
           <p className="text-xs text-foreground/65">Obrigatória por padrão. Somente usuários autorizados podem alterar essa condição.</p>}
-        </div>{cacheExecucao&&comprovantesHabilitados&&<EditorVinculosEvidencia item={item} tipoEvidencia={novoTipo} dados={contribuicaoCadastro} onChange={setContribuicaoCadastro} vinculos={vinculosCadastro} onVinculos={setVinculosCadastro}/>}</div>
+        </div>{!regularizacaoAtiva&&cacheExecucao&&comprovantesHabilitados&&<EditorVinculosEvidencia item={item} tipoEvidencia={novoTipo} dados={contribuicaoCadastro} onChange={setContribuicaoCadastro} vinculos={vinculosCadastro} onVinculos={setVinculosCadastro}/>}</div>
         {erroCadastro && <p role="alert" className="text-error-text">{erroCadastro}</p>}
         <div className="pi-rodape-formulario flex flex-wrap justify-end gap-2 border-t border-current/15 pt-3"><button type="button" disabled={salvandoNova} onClick={()=>fecharCadastro()} className="rounded-lg border border-current/25 px-3 py-2 text-sm">Cancelar</button><button type="submit" disabled={salvandoNova || (!novoTipo.trim() && !novaEvidenciaCriadaId)}
           className="rounded-lg bg-brand-green px-4 py-2 font-semibold text-on-brand-green disabled:opacity-50">
@@ -711,7 +712,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
     <section aria-label="Detalhe da evidência esperada" className="min-w-0 space-y-4">
       <PainelComprovacaoEvidencia key={`${item.contratoId}:${item.id}:${selecionada.id}`}
         contratoId={item.contratoId} entregavelId={item.id}
-        esperadaId={selecionada.id} onDetalheAtualizado={registrarDetalheAtualizado} onIntegridadeDetalhe={registrarIntegridadeDetalhe} podeEditar={planejamentoHabilitado && podeEditarEsperada && integridadeDetalhe?.id === selecionada.id && integridadeDetalhe.valida && confirmado?.contextoPermiteAlterar !== false && !selecionada.arquivadoEm && estadoEvidencias[selecionada.id]?.status !== 'VERIFICADA'}
+        esperadaId={selecionada.id} onDetalheAtualizado={registrarDetalheAtualizado} onIntegridadeDetalhe={registrarIntegridadeDetalhe} podeEditar={(planejamentoHabilitado || regularizacaoAtiva && confirmado?.podeEditarMetadadosComplementares === true) && podeEditarEsperada && integridadeDetalhe?.id === selecionada.id && integridadeDetalhe.valida && confirmado?.contextoPermiteAlterar !== false && !selecionada.arquivadoEm && estadoEvidencias[selecionada.id]?.status !== 'VERIFICADA'}
         podeArquivar={planejamentoHabilitado && (podeArquivarEvidencia ?? podeEditarEsperada) && !selecionada.arquivadoEm} ocultarArquivamento
         podeAlterarObrigatoriedade={planejamentoHabilitado && podeAlterarObrigatoriedade && integridadeDetalhe?.id === selecionada.id && integridadeDetalhe.valida && confirmado?.contextoPermiteAlterar !== false && !selecionada.arquivadoEm && estadoEvidencias[selecionada.id]?.status !== 'VERIFICADA'}
         revisaoConsulta={versaoEstado} detalheConfirmado={confirmado} anexacaoDireta

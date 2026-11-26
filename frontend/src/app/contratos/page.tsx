@@ -145,11 +145,15 @@ export default function ContratosListPage() {
           </div>
           <div className="min-w-0 pi-filtro-status">
             <label htmlFor="filtro-status" className="mb-1 block text-xs font-medium text-foreground/70">Filtrar por situação</label>
-            <select id="filtro-status" className="h-10 w-full rounded-lg border border-brand-green/30 bg-background px-3 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-brand-neon"
-              value={filtro} onChange={e => setFiltro(e.target.value as typeof filtro)}>
-              <option value="">Todos os status</option>
-              {opcoesStatusCarteira(filtroArquivo).map(o => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}
-            </select>
+            <span className="pi-seletor-status-carteira">
+              <span aria-hidden="true" className="pi-medida-status-carteira">{opcoesStatusCarteira(filtroArquivo).find(o=>o.valor===filtro)?.rotulo ?? 'Todos os status'}</span>
+              <select id="filtro-status" className="text-sm text-foreground focus-visible:outline-2 focus-visible:outline-brand-neon"
+                value={filtro} onChange={e => setFiltro(e.target.value as typeof filtro)}>
+                <option value="">Todos os status</option>
+                {opcoesStatusCarteira(filtroArquivo).map(o => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}
+              </select>
+              <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="m4 6 4 4 4-4"/></svg>
+            </span>
           </div>
           <button disabled={!busca && campoBusca === 'todos' && !filtro} type="button" onClick={() => { setBusca(''); setCampoBusca('todos'); setFiltro(''); }}
             className="pi-limpar-filtros h-10 shrink-0 rounded-lg border border-current/20 px-3 text-xs text-foreground/70 hover:bg-current/5">Limpar filtros</button>

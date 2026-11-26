@@ -18,6 +18,7 @@ import { ConfirmacaoSimples } from '@/app/components/confirmacao-simples';
 import { useElegibilidadeEntregavel } from '@/hooks/use-elegibilidade-entregavel';
 import { DialogoImpedimentos } from './explicacao-conclusao-entregavel';
 import { useProgresso } from '@/hooks/use-progresso';
+import { IconeConclusao, IconeConclusaoParcial } from '@/app/components/icones-ciclo-vida';
 import { MenuAcoesObjeto } from '@/app/components/menu-acoes-objeto';
 
 import { estadoDoObjeto, rotuloEstadoEntregavel } from '@/lib/identidade-operacional';
@@ -184,13 +185,14 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, vigencia, entregav
   const podeSolicitarConclusao = Boolean(elegibilidade?.podeSolicitarConclusao && !bloqueioDocumental);
   const podeSolicitarParcial = Boolean(elegibilidade?.podeSolicitarParcial && !bloqueioEdicao);
   const podeEditarCadastro = Boolean(podeEditar && permissoes?.editarEntregaveis);
+  const podeEditarRegularizacao = Boolean(regularizacao && !bloqueioDocumental && podeEditarCadastro);
   const apenasMetadados = Boolean(item && (bloqueioEdicao || verificado ||
     ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(item.statusExecucao ?? '')));
   const pendenteDecisao = Boolean(item && (item.regularizacaoDocumentalSolicitada || ['PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(item.statusExecucao ?? '')));
   const bloqueioFinalizacao = Boolean(item && (item.regularizacaoDocumentalSolicitada || ['PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(item.statusExecucao ?? '') || (!item.reabertoEm && ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(item.statusExecucao ?? ''))));
   const abertaParaDecisao = Boolean(item && !item.arquivadoEm && !bloqueioEdicao &&
     !['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(item.statusExecucao ?? ''));
-  const formularioEdicao = item ? (editando && podeEditarCadastro && !bloqueioEdicao && !bloqueioFinalizacao && apenasMetadados ? <FormularioMetadadosEntregavel item={item} ocupado={salvando}
+  const formularioEdicao = item ? (editando && podeEditarCadastro && ((!bloqueioEdicao && !bloqueioFinalizacao) || podeEditarRegularizacao) && apenasMetadados ? <FormularioMetadadosEntregavel item={item} ocupado={salvando}
           onCancelar={cancelarEdicaoEntregavel} onSalvar={async alteracoes => {
             setSalvando(true);try {await editarEntregavel(contratoId, entregavelId, alteracoes);
               toastSucesso('Dados descritivos atualizados.');voltarDaEdicaoEntregavel();
@@ -220,7 +222,7 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, vigencia, entregav
     textoFechar={retornoContextual ? 'Fechar' : '← Etapa'}
     bloqueadoPorSubmodal={nivel !== 'entregavel'}
     acoes={(!editando || interno) && item ? <>
-      {podeEditarCadastro && !bloqueioEdicao && !bloqueioFinalizacao && !verificado &&
+      {podeEditarCadastro && ((!bloqueioEdicao && !bloqueioFinalizacao) || podeEditarRegularizacao) && !verificado &&
         <BotaoEditarModal rotulo="Editar entregável" disabled={salvando}
           onClick={() => { const editar=()=>{setSecaoEdicao('completo');setEditando(true);}; if(!interno || solicitarNavegacaoInterna(editar, true)) editar(); }} />}
       {regularizacao && !pendenteDecisao && !bloqueioDocumental && permissoes?.editarEntregaveis && <BotaoAcaoModal intencao={podeSolicitarConclusao ? "solicitar-conclusao" : "neutra"} disabled={salvando} onClick={() => podeSolicitarConclusao ? void transicionar('solicitar-conclusao') : setDialogoSolicitacao('impedimentos')}>Solicitar regularização documental</BotaoAcaoModal>}
@@ -232,8 +234,8 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, vigencia, entregav
           className="rounded-lg border border-green-600/60 bg-green-600/20 px-3 py-2 text-xs font-semibold text-green-800 hover:bg-green-600/30 dark:text-green-200 disabled:opacity-35">Aprovar</button>
         {permissoes?.concluirEntregaveis && item.statusExecucao !== 'PENDENTE_ENCERRAMENTO' && !podeConcluir && <button type="button" onClick={()=>setDialogoSolicitacao('impedimentos')} className="text-xs underline text-foreground/75">Ver impedimentos</button>}
         {item.statusExecucao === 'PENDENTE_ENCERRAMENTO' && permissoes?.editarEntregaveis && <div className="ml-2 flex flex-wrap items-center gap-2">
-          {podeSolicitarConclusao && <button type="button" disabled={salvando} onClick={() => void transicionar('solicitar-conclusao')} className="rounded-lg border border-violet-500/50 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-500/20 dark:text-violet-200 disabled:opacity-35">Solicitar conclusão</button>}
-          {podeSolicitarParcial && <button type="button" disabled={salvando} onClick={() => {setErroConclusao('');setDialogoSolicitacao('parcial');}} className="rounded-lg border border-violet-500/50 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-500/20 dark:text-violet-200 disabled:opacity-35">Solicitar conclusão parcial</button>}
+          {podeSolicitarConclusao && <button type="button" disabled={salvando} onClick={() => void transicionar('solicitar-conclusao')} className="rounded-lg border border-violet-500/50 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-500/20 dark:text-violet-200 disabled:opacity-35"><IconeConclusao className="inline-block mr-1 h-4 w-4 align-middle"/>Solicitar conclusão</button>}
+          {podeSolicitarParcial && <button type="button" disabled={salvando} onClick={() => {setErroConclusao('');setDialogoSolicitacao('parcial');}} className="rounded-lg border border-violet-500/50 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-500/20 dark:text-violet-200 disabled:opacity-35"><IconeConclusaoParcial className="inline-block mr-1 h-4 w-4 align-middle"/>Solicitar conclusão parcial</button>}
         </div>}
       </div> : !item.arquivadoEm && !item.reabertoEm && ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(item.statusExecucao ?? '') ? <>
         {!bloqueioEdicao && permissoes?.reabrirEntregaveis && onReabrir && <MenuAcoesObjeto rotulo="Reabrir" disabled={salvando} acaoDireta={onReabrir}/>}
@@ -269,14 +271,14 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, vigencia, entregav
         {item.tipo === 'MARCO' && (!editando || interno) && <div role="tablist" aria-label="Seções do Marco" className="flex gap-1 rounded-lg border border-violet-500/20 p-1">{([['detalhes','Detalhes'],['metas','Metas']] as const).map(([aba,rotulo])=><button key={aba} type="button" role="tab" aria-selected={abaMarco===aba} onClick={()=>setAbaMarco(aba)} className={`rounded-lg px-3 py-2 text-xs font-semibold ${abaMarco===aba?'bg-violet-500/20 text-violet-300':'hover:bg-current/10'}`}>{rotulo}</button>)}</div>}
         {!interno && formularioEdicao ? <div onChangeCapture={()=>{edicaoSuja.current=true;}}>{formularioEdicao}</div>
           : item.tipo === 'MARCO' && abaMarco === 'metas' ? <PainelMetasMarco contratoId={contratoId} entregavelId={item.id} permissoes={permissoes} readOnly={bloqueioEdicao || Boolean(item.arquivadoEm) || bloqueioFinalizacao} onAtualizar={()=>{void atualizarDecisoes();}} />
-          : <ConteudoEntregavel origemRegistro={origemRegistro} interno={interno||retornoContextual} participacao={execucao.progresso?.entregaveis.find(e=>e.entregavelId===item.id)?.participacaoOperacional} item={item} resumoInicial={resumoInicial} contextoModal permissoesExecucao={permissoes} somenteLeituraExecucao={bloqueioEdicao || bloqueioFinalizacao || pendenteDecisao || verificado} regularizacaoDocumental={regularizacao && !bloqueioDocumental} podeEditarEsperada={!bloqueioEdicao && !verificado && !['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(item.statusExecucao ?? '') && (permissoes?.editarEvidencias ?? podeEditar)}
-              podeCriarEvidencia={!bloqueioEdicao && !verificado && !['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(item.statusExecucao ?? '') && (permissoes?.criarEvidencias ?? podeEditar)}
+          : <ConteudoEntregavel origemRegistro={origemRegistro} interno={interno||retornoContextual} participacao={execucao.progresso?.entregaveis.find(e=>e.entregavelId===item.id)?.participacaoOperacional} item={item} resumoInicial={resumoInicial} contextoModal permissoesExecucao={permissoes} somenteLeituraExecucao={bloqueioEdicao || bloqueioFinalizacao || pendenteDecisao || verificado} regularizacaoDocumental={regularizacao && !bloqueioDocumental} podeEditarEsperada={!bloqueioDocumental && !verificado && (regularizacao || !bloqueioEdicao && !['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(item.statusExecucao ?? '')) && (permissoes?.editarEvidencias ?? podeEditar)}
+              podeCriarEvidencia={!bloqueioDocumental && !verificado && (regularizacao || !bloqueioEdicao && !['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(item.statusExecucao ?? '')) && (permissoes?.criarEvidencias ?? podeEditar)}
               podeArquivarEvidencia={(permissoes?.arquivarEvidencias ?? podeEditar) && !bloqueioEdicao}
               podeReativarEvidencia={Boolean(permissoes?.reativarEvidencias) && !bloqueioEdicao}
               podeReabrirEvidencia={Boolean(permissoes?.reabrirEvidencias) && !bloqueioDocumental && !item.regularizacaoDocumentalSolicitada}
               podeExcluirEvidenciaArquivada={!bloqueioEdicao && (permissoes?.excluirEvidenciasArquivadas ?? false)}
-              podeAlterarObrigatoriedade={!bloqueioEdicao && (permissoes?.alterarObrigatoriedade ?? false)}
-              podeEnviarComprovantes={!bloqueioDocumental && !item.regularizacaoDocumentalSolicitada && !verificado && !['CONCLUIDO','FINALIZADO'].includes(item.statusExecucao ?? '') && (permissoes?.enviarComprovantes ?? podeEditar)} podeVerHistorico
+              podeAlterarObrigatoriedade={(!bloqueioEdicao || regularizacao && !bloqueioDocumental) && (permissoes?.alterarObrigatoriedade ?? false)}
+              podeEnviarComprovantes={!bloqueioDocumental && !verificado && !['CONCLUIDO','FINALIZADO'].includes(item.statusExecucao ?? '') && (permissoes?.enviarComprovantes ?? podeEditar)} podeVerHistorico
               paiArquivado={bloqueioArquivo} paiConcluido={!item.arquivadoEm && item.statusExecucao === 'CONCLUIDO' && !item.reabertoEm && !item.arquivadoEm} paiEmRevisao={paiEmRevisao} bloqueadoPorPai={bloqueioEdicao || verificado || item.statusExecucao === 'CONCLUIDO'}
               registrarVoltaEvidencia={registrarEvidencia} registrarVoltaEdicao={registrarEdicaoEvidencia}
               aoAtualizarEsperada={cacheAtualizado => { if(!cacheAtualizado) void atualizarDecisoes(); }} />}
