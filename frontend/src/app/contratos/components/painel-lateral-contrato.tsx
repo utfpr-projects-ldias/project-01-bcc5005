@@ -25,11 +25,11 @@ export function NumeroComprovacoes({ feitas, total }: { feitas?: number | null; 
 }
 
 /** Preserva uma única árvore de conteúdo ao alternar entre painel fixo e drawer. */
-export function PainelLateralContrato({ compacto, aberto, onFechar, children }: { compacto: boolean; aberto: boolean; onFechar: () => void; children: ReactNode }) {
+export function PainelLateralContrato({ compacto, aberto, onFechar, children, bloqueado = false }: { compacto: boolean; aberto: boolean; bloqueado?: boolean; onFechar: () => void; children: ReactNode }) {
   const ref = useRef<HTMLElement>(null);
   const modal = compacto && aberto;
   const oculto = compacto && !aberto;
-  useCamadaInterativa(modal,()=>ref.current,onFechar,40);
+  useCamadaInterativa(modal && !bloqueado,()=>ref.current,onFechar,40);
   useEffect(() => {
     if (!modal) return;
     const quadro = requestAnimationFrame(() => ref.current?.querySelector<HTMLElement>('[data-pi-fechar-painel]')?.focus({preventScroll:true}));
@@ -49,7 +49,7 @@ export function PainelLateralContrato({ compacto, aberto, onFechar, children }: 
   }
   return <>
     <button type="button" tabIndex={-1} data-pi-fundo-painel data-aberto={modal} aria-hidden="true" aria-label="Recolher painel" className="absolute inset-0 z-20 bg-black/40" onClick={modal ? onFechar : undefined}/>
-    <aside ref={ref} aria-label="Resumo e execução física do contrato" role={modal ? 'dialog' : undefined} aria-modal={modal || undefined} aria-hidden={oculto || undefined} inert={oculto || undefined} tabIndex={modal ? -1 : undefined} onKeyDown={teclado}
+    <aside ref={ref} aria-label="Resumo e execução física do contrato" role={modal ? 'dialog' : undefined} aria-modal={modal || undefined} aria-hidden={oculto || undefined} inert={oculto || bloqueado || undefined} tabIndex={modal ? -1 : undefined} onKeyDown={teclado}
       data-pi-painel-lateral data-compacto={compacto} data-aberto={!oculto} className="min-h-0 shrink-0 space-y-4 overflow-y-auto overscroll-contain border-l bg-background p-3 sm:p-4">
       {children}
     </aside>

@@ -2,12 +2,13 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { useState } from 'react';
 import { ConfirmacaoSimples } from './confirmacao-simples';
 
-test('confirmação simples abre com foco em cancelar, fecha por Escape e confirma apenas ao clicar', () => {
+test('confirmação simples abre com foco no diálogo, fecha por Escape e confirma apenas ao clicar', () => {
   const confirmar = jest.fn();
   const cancelar = jest.fn();
   render(<ConfirmacaoSimples titulo="Arquivar?" descricao="Preserva histórico" confirmar="Arquivar" onCancelar={cancelar} onConfirmar={confirmar} perigoso />);
   const dialogo = screen.getByRole('dialog', { name: 'Arquivar?' });
-  expect(within(dialogo).getByRole('button', { name: 'Cancelar' })).toHaveFocus();
+  expect(dialogo).toHaveFocus();
+  expect(within(dialogo).getByRole('button', { name: 'Cancelar' })).not.toHaveFocus();
   expect(confirmar).not.toHaveBeenCalled();
   fireEvent.keyDown(dialogo.parentElement!, { key: 'Escape' });
   expect(cancelar).toHaveBeenCalledTimes(1);
@@ -15,17 +16,17 @@ test('confirmação simples abre com foco em cancelar, fecha por Escape e confir
   expect(confirmar).toHaveBeenCalledTimes(1);
 });
 
-test('confirmação não perigosa usa texto contrastante sobre verde', () => {
+test('confirmação não perigosa usa texto contrastante sobre azul neutro', () => {
   const { unmount } = render(<ConfirmacaoSimples titulo="Prosseguir?" descricao="Verificação" confirmar="Continuar" onCancelar={jest.fn()} onConfirmar={jest.fn()} />);
-  expect(screen.getByRole('button', { name: 'Continuar' })).toHaveClass('bg-brand-green', 'text-on-brand-green', 'hover:brightness-110');
+  expect(screen.getByRole('button', { name: 'Continuar' })).toHaveClass('bg-[#35616f]', 'text-white', 'hover:brightness-110');
   unmount();
 });
 
 
-test('verificação apresenta cancelar vermelho e confirmar verde, com dimensões consistentes', () => {
+test('verificação apresenta cancelar neutro e confirmar verde, com dimensões consistentes', () => {
   render(<ConfirmacaoSimples titulo="Verificar?" descricao="Analisou o arquivo?" confirmar="Confirmar" cancelarVermelho aprovarVerde
     onCancelar={jest.fn()} onConfirmar={jest.fn()} />);
-  expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveClass('bg-red-600', 'whitespace-nowrap', 'shrink-0');
+  expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveClass('border-slate-500/40', 'whitespace-nowrap', 'shrink-0');
   expect(screen.getByRole('button', { name: 'Confirmar' })).toHaveClass('bg-green-800', 'shrink-0');
 });
 

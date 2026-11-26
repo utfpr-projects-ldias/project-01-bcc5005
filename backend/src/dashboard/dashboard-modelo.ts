@@ -10,6 +10,9 @@ export type Documental = Awaited<ReturnType<EntregaveisService['resumoDocumental
 export type Prazo = { tipo: 'ETAPA' | 'ENTREGAVEL' | 'OCORRENCIA'; id: string; entregavelId: string | null; nome: string; data: string; atrasado: boolean; aberto: boolean };
 export type Alerta = { tipo: 'ATRASO' | 'PRAZO_PROXIMO' | 'EVIDENCIA_PENDENTE' | 'COMPROVACAO_INCOMPLETA' | 'ENCERRAMENTO_PROXIMO' | 'VIGENCIA_VENCIDA'; severidade: 'Atenção' | 'Prioritário'; objeto: 'CONTRATO' | Prazo['tipo']; id: string; entregavelId: string | null; data: string | null; motivo: string };
 export const FINAL_CONTRATO = ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','ENCERRADO'];
+/** Mesmo agrupamento da carteira: encerramento não equivale a execução integral. */
+export const finalizado = (c: Pick<Contrato, 'status' | 'arquivadoEm' | 'reabertoEm'>) =>
+  !c.arquivadoEm && !c.reabertoEm && FINAL_CONTRATO.includes(c.status);
 const FINAL_ITEM = ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','ENCERRADA','CONCLUIDA','FINALIZADA'];
 export const ativo = (c: Contrato) => !c.arquivadoEm && !['CANCELADO','SUSPENSO'].includes(c.status) && (!FINAL_CONTRATO.includes(c.status) || Boolean(c.reabertoEm));
 export const diasEntre = (inicio: string, fim: string) => Math.round((Date.parse(`${fim}T00:00:00Z`) - Date.parse(`${inicio}T00:00:00Z`))/86400000);
@@ -62,7 +65,7 @@ export function resumirCarteira(linhas: LinhaDashboard[], limite: number) {
   const calculaveis=ativos.filter(l=>l.avanco!==null);
   return { ativos:ativos.length, planejamento:ativos.filter(l=>l.contrato.status==='PLANEJAMENTO').length,
     encerramento:ativos.filter(l=>l.diasRestantes>=0&&l.diasRestantes<=limite).length,
-    atrasados:ativos.filter(l=>l.atrasos>0).length, concluidos:linhas.filter(l=>!l.contrato.arquivadoEm&&!l.contrato.reabertoEm&&['CONCLUIDO','CONCLUIDO_PARCIALMENTE'].includes(l.contrato.status)).length,
+    atrasados:ativos.filter(l=>l.atrasos>0).length, concluidos:linhas.filter(l=>finalizado(l.contrato)).length,
     pendentes:ativos.reduce((s,l)=>s+l.entregaveis.pendentes,0), proximas:ativos.reduce((s,l)=>s+l.proximas,0),
     avanco:calculaveis.length?calculaveis.reduce((s,l)=>s+(l.avanco??0),0)/calculaveis.length:null, baseAvanco:calculaveis.length };
 }

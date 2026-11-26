@@ -1,4 +1,5 @@
 'use client';
+import { sincronizarEvidenciaCompartilhada } from '@/lib/sincronizar-evidencia-compartilhada';
 
 import { useConsulta, useRepositorioConsultasOpcional } from '@/app/components/provedor-consultas';
 
@@ -141,6 +142,7 @@ export function useAtividades(contratoId: string, filtros: FiltrosAtividade = {}
     },
     transicionarAtividade: async (id: string, acao: 'solicitar-conclusao' | 'aprovar-conclusao' | 'cancelar-solicitacao' | 'verificar' | 'reabrir' | 'arquivar' | 'reativar' | 'excluir', justificativa = '') => {
       const resposta = await transicionarAtividadeApi(contratoId, id, acao, justificativa);
+      if('atividadeCompartilhadaId' in resposta && resposta.atividadeCompartilhadaId && ['aprovar-conclusao','verificar','solicitar-conclusao'].includes(acao))sincronizarEvidenciaCompartilhada(cache,contratoId);
       cache?.invalidar(['atividades', contratoId]); cache?.invalidar(['ocorrencias', contratoId]);
       cache?.invalidar(['execucao', contratoId]); cache?.invalidar(['entregaveis', 'contrato', contratoId]); cache?.invalidar(['etapas','contrato',contratoId]);
       cache?.invalidar(['contratos', 'elegibilidade-conclusao', contratoId]);

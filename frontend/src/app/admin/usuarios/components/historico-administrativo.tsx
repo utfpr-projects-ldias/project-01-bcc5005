@@ -24,7 +24,7 @@ export function HistoricoAdministrativo() {
     <div className="flex flex-wrap items-center justify-between gap-2">
       <h3 className="text-base font-semibold">Histórico administrativo</h3>
       <button type="button" disabled={consulta.carregando || consulta.atualizando} onClick={() => { void consulta.atualizar().catch(() => {}); }}
-        className="rounded-lg border border-brand-green/40 px-3 py-2 text-sm">Atualizar</button>
+        className="rounded-lg border border-[color:var(--pi-admin-borda)] px-3 py-2 text-sm">Atualizar</button>
     </div>
     <p className="text-xs text-foreground/65">Registro de operações de usuários e permissões. Senhas, tokens e snapshots internos não são exibidos.</p>
     {consulta.carregando && <p role="status">Consultando histórico...</p>}

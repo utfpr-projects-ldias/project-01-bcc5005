@@ -61,7 +61,7 @@ export function validarEntregavel(r: RascunhoEntregavel, inicial?: Entregavel): 
   const erros: ErrosEntregavel = {};
   const nome = r.nome.trim();
   if (!nome) erros.nome = 'Informe o nome do entregável.';
-  else if ([...nome].length > 42 && nome !== inicial?.nome) erros.nome = 'O nome do entregável deve ter no máximo 42 caracteres.';
+  else if ([...nome].length > 45 && nome !== inicial?.nome) erros.nome = 'O nome do entregável deve ter no máximo 45 caracteres.';
   for (const [campo, maximo] of [['codigo', 15], ['descricao', 200], ['unidadeMedida', 40], ['criterioConclusao', 200], ['observacoes', 100]] as const) {
     const t = r[campo];
     if (t && (!t.trim() || ([...t].length > maximo && t !== (inicial?.[campo] ?? '')))) erros[campo] = `Revise o campo (até ${maximo} caracteres e sem valor somente com espaços).`;

@@ -41,12 +41,15 @@ export async function criarManualDireta(m:EntityManager,e:Entregavel,dto:CriarLa
   if(!e.quantidadeDiretaIntegrada){await m.query('UPDATE entregaveis SET quantidade_direta_integrada=true WHERE id=$1 AND contrato_id=$2',[e.id,e.contratoId]);e.quantidadeDiretaIntegrada=true;}
   await exigirSaldoQuantidadeDireta(m,e);const registro=await consultarManualDireta(m,e,dto.id);if(!registro)throw new NotFoundException('Lançamento não encontrado.');return {anterior:null,registro};
 }
-export async function editarManualDireta(m:EntityManager,e:Entregavel,id:string,dto:CorrigirLancamentoDto){
+export async function editarManualDireta(m:EntityManager,e:Entregavel,id:string,dto:CorrigirLancamentoDto,autorizarCorrecaoAprovada:()=>Promise<void>){
   validarQuantidadeManual(dto.valor);await contextoDireto(m,e);
   const anterior=await consultarManualDireta(m,e,id);if(!anterior)throw new NotFoundException('Lançamento não encontrado.');
   if(dto.versaoEsperada!==undefined&&anterior.versao!==dto.versaoEsperada)throw new ConflictException('O lançamento mudou. Atualize os dados antes de continuar.');
   if(!dto.motivo||dto.motivo.trim().length<15)throw new BadRequestException('Informe a justificativa da correção (mínimo de 15 caracteres).');
-  if (anterior.status==='APROVADO') await protegerReferenciaManual(m,e.contratoId,id,'QUANTIDADE');
+  if (anterior.status==='APROVADO') {
+    await autorizarCorrecaoAprovada();
+    await protegerReferenciaManual(m,e.contratoId,id,'QUANTIDADE');
+  }
   await m.query(`UPDATE ${tabela} SET quantidade=$4,data_execucao=$5,observacao=$6,status='PENDENTE',decidido_por=NULL,decidido_em=NULL WHERE id=$1 AND contrato_id=$2 AND entregavel_id=$3`,[id,e.contratoId,e.id,dto.valor,dto.data,dto.observacao?.trim()||null]);
   await exigirSaldoQuantidadeDireta(m,e);const registro=await consultarManualDireta(m,e,id);if(!registro)throw new NotFoundException('Lançamento não encontrado.');return {anterior,registro};
 }

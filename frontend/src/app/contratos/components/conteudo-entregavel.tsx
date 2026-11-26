@@ -1,6 +1,8 @@
 'use client';
+import { BotaoExcluirModal, BotaoAcaoModal } from '@/app/components/botoes-modal';
 import {ContadoresVinculos} from '@/app/components/contadores-vinculos';
-import { BotaoAcaoModal } from '@/app/components/botoes-modal';
+import {itensVinculosEvidencia} from '@/lib/vinculos-evidencia';
+
 import { MenuAcoesObjeto } from '@/app/components/menu-acoes-objeto';
 import { AbasRolaveis } from '@/app/components/abas-rolaveis';
 import { resultadoFinalizacao } from '@/lib/finalizados';
@@ -27,7 +29,8 @@ import { ExecucoesEntregavel, type CadastroExecucao, type OrigemExecucao, type R
 import { ModalCadastroAtividade } from '@/app/atividades/components/modal-cadastro-atividade';
 import { CartaoAtividade } from '@/app/atividades/components/cartao-atividade';
 import { consultarAtividade, type Atividade } from '@/hooks/use-atividades';
-import { sincronizarEvidenciaCompartilhada } from '@/lib/sincronizar-evidencia-compartilhada';
+import { sincronizarContrato } from '@/lib/sincronizar-contrato';
+import { sincronizarEvidenciaCompartilhada, EVENTO_REGISTROS_COMPARTILHADOS } from '@/lib/sincronizar-evidencia-compartilhada';
 import { useRepositorioConsultasOpcional } from '@/app/components/provedor-consultas';
 import type { PermissoesContrato } from '@/lib/contratos';
 
@@ -49,7 +52,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
   item: Entregavel; resumoInicial?: ResumoDocumentalEntregavel; podeEditarEsperada?: boolean;
   podeCriarEvidencia?: boolean; podeArquivarEvidencia?: boolean; podeReativarEvidencia?: boolean; podeReabrirEvidencia?: boolean; podeExcluirEvidenciaArquivada?: boolean; podeAlterarObrigatoriedade?: boolean;
   podeEnviarComprovantes?: boolean; podeVerHistorico?: boolean; bloqueadoPorPai?: boolean; paiArquivado?: boolean; paiConcluido?: boolean; paiEmRevisao?: boolean; contextoModal?: boolean; regularizacaoDocumental?: boolean; somenteLeituraExecucao?:boolean; permissoesExecucao?:PermissoesContrato;
-  aoAtualizarEsperada?: () => void;
+  aoAtualizarEsperada?: (cacheAtualizado?: boolean) => void;
   registrarVoltaEvidencia?: (voltar: (() => void) | null) => void;
   registrarVoltaEdicao?: (voltar: (() => void) | null) => void;
 }) {
@@ -70,6 +73,11 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
     voltarEdicaoRef.current = voltar; setEdicaoAberta(Boolean(voltar)); registrarVoltaEdicao?.(voltar);
   }, [registrarVoltaEdicao]);
   const [versaoEstado, setVersaoEstado] = useState(0);
+  useEffect(() => {
+    const atualizar = () => setVersaoEstado(v => v + 1);
+    window.addEventListener(EVENTO_REGISTROS_COMPARTILHADOS, atualizar);
+    return () => window.removeEventListener(EVENTO_REGISTROS_COMPARTILHADOS, atualizar);
+  }, []);
   const [ocultasLocais, setOcultasLocais] = useState<string[]>([]);
   const evidenciasAtivas = item.evidenciasEsperadas.filter(e => !ocultasLocais.includes(e.id));
   // Estado persistido do entregável prevalece sobre qualquer permissão de envio.
@@ -80,7 +88,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
   const planejamentoHabilitado = !bloqueadoPorPai && !paiArquivado && !paiConcluido && !item.arquivadoEm && !concluidoSemReabertura;
   const [historicoExpandido, setHistoricoExpandido] = useState(false);
   const chaveEvidencias = `${item.contratoId}:${item.id}:${item.evidenciasEsperadas.map(e => e.id).join(',')}:${versaoEstado}`;
-  const [consultaStatus, setConsultaStatus] = useState<{ chave: string; status: Record<string, { status: StatusComprovante; arquivo: string | null; reabertoEm?: string | null; vinculos?: DetalheEvidencia['vinculosAtuais'] }> }>({ chave: '', status: {} });
+  const [consultaStatus, setConsultaStatus] = useState<{ chave: string; status: Record<string, { status: StatusComprovante; arquivo: string | null; reabertoEm?: string | null; vinculos: ReturnType<typeof itensVinculosEvidencia> }> }>({ chave: '', status: {} });
   const statusInicialCarregado = item.evidenciasEsperadas.length === 0 ||
     consultaStatus.chave === chaveEvidencias;
   const [detalheConfirmado,setDetalheConfirmado] = useState<{chave:string;detalhe:DetalheEvidencia}|null>(()=>evidenciaAvulsa?{chave:chaveEvidencias,detalhe:evidenciaAvulsa}:null);
@@ -101,7 +109,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
   },[chaveEvidencias]);
   const confirmado = detalheConfirmado?.chave === chaveEvidencias && detalheConfirmado.detalhe.id === evidenciaId ? detalheConfirmado.detalhe : null;
   const temStatusAnterior = consultaStatus.chave.startsWith(`${item.contratoId}:${item.id}:`);
-  const estadoEvidencias = { ...(statusInicialCarregado || temStatusAnterior ? consultaStatus.status : {}), ...(confirmado ? {[confirmado.id]:{status:confirmado.status,arquivo:confirmado.versoes[0]?.nomeOriginal ?? null,reabertoEm:confirmado.reabertoEm,vinculos:confirmado.vinculosAtuais}} : {}) };
+  const estadoEvidencias = { ...(statusInicialCarregado || temStatusAnterior ? consultaStatus.status : {}), ...(confirmado ? {[confirmado.id]:{status:confirmado.status,arquivo:confirmado.versoes[0]?.nomeOriginal ?? null,reabertoEm:confirmado.reabertoEm,vinculos:itensVinculosEvidencia(confirmado)}} : {}) };
 
   const [focoRetornoEvidencia, setFocoRetornoEvidencia] = useState<HTMLElement | null>(focoAvulso??null);
   useEffect(() => {
@@ -113,7 +121,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
     if (!ids.length) return;
     void Promise.allSettled(ids.map(id => consultarEvidencia(item.contratoId, item.id, id)))
       .then(resultados => { if (!ativo) return;
-        const mapa: Record<string, { status: StatusComprovante; arquivo: string | null; reabertoEm?: string | null; vinculos?: DetalheEvidencia['vinculosAtuais'] }> = {};
+        const mapa: Record<string, { status: StatusComprovante; arquivo: string | null; reabertoEm?: string | null; vinculos: ReturnType<typeof itensVinculosEvidencia> }> = {};
         resultados.forEach((resultado, indice) => {
           const detalhe = resultado.status === 'fulfilled' ? resultado.value : null;
           // Respostas HTTP podem estar malformadas apesar da tipagem estática.
@@ -123,7 +131,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
             detalhe.contratoId === item.contratoId && detalhe.entregavelId === item.id &&
             Array.isArray(detalhe.versoes) &&
             ['SEM_ENVIO', 'PENDENTE_VERIFICACAO', 'VERIFICADA', 'REJEITADA'].includes(detalhe.status))
-            mapa[ids[indice]] = { status: detalhe.status, arquivo: detalhe.versoes[0]?.nomeOriginal ?? null, reabertoEm: detalhe.reabertoEm, vinculos:detalhe.vinculosAtuais };
+            mapa[ids[indice]] = { status: detalhe.status, arquivo: detalhe.versoes[0]?.nomeOriginal ?? null, reabertoEm: detalhe.reabertoEm, vinculos:itensVinculosEvidencia(detalhe) };
         });
         setConsultaStatus({ chave: chaveEvidencias, status: mapa });
       });
@@ -192,7 +200,11 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
   const [erroExecucao,setErroExecucao]=useState('');
   const cacheExecucao=useRepositorioConsultasOpcional();
   const versaoDetalheExecucao=useRef(0);
-  const atualizarExecucaoIntegrada=()=>{cacheExecucao?.invalidar(['atividades',item.contratoId]);cacheExecucao?.invalidar(['execucao',item.contratoId]);cacheExecucao?.invalidar(['entregaveis','contrato',item.contratoId]);cacheExecucao?.invalidar(['ocorrencias',item.contratoId]);cacheExecucao?.invalidar(['etapas','contrato',item.contratoId]);cacheExecucao?.invalidar(['contratos','detalhe',item.contratoId]);cacheExecucao?.invalidar(['contratos','pendentes']);cacheExecucao?.invalidar(['contratos','lista']);window.dispatchEvent(new CustomEvent('pi:estrutura-operacional-atualizada',{detail:{contratoId:item.contratoId}}));setVersaoEstado(v=>v+1);aoAtualizarEsperada?.();};
+  const atualizarExecucaoIntegrada=()=>{
+    if(cacheExecucao)sincronizarContrato(cacheExecucao,item.contratoId);
+    window.dispatchEvent(new CustomEvent('pi:estrutura-operacional-atualizada',{detail:{contratoId:item.contratoId,cacheAtualizado:Boolean(cacheExecucao)}}));
+    setVersaoEstado(v=>v+1);aoAtualizarEsperada?.(Boolean(cacheExecucao));
+  };
   function atualizarEvidenciaIntegrada(detalhe?: DetalheEvidencia) {
     if (detalhe && detalhe.id === evidenciaId && detalhe.contratoId === item.contratoId && detalhe.entregavelId === item.id) {
       setDetalheConfirmado({chave: `${item.contratoId}:${item.id}:${item.evidenciasEsperadas.map(e => e.id).join(',')}:${versaoEstado + 1}`, detalhe});
@@ -308,7 +320,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
       }
       setSalvandoNova(false); fecharCadastro(true); setNovoTipo(''); setNovaDescricao(''); setNovaObrigatoria(true);
       setNovoArquivo(null); setNovaEvidenciaCriadaId(null);
-      if(vinculosCadastro.destinos?.length&&!novoArquivo)toastAviso('Vínculos salvos. Anexe o comprovante para disponibilizá-lo nos outros entregáveis.');
+      if(vinculosCadastro.destinos?.length&&!novoArquivo)sincronizarEvidenciaCompartilhada(cacheExecucao,item.contratoId);
       atualizarExecucaoIntegrada();
     } catch (erro) {
       const mensagem=erro instanceof Error ? erro.message : 'Não foi possível adicionar a evidência.';
@@ -316,6 +328,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
         // Metadados e declaração já persistidos. A recuperação ocorre no item existente.
         fecharCadastro(true,false);
         atualizarExecucaoIntegrada();
+        if(vinculosCadastro.destinos?.length)sincronizarEvidenciaCompartilhada(cacheExecucao,item.contratoId);
         toastAviso(`Evidência cadastrada. O arquivo não foi enviado: ${mensagem}`);
         setEvidenciaId(id);
       }else setErroCadastro(mensagem);
@@ -590,7 +603,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
                       {estadoEvidencias[e.id]?.arquivo ? (categoriaVisivelEvidencia(e.tipoEvidencia, estadoEvidencias[e.id]?.arquivo ?? '') ?? e.tipoEvidencia) : e.descricao}
                     </span>}
                   </div>
-                  <ContadoresVinculos itens={[{rotulo:"Contratos",total:1},{rotulo:"Entregáveis",total:1},{rotulo:"Ocorrências",total:estadoEvidencias[e.id]?.vinculos?.filter(v=>v.tipo==='ocorrencia').length??null},{rotulo:"Atividades",total:estadoEvidencias[e.id]?.vinculos?.filter(v=>v.tipo==='atividade').length??null}]}/>
+                  <ContadoresVinculos itens={estadoEvidencias[e.id]?.vinculos??itensVinculosEvidencia()}/>
                   <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2 pl-11 sm:pl-0">
                     <span className={`rounded-full border px-2 py-1 text-[11px] ${estadoEvidencias[e.id]?.reabertoEm ? 'border-teal-600/55 bg-teal-900/20 text-teal-200' : estadoEvidencias[e.id]?.status === 'VERIFICADA' ? 'border-violet-400/45 bg-violet-500/15 text-violet-100' : estadoEvidencias[e.id] ? CLASSE_STATUS[estadoEvidencias[e.id].status] : 'border-foreground/20 text-foreground/60'}`}
                       aria-label={`Status da evidência ${e.tipoEvidencia}`}>
@@ -674,19 +687,19 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
     camada="evidencia" larguraFormulario="evidencia" estadoContextual={estadoVisualEvidencia(estadoEvidencias[selecionada.id]?.status,estadoEvidencias[selecionada.id]?.reabertoEm,Boolean(selecionada.arquivadoEm))} ocupado={false} focoRetorno={focoRetornoEvidencia}
     textoFechar="Fechar ×" somenteIconeFechar bloqueadoPorSubmodal={edicaoAberta}
     acoes={<>
-      <MenuAcoesObjeto rotulo={selecionada.arquivadoEm || estadoEvidencias[selecionada.id]?.status === 'VERIFICADA' ? 'Reabrir' : 'Fechar'}
-        acaoDireta={selecionada.arquivadoEm && podeReativarEvidencia && !bloqueadoPorPai ? () => setConfirmarReativacao(selecionada.id)
+      <MenuAcoesObjeto rotulo={selecionada.arquivadoEm ? 'Reativar' : estadoEvidencias[selecionada.id]?.status === 'VERIFICADA' ? 'Reabrir' : 'Fechar'}
+        acaoDireta={selecionada.arquivadoEm && podeReativarEvidencia && !bloqueadoPorPai ? () => {setErroArquivo('');setConfirmarReativacao(selecionada.id);}
           : !selecionada.arquivadoEm && (planejamentoHabilitado || regularizacaoAtiva) && podeReabrirEvidencia && estadoEvidencias[selecionada.id]?.status === 'VERIFICADA' && (!bloqueadoPorPai || regularizacaoAtiva) && !paiArquivado
             ? () => setConfirmarReabertura(selecionada.id) : undefined}>
       {selecionada.arquivadoEm && podeReativarEvidencia && !bloqueadoPorPai &&
-        <BotaoAcaoModal intencao="reativar" disabled={ocupadoArquivo} onClick={() => setConfirmarReativacao(selecionada.id)}>⟳ Reativar</BotaoAcaoModal>}
+        <BotaoAcaoModal intencao="reativar" disabled={ocupadoArquivo} onClick={() => {setErroArquivo('');setConfirmarReativacao(selecionada.id);}}>⟳ Reativar</BotaoAcaoModal>}
       {!selecionada.arquivadoEm && (planejamentoHabilitado || regularizacaoAtiva) && podeReabrirEvidencia && estadoEvidencias[selecionada.id]?.status === 'VERIFICADA' && (!bloqueadoPorPai || regularizacaoAtiva) && !paiArquivado &&
         <BotaoAcaoModal intencao="reabrir" disabled={arquivandoItem} onClick={() => setConfirmarReabertura(selecionada.id)}>Reabrir</BotaoAcaoModal>}
       {!selecionada.arquivadoEm && planejamentoHabilitado && podeArquivarEvidencia && estadoEvidencias[selecionada.id]?.status !== 'VERIFICADA' && !bloqueadoPorPai && !paiArquivado &&
-        <BotaoAcaoModal intencao="arquivar" disabled={ocupadoArquivo} onClick={() => setConfirmarArquivamento(selecionada.id)}>Arquivar</BotaoAcaoModal>}
+        <BotaoAcaoModal intencao="arquivar" disabled={ocupadoArquivo} onClick={() => {setErroArquivo('');setConfirmarArquivamento(selecionada.id);}}>Arquivar</BotaoAcaoModal>}
       </MenuAcoesObjeto>
       {selecionada.arquivadoEm && podeExcluirEvidenciaArquivada && !bloqueadoPorPai &&
-        <button type="button" title="Excluir evidência arquivada" aria-label="Excluir evidência arquivada" disabled={ocupadoArquivo} onClick={() => setConfirmarExclusao(selecionada.id)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/35 bg-red-500/10 text-red-300 hover:bg-red-500/20 disabled:opacity-40">×</button>}
+        <BotaoExcluirModal rotulo="Excluir evidência arquivada" disabled={ocupadoArquivo} onClick={() => {setErroArquivo('');setConfirmarExclusao(selecionada.id);}}/>}
     </>}
     rotuloFechar="Fechar evidência"
     onFechar={() => {
@@ -710,7 +723,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
     </section>
   </ModalEtapa>, document.body)}
   {confirmarExclusao && createPortal(<div className="relative z-[160]" onKeyDown={e => e.stopPropagation()}>
-    <ConfirmacaoSimples titulo="Excluir evidência arquivada?" perigoso ocupado={ocupadoArquivo}
+    <ConfirmacaoSimples pendencias={erroArquivo ? [erroArquivo] : []} titulo="Excluir evidência arquivada?" perigoso ocupado={ocupadoArquivo}
       descricao="Excluir definitivamente esta evidência de teste, todos os comprovantes e todos os arquivos enviados? Não é possível desfazer."
       confirmar="Excluir definitivamente" onCancelar={() => setConfirmarExclusao(null)} onConfirmar={() => void (async () => {
         const id = confirmarExclusao;
@@ -723,24 +736,24 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
           setConfirmarExclusao(null);
           toastSucesso('Evidência excluída com sucesso.');
           atualizarEstadoEvidencias(); aoAtualizarEsperada?.();
-        } catch (e) { setErroArquivo(e instanceof Error ? e.message : 'Falha ao excluir evidência.'); setConfirmarExclusao(null); }
+        } catch (e) { setErroArquivo(e instanceof Error ? e.message : 'Falha ao excluir evidência.'); }
         finally { setOcupadoArquivo(false); }
       })()} />
   </div>, document.body)}
   {confirmarReativacao && createPortal(<div className="relative z-[160]">
-    <ConfirmacaoSimples titulo="Desarquivar evidência?"
+    <ConfirmacaoSimples pendencias={erroArquivo ? [erroArquivo] : []} titulo="Reativar evidência?"
       descricao="A evidência voltará ao checklist ativo deste entregável. A alteração será registrada na rastreabilidade e nenhum detalhe será aberto automaticamente."
-      confirmar="Confirmar desarquivamento" ocupado={ocupadoArquivo} justificativa={motivoEvidencia} onJustificativaChange={setMotivoEvidencia}
+      confirmar="Confirmar reativação" ocupado={ocupadoArquivo} justificativa={motivoEvidencia} onJustificativaChange={setMotivoEvidencia}
       onCancelar={() => { setConfirmarReativacao(null); setMotivoEvidencia(''); }} onConfirmar={() => void reativar()} />
   </div>, document.body)}
   {confirmarReabertura && createPortal(<div className="relative z-[160]">
-    <ConfirmacaoSimples titulo="Reabrir evidência verificada?"
+    <ConfirmacaoSimples pendencias={erroArquivo ? [erroArquivo] : []} titulo="Reabrir evidência verificada?"
       descricao="A evidência voltará a Pendente de verificação. O comprovante existente e o histórico serão preservados."
       confirmar="Reabrir evidência" ocupado={arquivandoItem} justificativa={motivoEvidencia} onJustificativaChange={setMotivoEvidencia}
       onCancelar={() => { setConfirmarReabertura(null); setMotivoEvidencia(''); }} onConfirmar={() => void executarReaberturaEvidencia()} />
   </div>, document.body)}
   {confirmarArquivamento && createPortal(<div className="relative z-[160]">
-    <ConfirmacaoSimples titulo="Arquivar evidência?"
+    <ConfirmacaoSimples pendencias={erroArquivo ? [erroArquivo] : []} titulo="Arquivar evidência?"
       descricao={`Esta evidência sairá do planejamento ativo, mas os comprovantes e o histórico continuarão preservados. Deseja arquivar “${item.evidenciasEsperadas.find(e => e.id === confirmarArquivamento)?.tipoEvidencia ?? 'esta evidência'}”?`}
       confirmar="Confirmar arquivamento" perigoso ocupado={arquivandoItem}
       onCancelar={() => setConfirmarArquivamento(null)} onConfirmar={() => void arquivarEvidenciaDireta()} />

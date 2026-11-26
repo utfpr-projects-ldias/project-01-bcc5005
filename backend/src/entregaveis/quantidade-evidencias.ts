@@ -63,14 +63,14 @@ export async function listarContribuicoesQuantitativas(m: EntityManager, contrat
   return m.query(`SELECT l.id, 'MANUAL' AS origem, l.ocorrencia_id AS "ocorrenciaId", 'Registro manual' AS titulo,
       l.quantidade::text AS quantidade, CASE WHEN l.excluido_em IS NOT NULL THEN 'INATIVO' ELSE l.status_execucao END AS situacao, l.data_execucao::text AS "dataExecucao",
       COALESCE(u.nome,u.email,'Usuário') AS "autorNome", COALESCE(l.observacao,l.justificativa) AS observacao,
-      NULL::uuid AS "evidenciaId", l.bloqueado_em IS NOT NULL AS bloqueado, NULL::text AS "referenciaExecucao", l.xmin::text AS versao
+      NULL::uuid AS "evidenciaId", l.bloqueado_em IS NOT NULL AS bloqueado, NULL::text AS "referenciaExecucao", l.xmin::text AS versao, CASE WHEN l.excluido_em IS NOT NULL THEN 'EXCLUIDO' ELSE NULL END AS "situacaoRegistro"
     FROM ocorrencia_lancamentos l LEFT JOIN usuarios u ON u.id=l.criado_por
     WHERE l.contrato_id=$1 AND l.ocorrencia_id=ANY($2::uuid[])
     UNION ALL
     SELECT a.id, 'ATIVIDADE', o.id, a.titulo,
       COALESCE(am.quantidade, CASE WHEN a."ocorrenciaId"=o.id THEN a.quantidade_execucao ELSE 0 END)::text,
       CASE WHEN a."excluidaEm" IS NOT NULL OR a.status='ARQUIVADA' THEN 'INATIVO' WHEN a.status='VERIFICADA' THEN 'APROVADO' ELSE 'PENDENTE' END,
-      (a."dataHora" AT TIME ZONE 'America/Sao_Paulo')::date::text, a.responsavel, a.observacoes, NULL::uuid, false, am.referencia_execucao, NULL::text
+      (a."dataHora" AT TIME ZONE 'America/Sao_Paulo')::date::text, a.responsavel, a.observacoes, NULL::uuid, false, am.referencia_execucao, NULL::text, CASE WHEN a."excluidaEm" IS NOT NULL THEN 'EXCLUIDO' WHEN a.status='ARQUIVADA' THEN 'ARQUIVADO' ELSE a.status::text END
     FROM ocorrencias o JOIN atividades a ON a."contratoId"=o.contrato_id
     LEFT JOIN atividade_ocorrencia_medicoes am ON am.atividade_id=a.id AND am.ocorrencia_id=o.id
     WHERE o.contrato_id=$1 AND o.id=ANY($2::uuid[]) AND (a."ocorrenciaId"=o.id OR EXISTS (
@@ -81,7 +81,7 @@ export async function listarContribuicoesQuantitativas(m: EntityManager, contrat
       CASE WHEN c.status='VERIFICADA' AND ev.reaberto_em IS NULL THEN COALESCE(c.quantidade_aprovada,c.quantidade_declarada) ELSE c.quantidade_declarada END::text,
       CASE WHEN ev.arquivado_em IS NOT NULL OR EXISTS (SELECT 1 FROM comprovantes_evidencia n WHERE n.evidencia_esperada_id=c.evidencia_esperada_id AND (n.criado_em,n.id)>(c.criado_em,c.id)) THEN 'INATIVO' WHEN c.status='REJEITADA' THEN 'REJEITADO' WHEN c.status='VERIFICADA' AND c.verificado_em IS NOT NULL AND ev.reaberto_em IS NULL THEN 'APROVADO' ELSE 'PENDENTE' END,
       (c.criado_em AT TIME ZONE 'America/Sao_Paulo')::date::text, COALESCE(u.nome,u.email,'Usuário'), c.descricao, ev.id, false,
-      CASE WHEN c.origem_quantidade='COMPROVACAO' THEN c.referencia_execucao ELSE NULL END, NULL::text
+      CASE WHEN c.origem_quantidade='COMPROVACAO' THEN c.referencia_execucao ELSE NULL END, NULL::text, CASE WHEN ev.arquivado_em IS NOT NULL THEN 'ARQUIVADO' WHEN EXISTS (SELECT 1 FROM comprovantes_evidencia n WHERE n.evidencia_esperada_id=c.evidencia_esperada_id AND (n.criado_em,n.id)>(c.criado_em,c.id)) THEN 'SUBSTITUIDO' WHEN ev.reaberto_em IS NOT NULL OR c.status='REJEITADA' THEN 'EM_REVISAO' ELSE c.status::text END
     FROM comprovantes_evidencia c JOIN evidencias_esperadas ev ON ev.id=c.evidencia_esperada_id
     LEFT JOIN usuarios u ON u.id=c.autor_id
     WHERE c.contrato_id=$1 AND c.ocorrencia_quantidade_id=ANY($2::uuid[]) AND c.quantidade_declarada IS NOT NULL
@@ -177,18 +177,18 @@ export async function listarQuantidadeDireta(m:EntityManager,e:Entregavel) {
     CASE WHEN c.status='VERIFICADA' AND ev.reaberto_em IS NULL THEN c.quantidade_aprovada ELSE c.quantidade_declarada END::text AS quantidade,
     CASE WHEN ev.arquivado_em IS NOT NULL OR EXISTS(SELECT 1 FROM comprovantes_evidencia n WHERE n.evidencia_esperada_id=c.evidencia_esperada_id AND (n.criado_em,n.id)>(c.criado_em,c.id)) THEN 'INATIVO'
       WHEN c.status='REJEITADA' THEN 'REJEITADO' WHEN c.status='VERIFICADA' AND c.verificado_em IS NOT NULL AND ev.reaberto_em IS NULL THEN 'APROVADO' ELSE 'PENDENTE' END AS situacao,
-    (c.criado_em AT TIME ZONE 'America/Sao_Paulo')::date::text AS "dataExecucao",COALESCE(u.email,'Usuário') AS "autorNome",c.descricao AS observacao,ev.id AS "evidenciaId",false AS bloqueado,CASE WHEN c.origem_quantidade='COMPROVACAO' THEN c.referencia_execucao ELSE NULL END AS "referenciaExecucao",NULL::text AS versao
+    (c.criado_em AT TIME ZONE 'America/Sao_Paulo')::date::text AS "dataExecucao",COALESCE(u.email,'Usuário') AS "autorNome",c.descricao AS observacao,ev.id AS "evidenciaId",false AS bloqueado,CASE WHEN c.origem_quantidade='COMPROVACAO' THEN c.referencia_execucao ELSE NULL END AS "referenciaExecucao",NULL::text AS versao, CASE WHEN ev.arquivado_em IS NOT NULL THEN 'ARQUIVADO' WHEN EXISTS (SELECT 1 FROM comprovantes_evidencia n WHERE n.evidencia_esperada_id=c.evidencia_esperada_id AND (n.criado_em,n.id)>(c.criado_em,c.id)) THEN 'SUBSTITUIDO' WHEN ev.reaberto_em IS NOT NULL OR c.status='REJEITADA' THEN 'EM_REVISAO' ELSE c.status::text END AS "situacaoRegistro"
     FROM comprovantes_evidencia c JOIN evidencias_esperadas ev ON ev.id=c.evidencia_esperada_id LEFT JOIN usuarios u ON u.id=c.autor_id
     WHERE c.contrato_id=$1 AND c.entregavel_id=$2 AND c.ocorrencia_quantidade_id IS NULL AND c.origem_quantidade IN ('NOVA_EXECUCAO','COMPROVACAO')
     UNION ALL
     SELECT a.id,'ATIVIDADE','',a.titulo,dm.quantidade::text,
       CASE WHEN a."excluidaEm" IS NOT NULL OR a.status='ARQUIVADA' THEN 'INATIVO' WHEN a.status='VERIFICADA' THEN 'APROVADO' ELSE 'PENDENTE' END,
-      (a."dataHora" AT TIME ZONE 'America/Sao_Paulo')::date::text,a.responsavel,a.observacoes,NULL::uuid,false,NULL::text,NULL::text
+      (a."dataHora" AT TIME ZONE 'America/Sao_Paulo')::date::text,a.responsavel,a.observacoes,NULL::uuid,false,NULL::text,NULL::text, CASE WHEN a."excluidaEm" IS NOT NULL THEN 'EXCLUIDO' WHEN a.status='ARQUIVADA' THEN 'ARQUIVADO' ELSE a.status::text END
     FROM atividade_entregavel_medicoes dm JOIN atividades a ON a.id=dm.atividade_id AND a."contratoId"=dm.contrato_id
     WHERE dm.contrato_id=$1 AND dm.entregavel_id=$2
     UNION ALL
     SELECT md.id,'MANUAL','','Execução manual',md.quantidade::text,md.status,
-      md.data_execucao::text,COALESCE(u.email,'Usuário'),md.observacao,NULL::uuid,false,NULL::text,md.xmin::text
+      md.data_execucao::text,COALESCE(u.email,'Usuário'),md.observacao,NULL::uuid,false,NULL::text,md.xmin::text,NULL::text
     FROM execucoes_quantitativas_diretas md LEFT JOIN usuarios u ON u.id=md.autor_id
     WHERE md.contrato_id=$1 AND md.entregavel_id=$2 ORDER BY "dataExecucao" DESC`,[e.contratoId,e.id]);
 }

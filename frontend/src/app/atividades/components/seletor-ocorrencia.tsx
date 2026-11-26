@@ -10,11 +10,11 @@ type Props = {
   valor?: string | null; onChange: (v: string | null) => void;
   valores?: string[]; onChangeMultiplas?: (ids: string[]) => void;
   medicoes?: MedicaoAtividade[]; onMedicoesChange?: (medicoes: MedicaoAtividade[]) => void;
-  unidades?: Record<string,string>; somenteVinculos?: boolean; somenteMedicoes?: boolean; origemId?:string;
+  unidades?: Record<string,string>; somenteVinculos?: boolean; somenteMedicoes?: boolean; origemId?:string; onConfigurar?: (id:string)=>void; configuravel?: (id:string)=>boolean; resumoContribuicao?: (id:string)=>string;
 };
 const campo='w-full min-w-0 rounded-lg border border-current/25 bg-background px-3 py-2 text-sm outline-none focus-visible:border-brand-green focus-visible:ring-2 focus-visible:ring-brand-green/20';
 function Campo({ contratoId, entregavelIds, valor, onChange, valores, onChangeMultiplas,
-  medicoes = [], onMedicoesChange, unidades = {}, somenteVinculos=false, somenteMedicoes=false, origemId }: Props) {
+  medicoes = [], onMedicoesChange, unidades = {}, somenteVinculos=false, somenteMedicoes=false, origemId, onConfigurar, configuravel, resumoContribuicao }: Props) {
   const agenda=useOcorrencias(contratoId);
   const opcoes=agenda.ocorrencias.filter(o=>entregavelIds.includes(o.entregavelId) && !o.substituidaEm &&
     !['PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','CONCLUIDO','CONCLUIDO_PARCIALMENTE','PENDENTE_ENCERRAMENTO','ENCERRADA'].includes(o.status));
@@ -32,7 +32,7 @@ function Campo({ contratoId, entregavelIds, valor, onChange, valores, onChangeMu
       {!somenteMedicoes&&<div className="space-y-2">
       {agenda.erro&&<p role="alert" className="text-xs text-error-text">Não foi possível consultar as ocorrências.</p>}
       {!opcoes.length?<p className="text-sm text-foreground/65">Nenhuma ocorrência disponível.</p>:
-        <SeletorVinculosMultiplos rotulo="Selecionar ocorrências" placeholder="Localizar ocorrência…" itens={opcoes.map(o=>({id:o.id,nome:o.titulo,detalhe:o.modoRegistro==='QUANTITATIVO'?'Por quantidade':'Descritiva'}))} valores={escolhidas} onChange={ids=>onChangeMultiplas(ids)}/>}</div>}
+        <SeletorVinculosMultiplos rotulo="Selecionar ocorrências" placeholder="Localizar ocorrência…" itens={opcoes.map(o=>({id:o.id,nome:o.titulo,detalhe:o.modoRegistro==='QUANTITATIVO'?'Por quantidade':'Descritiva',configuravel:configuravel?.(o.id),contribuicao:resumoContribuicao?.(o.id)}))} onConfigurar={onConfigurar} valores={escolhidas} onChange={ids=>onChangeMultiplas(ids)}/>}</div>}
 
       {!somenteVinculos&&quantitativas.length>0&&<div className="space-y-3 border-t border-current/15 pt-3">
         {!somenteMedicoes&&<h4 className="text-sm font-semibold">Contribuição</h4>}

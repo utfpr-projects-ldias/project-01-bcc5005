@@ -102,9 +102,9 @@ export function ModalIdentificacaoContrato({ contrato, focoRetorno, onFechar }: 
         aria-modal="true"
         aria-labelledby={tituloId}
         onKeyDown={teclado}
-        className="flex max-h-[90dvh] w-full max-w-xl min-w-0 flex-col overflow-hidden rounded-2xl border border-brand-green/45 bg-background text-foreground shadow-2xl"
+        className="flex max-h-[90dvh] w-full max-w-xl min-w-0 flex-col overflow-hidden rounded-2xl border border-[color:var(--pi-admin-borda)] bg-background text-foreground shadow-2xl"
       >
-        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-brand-green/25 px-4 py-4 sm:px-6">
+        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[color:var(--pi-admin-borda)] px-4 py-4 sm:px-6">
           <div className="min-w-0">
             <p className="text-xs text-foreground/65">Código #{contrato.codigoPublico}</p>
             <h2 id={tituloId} className="text-lg font-semibold">Identificação completa do contrato</h2>
@@ -113,7 +113,7 @@ export function ModalIdentificacaoContrato({ contrato, focoRetorno, onFechar }: 
             ref={botaoFechar}
             type="button"
             aria-label="Fechar identificação do contrato"
-            className="shrink-0 rounded-lg border border-brand-green/40 px-3 py-2 text-sm hover:bg-brand-green/10 focus-visible:outline-2 focus-visible:outline-brand-green"
+            className="shrink-0 rounded-lg border border-[color:var(--pi-admin-borda)] px-3 py-2 text-sm hover:bg-[var(--pi-admin-hover)] focus-visible:outline-2 focus-visible:outline-[#7bafc3]"
             onClick={fechar}
           >Fechar</button>
         </header>
@@ -127,8 +127,8 @@ export function ModalIdentificacaoContrato({ contrato, focoRetorno, onFechar }: 
             <dd className="whitespace-pre-wrap [overflow-wrap:anywhere]">{contrato.orgaoContratante}</dd>
           </div>
         </dl>
-        <footer className="flex shrink-0 justify-end border-t border-brand-green/25 px-4 py-3 sm:px-6">
-          <button type="button" className="rounded-lg border border-brand-green/40 px-4 py-2 text-sm hover:bg-brand-green/10 focus-visible:outline-2 focus-visible:outline-brand-green" onClick={fechar}>Voltar</button>
+        <footer className="flex shrink-0 justify-end border-t border-[color:var(--pi-admin-borda)] px-4 py-3 sm:px-6">
+          <button type="button" className="rounded-lg border border-[color:var(--pi-admin-borda)] px-4 py-2 text-sm hover:bg-[var(--pi-admin-hover)] focus-visible:outline-2 focus-visible:outline-[#7bafc3]" onClick={fechar}>Voltar</button>
         </footer>
       </div>
     </div>,

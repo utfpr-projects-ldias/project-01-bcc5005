@@ -164,7 +164,8 @@ describe('Patch24 — competências independentes de planejamento, peso e recorr
 describe('lançamentos manuais — bloqueio e exclusão com permissões independentes', () => {
   it('nega as novas operações por padrão até para gestor com edição', () => {
     const permissoes = permissoesEfetivas('GESTOR', true, null);
-    expect(permissoes.corrigirExecucaoOcorrencia).toBe(false);
+    expect(permissoes.corrigirExecucaoOcorrencia).toBe(true);
+    expect(permissoes.corrigirExecucaoAprovada).toBe(false);
     expect(permissoes.bloquearExecucaoOcorrencia).toBe(false);
     expect(permissoes.excluirExecucaoOcorrencia).toBe(false);
   });
@@ -232,3 +233,33 @@ test('podeEditar legado não concede edição de atividades ao colaborador; dele
   expect(legado.editarAtividades).toBe(false);
   expect(permissoesEfetivas('COLABORADOR', true, {editarAtividades:true}).editarAtividades).toBe(true);
 });
+
+test('edição padrão não permite arquivar, aprovar, reabrir ou corrigir execução aprovada', () => {
+  for (const perfil of ['GESTOR', 'COLABORADOR']) {
+    const p = permissoesEfetivas(perfil, true, null);
+    for (const chave of CHAVES_PERMISSOES) {
+      if (/^(arquivar|reativar|reabrir|excluir|aprovar|verificar|concluir|encerrar)/.test(chave) || chave === 'corrigirExecucaoAprovada')
+        expect(p[chave]).toBe(false);
+    }
+  }
+  const p = permissoesEfetivas('COLABORADOR', false, { editarExecucaoFisica: true, corrigirExecucaoAprovada: true });
+  expect(p.corrigirExecucaoAprovada).toBe(true);
+  expect(p.aprovarExecucaoManual).toBe(false);
+  expect(p.reabrirEntregaveis).toBe(false);
+  expect(permissoesEfetivas('GESTOR', false, null).enviarComprovantes).toBe(false);
+});
+
+ test('compartilhamento exige delegação própria e não concede aprovação', () => {
+   for (const perfil of ['GESTOR','COLABORADOR']) {
+     const base=permissoesEfetivas(perfil,true,null);
+     expect(base.compartilharEvidencias).toBe(false);
+     expect(base.compartilharAtividades).toBe(false);
+     const delegado=permissoesEfetivas(perfil,false,{compartilharEvidencias:true,compartilharAtividades:true});
+     expect(delegado.compartilharEvidencias).toBe(true);
+     expect(delegado.compartilharAtividades).toBe(true);
+     expect(delegado.verificarComprovantes).toBe(false);
+     expect(delegado.verificarAtividades).toBe(false);
+   }
+   expect(permissoesEfetivas('ADMINISTRADOR',false,null).compartilharEvidencias).toBe(true);
+   expect(permissoesEfetivas('ADMINISTRADOR',false,null).compartilharAtividades).toBe(true);
+ });

@@ -40,3 +40,15 @@ test('confirmar o descarte retoma a navegação originalmente solicitada',async(
  await waitFor(()=>expect(navegar).toHaveBeenCalledTimes(1));
  expect(screen.queryByRole('dialog',{name:'Descartar alterações?'})).not.toBeInTheDocument();
 });
+
+
+test('navegação interna permite a etapa ancorada, mas não ignora confirmações',()=>{
+  const etapa=document.createElement('div');etapa.setAttribute('data-tec08-modal','');etapa.setAttribute('data-pi-sobreposicao-etapa','');
+  const dialogo=document.createElement('div');dialogo.setAttribute('role','dialog');dialogo.setAttribute('aria-modal','true');dialogo.setAttribute('data-pi-modal-ancorado','');etapa.append(dialogo);document.body.append(etapa);
+  try {
+    expect(solicitarNavegacaoInterna()).toBe(false);
+    expect(solicitarNavegacaoInterna(undefined,true)).toBe(true);
+    const decisao=document.createElement('div');decisao.setAttribute('role','dialog');decisao.setAttribute('aria-modal','true');dialogo.append(decisao);
+    expect(solicitarNavegacaoInterna(undefined,true)).toBe(false);
+  } finally {etapa.remove();}
+});

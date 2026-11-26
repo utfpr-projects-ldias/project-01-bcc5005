@@ -43,7 +43,7 @@ export type IntencaoAcao = 'neutra' | 'editar' | 'criar' | 'solicitar-conclusao'
 export const CLASSES_ACAO_MENU: Record<IntencaoAcao, string> = {
   neutra: 'border-slate-500/30 text-foreground hover:bg-slate-500/15',
   editar: 'border-teal-500/40 text-teal-700 dark:text-teal-200 hover:bg-teal-500/15',
-  criar: 'border-green-500/40 text-green-700 dark:text-green-200 hover:bg-green-500/15',
+  criar: 'border-slate-500/40 text-foreground hover:bg-slate-500/15',
   'solicitar-conclusao': 'border-violet-500/40 text-violet-700 dark:text-violet-200 hover:bg-violet-500/15',
   concluir: 'border-violet-500/40 text-violet-700 dark:text-violet-200 hover:bg-violet-500/15',
   verificar: 'border-violet-500/40 text-violet-700 dark:text-violet-200 hover:bg-violet-500/15',
@@ -58,15 +58,15 @@ export const CLASSES_ACAO_MENU: Record<IntencaoAcao, string> = {
 };
 
 /** Rótulo operacional único para lista, modal e tela de detalhe. */
-export function rotuloEstadoEntregavel(status?: string | null, arquivado?: boolean, reaberto?: boolean, regularizacaoSolicitada?: boolean): string {
+export function rotuloEstadoEntregavel(status?: string | null, arquivado?: boolean, reaberto?: boolean, regularizacaoSolicitada?: boolean, encerradoAdministrativamente?: boolean | null): string {
   if (arquivado) return 'Arquivado';
   if (regularizacaoSolicitada) return 'Pendente de regularização documental';
   if (status === 'PENDENTE_ENCERRAMENTO') return 'Pendente de encerramento';
   if (status === 'PENDENTE_CONCLUSAO_PARCIAL') return 'Pendente de conclusão parcial';
   if (status === 'PENDENTE_CONCLUSAO') return 'Pendente de conclusão';
   if (reaberto) return 'Em revisão';
-  if (status === 'CONCLUIDO_PARCIALMENTE') return 'Concluído parcialmente';
-  if (status === 'CONCLUIDO') return 'Concluído';
+  if (status === 'CONCLUIDO_PARCIALMENTE') return encerradoAdministrativamente ? 'Concluído parcialmente · Encerrado' : 'Concluído parcialmente';
+  if (status === 'CONCLUIDO') return encerradoAdministrativamente ? 'Concluído · Encerrado' : 'Concluído';
   if (status === 'FINALIZADO') return 'Encerrado';
   if (status === 'EM_ANDAMENTO') return 'Em andamento';
   return 'Não iniciado';

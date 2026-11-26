@@ -82,12 +82,25 @@ describe('PATCH B04 — sequência e decisões finais da etapa', () => {
     expect(repositorio.save).not.toHaveBeenCalled();
   });
 
-  it('não arquiva etapa FINALIZADA sem reabertura', async () => {
+  it('arquiva e reativa etapa finalizada sem reabrir a decisão', async () => {
     const e = { ...etapa('A',1), status: StatusEtapa.FINALIZADA };
     const { service, repositorio } = contexto([e]);
-    await expect(service.alterarArquivamento(contratoId, 'A', true, ator))
-      .rejects.toBeInstanceOf(ConflictException);
-    expect(repositorio.save).not.toHaveBeenCalled();
+    await service.alterarArquivamento(contratoId, 'A', true, ator);
+    expect(e.arquivadoEm).toBeInstanceOf(Date);
+    expect(e.status).toBe(StatusEtapa.FINALIZADA);
+    await service.alterarArquivamento(contratoId, 'A', false, ator);
+    expect(e.arquivadoEm).toBeNull();
+    expect(e.status).toBe(StatusEtapa.FINALIZADA);
+    expect(repositorio.save).toHaveBeenCalledTimes(2);
+  });
+  it('preserva solicitação pendente durante arquivamento e reativação', async () => {
+    const pedido = new Date('2026-11-10');
+    const e = { ...etapa('A',1), conclusaoSolicitadaEm: pedido };
+    const { service } = contexto([e]);
+    await service.alterarArquivamento(contratoId, 'A', true, ator);
+    expect(e.conclusaoSolicitadaEm).toBe(pedido);
+    await service.alterarArquivamento(contratoId, 'A', false, ator);
+    expect(e.conclusaoSolicitadaEm).toBe(pedido);
   });
 });
 
@@ -157,19 +170,23 @@ it('B04: etapa vazia pode solicitar encerramento, mas não conclusão nem finali
   expect(r).toMatchObject({ podeSolicitarConclusao:false, podeSolicitarParcial:false, podeSolicitarEncerramento:true, podeFinalizar:false });
 });
 
-it('B04: pedido descendente bloqueia solicitação de encerramento e a elegibilidade', async () => {
+it('Pendência descendente impede conclusão, mas não a solicitação de encerramento', async () => {
   const { service, manager, repositorio } = contexto([etapa('A', 1)]);
-  manager.findBy.mockResolvedValue([{ statusExecucao:'PENDENTE_CONCLUSAO' } as Entregavel]);
-  await expect(service.elegibilidade(contratoId, 'A')).resolves.toMatchObject({ decisoesPendentes:true, podeSolicitarEncerramento:false });
-  await expect(service.solicitarEncerramento(contratoId,'A',ator,'Encerramento por motivo operacional')).rejects.toBeInstanceOf(ConflictException);
-  expect(repositorio.save).not.toHaveBeenCalled();
+  const filho = { statusExecucao:'PENDENTE_CONCLUSAO' } as Entregavel;
+  manager.findBy.mockResolvedValue([filho]);
+  await expect(service.elegibilidade(contratoId, 'A')).resolves.toMatchObject({ decisoesPendentes:true, podeSolicitarEncerramento:true, podeSolicitarConclusao:false });
+  await service.solicitarEncerramento(contratoId,'A',ator,'Encerramento por motivo operacional');
+  expect(repositorio.save).toHaveBeenCalledTimes(1);
+  expect(filho.statusExecucao).toBe('PENDENTE_CONCLUSAO');
 });
 
-it('B04: aprovar encerramento revalida decisões descendentes', async () => {
+it('Aprova encerramento sem aprovar nem alterar decisões descendentes', async () => {
   const { service, manager, repositorio } = contexto([{ ...etapa('A', 1), encerramentoSolicitadoEm: new Date(), encerramentoMotivo: 'Encerramento por motivo operacional' } as EtapaMock]);
-  manager.findBy.mockResolvedValue([{ statusExecucao:'PENDENTE_CONCLUSAO' } as Entregavel]);
-  await expect(service.encerrar(contratoId,'A',ator,'Encerramento por motivo operacional')).rejects.toBeInstanceOf(ConflictException);
-  expect(repositorio.save).not.toHaveBeenCalled();
+  const filho = { statusExecucao:'PENDENTE_CONCLUSAO' } as Entregavel;
+  manager.findBy.mockResolvedValue([filho]);
+  await expect(service.encerrar(contratoId,'A',ator,'Encerramento por motivo operacional')).resolves.toMatchObject({status:StatusEtapa.ENCERRADA});
+  expect(repositorio.save).toHaveBeenCalledTimes(1);
+  expect(filho.statusExecucao).toBe('PENDENTE_CONCLUSAO');
 });
 
 it('B04: edição concorrente rejeitada antes de modificar os campos', async () => {

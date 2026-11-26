@@ -10,7 +10,6 @@ function useItens(): Item[] {
   return [
     { nome: 'Dashboard', href: '/dashboard', icone: 'inicio' },
     { nome: 'Contratos', href: '/contratos', icone: 'arquivo' },
-    { nome: 'Relatórios', href: '/relatorios', icone: 'relatorio' },
     { nome: 'Administração', href: '/admin', icone: 'usuarios' },
   ];
 }
@@ -21,7 +20,6 @@ function IconeMenu({ tipo }: { tipo: string }) {
       tipo === 'usuarios' ? <><circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6m1 4a5 5 0 0 1 4 5"/></> :
       tipo === 'conta' ? <><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></> :
       tipo === 'evidencia' ? <><rect x="4" y="5" width="16" height="15" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="m5 18 5-5 3 3 3-2 3 4"/></> :
-      tipo === 'relatorio' ? <><path d="M6 3h9l4 4v14H6Z"/><path d="M14 3v5h5M9 12h6M9 16h6"/></> :
       <><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></>}
   </svg>;
 }

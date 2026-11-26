@@ -41,7 +41,7 @@ export function FormularioEtapa({ inicial, onSalvar, onCancelar, onSalvandoMudou
     let envio: DadosEtapa;
     if (somenteMetadados) {
       const revisoes: ErrosCamposEtapa = {};
-      if (!dados.nome.trim() || (dados.nome.length > LIMITES_ETAPA.nome && dados.nome !== inicial?.nome)) revisoes.nome = 'Nome inválido ou muito longo.';
+      if (!dados.nome.trim() || ([...dados.nome].length > LIMITES_ETAPA.nome && dados.nome !== inicial?.nome)) revisoes.nome = 'Nome inválido ou muito longo.';
       if ((dados.codigo ?? '').length > LIMITES_ETAPA.codigo && dados.codigo !== inicial?.codigo) revisoes.codigo = 'Código muito longo.';
       if ((dados.descricao ?? '').length > LIMITES_ETAPA.descricao && dados.descricao !== inicial?.descricao) revisoes.descricao = 'Descrição muito longa.';
       if ((dados.observacoes ?? '').length > LIMITES_ETAPA.observacoes && dados.observacoes !== inicial?.observacoes) revisoes.observacoes = 'Observações muito longas.';
@@ -68,7 +68,7 @@ export function FormularioEtapa({ inicial, onSalvar, onCancelar, onSalvandoMudou
           onChange={(e) => mudar('codigo', e.target.value || null)} /><span className="block text-right text-[11px] text-foreground/50">{(dados.codigo ?? '').length}/{LIMITES_ETAPA.codigo}</span>{mensagem('codigo')}</div>
       <div><label htmlFor="etapa-nome" className="mb-1 block text-sm font-medium">Nome *</label>
         <input id="etapa-nome" maxLength={somenteMetadados ? Math.max(LIMITES_ETAPA.nome, (inicial?.nome ?? '').length) : LIMITES_ETAPA.nome} required className={campoClasse} value={dados.nome} {...erroCampo('nome')}
-          onChange={(e) => mudar('nome', e.target.value)} /><span className="block text-right text-[11px] text-foreground/50">{dados.nome.length}/{LIMITES_ETAPA.nome}</span>{mensagem('nome')}</div>
+          onChange={(e) => mudar('nome', e.target.value)} /><span className="block text-right text-[11px] text-foreground/50">{[...dados.nome].length}/{LIMITES_ETAPA.nome}</span>{mensagem('nome')}</div>
     </div>
     {!somenteMetadados && <div className="pi-etapa-planejamento">
       <div><label htmlFor="etapa-inicioPrevisto" className="mb-1 block text-sm font-medium">Início previsto</label>

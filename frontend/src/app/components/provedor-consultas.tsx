@@ -3,11 +3,14 @@
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { RepositorioConsultas, chaveTexto, type ChaveConsulta, type Consulta } from '@/lib/repositorio-consultas';
 
+import { observarRegistrosCompartilhados } from '@/lib/sincronizar-evidencia-compartilhada';
+
 const SNAPSHOT_SERVIDOR = Object.freeze({ carregando: true, atualizando: false });
 const ContextoConsultas = createContext<RepositorioConsultas | null>(null);
 /** Client Component: o Query Context nao e importado como hook pelo RootLayout (Server). */
 export function ProvedorConsultas({ children }: { children: ReactNode }) {
   const [repositorio] = useState(() => new RepositorioConsultas());
+  useEffect(() => observarRegistrosCompartilhados(repositorio), [repositorio]);
   return <ContextoConsultas.Provider value={repositorio}>{children}</ContextoConsultas.Provider>;
 }
 /** Leitura opcional para painéis também testados isoladamente; a aplicação sempre usa o provider. */

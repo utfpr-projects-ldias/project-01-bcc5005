@@ -43,7 +43,7 @@ export class LancamentosService {
     const idsAtuais=ocorrencias.filter(o=>o.modoRegistro==='QUANTITATIVO'&&!o.substituidaEm).map(o=>o.id);
     const ativas=new Set(ocorrencias.filter(o=>!o.substituidaEm).map(o=>o.id));
     const [quantitativas,referenciasQuantitativas]=await Promise.all([listarContribuicoesQuantitativas(m,c,ids),listarExecucoesQuantitativas(m,c,idsAtuais)]);
-    const detalhadas=quantitativas.map((l:{origem:string;id:string;ocorrenciaId:string;situacao:string;referenciaExecucao:string|null})=>({...l,situacao:ativas.has(l.ocorrenciaId)?l.situacao:'INATIVO',contabilizada:referenciasQuantitativas.some(f=>f.ocorrenciaId===l.ocorrenciaId&&f.referencia===`${l.origem.toLowerCase()}:${l.id}`)}));
+    const detalhadas=quantitativas.map((l:{origem:string;id:string;ocorrenciaId:string;situacao:string;referenciaExecucao:string|null;situacaoRegistro?:string})=>({...l,situacao:ativas.has(l.ocorrenciaId)?l.situacao:'INATIVO',situacaoRegistro:ativas.has(l.ocorrenciaId)||['ARQUIVADO','EXCLUIDO'].includes(l.situacaoRegistro??'')?l.situacaoRegistro:'SUBSTITUIDO',contabilizada:referenciasQuantitativas.some(f=>f.ocorrenciaId===l.ocorrenciaId&&f.referencia===`${l.origem.toLowerCase()}:${l.id}`)}));
     const diretas=await listarQuantidadeDireta(m,e);
     const versoes=await m.query(`SELECT id,xmin::text AS versao FROM execucoes_entregavel WHERE contrato_id=$1 AND entregavel_id=$2 AND origem='MANUAL'`,[c,id]) as {id:string;versao:string}[];
     const versaoPorId=new Map(versoes.map(v=>[v.id,v.versao]));
@@ -75,7 +75,7 @@ export class LancamentosService {
   editar(c:string,id:string,lid:string,dto:CorrigirLancamentoDto,ator:UsuarioAutenticado){return this.ds.transaction(async m=>{
     await exigirPermissaoTransacional(m,c,ator,'editarExecucaoFisica');const e=await this.contexto(m,c,id,true);this.validarData(dto.data);
     if(e.tipo==='QUANTITATIVO'){
-      const {anterior,registro}=await editarManualDireta(m,e,lid,dto);
+      const {anterior,registro}=await editarManualDireta(m,e,lid,dto,()=>exigirPermissaoTransacional(m,c,ator,'corrigirExecucaoAprovada'));
       await this.auditoria.registrarNaTransacao(m,ator,{acao:AcaoAuditoria.ENTREGAVEL_EXECUCAO_ATUALIZADA,entidadeTipo:'ENTREGAVEL',entidadeId:e.id,dadosAnteriores:anterior,dadosPosteriores:{...registro,operacao:'CORRIGIR_QUANTIDADE_MANUAL',motivo:dto.motivo.trim()}});return registro;
     }
     const l=await m.findOneBy(ExecucaoLancamento,{id:lid,contratoId:c,entregavelId:id,origem:'MANUAL'});if(!l)throw new NotFoundException('Lançamento não encontrado.');
@@ -85,7 +85,10 @@ export class LancamentosService {
     }
     await exigirOcorrenciaParcela(m,e,l.ocorrenciaId);
     if(!dto.motivo || dto.motivo.trim().length<15)throw new BadRequestException('Informe a justificativa da correção (mínimo de 15 caracteres).');
-    if(l.status==='APROVADO') await protegerReferenciaManual(m,c,lid,'PERCENTUAL');
+    if(l.status==='APROVADO') {
+      await exigirPermissaoTransacional(m,c,ator,'corrigirExecucaoAprovada');
+      await protegerReferenciaManual(m,c,lid,'PERCENTUAL');
+    }
     const antes={...l};l.centesimos=centesimos(dto.valor);l.dataExecucao=dto.data;l.observacao=dto.observacao?.trim()||null;l.status='PENDENTE';l.centesimosAprovados=null;l.decididoPor=null;l.decididoEm=null;
     await m.save(ExecucaoLancamento,l);await validarSaldoParcelas(m,e);await this.auditar(m,ator,e,antes,l,'CORRIGIR_LANCAMENTO',dto.motivo.trim());if(l.ocorrenciaId)await reconhecerExecucaoOcorrencia(m,this.auditoria,ator,e,l.ocorrenciaId);return l;
   });}

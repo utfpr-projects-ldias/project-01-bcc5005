@@ -1,6 +1,6 @@
 import { type DadosEtapa, type StatusEtapa } from './etapas';
 
-export const LIMITES_ETAPA = { codigo: 15, nome: 36, descricao: 400, observacoes: 150 } as const;
+export const LIMITES_ETAPA = { codigo: 15, nome: 45, descricao: 400, observacoes: 150 } as const;
 
 export const DADOS_ETAPA_INICIAIS: DadosEtapa = {
   codigo: null, nome: '', descricao: null, inicioPrevisto: null,
@@ -24,7 +24,7 @@ export function validarEtapa(valor: DadosEtapa, inicial?: Partial<DadosEtapa>):
   const terminoPrevisto = valor.terminoPrevisto || null;
   const statusValidos: StatusEtapa[] = ['PLANEJADA', 'EM_ANDAMENTO'];
   if (!nome) erros.nome = 'Informe o nome da etapa.';
-  else if (nome.length > LIMITES_ETAPA.nome && nome !== inicial?.nome) erros.nome = `O nome deve ter no máximo ${LIMITES_ETAPA.nome} caracteres.`;
+  else if ([...nome].length > LIMITES_ETAPA.nome && nome !== inicial?.nome) erros.nome = `O nome deve ter no máximo ${LIMITES_ETAPA.nome} caracteres.`;
   if (codigo && codigo.length > LIMITES_ETAPA.codigo && codigo !== inicial?.codigo) erros.codigo = `O código deve ter no máximo ${LIMITES_ETAPA.codigo} caracteres.`;
   if (valor.descricao && valor.descricao.length > LIMITES_ETAPA.descricao && valor.descricao !== inicial?.descricao) erros.descricao = `Descrição: máximo de ${LIMITES_ETAPA.descricao} caracteres.`;
   if (valor.observacoes && valor.observacoes.length > LIMITES_ETAPA.observacoes && valor.observacoes !== inicial?.observacoes) erros.observacoes = `Observações: máximo de ${LIMITES_ETAPA.observacoes} caracteres.`;

@@ -341,13 +341,19 @@ describe('B05 — precisão, vigência e versão do planejamento', () => {
     const e=exemplo(); e.nome='😀'.repeat(22); e.peso='0';
     expect(()=>validarPlanejamento(e)).not.toThrow();
     e.peso='33.3333'; expect(()=>validarPlanejamento(e)).not.toThrow();
-    e.nome='😀'.repeat(43); expect(()=>validarPlanejamento(e)).toThrow(BadRequestException);
+    e.nome='😀'.repeat(46); expect(()=>validarPlanejamento(e)).toThrow(BadRequestException);
   });
   it('verifica datas novas sem impedir metadados de planejamento histórico', () => {
     const e=exemplo(); const vigencia={inicioVigencia:'2026-11-01',terminoVigencia:'2026-11-30'};
     expect(()=>validarVigenciaPlanejamento(e,vigencia)).toThrow(BadRequestException);
     expect(()=>validarVigenciaPlanejamento(e,vigencia,e)).not.toThrow();
     expect(()=>validarVigenciaPlanejamento({...e,inicioPrevisto:'2026-11-01'},vigencia,e)).not.toThrow();
+  });
+  it('identifica a data inválida e informa a vigência real do contrato', () => {
+    const v={inicioVigencia:'2026-11-01',terminoVigencia:'2026-11-30'};
+    expect(()=>validarVigenciaPlanejamento({inicioPrevisto:'2026-10-31',terminoPrevisto:'2026-11-15'},v)).toThrow('Início previsto fora da vigência do contrato. Informe uma data entre 01/11/2026 e 30/11/2026.');
+    expect(()=>validarVigenciaPlanejamento({inicioPrevisto:'2026-11-01',terminoPrevisto:'2026-12-01'},v)).toThrow('Término previsto fora da vigência do contrato. Informe uma data entre 01/11/2026 e 30/11/2026.');
+    expect(()=>validarVigenciaPlanejamento({inicioPrevisto:'2026-11-01',terminoPrevisto:'2026-11-30'},v)).not.toThrow();
   });
   it('hash não depende da escala decimal ou ordem do JSON, mas diferencia milésimos grandes', () => {
     const e=exemplo(TipoEntregavel.RECORRENTE); e.configuracaoPeriodicidade={versao:1,modoRegistro:'DESCRITIVO'};
@@ -360,7 +366,7 @@ describe('B05 — precisão, vigência e versão do planejamento', () => {
 });
 
 it('limita novos metadados aos contadores da interface', () => {
-  for (const [campo,limite] of [['codigo',15],['nome',42],['descricao',200],['observacoes',100],['unidadeMedida',40],['criterioConclusao',200]] as const) {
+  for (const [campo,limite] of [['codigo',15],['nome',45],['descricao',200],['observacoes',100],['unidadeMedida',40],['criterioConclusao',200]] as const) {
     const e=exemplo();
     e[campo]='x'.repeat(limite);
     expect(()=>validarMetadadosEntregavel(e,undefined,[campo])).not.toThrow();

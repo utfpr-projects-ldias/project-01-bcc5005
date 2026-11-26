@@ -16,9 +16,9 @@ import { contarAprovacoes } from './resumo-compartilhado.js';
 import type { CreateAtividadeDto } from './dto/create-atividade.dto.js';
 import { AprovarCompartilhadaDto, CriarAtividadeCompartilhadaDto, AdicionarContratosAtividadeDto, EditarMetadadosCompartilhadosDto } from './dto/atividade-compartilhada.dto.js';
 
-const politica = (acao: 'atividades:registrar' | 'atividades:visualizar' | 'atividades:verificar' | 'atividades:editar') => ({
+const politica = (acao: 'atividades:registrar' | 'atividades:compartilhar' | 'atividades:visualizar' | 'atividades:verificar' | 'atividades:editar') => ({
   acao,
-  escopoOperacional: acao === 'atividades:registrar'
+  escopoOperacional: acao === 'atividades:registrar' || acao === 'atividades:compartilhar'
     ? { tipo: 'contrato' as const, parametro: 'contratoId' }
     : { tipo: 'recurso' as const, recurso: 'atividade' as const, parametro: 'id' },
 });
@@ -30,7 +30,7 @@ export class AtividadeCompartilhadaService {
     private readonly auditoria: AuditoriaService,
     private readonly atividades: AtividadesService) {}
 
-  private async pode(ator: UsuarioAutenticado, acao: 'atividades:registrar' | 'atividades:visualizar' | 'atividades:verificar' | 'atividades:editar', contratoId: string, manager?: EntityManager) {
+  private async pode(ator: UsuarioAutenticado, acao: 'atividades:registrar' | 'atividades:compartilhar' | 'atividades:visualizar' | 'atividades:verificar' | 'atividades:editar', contratoId: string, manager?: EntityManager) {
     return manager ? this.acesso.permitidoNaTransacao(manager,ator,politica(acao),contratoId) : this.acesso.permitido(ator, politica(acao), contratoId);
   }
 
@@ -42,8 +42,9 @@ export class AtividadeCompartilhadaService {
     return this.database.transaction(async manager => {
       // Autorização em TODOS os contratos antes de criar qualquer atividade.
       for (const vinculo of vinculos) {
-        if (!await this.pode(ator, 'atividades:registrar', vinculo.contratoId, manager))
-          throw new ForbiddenException('Sem autorização para registrar atividade em todos os contratos selecionados');
+        if (!await this.pode(ator, 'atividades:registrar', vinculo.contratoId, manager) ||
+            !await this.pode(ator, 'atividades:compartilhar', vinculo.contratoId, manager))
+          throw new ForbiddenException('Sem autorização para registrar e compartilhar atividades em todos os contratos selecionados');
       }
       const grupoId = randomUUID();
       await manager.save(AtividadeCompartilhada, manager.create(AtividadeCompartilhada,
@@ -77,7 +78,8 @@ export class AtividadeCompartilhadaService {
       const registros=await m.find(AtividadeEntity,{where:{atividadeCompartilhadaId:id}});
       const origem=registros.find(a=>a.contratoId===dto.origemContratoId&&!a.excluidaEm);
       if(!origem)throw new NotFoundException('Origem da atividade não encontrada.');
-      for(const v of vinculos)if(!await this.pode(ator,'atividades:registrar',v.contratoId,m))throw new ForbiddenException('Sem autorização para registrar em todos os novos destinos.');
+      if(!await this.pode(ator,'atividades:compartilhar',dto.origemContratoId,m))throw new ForbiddenException('Sem autorização para compartilhar na origem.');
+      for(const v of vinculos)if(!await this.pode(ator,'atividades:registrar',v.contratoId,m)||!await this.pode(ator,'atividades:compartilhar',v.contratoId,m))throw new ForbiddenException('Sem autorização para registrar e compartilhar em todos os novos destinos.');
       if(registros.filter(a=>!a.excluidaEm).length+vinculos.length>20||vinculos.some(v=>registros.some(a=>a.contratoId===v.contratoId)))throw new ConflictException('Um dos destinos já está vinculado ou o limite do grupo foi atingido.');
       for(const cid of [...new Set([dto.origemContratoId,...vinculos.map(v=>v.contratoId)])].sort()){
         const c=await m.findOne(Contrato,{where:{id:cid},lock:{mode:'pessimistic_write'}});
@@ -141,7 +143,17 @@ export class AtividadeCompartilhadaService {
       podeAprovar: registro.status === 'PENDENTE_CONCLUSAO' &&
         await this.pode(ator, 'atividades:verificar', registro.contratoId),
     });
-    return { id, ...contarAprovacoes(visiveis.map(r => r.status)), atividades: linhas };
+    // Agrega exclusivamente os membros que passaram pela autorização de leitura acima.
+    const [vinculos] = await this.database.manager.query(`WITH membros AS (
+      SELECT id,"contratoId","ocorrenciaId" FROM atividades WHERE id=ANY($1::uuid[]) AND "excluidaEm" IS NULL
+    ) SELECT
+      (SELECT count(DISTINCT (m."contratoId",ae."entregavelId"))::int FROM membros m JOIN atividade_entregaveis ae ON ae."atividadeId"=m.id) AS entregaveis,
+      (SELECT count(*)::int FROM (SELECT m."contratoId",ao."ocorrenciaId" FROM membros m JOIN atividade_ocorrencias ao ON ao."atividadeId"=m.id AND ao."contratoId"=m."contratoId" UNION SELECT "contratoId","ocorrenciaId" FROM membros WHERE "ocorrenciaId" IS NOT NULL) o) AS ocorrencias,
+      (SELECT count(DISTINCT (ac.contrato_id,ac.comprovante_id))::int FROM membros m JOIN atividade_comprovantes ac ON ac.atividade_id=m.id AND ac.contrato_id=m."contratoId"
+        JOIN comprovantes_evidencia c ON c.id=ac.comprovante_id AND c.contrato_id=ac.contrato_id JOIN evidencias_esperadas ev ON ev.id=c.evidencia_esperada_id
+        WHERE ev.arquivado_em IS NULL AND EXISTS(SELECT 1 FROM atividade_entregaveis ae WHERE ae."atividadeId"=m.id AND ae."entregavelId"=c.entregavel_id)
+        AND NOT EXISTS(SELECT 1 FROM comprovantes_evidencia n WHERE n.evidencia_esperada_id=c.evidencia_esperada_id AND (n.criado_em,n.id)>(c.criado_em,c.id))) AS evidencias`,[visiveis.map(r=>r.id)]) as {entregaveis:number;ocorrencias:number;evidencias:number}[];
+    return { id, ...contarAprovacoes(visiveis.map(r => r.status)), atividades: linhas, vinculos };
   }
 
   /** Retira apenas a associação ao grupo. O diário local, as medições e os comprovantes permanecem intactos. */
@@ -168,7 +180,7 @@ export class AtividadeCompartilhadaService {
     });
   }
 
-  /** Solicitação em lote, atômica, limitada às permissões de edição por contrato. */
+  /** Solicitação compartilhada autorizada por um dos vínculos visíveis. */
   async solicitar(id: string, dto: AprovarCompartilhadaDto, ator: UsuarioAutenticado) {
     if (!uuidValido(id)) throw new NotFoundException('Atividade compartilhada não encontrada');
     return this.database.transaction(async manager => {
@@ -188,28 +200,28 @@ export class AtividadeCompartilhadaService {
       if (selecionados && [...selecionados].some(cid => !visiveis.has(cid)))
         throw new NotFoundException('Vínculo não encontrado');
       const autorizados: AtividadeEntity[] = [];
-      for (const registro of registros) {
-        if (selecionados && !selecionados.has(registro.contratoId)) continue;
-        if (!await this.pode(ator, 'atividades:editar', registro.contratoId, manager)) {
-          if (selecionados) throw new ForbiddenException('Sem permissão de solicitar em um dos contratos');
+      for (const r of registros) {
+        if (selecionados && !selecionados.has(r.contratoId)) continue;
+        if (!visiveis.has(r.contratoId) || !await this.pode(ator,'atividades:editar',r.contratoId,manager)) {
+          if(selecionados)throw new ForbiddenException('Sem permissão de solicitar no contrato escolhido.');
           continue;
         }
-        if (registro.status === 'REGISTRADA') autorizados.push(registro);
-        else if (selecionados && registro.status !== 'PENDENTE_CONCLUSAO' && registro.status !== 'VERIFICADA')
-          throw new ConflictException('Uma das atividades não admite solicitação');
+        autorizados.push(r);
       }
-      for (const registro of autorizados)
-        await this.atividades.solicitarNaTransacao(manager, registro.contratoId, registro.id, ator);
+      if(!autorizados.length)throw new ForbiddenException('Sem permissão para solicitar a conclusão.');
+      const origem=autorizados.find(r=>r.status==='REGISTRADA');
+      const antesVisiveis=registros.filter(r=>visiveis.has(r.contratoId)&&r.status==='PENDENTE_CONCLUSAO').length;
+      if(origem)await this.atividades.solicitarNaTransacao(manager,origem.contratoId,origem.id,ator);
+      else if(!autorizados.some(r=>r.status==='PENDENTE_CONCLUSAO'||r.status==='VERIFICADA'))throw new ConflictException('A atividade não admite solicitação.');
       const atualizados = await manager.find(AtividadeEntity, {
         where: { atividadeCompartilhadaId: id, excluidaEm: IsNull() },
       });
-      return { id, novasSolicitacoes: autorizados.length, ...contarAprovacoes(atualizados.filter(r => visiveis.has(r.contratoId)).map(r => r.status)) };
+      const estados=atualizados.filter(r=>visiveis.has(r.contratoId)).map(r=>r.status);
+      return {id,novasSolicitacoes:estados.filter(s=>s==='PENDENTE_CONCLUSAO').length-antesVisiveis,...contarAprovacoes(estados)};
     });
   }
 
-  /** Aprovação em lote atômica por contratos autorizados, sem reaprovação da mesma linha.
-   * Sem contratoIds: considera todos os contratos permitidos; os demais ficam intactos.
-   * Com seleção explícita: acesso insuficiente causa rollback total e 403. */
+  /** Uma decisão compartilhada, autorizada por um vínculo visível e com permissão de verificar. */
   async aprovar(id: string, dto: AprovarCompartilhadaDto, ator: UsuarioAutenticado) {
     if (!uuidValido(id)) throw new NotFoundException('Atividade compartilhada não encontrada');
     return this.database.transaction(async manager => {
@@ -231,21 +243,22 @@ export class AtividadeCompartilhadaService {
       const autorizados: AtividadeEntity[] = [];
       for (const r of registros) {
         if (selecionados && !selecionados.has(r.contratoId)) continue;
-        const podeAprovar = await this.pode(ator, 'atividades:verificar', r.contratoId, manager);
-        if (!podeAprovar) {
-          if (selecionados) throw new ForbiddenException('Sem permissão de verificar em um dos contratos solicitados');
+        if (!visiveis.has(r.contratoId) || !await this.pode(ator,'atividades:verificar',r.contratoId,manager)) {
+          if(selecionados)throw new ForbiddenException('Sem permissão de verificar no contrato escolhido.');
           continue;
         }
-        if (r.status === 'PENDENTE_CONCLUSAO') autorizados.push(r);
-        else if (selecionados && r.status !== 'VERIFICADA')
-          throw new ConflictException('Uma das atividades não está pendente de conclusão');
+        autorizados.push(r);
       }
-      for (const registro of autorizados)
-        await this.atividades.verificarNaTransacao(manager, registro.contratoId, registro.id, ator);
+      if(!autorizados.length)throw new ForbiddenException('Sem permissão para aprovar esta atividade.');
+      const origem=autorizados.find(r=>r.status==='PENDENTE_CONCLUSAO');
+      const antesVisiveis=registros.filter(r=>visiveis.has(r.contratoId)&&r.status==='VERIFICADA').length;
+      if(origem)await this.atividades.verificarNaTransacao(manager,origem.contratoId,origem.id,ator);
+      else if(!autorizados.some(r=>r.status==='VERIFICADA'))throw new ConflictException('A atividade não está pendente de conclusão.');
       const atualizados = await manager.find(AtividadeEntity, {
         where: { atividadeCompartilhadaId: id, excluidaEm: IsNull() },
       });
-      return { id, novasAprovacoes: autorizados.length, ...contarAprovacoes(atualizados.filter(r => visiveis.has(r.contratoId)).map(r => r.status)) };
+      const estados=atualizados.filter(r=>visiveis.has(r.contratoId)).map(r=>r.status);
+      return {id,novasAprovacoes:estados.filter(s=>s==='VERIFICADA').length-antesVisiveis,...contarAprovacoes(estados)};
     });
   }
 }

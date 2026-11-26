@@ -5,7 +5,7 @@ export function AnelProgresso({atual,total,rotulo,cor='violeta',tamanho=96,forma
 }) {
   const porcentagem = total > 0 ? Math.min(100,Math.max(0,atual/total*100)) : null;
   const raio=38, circunferencia=2*Math.PI*raio;
-  const corAnel = cor === 'contextual' ? 'var(--pi-cor-propria, #5fd34a)' : cor === 'violeta' ? '#A855F7' : '#14B8A6';
+  const corAnel = cor === 'contextual' ? 'var(--pi-cor-propria, #799fac)' : cor === 'violeta' ? '#A855F7' : '#14B8A6';
   return <div className="relative shrink-0" style={{width:tamanho,height:tamanho}}>
     <svg viewBox="0 0 100 100" width={tamanho} height={tamanho} role={porcentagem==null?'img':'progressbar'}
       aria-label={porcentagem==null?`${rotulo}: não exigido`:`${rotulo}: ${atual} de ${total} (${formatarPercentualSemAnteciparConclusao(porcentagem,0)})`}

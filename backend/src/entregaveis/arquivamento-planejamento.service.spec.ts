@@ -329,11 +329,15 @@ test('arquivamento de colaborador não concede permissão para aprovar conclusã
 });
 
 
-test('decisão pendente de descendente impede arquivar o entregável', async () => {
+test('arquivamento não exige decisão dos registros e preserva solicitação própria', async () => {
   const a=base();
+  Object.assign(a.entregue, {statusExecucao:'PENDENTE_CONCLUSAO', regularizacaoDocumentalSolicitada:true});
   a.m.query.mockResolvedValueOnce([{pendentes:true}]);
-  await expect(a.service.alterarEntregavel(contratoId,entregavelId,true,ator)).rejects.toThrow('decisões e contribuições pendentes');
-  expect(a.repoEntregavel.save).not.toHaveBeenCalled();
+  await a.service.alterarEntregavel(contratoId,entregavelId,true,ator);
+  expect(a.entregue).toMatchObject({arquivadoEm:expect.any(Date),statusExecucao:'PENDENTE_CONCLUSAO',regularizacaoDocumentalSolicitada:true});
+  expect(a.m.query).not.toHaveBeenCalled();
+  await a.service.alterarEntregavel(contratoId,entregavelId,false,ator);
+  expect(a.entregue).toMatchObject({arquivadoEm:null,statusExecucao:'PENDENTE_CONCLUSAO',regularizacaoDocumentalSolicitada:true});
 });
 
 test('regularização parcial protege requisitos obrigatórios e permite arquivar evidência opcional sem contribuição', async () => {

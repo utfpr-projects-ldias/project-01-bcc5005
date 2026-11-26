@@ -30,6 +30,7 @@ import { resumoMedicao, proximoStatusAutomatico, conclusaoTemporalPermitida } fr
 import { inicioDiaCivilUtc, proximoDiaCivil, hojeCivil } from '../common/data-civil.js';
 import type { MedicaoAtividadeDto } from './dto/medicao-atividade.dto.js';
 import { AtividadeEntity } from './atividade.entity.js';
+import { AtividadeCompartilhada } from './atividade-compartilhada.entity.js';
 import type { CreateAtividadeDto } from './dto/create-atividade.dto.js';
 import type { UpdateAtividadeDto } from './dto/update-atividade.dto.js';
 
@@ -525,7 +526,16 @@ export class AtividadesService implements OnModuleInit {
     const medicoesDiretas=registro.entregaveis.some(e=>e.quantidadeDiretaIntegrada)?await this.repo.manager.query(`SELECT entregavel_id AS "entregavelId",quantidade::text FROM atividade_entregavel_medicoes WHERE contrato_id=$1 AND atividade_id=$2`,[contratoId,id]):[];
     const parcelasAtividade=registro.entregaveis.some(e=>e.execucoesIntegradas)?await this.repo.manager.findBy(ExecucaoLancamento,{contratoId,origem:'ATIVIDADE',origemId:id}):[];
     const parcelasPercentuais=parcelasAtividade.filter(p=>!p.referenciaId).map(p=>({entregavelId:p.entregavelId,ocorrenciaId:p.ocorrenciaId??undefined,percentual:(p.centesimos/100).toFixed(2)}));
-    return Object.assign({}, registro, { medicoes:[...medidas.map(({ocorrenciaId,quantidade})=>({ocorrenciaId,quantidade})),...legado],medicoesDiretas,parcelasPercentuais,
+    const ocorrencias = [...(registro.ocorrencias??[])];
+    if(registro.ocorrenciaId&&!ocorrencias.some(o=>o.id===registro.ocorrenciaId)) {
+      const o=await this.repo.manager.findOneBy(Ocorrencia,{id:registro.ocorrenciaId,contratoId});
+      if(o) ocorrencias.push(o);
+    }
+    const [contagem] = await this.repo.manager.query(`SELECT count(DISTINCT ac.comprovante_id)::int AS historicos,
+      count(DISTINCT ac.comprovante_id) FILTER(WHERE ev.arquivado_em IS NULL AND EXISTS(SELECT 1 FROM atividade_entregaveis ae WHERE ae."atividadeId"=ac.atividade_id AND ae."entregavelId"=c.entregavel_id) AND NOT EXISTS(SELECT 1 FROM comprovantes_evidencia n WHERE n.evidencia_esperada_id=c.evidencia_esperada_id AND (n.criado_em,n.id)>(c.criado_em,c.id)))::int AS total
+      FROM atividade_comprovantes ac JOIN comprovantes_evidencia c ON c.id=ac.comprovante_id AND c.contrato_id=ac.contrato_id JOIN evidencias_esperadas ev ON ev.id=c.evidencia_esperada_id
+      WHERE ac.contrato_id=$1 AND ac.atividade_id=$2`,[contratoId,id]) as {historicos:number;total:number}[];
+    return Object.assign({}, registro, { ocorrencias, comprovantesVinculados:contagem?.total??0, comprovantesHistoricos:(contagem?.historicos??0)-(contagem?.total??0), medicoes:[...medidas.map(({ocorrenciaId,quantidade})=>({ocorrenciaId,quantidade})),...legado],medicoesDiretas,parcelasPercentuais,
       referenciasQuantitativas:medidas.filter(m=>m.referenciaExecucao).map(m=>({ocorrenciaId:m.ocorrenciaId,referencia:m.referenciaExecucao})),
       referenciasPercentuais:parcelasAtividade.filter(p=>p.referenciaId).map(p=>({id:p.id,entregavelId:p.entregavelId,ocorrenciaId:p.ocorrenciaId,referenciaId:p.referenciaId})) });
   }
@@ -770,7 +780,7 @@ export class AtividadesService implements OnModuleInit {
   private async transicionarNaTransacao(manager: EntityManager, contratoId: string, id: string, ator: UsuarioAutenticado,
     origem: 'REGISTRADA' | 'PENDENTE_CONCLUSAO' | 'VERIFICADA' | 'ARQUIVADA',
     destino: 'REGISTRADA' | 'PENDENTE_CONCLUSAO' | 'VERIFICADA' | 'ARQUIVADA',
-    acao: AcaoAuditoria, justificativa: string) {
+    acao: AcaoAuditoria, justificativa: string, grupoAutorizado?: string) {
     const motivo = justificativa.trim();
     const permissoes: Partial<Record<AcaoAuditoria, ChavePermissao>> = {
       [AcaoAuditoria.ATIVIDADE_CONCLUSAO_SOLICITADA]:'editarAtividades',
@@ -783,7 +793,8 @@ export class AtividadesService implements OnModuleInit {
     const permissao = permissoes[acao];
     if (!permissao) throw new ForbiddenException('Transição de atividade não autorizada');
     if ((![AcaoAuditoria.ATIVIDADE_VERIFICADA, AcaoAuditoria.ATIVIDADE_CONCLUSAO_SOLICITADA].includes(acao) && motivo.length < 15) || motivo.length > 200 || (motivo && motivo.length < 15)) throw new BadRequestException('Justificativa deve ter entre 15 e 200 caracteres; verificação dispensa motivo');
-      await this.autorizarMutacao(manager, contratoId, ator, permissao);
+      if (grupoAutorizado && ![AcaoAuditoria.ATIVIDADE_VERIFICADA,AcaoAuditoria.ATIVIDADE_CONCLUSAO_SOLICITADA].includes(acao)) throw new ForbiddenException('Decisão compartilhada inválida');
+      if (!grupoAutorizado) await this.autorizarMutacao(manager, contratoId, ator, permissao);
       const contrato = await manager.findOne(Contrato,{where:{id:contratoId},lock:{mode:'pessimistic_write'}});
       if (!contrato || contrato.arquivadoEm || contrato.conclusaoSolicitadaEm || contrato.encerramentoSolicitado || !FASES_OPERACIONAIS_CONTRATO.includes(contrato.status)) throw new ConflictException('Reabra ou retome o contrato antes de alterar atividades');
       // PostgreSQL não permite FOR UPDATE sobre o lado opcional de LEFT JOIN.
@@ -796,6 +807,7 @@ export class AtividadesService implements OnModuleInit {
         where: { id, contratoId }, relations: { entregaveis: true, ocorrencias: true },
       });
       if (!registro) throw new NotFoundException('Atividade não encontrada');
+      if (grupoAutorizado && registro.atividadeCompartilhadaId !== grupoAutorizado) throw new ConflictException('O vínculo compartilhado mudou.');
       await this.validarOcorrencia(manager, contratoId, registro.ocorrenciaId, registro.entregaveis, registro.quantidadeExecucao);
       for (const secundaria of registro.ocorrencias ?? []) if (secundaria.id !== registro.ocorrenciaId)
         await this.validarOcorrencia(manager, contratoId, secundaria.id, registro.entregaveis);
@@ -813,7 +825,7 @@ export class AtividadesService implements OnModuleInit {
       if (destino === 'PENDENTE_CONCLUSAO') { registro.solicitadaEm=new Date(); registro.solicitadaPor=ator.id; }
       else { registro.solicitadaEm=null; registro.solicitadaPor=null; }
       if (destino === 'REGISTRADA') { registro.verificadaEm = null; registro.verificadaPor=null; }
-      if (destino === 'VERIFICADA' && origem === 'PENDENTE_CONCLUSAO') { registro.verificadaEm = new Date(); registro.verificadaPor=ator.id; }
+      if (destino === 'VERIFICADA' && (origem === 'PENDENTE_CONCLUSAO' || Boolean(grupoAutorizado))) { registro.verificadaEm = new Date(); registro.verificadaPor=ator.id; }
       registro.arquivadaEm = destino === 'ARQUIVADA' ? new Date() : null;
       const salvo = await manager.save(AtividadeEntity, registro);
       for(const ent of registro.entregaveis) await validarSaldoParcelas(manager,ent);
@@ -824,7 +836,7 @@ export class AtividadesService implements OnModuleInit {
         await this.recalcularOcorrencia(manager, id, ator);
       return { resultado: salvo, evento: {
         acao, entidadeTipo: 'ATIVIDADE' as const, entidadeId: salvo.id,
-        dadosAnteriores: antes, dadosPosteriores: { ...resumo(salvo), ...(motivo ? { justificativa: motivo } : {}) },
+        dadosAnteriores: antes, dadosPosteriores: { ...resumo(salvo), ...(grupoAutorizado ? {atividadeCompartilhadaId:grupoAutorizado,decisaoCompartilhada:true} : {}), ...(motivo ? { justificativa: motivo } : {}) },
       },
       // Audita primeiro a verificação e, na mesma transação, conclui os
       // entregáveis que ficaram sem pendências. O contrato nunca fecha sozinho.
@@ -842,18 +854,47 @@ export class AtividadesService implements OnModuleInit {
       } : {}),
       };
   }
+  private async prepararDecisaoCompartilhada(manager: EntityManager, contratoId: string, id: string, ator: UsuarioAutenticado, justificativa: string, acao: AcaoAuditoria.ATIVIDADE_VERIFICADA|AcaoAuditoria.ATIVIDADE_CONCLUSAO_SOLICITADA) {
+    const aprovando=acao===AcaoAuditoria.ATIVIDADE_VERIFICADA;
+    const estadoOrigem=aprovando?'PENDENTE_CONCLUSAO':'REGISTRADA';
+    const destino=aprovando?'VERIFICADA':'PENDENTE_CONCLUSAO';
+    const origem=await manager.findOne(AtividadeEntity,{where:{id,contratoId}});
+    const grupoId=origem?.atividadeCompartilhadaId;
+    if(!grupoId) return this.transicionarNaTransacao(manager,contratoId,id,ator,estadoOrigem,destino,acao,justificativa);
+    await this.autorizarMutacao(manager,contratoId,ator,aprovando?'verificarAtividades':'editarAtividades');
+    const grupo=await manager.findOne(AtividadeCompartilhada,{where:{id:grupoId},lock:{mode:'pessimistic_write'}});
+    if(!grupo)throw new ConflictException('Vínculo compartilhado indisponível.');
+    const membros=await manager.find(AtividadeEntity,{where:{atividadeCompartilhadaId:grupoId,excluidaEm:IsNull()},order:{contratoId:'ASC',id:'ASC'}});
+    if(!membros.some(a=>a.id===id&&a.contratoId===contratoId))throw new ConflictException('O vínculo compartilhado mudou.');
+    const ativos=membros.filter(a=>a.status!=='ARQUIVADA');
+    await manager.query('SELECT id FROM contratos WHERE id=ANY($1::uuid[]) ORDER BY id FOR UPDATE',[[...new Set(ativos.map(a=>a.contratoId))]]);
+    const operacao=await this.transicionarNaTransacao(manager,contratoId,id,ator,estadoOrigem,destino,acao,justificativa,grupoId);
+    return {...operacao,aposEvento:async(m:EntityManager)=>{
+      if(operacao.aposEvento)await operacao.aposEvento(m);
+      for(const a of ativos){
+        if(a.id===id||a.status==='VERIFICADA'||(!aprovando&&a.status==='PENDENTE_CONCLUSAO'))continue;
+        if(a.status!=='REGISTRADA'&&a.status!=='PENDENTE_CONCLUSAO')throw new ConflictException('Um vínculo compartilhado não permite esta operação.');
+        try {
+          const op=await this.transicionarNaTransacao(m,a.contratoId,a.id,ator,a.status,destino,acao,'',grupoId);
+          await this.auditoria.registrarNaTransacao(m,ator,op.evento);
+          if(op.aposEvento)await op.aposEvento(m);
+        }catch(e){if(e instanceof ConflictException||e instanceof BadRequestException||e instanceof NotFoundException||e instanceof ForbiddenException)throw new ConflictException('Não foi possível atualizar todos os vínculos. Confira a situação e as contribuições da atividade.');throw e;}
+      }
+    }};
+  }
   private async transicionar(contratoId: string, id: string, ator: UsuarioAutenticado,
     origem: 'REGISTRADA' | 'PENDENTE_CONCLUSAO' | 'VERIFICADA' | 'ARQUIVADA',
     destino: 'REGISTRADA' | 'PENDENTE_CONCLUSAO' | 'VERIFICADA' | 'ARQUIVADA',
     acao: AcaoAuditoria, justificativa: string) {
     return this.auditoria.executarComAuditoria(ator, manager =>
-      this.transicionarNaTransacao(manager, contratoId, id, ator, origem, destino, acao, justificativa));
+      (acao === AcaoAuditoria.ATIVIDADE_VERIFICADA || acao === AcaoAuditoria.ATIVIDADE_CONCLUSAO_SOLICITADA)
+        ? this.prepararDecisaoCompartilhada(manager,contratoId,id,ator,justificativa,acao)
+        : this.transicionarNaTransacao(manager, contratoId, id, ator, origem, destino, acao, justificativa));
   }
 
-  /** Solicitação compartilhada, preservando decisão separada por contrato. */
+  /** Uma solicitação para todos os vínculos vigentes. */
   async solicitarNaTransacao(manager: EntityManager, contratoId: string, id: string, ator: UsuarioAutenticado) {
-    const acao = await this.transicionarNaTransacao(manager, contratoId, id, ator,
-      'REGISTRADA', 'PENDENTE_CONCLUSAO', AcaoAuditoria.ATIVIDADE_CONCLUSAO_SOLICITADA, '');
+    const acao = await this.prepararDecisaoCompartilhada(manager,contratoId,id,ator,'',AcaoAuditoria.ATIVIDADE_CONCLUSAO_SOLICITADA);
     await this.auditoria.registrarNaTransacao(manager, ator, acao.evento);
     if (acao.aposEvento) await acao.aposEvento(manager);
     return acao.resultado;
@@ -861,8 +902,7 @@ export class AtividadesService implements OnModuleInit {
 
   /** Aprovação compartilhada, na transação única do grupo; reaproveita regras e auditoria HU08. */
   async verificarNaTransacao(manager: EntityManager, contratoId: string, id: string, ator: UsuarioAutenticado) {
-    const acao = await this.transicionarNaTransacao(manager, contratoId, id, ator,
-      'PENDENTE_CONCLUSAO', 'VERIFICADA', AcaoAuditoria.ATIVIDADE_VERIFICADA, '');
+    const acao = await this.prepararDecisaoCompartilhada(manager,contratoId,id,ator,'',AcaoAuditoria.ATIVIDADE_VERIFICADA);
     await this.auditoria.registrarNaTransacao(manager, ator, acao.evento);
     if (acao.aposEvento) await acao.aposEvento(manager);
     return acao.resultado;

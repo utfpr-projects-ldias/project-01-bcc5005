@@ -6,7 +6,7 @@ test('detalhe não mostra Fechar novamente enquanto houver atividade Registrada'
   const fonte = ler('src/app/contratos/components/modal-detalhe-entregavel.tsx');
   expect(fonte).toContain("useElegibilidadeEntregavel(contratoId, entregavelId)");
   expect(fonte).toContain('elegibilidade?.podeAprovar && !bloqueioDocumental');
-  expect(fonte).toContain('elegibilidadeQuery.erro || elegibilidadeQuery.carregando || elegibilidadeQuery.atualizando');
+  expect(fonte).toContain('elegibilidadeQuery.erro ? undefined : elegibilidadeQuery.dados');
 });
 test('criação invalida todas as consultas de atividades, inclusive a contagem de pendências', () => {
   const fonte = ler('src/hooks/use-atividades.ts');

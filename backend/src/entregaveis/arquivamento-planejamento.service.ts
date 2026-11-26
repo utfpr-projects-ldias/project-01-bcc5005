@@ -1,5 +1,4 @@
 import { exigirPermissaoTransacional } from '../autorizacao/permissao-transacional.js';
-import { possuiDecisoesDescendentesPendentes } from './decisoes-descendentes.js';
 import { validarContribuicaoEvidencia } from './quantidade-evidencias.js';
 import { validarSaldoParcelas } from '../execucao/parcelas-execucao.js';
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
@@ -48,12 +47,8 @@ export class ArquivamentoPlanejamentoService {
       const e = await repo.findOneBy({ contratoId, id });
       if (!e) throw new NotFoundException('Entregável não encontrado neste contrato');
       await this.etapaAtiva(m, e);
-      if (['PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(e.statusExecucao??'') || e.regularizacaoDocumentalSolicitada) throw new ConflictException('Resolva a solicitação do entregável antes de arquivar ou reativar');
       if (Boolean(e.arquivadoEm) === arquivar) throw new ConflictException(arquivar ? 'Entregável já arquivado' : 'Entregável já ativo');
-      if (arquivar && (['CONCLUIDO', 'CONCLUIDO_PARCIALMENTE', 'FINALIZADO'].includes(e.statusExecucao ?? '') && !e.reabertoEm))
-        throw new ConflictException('Entregável concluído: reabra antes de arquivar');
-      if (arquivar && await possuiDecisoesDescendentesPendentes(m,e))
-        throw new ConflictException('Resolva as decisões e contribuições pendentes dos descendentes antes de arquivar o entregável.');
+      // Preserva solicitações, lançamentos, comprovantes e status original.
       if (!arquivar) {
         const contrato = await m.getRepository(Contrato).findOneBy({id:contratoId});
         if (contrato?.modoCalculo === 'PONDERADO') {

@@ -19,13 +19,13 @@ export function centesimos(valor: unknown): number {
 }
 export const percentualDireto = (tipo:string) => tipo==='UNICO'||tipo==='CONTINUO';
 export const aceitaParcelas = (tipo:string) => percentualDireto(tipo)||tipo==='RECORRENTE';
-export type ParcelaPublica = ExecucaoLancamento & { situacao:'PENDENTE'|'APROVADO'|'REJEITADO'|'INATIVO'; reconhecido:number; reservado:number; titulo:string; evidenciaId?:string };
+export type ParcelaPublica = ExecucaoLancamento & { situacao:'PENDENTE'|'APROVADO'|'REJEITADO'|'INATIVO'; reconhecido:number; reservado:number; titulo:string; evidenciaId?:string; situacaoRegistro?:string };
 export async function parcelas(m:EntityManager,e:Entregavel,atividadeIds?:string[]):Promise<ParcelaPublica[]> {
   if (!e.execucoesIntegradas || atividadeIds?.length===0) return [];
   const linhas=await m.find(ExecucaoLancamento,{where:{contratoId:e.contratoId,entregavelId:e.id,...(atividadeIds?{origem:'ATIVIDADE' as const,origemId:In(atividadeIds)}:{})},order:{dataExecucao:'DESC',criadoEm:'DESC',id:'DESC'}});
   const atividades = new Map<string,Promise<AtividadeEntity|null>>();
   return Promise.all(linhas.map(async l=>{
-    let situacao:ParcelaPublica['situacao']=l.status, titulo='Registro manual', evidenciaId:string|undefined;
+    let situacao:ParcelaPublica['situacao']=l.status, titulo='Registro manual', evidenciaId:string|undefined, situacaoRegistro:string|undefined;
     let aprovado=l.centesimosAprovados ?? l.centesimos;
     if(l.origem==='ATIVIDADE') {
       let consulta=atividades.get(l.origemId!);
@@ -33,6 +33,7 @@ export async function parcelas(m:EntityManager,e:Entregavel,atividadeIds?:string
       const a=await consulta;
       titulo=a?.titulo??'Atividade não disponível';
       situacao=!a||a.excluidaEm||a.status==='ARQUIVADA'||(!a.entregaveis.some(x=>x.id===e.id)||(l.ocorrenciaId&&a.ocorrenciaId!==l.ocorrenciaId&&!a.ocorrencias?.some(x=>x.id===l.ocorrenciaId)))?'INATIVO':a.status==='VERIFICADA'?'APROVADO':'PENDENTE';
+      situacaoRegistro=situacao==='INATIVO'?(a?.excluidaEm?'EXCLUIDO':a?.status==='ARQUIVADA'?'ARQUIVADO':'SEM_EFEITO'):a?.status;
       aprovado=l.centesimos;
     } else if(l.origem==='EVIDENCIA') {
       const c=await m.findOneBy(ComprovanteEvidencia,{id:l.origemId!,contratoId:e.contratoId,entregavelId:e.id});
@@ -40,9 +41,10 @@ export async function parcelas(m:EntityManager,e:Entregavel,atividadeIds?:string
       const atual=ev?await m.findOne(ComprovanteEvidencia,{where:{evidenciaEsperadaId:ev.id,contratoId:e.contratoId,entregavelId:e.id},order:{criadoEm:'DESC',id:'DESC'}}):null;
       titulo=c?.nomeOriginal??'Evidência não disponível'; evidenciaId=ev?.id;
       situacao=!c||!ev||ev.arquivadoEm||atual?.id!==c.id?'INATIVO':c.status==='REJEITADA'?'REJEITADO':c.status==='VERIFICADA'&&!ev.reabertoEm&&c.verificadoEm&&(l.centesimosAprovados!=null||l.referenciaId!=null)?'APROVADO':'PENDENTE';
+      situacaoRegistro=situacao==='INATIVO'?(ev?.arquivadoEm?'ARQUIVADO':c&&atual&&atual.id!==c.id?'SUBSTITUIDO':'SEM_EFEITO'):ev?.reabertoEm||c?.status==='REJEITADA'?'EM_REVISAO':c?.status;
     }
-    if(l.ocorrenciaId && !await m.findOneBy(Ocorrencia,{id:l.ocorrenciaId,contratoId:e.contratoId,entregavelId:e.id,substituidaEm:IsNull()}))situacao='INATIVO';
-    return {...l,titulo,evidenciaId,situacao,reconhecido:situacao==='APROVADO'&&!l.referenciaId?aprovado:0,reservado:situacao==='PENDENTE'&&!l.referenciaId?l.centesimos:0};
+    if(l.ocorrenciaId && !await m.findOneBy(Ocorrencia,{id:l.ocorrenciaId,contratoId:e.contratoId,entregavelId:e.id,substituidaEm:IsNull()})){situacao='INATIVO';situacaoRegistro=situacaoRegistro==='ARQUIVADO'||situacaoRegistro==='EXCLUIDO'?situacaoRegistro:'SUBSTITUIDO';}
+    return {...l,titulo,evidenciaId,situacao,situacaoRegistro,reconhecido:situacao==='APROVADO'&&!l.referenciaId?aprovado:0,reservado:situacao==='PENDENTE'&&!l.referenciaId?l.centesimos:0};
   }));
 }
 export async function resumoParcelas(m:EntityManager,e:Entregavel) {

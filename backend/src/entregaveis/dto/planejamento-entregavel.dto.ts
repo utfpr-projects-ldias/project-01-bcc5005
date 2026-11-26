@@ -9,7 +9,7 @@ import { TipoEntregavel } from '../tipo-entregavel.enum.js';
 /** Datas são civis (YYYY-MM-DD); decimais são strings para não perder precisão. */
 export class CriarEntregavelDto {
   @IsUUID('4') etapaId!: string;
-  @IsString() @IsNotEmpty() @MaxLength(42) nome!: string;
+  @IsString() @IsNotEmpty() @MaxLength(45) nome!: string;
   @IsEnum(TipoEntregavel) tipo!: TipoEntregavel;
   @IsOptional() @IsString() @MaxLength(15) codigo?: string | null;
   @IsOptional() @IsString() @MaxLength(200) descricao?: string | null;

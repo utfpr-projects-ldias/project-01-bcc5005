@@ -1,5 +1,7 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {useRepositorioConsultasOpcional} from '@/app/components/provedor-consultas';
+import {sincronizarEvidenciaCompartilhada, EVENTO_REGISTROS_COMPARTILHADOS} from '@/lib/sincronizar-evidencia-compartilhada';
 import { aprovarCompartilhada, solicitarCompartilhada, consultarCompartilhada, type ResumoCompartilhada } from '@/lib/atividades-compartilhadas';
 
 /** Os vínculos sem acesso não são enumerados: apenas o contador agregado é visível. */
@@ -7,26 +9,31 @@ export function ProgressoAtividadeCompartilhada({ grupoId, onAtualizada }: { gru
   const [resumo, setResumo] = useState<ResumoCompartilhada | null>(null);
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const cache=useRepositorioConsultasOpcional();
+  const geracao=useRef(0);
   const carregar = useCallback(async () => {
-    try { setResumo(await consultarCompartilhada(grupoId)); setErro(''); }
-    catch (e) { setErro(e instanceof Error ? e.message : 'Consulta indisponível'); }
+    const atual=++geracao.current;
+    try { const resultado=await consultarCompartilhada(grupoId); if(atual===geracao.current){setResumo(resultado);setErro('');} }
+    catch (e) { if(atual===geracao.current)setErro(e instanceof Error ? e.message : 'Consulta indisponível'); }
   }, [grupoId]);
   useEffect(() => {
     let ativo = true;
     queueMicrotask(() => { if (ativo) void carregar(); });
-    return () => { ativo = false; };
+    const atualizar=()=>{if(ativo)void carregar();};
+    window.addEventListener(EVENTO_REGISTROS_COMPARTILHADOS,atualizar);
+    return () => { ativo = false; geracao.current++; window.removeEventListener(EVENTO_REGISTROS_COMPARTILHADOS,atualizar); };
   }, [carregar]);
   const disponiveis = resumo?.atividades.filter(a => a.podeAprovar).length ?? 0;
   const solicitaveis = resumo?.atividades.filter(a => a.podeSolicitar).length ?? 0;
   async function solicitar() {
     setSalvando(true); setErro('');
-    try { await solicitarCompartilhada(grupoId); await carregar(); onAtualizada?.(); }
+    try { await solicitarCompartilhada(grupoId); sincronizarEvidenciaCompartilhada(cache,grupoId); await carregar(); onAtualizada?.(); }
     catch (e) { setErro(e instanceof Error ? e.message : 'Não foi possível solicitar'); }
     finally { setSalvando(false); }
   }
   async function aprovar() {
     setSalvando(true); setErro('');
-    try { await aprovarCompartilhada(grupoId); await carregar(); onAtualizada?.(); }
+    try { await aprovarCompartilhada(grupoId); sincronizarEvidenciaCompartilhada(cache,grupoId); await carregar(); onAtualizada?.(); }
     catch (e) { setErro(e instanceof Error ? e.message : 'Não foi possível aprovar'); }
     finally { setSalvando(false); }
   }

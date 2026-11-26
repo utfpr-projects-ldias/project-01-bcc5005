@@ -8,12 +8,12 @@ export class CriarFuncionarioDto {
   @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : value)
   @IsString()
   @MinLength(3)
-  @MaxLength(160)
-  @Matches(REGEX_NOME_COMPLETO, { message: 'Informe nome e sobrenome válidos' })
+  @MaxLength(30)
+  @Matches(REGEX_NOME_COMPLETO, { message: 'Informe um nome válido' })
   nome!: string;
 
   @IsEmail()
-  @MaxLength(254)
+  @MaxLength(40)
   email!: string;
 
   @IsEnum(PerfilUsuario)
@@ -21,7 +21,7 @@ export class CriarFuncionarioDto {
 
   @IsString()
   @MinLength(12)
-  @MaxLength(128)
+  @MaxLength(30)
   @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^a-zA-Z0-9]).+$/)
   senhaInicial!: string;
 }

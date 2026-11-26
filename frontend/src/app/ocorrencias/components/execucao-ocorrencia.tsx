@@ -1,6 +1,7 @@
 'use client';
+import { BotaoExcluirModal, BotaoEditarModal } from '@/app/components/botoes-modal';
 import { ConfirmacaoSimples } from '@/app/components/confirmacao-simples';
-import { BotaoEditarModal } from '@/app/components/botoes-modal';
+
 import { PainelComprovacaoEvidencia } from '@/app/contratos/components/painel-comprovacao-evidencia';
 import { CampoDataCivil } from '@/app/components/campo-data-civil';
 import { createPortal } from 'react-dom';
@@ -56,8 +57,8 @@ export function ResumoLateralOcorrencia({ocorrencia,unidade,entregavel,periodo}:
 }
 
 /** Detalhamento da execução física: lançamento manual é independente da medição aprovada por atividade. */
-export function ExecucaoOcorrencia({ contratoId, ocorrencia, unidade, podeRegistrar, podeCorrigir, podeBloquear, podeExcluir, podeAprovar=false, usuarioId, onAtualizar }: {
-  contratoId:string; ocorrencia:Ocorrencia; unidade:string; podeRegistrar:boolean; podeCorrigir:boolean; podeBloquear:boolean; podeExcluir:boolean; podeAprovar?:boolean; usuarioId?:string; onAtualizar:()=>Promise<unknown>;
+export function ExecucaoOcorrencia({ contratoId, ocorrencia, unidade, podeRegistrar, podeCorrigir, podeCorrigirAprovada=false, podeBloquear, podeExcluir, podeAprovar=false, usuarioId, onAtualizar }: {
+  contratoId:string; ocorrencia:Ocorrencia; unidade:string; podeRegistrar:boolean; podeCorrigir:boolean; podeCorrigirAprovada?:boolean; podeBloquear:boolean; podeExcluir:boolean; podeAprovar?:boolean; usuarioId?:string; onAtualizar:()=>Promise<unknown>;
 }) {
   const [lancamentos,setLancamentos]=useState<LancamentoOcorrencia[]>([]);
   const [carregando,setCarregando]=useState(false);const [ocupado,setOcupado]=useState(false);
@@ -182,7 +183,7 @@ export function ExecucaoOcorrencia({ contratoId, ocorrencia, unidade, podeRegist
             <div className="flex flex-wrap items-start justify-between gap-2"><div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
               <strong className="tabular-nums">{quantidadeApiParaBR(item.quantidade)} {unidade}</strong>
               <p className="text-xs text-foreground/60">{item.dataExecucao?`Realizado em ${item.dataExecucao.slice(0,10).split('-').reverse().join('/')}`:`Registrado em ${new Date(item.criadoEm).toLocaleString('pt-BR')}`}{item.alteradoEm?' · corrigido posteriormente':''}</p>
-              <p className="text-xs text-foreground/65">{item.situacao==='PENDENTE'?'Pendente de aprovação':item.situacao==='REJEITADO'?'Rejeitado · pendente de correção':'Aprovado'}</p>{item.observacao&&<p className="text-xs break-words">{item.observacao}</p>}{item.justificativa&&<p className="mt-1 break-words text-xs text-foreground/70">{item.justificativa}</p>}
+              <p className="text-xs text-foreground/65">{item.situacao==='PENDENTE'?'Pendente de aprovação':item.situacao==='REJEITADO'?'Em revisão':'Aprovado'}</p>{item.observacao&&<p className="text-xs break-words">{item.observacao}</p>}{item.justificativa&&<p className="mt-1 break-words text-xs text-foreground/70">{item.justificativa}</p>}
             </div>
             <div className="pi-lancamento-acoes-v18">
               {aberta(ocorrencia)&&podeAprovar&&['PENDENTE','REJEITADO'].includes(item.situacao??'APROVADO')&&!item.bloqueadoEm&&<><button type="button" className={`${ACAO} text-green-400 border-green-500/40`} disabled={ocupado} onClick={()=>void decidir(item.id,'APROVADO')}>Aprovar</button>{item.situacao==='PENDENTE'&&<button type="button" className={`${ACAO} text-error-text border-red-500/40`} disabled={ocupado} onClick={()=>{versaoRejeicao.current=item.versao;setRejeitando(item.id);setMotivoRejeicao('');}}>Rejeitar</button>}</>}
@@ -195,14 +196,8 @@ export function ExecucaoOcorrencia({ contratoId, ocorrencia, unidade, podeRegist
                   {item.bloqueadoEm?<path d="M8 10V7a4 4 0 0 1 8 0v3"/>:<path d="M8 10V7a4 4 0 0 1 7.5-2"/>}
                 </svg>
               </button>}
-              {aberta(ocorrencia)&&podeCorrigir&&!item.bloqueadoEm&&<BotaoEditarModal rotulo="Editar lançamento" className="pi-editar-registro pi-lancamento-topo-v18" onClick={()=>{versaoCorrecao.current=item.versao;setCorrigindo(item.id);setQuantidadeCorrecao(quantidadeApiParaBR(item.quantidade));setMotivoCorrecao('');setDataCorrecao(item.dataExecucao??item.criadoEm.slice(0,10));setObsCorrecao(item.observacao??'');}}/>}
-              {aberta(ocorrencia)&&podeExcluir&&!item.bloqueadoEm&&<button type="button" aria-label="Excluir lançamento" title="Excluir lançamento" disabled={ocupado}
-                className="pi-lancamento-excluir-v18 rounded-lg border border-red-700/50 p-2 text-error-text transition hover:bg-red-700/15 focus-visible:outline-2 focus-visible:outline-red-400 disabled:opacity-40"
-                onClick={()=>{setCorrigindo(null);setExcluindo(item.id);setMotivoExclusao('');}}>
-                <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 6h18M8 6V4h8v2m3 0-1 14H6L5 6m5 4v7m4-7v7"/>
-                </svg>
-              </button>}
+              {aberta(ocorrencia)&&podeCorrigir&&(['PENDENTE','REJEITADO'].includes(item.situacao??'APROVADO')||podeCorrigirAprovada)&&!item.bloqueadoEm&&<BotaoEditarModal rotulo="Editar lançamento" className="pi-editar-registro pi-lancamento-topo-v18" onClick={()=>{versaoCorrecao.current=item.versao;setCorrigindo(item.id);setQuantidadeCorrecao(quantidadeApiParaBR(item.quantidade));setMotivoCorrecao('');setDataCorrecao(item.dataExecucao??item.criadoEm.slice(0,10));setObsCorrecao(item.observacao??'');}}/>}
+              {aberta(ocorrencia)&&podeExcluir&&!item.bloqueadoEm&&<BotaoExcluirModal rotulo="Excluir lançamento" disabled={ocupado} className="pi-lancamento-excluir-v18" onClick={()=>{setCorrigindo(null);setExcluindo(item.id);setMotivoExclusao('');}}/>}
             </div></div>
             {rejeitando===item.id&&<form onSubmit={ev=>{ev.preventDefault();void decidir(item.id,'REJEITADO');}} className="mt-2 space-y-2"><label className="block text-xs">Justificativa<input className={CAMPO} value={motivoRejeicao} maxLength={300} required onChange={ev=>setMotivoRejeicao(ev.target.value)}/></label><button type="button" className={ACAO} onClick={()=>setRejeitando(null)}>Cancelar</button> <button type="submit" className={ACAO} disabled={ocupado||!motivoRejeicao.trim()}>Confirmar rejeição</button></form>}
             {excluindo===item.id&&<form onSubmit={excluir} className="mt-3 rounded-lg border border-red-700/60 p-3">

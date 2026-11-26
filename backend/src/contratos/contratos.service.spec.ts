@@ -1260,15 +1260,20 @@ test('B02: gestor sem ACL não passa para a mutação da raiz', async () => {
 });
 
 
-test('B03: não encerra antecipadamente enquanto houver decisão descendente', async () => {
+test('Encerramento antecipado preserva decisões descendentes pendentes', async () => {
   const c = montarCenario();
   c.repositorio.findOne.mockResolvedValue(contratoBase());
-  Object.assign(c.manager, { query: jest.fn(async () => [{ possui: true }]) });
-  await expect(c.service.encerrarAntecipadamente(ID_CONTRATO,'Encerramento administrativo justificado.',ator)).rejects.toThrow('Decida as solicitações');
-  expect(c.repositorio.save).not.toHaveBeenCalled();
-  c.repositorio.findOne.mockResolvedValue(contratoBase({ conclusaoSolicitadaEm:new Date(), encerramentoSolicitado:true, tipoEncerramentoSolicitado:'ANTECIPADO', motivoEncerramento:'Encerramento administrativo justificado.' }));
-  await expect(c.service.concluir(ID_CONTRATO, ator)).rejects.toThrow('Decida as solicitações');
-  expect(c.eventos).toHaveLength(0);
+  const consultarFilhos = jest.fn(async () => [{ possui: true }]);
+  Object.assign(c.manager, { query: consultarFilhos });
+  const pedido = await c.service.encerrarAntecipadamente(ID_CONTRATO,'Encerramento administrativo justificado.',ator);
+  expect(pedido.encerramentoSolicitado).toBe(true);
+  expect(pedido.tipoEncerramentoSolicitado).toBe('ANTECIPADO');
+  c.repositorio.findOne.mockResolvedValue(pedido);
+  const encerrado = await c.service.concluir(ID_CONTRATO, ator);
+  expect(encerrado.status).toBe(StatusContrato.ENCERRADO);
+  expect(consultarFilhos).not.toHaveBeenCalled();
+  expect(c.execucao.consultarNaTransacao).not.toHaveBeenCalled();
+  expect(c.eventos).toHaveLength(2);
 });
 
 test('B03: revisão com progresso incompleto não pode ser fechada', async () => {

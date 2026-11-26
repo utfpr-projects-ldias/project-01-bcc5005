@@ -438,3 +438,18 @@ test('R51: resposta confirmada da revisão atual não some durante revalidação
   await waitFor(()=>expect(editarContribuicaoEvidencia).toHaveBeenCalledWith('contrato-1','entregavel-1','evidencia-1','comprovante-1',{modalidade:'PERCENTUAL',valor:'12.50'}));
   expect(enviar).not.toHaveBeenCalled();
  });
+
+test('um único botão de vínculos consulta também registros de outros contratos',async()=>{
+  consultar.mockResolvedValue({...dados,contrato:'001',entregavel:'Entrega local',vinculosAtuais:[],compartilhamentos:[{contratoId:'contrato-2',contrato:'002',entregavelId:'entregavel-2',entregavel:'Entrega remota',esperadaId:'evidencia-2',comprovanteId:'comprovante-2',status:'PENDENTE_VERIFICACAO',vigente:true,somenteDocumento:true,podeVerificar:false,vinculosAtuais:[{id:'ocorrencia-2',titulo:'Ocorrência remota',tipo:'ocorrencia'}]}]});
+  render(<PainelComprovacaoEvidencia {...props}/>);
+  const botao=await screen.findByRole('button',{name:'Vínculos e contribuição de execução'});
+  expect(screen.getAllByRole('button',{name:'Vínculos e contribuição de execução'})).toHaveLength(1);
+  fireEvent.click(botao);
+  const modal=screen.getByRole('dialog',{name:'Vínculos da evidência'});
+  fireEvent.click(within(modal).getByRole('button',{name:'Ocorrências'}));
+  expect(within(modal).getByText('Ocorrência remota')).toBeInTheDocument();
+  fireEvent.change(within(modal).getByLabelText('Filtrar por contrato'),{target:{value:'contrato-1'}});
+  expect(within(modal).queryByText('Ocorrência remota')).not.toBeInTheDocument();
+  fireEvent.change(within(modal).getByLabelText('Filtrar por contrato'),{target:{value:'contrato-2'}});
+  expect(within(modal).getByText('Ocorrência remota')).toBeInTheDocument();
+});

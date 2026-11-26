@@ -84,8 +84,8 @@ describe('DTOs de contratos — validação de entrada', () => {
   });
 });
 
-  test('limites 32 de processo administrativo e unidade responsável, sem truncar valores', () => {
-    expect(validarCriacao({ ...base, processoAdministrativo: 'P'.repeat(32), unidadeResponsavel: 'U'.repeat(32) })).toHaveLength(0);
-    expect(validarCriacao({ ...base, processoAdministrativo: 'P'.repeat(33) }).length).toBeGreaterThan(0);
-    expect(validarAtualizacao({ unidadeResponsavel: 'U'.repeat(33) }).length).toBeGreaterThan(0);
+  test('limites 40 de processo administrativo e unidade responsável, sem truncar valores', () => {
+    expect(validarCriacao({ ...base, processoAdministrativo: 'P'.repeat(40), unidadeResponsavel: 'U'.repeat(40) })).toHaveLength(0);
+    expect(validarCriacao({ ...base, processoAdministrativo: 'P'.repeat(41) }).length).toBeGreaterThan(0);
+    expect(validarAtualizacao({ unidadeResponsavel: 'U'.repeat(41) }).length).toBeGreaterThan(0);
   });
