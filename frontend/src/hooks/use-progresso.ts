@@ -2,7 +2,10 @@
 
 import { useConsulta, useRepositorioConsultasOpcional } from '@/app/components/provedor-consultas';
 
+export type RegistroAtrasadoContinuo={id:string;tipo:'OCORRENCIA'|'ATIVIDADE'|'EVIDENCIA';data:string;prazo:string|null;enviadoEm:string|null};
+export type AcompanhamentoContinuo={registrosAtrasados?:RegistroAtrasadoContinuo[];temAtrasos?:boolean;diasRegistrados:{dia:string;estado:string;total:number}[];total:number;concluidos:number;pendentes:number;emExecucao:number;dias:number;transcorridos:number;prazo:number|null;vigenciaAtingida:boolean;semPendenciasOperacionais:boolean;semDatasInvalidas:boolean;apto:boolean;percentualOficial:number};
 export type ProgressoEntregavel = {
+  acompanhamento?:AcompanhamentoContinuo;
   entregavelId: string; nome: string; tipo: 'QUANTITATIVO' | 'RECORRENTE' | 'MARCO' | 'UNICO' | 'CONTINUO';
   realizado: string | null; previsto: string | null; percentualExecucao: number | null;
   pesoOperacional: string | null; participacaoOperacional?: number | null; dataEfetivaMarco: string | null;

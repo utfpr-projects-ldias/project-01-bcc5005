@@ -25,7 +25,7 @@ export function NovoRegistroContrato({contratoId,contexto,bloqueado,abrir}:{cont
   const disponivel:Record<OrigemExecucao,boolean>={MANUAL:pode('editarExecucaoFisica')||pode('registrarExecucaoOcorrencia'),ATIVIDADE:pode('registrarAtividades'),EVIDENCIA:pode('criarEvidencias')||pode('editarEvidencias'),OCORRENCIA:pode('criarOcorrencias')};
   const etapasValidas=(etapas.dados??[]).filter(e=>!e.arquivadoEm&&!e.conclusaoSolicitadaEm&&!e.encerramentoSolicitadoEm&&!encerrados.includes(e.status));
   const elegiveis=(entregaveis.dados??[]).filter(e=>!e.arquivadoEm&&!e.regularizacaoDocumentalSolicitada&&!encerrados.includes(e.statusExecucao??'')&&etapasValidas.some(t=>t.id===e.etapaId));
-  const aceitaOrigem=(e: (typeof elegiveis)[number], tipo: OrigemExecucao)=>disponivel[tipo]&&(tipo!=='OCORRENCIA'||!['UNICO','RECORRENTE'].includes(e.tipo))&&(tipo!=='MANUAL'||e.tipo!=='MARCO');
+  const aceitaOrigem=(e: (typeof elegiveis)[number], tipo: OrigemExecucao)=>disponivel[tipo]&&(tipo!=='OCORRENCIA'||!['UNICO','RECORRENTE'].includes(e.tipo))&&(tipo!=='MANUAL'||!['MARCO','CONTINUO'].includes(e.tipo));
   const destinosOrigem=elegiveis.filter(e=>aceitaOrigem(e,origem));
   const etapasOrigem=etapasValidas.filter(e=>destinosOrigem.some(d=>d.etapaId===e.id));
   const itens=destinosOrigem.filter(e=>!etapa||e.etapaId===etapa);

@@ -18,6 +18,7 @@ export class EnviarComprovanteDto {
   @IsOptional() @IsString() @MaxLength(100) referenciaExecucao?: string;
 }
 export class EditarEvidenciaEsperadaDto {
+  @IsOptional() @IsString() @Matches(/^\d{4}-\d{2}-\d{2}$/) dataAcompanhamento?:string;
   @IsOptional() @IsString() @IsNotEmpty() @MaxLength(50) tipoEvidencia?: string;
   @IsOptional() @IsString() @IsNotEmpty() @MaxLength(65) descricao?: string | null;
   @IsOptional() @IsBoolean() obrigatoria?: boolean;

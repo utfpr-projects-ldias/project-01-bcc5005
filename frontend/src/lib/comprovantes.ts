@@ -37,7 +37,7 @@ export type DetalheEvidencia = {
   tipoEntregavel?:string; quantidadePrevista?:string|null; ocorrenciasDescritivas?:{id:string;titulo:string;status:string}[];
   unidadeMedida?: string | null; quantidadeMensuravel?: boolean; quantidadeDiretaPermitida?:boolean;
   execucoesQuantitativas?: { ocorrenciaId: string; referencia: string; rotulo: string; quantidade: string }[];
-  ocorrenciasQuantitativas?: { id: string; titulo: string; status: string }[];
+  ocorrenciasQuantitativas?: { id: string; titulo: string; status: string; unidadeMedida?:string|null }[];
   historico?: EventoRastreabilidadeEvidencia[];
   compartilhamentos?: VinculoCompartilhado[];
   vinculosAtuais?: VinculoLocalEvidencia[];
@@ -191,7 +191,7 @@ export function alterarArquivoEvidencia(contrato: string, entregavel: string, es
 }
 
 export function criarEvidenciaEsperada(contrato: string, entregavel: string,
-  dados: { tipoEvidencia: string; descricao: string | null; obrigatoria: boolean; rascunhoEnvio?:RascunhoEnvioEvidencia }) {
+  dados: { tipoEvidencia: string; descricao: string | null; obrigatoria: boolean; dataAcompanhamento?:string; rascunhoEnvio?:RascunhoEnvioEvidencia }) {
   const caminho = `/contratos/${encodeURIComponent(contrato)}/entregaveis/${encodeURIComponent(entregavel)}/evidencias-esperadas`;
   return pedir<{ id: string; tipoEvidencia: string }>(caminho, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dados),
@@ -202,7 +202,7 @@ export function excluirEvidenciaArquivada(c: string, e: string, id: string) {
   return pedir<{ id: string; excluido: boolean; limpezaPendente?: number }>(`${base(c, e, id)}/excluir`, { method: 'POST' });
 }
 
-export type EvidenciaConsolidada = {arquivadoEm?:string|null; id:string; entregavelId:string; entregavel:string; etapa:string; tipoEvidencia:string; descricao:string|null; obrigatoria:boolean; status:StatusComprovante; comprovanteId:string|null; nomeOriginal:string|null; criadoEm:string|null; criadoEmCadastro?:string|null; enviadoEm?:string|null; tamanho:number|null; atividades:string[]; ocorrencias:string[] };
+export type EvidenciaConsolidada = {dataReferencia?:string|null;dataAcompanhamento?:string|null;arquivadoEm?:string|null; id:string; entregavelId:string; entregavel:string; etapa:string; tipoEvidencia:string; descricao:string|null; obrigatoria:boolean; status:StatusComprovante; comprovanteId:string|null; nomeOriginal:string|null; criadoEm:string|null; criadoEmCadastro?:string|null; enviadoEm?:string|null; tamanho:number|null; atividades:string[]; ocorrencias:string[] };
 export function consultarEvidenciasConsolidadas(contratoId:string,filtros:Record<string,string>,signal?:AbortSignal) {
   const params=new URLSearchParams(Object.entries(filtros).filter(([,valor])=>Boolean(valor)));
   return pedir<{data:EvidenciaConsolidada[];meta:{total:number;page:number;limit:number}}>(`/contratos/${encodeURIComponent(contratoId)}/entregaveis/evidencias-consolidadas?${params}`,{signal});

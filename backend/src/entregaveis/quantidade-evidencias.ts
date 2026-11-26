@@ -104,7 +104,7 @@ export async function listarReferenciasDiretas(m: EntityManager, e: Entregavel):
 
 export async function validarOcorrenciaQuantidade(m: EntityManager, e: Entregavel, vinculo: ReturnType<typeof normalizarVinculoQuantidade>) {
   if (!vinculo) return;
-  if (!['QUANTITATIVO','RECORRENTE'].includes(e.tipo) || !e.unidadeMedida?.trim())
+  if (e.tipo!=='MARCO' && (!['QUANTITATIVO','RECORRENTE'].includes(e.tipo) || !e.unidadeMedida?.trim()))
     throw new ConflictException('Quantidade exige entregável mensurável com unidade de medida.');
   if (!vinculo.ocorrenciaQuantidadeId) {
     if (e.tipo!=='QUANTITATIVO' || !(Number(e.quantidadePrevista)>0) || Number(e.quantidadeRealizada??0)!==0)
@@ -120,7 +120,7 @@ export async function validarOcorrenciaQuantidade(m: EntityManager, e: Entregave
   }
   if(e.quantidadeDiretaIntegrada)throw new ConflictException('Este entregável possui medição direta integrada. Não misture com ocorrências.');
   const o = await m.findOneBy(Ocorrencia, { id: vinculo.ocorrenciaQuantidadeId, contratoId: e.contratoId, entregavelId: e.id });
-  if (!o || o.substituidaEm || o.modoRegistro !== 'QUANTITATIVO')
+  if (!o || o.substituidaEm || o.modoRegistro !== 'QUANTITATIVO' || (e.tipo==='MARCO' && (!o.metaMarcoOrigemId || !o.unidadeMedidaMarco)))
     throw new ConflictException('Selecione uma ocorrência quantitativa vigente deste entregável.');
   if (vinculo.origemQuantidade === 'COMPROVACAO') {
     const fontes = await listarExecucoesQuantitativas(m, e.contratoId, [o.id]);

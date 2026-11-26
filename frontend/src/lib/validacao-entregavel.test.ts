@@ -151,3 +151,13 @@ test('limites de cadastro de metadados coincidem com os contadores', () => {
     expect(validarEntregavel(r).sucesso).toBe(false);
   }
 });
+
+test('frequência do contínuo é persistida sem utilizar a periodicidade recorrente',()=>{
+ const r=modelo('CONTINUO'); r.criterioConclusao='Manter serviço operacional';
+ for(const frequencia of ['DIARIA','SEMANAL','MENSAL'] as const){
+  r.frequenciaAcompanhamento=frequencia;
+  const v=validarEntregavel(r);expect(v.sucesso).toBe(true);
+  if(v.sucesso)expect(v.dados).toMatchObject({frequenciaAcompanhamento:frequencia,periodicidade:null,configuracaoPeriodicidade:null});
+ }
+ r.tipo='UNICO';const v=validarEntregavel(r);if(v.sucesso)expect(v.dados.frequenciaAcompanhamento).toBeNull();
+});

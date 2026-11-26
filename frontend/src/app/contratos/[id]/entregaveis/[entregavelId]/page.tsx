@@ -62,7 +62,7 @@ export default function DetalheEntregavelPage() {
     {Boolean(erro) && <Aviso erro>{erro instanceof Error ? erro.message : 'Falha na consulta do entregável.'}</Aviso>}
     {!perfil.carregando && !erro && !habilitado && <Aviso erro>Conta sem autorização para consultar entregáveis.</Aviso>}
     {!perfil.carregando && habilitado && !consulta.carregando && !erro && !item && <Aviso erro>Entregável não encontrado neste contrato.</Aviso>}
-    {item && <div className="flex flex-wrap items-center gap-2"><h2 className="break-words text-lg font-semibold text-brand-neon">{item.nome}</h2><span className="text-xs font-semibold text-foreground/70">{rotuloEstadoEntregavel(item.statusExecucao,Boolean(item.arquivadoEm),Boolean(item.reabertoEm),Boolean(item.regularizacaoDocumentalSolicitada))}</span><EtiquetaAtraso atrasado={item.atrasado} finalizadoComAtraso={item.finalizadoComAtraso}/></div>}
+    {item && <div className="flex flex-wrap items-center gap-2"><h2 className="break-words text-lg font-semibold text-brand-neon">{item.nome}</h2><span className="text-xs font-semibold text-foreground/70">{rotuloEstadoEntregavel(item.statusExecucao,Boolean(item.arquivadoEm),Boolean(item.reabertoEm),Boolean(item.regularizacaoDocumentalSolicitada),false,item.tipo==='CONTINUO'&&Boolean(item.finalizadoComAtraso))}</span><EtiquetaAtraso atrasado={item.atrasado} finalizadoComAtraso={item.tipo!=='CONTINUO'&&item.finalizadoComAtraso}/></div>}
 
     {item && podeEditar && <div className="flex justify-end"><button type="button" disabled={salvando} aria-expanded={editando}
       aria-controls="edicao-entregavel" onClick={() => { setEditando((anterior) => !anterior); }}
@@ -71,7 +71,7 @@ export default function DetalheEntregavelPage() {
 
     </button></div>}
     {item && podeEditar && editando && <div id="edicao-entregavel" className="etapa-form-expandido">
-      <FormularioEntregavel key={item.id} contratoId={contratoId} etapaId={item.etapaId} inicial={item} onSalvar={salvar}
+      <FormularioEntregavel vigencia={raiz?{...raiz,inicioEtapa:pai?.inicioPrevisto,terminoEtapa:pai?.terminoPrevisto}:undefined} key={item.id} contratoId={contratoId} etapaId={item.etapaId} inicial={item} onSalvar={salvar}
         pesosContrato={pesos.dados} modoCalculo={execucao.progresso?.modoCalculo ?? 'SIMPLES'}
         onCancelar={() => setEditando(false)} onSalvandoMudou={setSalvando}
         podeConfigurarPesos={Boolean(permissoes?.configurarPesos)}

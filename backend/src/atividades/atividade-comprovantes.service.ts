@@ -1,3 +1,4 @@
+import { exigirRegistroMetaEditavel } from '../metas-marco/proteger-registro-meta.js';
 import { FASES_OPERACIONAIS_CONTRATO } from '../contratos/fases-operacionais.js';
 import { exigirPermissaoTransacional } from '../autorizacao/permissao-transacional.js';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
@@ -74,6 +75,7 @@ export class AtividadeComprovantesService {
       const atividade=await this.atividade(m,contratoId,atividadeId);
       if(atividade.status!=='REGISTRADA')throw new ConflictException('Reabra a atividade antes de desvincular evidências.');
       await this.exigirPaisAbertos(m,contratoId,atividadeId,atividade);
+      await exigirRegistroMetaEditavel(m,contratoId,'ATIVIDADE',atividadeId);
       const removidos=await m.query(`DELETE FROM atividade_comprovantes WHERE atividade_id=$1 AND contrato_id=$2 AND comprovante_id=$3 RETURNING comprovante_id`,[atividadeId,contratoId,comprovanteId]);
       // TypeORM PostgreSQL pode retornar [linhas, quantidade] para DELETE.
       const linhas=Array.isArray(removidos[0])?removidos[0]:removidos;
@@ -92,6 +94,7 @@ export class AtividadeComprovantesService {
       const atividade = await this.atividade(m, contratoId, atividadeId);
       if (atividade.status !== 'REGISTRADA') throw new ConflictException('Reabra a atividade antes de alterar evidências vinculadas');
       await this.exigirPaisAbertos(m,contratoId,atividadeId,atividade);
+      await exigirRegistroMetaEditavel(m,contratoId,'ATIVIDADE',atividadeId);
       const comprovantes: Array<{ id: string }> = await m.query(`
         SELECT c.id FROM comprovantes_evidencia c
           JOIN evidencias_esperadas ev ON ev.id=c.evidencia_esperada_id AND ev.arquivado_em IS NULL

@@ -40,7 +40,7 @@ test('EC-01: excesso físico limita o percentual, sem arredondar a medição de 
 test('tipos de entregável não convertem ausência ou dados inválidos em execução inventada', () => {
   expect(calcularFisico({ tipo: 'UNICO' })).toBe(0);
   expect(calcularFisico({ tipo: 'UNICO', percentualManual: 101 })).toBeNull();
-  expect(calcularFisico({ tipo: 'CONTINUO', percentualManual: 37.5 })).toBe(37.5);
+  expect(calcularFisico({ tipo: 'CONTINUO', percentualManual: 37.5 })).toBeNull();
   expect(calcularFisico({ tipo: 'CONTINUO', percentualManual: -1 })).toBeNull();
   expect(calcularFisico({ tipo: 'QUANTITATIVO', quantidadePrevista: 0, quantidadeRealizada: 1 })).toBeNull();
   expect(calcularFisico({ tipo: 'RECORRENTE', ocorrenciasPrevistas: 12, ocorrenciasConcluidas: 3 })).toBe(25);

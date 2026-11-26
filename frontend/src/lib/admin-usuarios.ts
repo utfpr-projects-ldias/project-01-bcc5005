@@ -32,7 +32,7 @@ export type OperacaoPermissao =
   'criarEvidencias' | 'editarEvidencias' | 'arquivarEvidencias' | 'reativarEvidencias' | 'reabrirEvidencias' | 'excluirEvidenciasArquivadas' |
   'alterarObrigatoriedade' | 'enviarComprovantes' | 'verificarComprovantes' | 'compartilharEvidencias' |
   'criarOcorrencias' | 'editarOcorrencias' | 'editarMetaOcorrencia' | 'vincularAtividadesOcorrencia' | 'vincularEvidenciasOcorrencia' | 'editarExigenciasOcorrencia' | 'editarPesoOcorrencia' | 'registrarExecucaoOcorrencia' | 'aprovarExecucaoManual' | 'corrigirExecucaoOcorrencia' | 'corrigirExecucaoAprovada' | 'bloquearExecucaoOcorrencia' | 'excluirExecucaoOcorrencia' | 'concluirOcorrencias' | 'reabrirOcorrencias' | 'configurarAgendaOcorrencias' | 'editarExecucaoFisica' | 'configurarPesos' |
-  'criarMetasMarco' | 'editarMetasMarco' | 'vincularMetasMarco' | 'aprovarVinculosMetasMarco' |
+  'criarMetasMarco' | 'editarMetasMarco' | 'vincularMetasMarco' | 'aprovarVinculosMetasMarco' | 'solicitarMetasMarco' | 'reabrirMetasMarco' | 'arquivarMetasMarco' | 'reativarMetasMarco' |
   'registrarAtividades' | 'editarAtividades' | 'compartilharAtividades' | 'verificarAtividades' | 'reabrirAtividades' | 'arquivarAtividades' | 'reativarAtividades' | 'excluirAtividadesArquivadas' |
   'editarContrato' | 'concluirContrato' | 'encerrarContrato' | 'reabrirContrato' | 'cancelarContrato' | 'reverterCancelamentoContrato' | 'suspenderContrato' | 'retomarContrato' | 'verificarDocumentos' | 'reabrirDocumentos' | 'verificarDocumentoPrincipal' | 'reabrirDocumentoPrincipal' | 'anexarDocumentos' | 'editarDocumentos' | 'arquivarDocumentos' | 'reativarDocumentos' | 'excluirDocumentosArquivados' | 'arquivarDocumentoPrincipal' | 'reativarDocumentoPrincipal' | 'excluirDocumentoPrincipal';
 export type PermissaoFuncionario = { contratoId: string; podeEditar: boolean;
@@ -59,7 +59,11 @@ export const OPERACOES_CONTRATO: ReadonlyArray<{ chave: OperacaoPermissao; rotul
   { chave: 'criarMetasMarco', rotulo: 'Cadastrar metas preparatórias de entregáveis Marco' },
   { chave: 'editarMetasMarco', rotulo: 'Editar metas preparatórias do Marco' },
   { chave: 'vincularMetasMarco', rotulo: 'Solicitar vínculos com metas de Marco' },
-  { chave: 'aprovarVinculosMetasMarco', rotulo: 'Aprovar ou rejeitar vínculos de Marco' },
+  { chave: 'aprovarVinculosMetasMarco', rotulo: 'Aprovar ou devolver solicitações de metas do Marco' },
+  { chave: 'solicitarMetasMarco', rotulo: 'Solicitar conclusão, encerramento ou regularização de metas' },
+  { chave: 'reabrirMetasMarco', rotulo: 'Reabrir metas fechadas' },
+  { chave: 'arquivarMetasMarco', rotulo: 'Arquivar metas fechadas' },
+  { chave: 'reativarMetasMarco', rotulo: 'Reativar metas arquivadas' },
   { chave: 'registrarAtividades', rotulo: 'Registrar atividades no diário' },
   { chave: 'compartilharAtividades', rotulo: 'Compartilhar atividades entre contratos' },
   { chave: 'editarAtividades', rotulo: 'Editar atividades registradas' },
@@ -120,7 +124,7 @@ export const OPERACOES_CONTRATO: ReadonlyArray<{ chave: OperacaoPermissao; rotul
 export function obterPermissoesIniciais(perfil: PerfilFuncionario, vinculo: PermissaoFuncionario): Record<OperacaoPermissao, boolean> {
   const resultado = permissoesPadraoVinculo(perfil, perfil === 'GESTOR' && vinculo.podeEditar ? 'edicao' : 'leitura');
   for (const { chave } of OPERACOES_CONTRATO) {
-    resultado[chave] = vinculo.permissoesEfetivas?.[chave] ?? vinculo.permissoesDetalhadas?.[chave] ?? resultado[chave];
+    resultado[chave] = vinculo.permissoesEfetivas?.[chave] ?? vinculo.permissoesDetalhadas?.[chave] ?? (vinculo.permissoesDetalhadas && ['criarMetasMarco', 'editarMetasMarco', 'vincularMetasMarco', 'solicitarMetasMarco'].includes(chave) ? false : resultado[chave]);
   }
   return resultado;
 }
@@ -141,8 +145,8 @@ export function permissoesPadraoVinculo(
 
   // Edição é diferente de aprovação, arquivo, exclusão ou reabertura.
   const operacoesBasicas: OperacaoPermissao[] = [
-    'registrarAtividades', 'editarAtividades', 'criarEvidencias', 'editarEvidencias', 'enviarComprovantes', 'anexarDocumentos', 'registrarExecucaoOcorrencia', 'editarExecucaoFisica', 'corrigirExecucaoOcorrencia',
-    ...(perfil === 'GESTOR' ? ['criarEtapas', 'editarEtapas', 'reordenarEtapas', 'criarEntregaveis', 'editarEntregaveis', 'criarOcorrencias', 'editarOcorrencias', 'configurarAgendaOcorrencias', 'editarContrato', 'editarDocumentos'] as OperacaoPermissao[] : []),
+    'registrarAtividades', 'editarAtividades', 'criarEvidencias', 'editarEvidencias', 'enviarComprovantes', 'anexarDocumentos', 'registrarExecucaoOcorrencia', 'editarExecucaoFisica', 'corrigirExecucaoOcorrencia', 'vincularMetasMarco',
+    ...(perfil === 'GESTOR' ? ['criarEtapas', 'editarEtapas', 'reordenarEtapas', 'criarEntregaveis', 'editarEntregaveis', 'criarOcorrencias', 'editarOcorrencias', 'configurarAgendaOcorrencias', 'editarContrato', 'editarDocumentos', 'criarMetasMarco', 'editarMetasMarco', 'solicitarMetasMarco'] as OperacaoPermissao[] : []),
   ];
   for (const chave of operacoesBasicas) resultado[chave] = true;
   return resultado;

@@ -1,3 +1,5 @@
+import { dataAcompanhamentoValida } from '../execucao/acompanhamento-continuo.js';
+import { exigirRegistroMetaEditavel } from '../metas-marco/proteger-registro-meta.js';
 import { FASES_OPERACIONAIS_CONTRATO } from '../contratos/fases-operacionais.js';
 import { operacaoUpload, recuperarUpload, registrarUpload } from '../armazenamento/idempotencia-upload.js';
 import { exigirPermissaoTransacional } from '../autorizacao/permissao-transacional.js';
@@ -262,11 +264,11 @@ export class EvidenciasRecebidasService {
       [AcaoAuditoria.ENTREGAVEL_EVIDENCIA_ESPERADA_ARQUIVADA]: 'Evidência arquivada',
       [AcaoAuditoria.ENTREGAVEL_EVIDENCIA_ESPERADA_REATIVADA]: 'Evidência reativada',
     };
-    const percentualDiretoPermitido = entregavel.tipo==='UNICO' || entregavel.tipo==='CONTINUO' && !(await this.db.manager.getRepository(Ocorrencia).findBy({contratoId,entregavelId})).some(o=>!o.substituidaEm);
+    const percentualDiretoPermitido = entregavel.tipo==='UNICO';
     const quantidadeDiretaPermitida = entregavel.tipo==='QUANTITATIVO' && Number(entregavel.quantidadePrevista)>0 && Number(entregavel.quantidadeRealizada??0)===0 && !(await this.db.manager.getRepository(Ocorrencia).findBy({contratoId,entregavelId})).some(o=>!o.substituidaEm);
-    const ocorrenciasQuantitativas = ['QUANTITATIVO','RECORRENTE'].includes(entregavel.tipo) && entregavel.unidadeMedida
-      ? (await this.db.manager.getRepository(Ocorrencia).findBy({ contratoId, entregavelId })).filter(o => !o.substituidaEm && o.modoRegistro === 'QUANTITATIVO')
-        .map(o => ({ id: o.id, titulo: o.titulo, status: o.status })) : [];
+    const ocorrenciasQuantitativas = (['QUANTITATIVO','RECORRENTE'].includes(entregavel.tipo) && entregavel.unidadeMedida) || entregavel.tipo==='MARCO'
+      ? (await this.db.manager.getRepository(Ocorrencia).findBy({ contratoId, entregavelId })).filter(o => !o.substituidaEm && o.modoRegistro === 'QUANTITATIVO' && (entregavel.tipo!=='MARCO'||!!o.metaMarcoOrigemId))
+        .map(o => ({ id: o.id, titulo: o.titulo, status: o.status, unidadeMedida:o.unidadeMedidaMarco??entregavel.unidadeMedida })) : [];
     const vinculosAtuais = await this.vinculosLocais(this.db.manager,contratoId,entregavelId,ultima?.id,declaracao);
     const parcial = entregavel.statusExecucao === 'CONCLUIDO_PARCIALMENTE';
     const complementar = parcial && esperada.obrigatoria === false && declaracaoComplementar(declaracao) &&
@@ -356,6 +358,12 @@ export class EvidenciasRecebidasService {
     if(r?.duplicada) throw new ConflictException('A atividade vinculada já registra execução neste destino. Utilize comprovação sem duplicar a medição.');
   }
   /** Read only in the scoped evidence service; never expose cross-contract IDs from the JSON. */
+  private dataDestinoContinuo(e:Entregavel,origem:EvidenciaEsperada):string|null {
+    if(e.tipo!=='CONTINUO')return null;
+    if(!origem.dataAcompanhamento)throw new ConflictException('Selecione um requisito geral existente no Contínuo ou compartilhe uma evidência que possua dia de acompanhamento.');
+    if(!dataAcompanhamentoValida(origem.dataAcompanhamento,e.inicioPrevisto,e.terminoPrevisto))throw new ConflictException('A data da evidência não pertence à vigência do Contínuo de destino.');
+    return origem.dataAcompanhamento;
+  }
   private async rascunho(m: EntityManager, id: string, entregavelId: string): Promise<(EnviarComprovanteDto & {origemCompartilhadaId?:string}) | null> {
     const [r] = await m.query('SELECT rascunho_envio AS rascunho FROM evidencias_esperadas WHERE id=$1 AND entregavel_id=$2', [id, entregavelId]);
     return r?.rascunho ?? null;
@@ -373,8 +381,9 @@ export class EvidenciasRecebidasService {
       if(!item){
         await exigirPermissaoTransacional(m,alvo.contratoId,ator,'criarEvidencias');
         await exigirPermissaoTransacional(m,alvo.contratoId,ator,'alterarObrigatoriedade');
-        if(await repo.count({where:{entregavelId:alvo.id,arquivadoEm:IsNull()}})>=10)throw new ConflictException('Um dos entregáveis atingiu o limite de evidências.');
-        item=await repo.save(repo.create({entregavelId:alvo.id,tipoEvidencia:origem.tipoEvidencia,descricao:origem.descricao,obrigatoria:false}));
+        const dataAcompanhamento=this.dataDestinoContinuo(alvo,origem);
+        if(await repo.count({where:{entregavelId:alvo.id,arquivadoEm:IsNull(),...(alvo.tipo==='CONTINUO'?{dataAcompanhamento:dataAcompanhamento??IsNull()}: {})}})>=10)throw new ConflictException('Um dos entregáveis atingiu o limite de evidências.');
+        item=await repo.save(repo.create({entregavelId:alvo.id,tipoEvidencia:origem.tipoEvidencia,descricao:origem.descricao,obrigatoria:false,dataAcompanhamento}));
       }
       if(await this.rascunho(m,item.id,alvo.id)||await m.getRepository(ComprovanteEvidencia).count({where:{evidenciaEsperadaId:item.id}}))throw new ConflictException('Uma das evidências vinculadas já possui registro próprio.');
       const declaracao:Record<string,string>={origemCompartilhadaId:origem.id};
@@ -500,10 +509,12 @@ export class EvidenciasRecebidasService {
       if (dto.obrigatoria === false && !await this.alterarObrigatoriedadePermitido(m, contratoId, ator))
         throw new ForbiddenException('Somente Administrador ou usuário delegado pode cadastrar evidência opcional');
       const repo = m.getRepository(EvidenciaEsperada);
-      const total = await repo.count({ where: { entregavelId, arquivadoEm: IsNull() } });
+      if(e.tipo==='CONTINUO'&&dto.dataAcompanhamento===undefined)throw new BadRequestException('Informe o dia de acompanhamento da evidência. Requisitos gerais devem ser planejados na edição do entregável.');
+      if(dto.dataAcompanhamento!==undefined){const d=new Date(`${dto.dataAcompanhamento}T00:00:00Z`);if(e.tipo!=='CONTINUO'||!e.inicioPrevisto||!e.terminoPrevisto||!Number.isFinite(d.getTime())||d.toISOString().slice(0,10)!==dto.dataAcompanhamento||dto.dataAcompanhamento<e.inicioPrevisto||dto.dataAcompanhamento>e.terminoPrevisto)throw new BadRequestException('Data de acompanhamento fora da vigência do Contínuo.');}
+      const total = await repo.count({ where: { entregavelId, arquivadoEm: IsNull(), ...(e.tipo==='CONTINUO'?{dataAcompanhamento:dto.dataAcompanhamento??IsNull()}: {}) } });
       if (total >= 10) throw new ConflictException('Limite de dez evidências ativas por entregável');
       if (dto.rascunhoEnvio) await this.validarRascunho(m,e,dto.rascunhoEnvio,ator,tipoEvidencia);
-      const criado = await repo.save(repo.create({ entregavelId, tipoEvidencia,
+      const criado = await repo.save(repo.create({ entregavelId, tipoEvidencia,dataAcompanhamento:dto.dataAcompanhamento??null,
         ...(dto.rascunhoEnvio ? {rascunhoEnvio: Object.fromEntries(Object.entries(dto.rascunhoEnvio).filter(([,v])=>typeof v==='string'))} : {}),
         descricao: dto.descricao?.trim() || null, obrigatoria: dto.obrigatoria !== false }));
       if(dto.rascunhoEnvio&&destinos.length)await this.materializarDestinosPreliminares(m,criado,dto.rascunhoEnvio,ator);
@@ -511,7 +522,7 @@ export class EvidenciasRecebidasService {
         acao: AcaoAuditoria.ENTREGAVEL_EVIDENCIA_ESPERADA_CONFIGURADA,
         entidadeTipo: 'ENTREGAVEL', entidadeId: entregavelId,
         dadosPosteriores: { operacao: 'CRIAR_ITEM', itemId: criado.id,
-          tipoEvidencia: criado.tipoEvidencia, obrigatoria: criado.obrigatoria, ...(dto.rascunhoEnvio ? {declaracaoPreliminar:resumoRascunho(dto.rascunhoEnvio)} : {}) },
+          tipoEvidencia: criado.tipoEvidencia, dataAcompanhamento:criado.dataAcompanhamento, obrigatoria: criado.obrigatoria, ...(dto.rascunhoEnvio ? {declaracaoPreliminar:resumoRascunho(dto.rascunhoEnvio)} : {}) },
       });
       return { id: criado.id, tipoEvidencia: criado.tipoEvidencia,
         descricao: criado.descricao, obrigatoria: criado.obrigatoria };
@@ -520,11 +531,13 @@ export class EvidenciasRecebidasService {
   /** Modifica apenas UM item. Os demais itens do checklist e seus comprovantes são preservados. */
   async editarEsperada(contratoId: string, entregavelId: string, esperadaId: string,
     dto: EditarEvidenciaEsperadaDto, ator: UsuarioAutenticado) {
+    if(dto.dataAcompanhamento!==undefined)throw new BadRequestException('A data de acompanhamento é definida no cadastro do registro.');
     if (!Object.values(dto).some(valor => valor !== undefined)) throw new BadRequestException('Informe ao menos um campo');
     return this.db.transaction(async m => {
       await exigirPermissaoTransacional(m, contratoId, ator, 'editarEvidencias');
       const contrato = await this.contratoEditavel(m, contratoId);
       const { entregavel, esperada } = await this.contexto(m, contratoId, entregavelId, esperadaId);
+      await exigirRegistroMetaEditavel(m,contratoId,'EVIDENCIA',esperadaId);
       this.exigirRegularizacao(contrato,entregavel);
       const parcial = entregavel.statusExecucao === 'CONCLUIDO_PARCIALMENTE';
       this.validarPlanejamentoAtivo(entregavel, esperada, parcial);
@@ -584,6 +597,7 @@ export class EvidenciasRecebidasService {
       await exigirPermissaoTransacional(m, contratoId, ator, 'editarEvidencias');
       const contrato = await this.contratoEditavel(m, contratoId);
       const {entregavel:e,esperada}=await this.contexto(m,contratoId,entregavelId,esperadaId);
+      await exigirRegistroMetaEditavel(m,contratoId,'EVIDENCIA',esperadaId);
       this.exigirRegularizacao(contrato,e);
       if (contrato.status === 'CONCLUIDO_PARCIALMENTE') throw new ConflictException('A regularização documental não permite alterar vínculos do contrato parcialmente concluído.');
       this.validarPlanejamentoAtivo(e,esperada); await this.etapaAtiva(m,e);
@@ -602,6 +616,8 @@ export class EvidenciasRecebidasService {
       const anterioresO=c?(await m.query(`SELECT ocorrencia_id AS id FROM ocorrencia_comprovantes WHERE contrato_id=$1 AND comprovante_id=$2`,[contratoId,c.id]) as {id:string}[]).map(v=>v.id):[...new Set([...idsVinculadosEnvio(r.ocorrenciasVinculadas),...fixas])];
       const anterioresA=c?(await m.query(`SELECT atividade_id AS id FROM atividade_comprovantes WHERE contrato_id=$1 AND comprovante_id=$2`,[contratoId,c.id]) as {id:string}[]).map(v=>v.id):idsVinculadosEnvio(r.atividadesVinculadas);
       const os=dto.ocorrencias??anterioresO,idsAtividades=dto.atividades??anterioresA;
+      for(const id of new Set([...os.filter(id=>!anterioresO.includes(id)),...anterioresO.filter(id=>!os.includes(id))])) await exigirRegistroMetaEditavel(m,contratoId,'OCORRENCIA',id);
+      for(const id of new Set([...idsAtividades.filter(id=>!anterioresA.includes(id)),...anterioresA.filter(id=>!idsAtividades.includes(id))])) await exigirRegistroMetaEditavel(m,contratoId,'ATIVIDADE',id);
       if(dto.ocorrencias!=null&&fixas.some(id=>!os.includes(id)))throw new ConflictException('Preserve a ocorrência da contribuição ou altere a contribuição primeiro.');
       if(dto.ocorrencias!=null&&os.length){const rows=await m.query(`SELECT id FROM ocorrencias WHERE contrato_id=$1 AND entregavel_id=$2 AND id=ANY($3::uuid[]) AND substituida_em IS NULL`,[contratoId,entregavelId,os]);if(rows.length!==os.length)throw new ConflictException('Ocorrências fora do destino.');}
       if(dto.atividades!=null&&idsAtividades.length){const rows=await m.query(`SELECT DISTINCT a.id FROM atividades a JOIN atividade_entregaveis ae ON ae."atividadeId"=a.id AND ae."entregavelId"=$2 WHERE a."contratoId"=$1 AND a.id=ANY($3::uuid[]) AND a."excluidaEm" IS NULL AND a.status<>'ARQUIVADA'`,[contratoId,entregavelId,idsAtividades]);if(rows.length!==idsAtividades.length)throw new ConflictException('Atividades fora do destino.');}
@@ -625,6 +641,7 @@ export class EvidenciasRecebidasService {
       await exigirPermissaoTransacional(m, contratoId, ator, 'editarExecucaoFisica');
       const contrato = await this.contratoEditavel(m, contratoId);
       const {entregavel:e,esperada}=await this.contexto(m,contratoId,entregavelId,esperadaId);
+      await exigirRegistroMetaEditavel(m,contratoId,'EVIDENCIA',esperadaId);
       this.exigirRegularizacao(contrato,e);
       this.validarPlanejamentoAtivo(e,esperada); await this.etapaAtiva(m,e);
       if(e.statusExecucao==='CONCLUIDO_PARCIALMENTE')throw new ConflictException('Reabra a execução física antes de corrigir a contribuição.');
@@ -760,6 +777,7 @@ export class EvidenciasRecebidasService {
         const anterior = await recuperar(m);
         if (anterior) { repetido = true; callbackConcluido = true; return anterior; }
         const atual = await this.contexto(m, contratoId, entregavelId, esperadaId);
+        await exigirRegistroMetaEditavel(m,contratoId,'EVIDENCIA',esperadaId,!vinculoQuantidade&&!dto.percentualExecucao&&!dto.comprovaExecucaoId&&!destinos.length);
         this.exigirRegularizacao(contratosBloqueados.get(contratoId)!,atual.entregavel);
         if (JSON.stringify(await this.rascunho(m,esperadaId,entregavelId)) !== JSON.stringify(rascunho)) throw new ConflictException('A declaração foi alterada. Atualize a evidência e tente novamente.');
         this.validarPlanejamentoAtivo(atual.entregavel, atual.esperada, true);
@@ -832,6 +850,9 @@ export class EvidenciasRecebidasService {
         }
         // Os vínculos existem desde o envio; a comprovação só considera versões verificadas.
         const idsOcorrencias=[...new Set([...ocorrenciasVinculadas,...(criado.ocorrenciaQuantidadeId?[criado.ocorrenciaQuantidadeId]:[]),...(parcela?.ocorrenciaId?[parcela.ocorrenciaId]:[])])];
+        const envioDocumental=!vinculoQuantidade&&!dto.percentualExecucao&&!dto.comprovaExecucaoId&&!destinos.length;
+        for(const id of idsOcorrencias) await exigirRegistroMetaEditavel(m,contratoId,'OCORRENCIA',id,envioDocumental);
+        for(const id of atividadesVinculadas) await exigirRegistroMetaEditavel(m,contratoId,'ATIVIDADE',id,envioDocumental);
         if(idsOcorrencias.length)await m.query(`INSERT INTO ocorrencia_comprovantes (ocorrencia_id,comprovante_id,contrato_id,vinculado_por) SELECT unnest($1::uuid[]),$2,$3,$4 ON CONFLICT DO NOTHING`,[idsOcorrencias,criado.id,contratoId,ator.id]);
         if(atividadesVinculadas.length)await m.query(`INSERT INTO atividade_comprovantes (atividade_id,comprovante_id,contrato_id,vinculado_por) SELECT unnest($1::uuid[]),$2,$3,$4 ON CONFLICT DO NOTHING`,[atividadesVinculadas,criado.id,contratoId,ator.id]);
         if (vinculoQuantidade) await validarContribuicaoEvidencia(m,atual.entregavel,criado);
@@ -866,9 +887,11 @@ export class EvidenciasRecebidasService {
             if (ev.tipoEvidencia.trim().toLocaleLowerCase('pt-BR')!==atual.esperada.tipoEvidencia.trim().toLocaleLowerCase('pt-BR')) throw new ConflictException('O tipo da evidência deve corresponder ao requisito de destino.');
           } else {
             if (!p.criarOpcional) throw new ForbiddenException('Sem permissão para criar vínculo documental opcional no destino.');
-            if (await requisitos.count({where:{entregavelId:e.id,arquivadoEm:IsNull()}})>=10) throw new ConflictException('Limite de evidências no entregável de destino.');
-            ev=await requisitos.save(requisitos.create({entregavelId:e.id,tipoEvidencia:atual.esperada.tipoEvidencia,descricao:atual.esperada.descricao,obrigatoria:false}));
+            const dataAcompanhamento=this.dataDestinoContinuo(e,atual.esperada);
+            if (await requisitos.count({where:{entregavelId:e.id,arquivadoEm:IsNull(),...(e.tipo==='CONTINUO'?{dataAcompanhamento:dataAcompanhamento??IsNull()}: {})}})>=10) throw new ConflictException('Limite de evidências no entregável de destino.');
+            ev=await requisitos.save(requisitos.create({entregavelId:e.id,tipoEvidencia:atual.esperada.tipoEvidencia,descricao:atual.esperada.descricao,obrigatoria:false,dataAcompanhamento}));
           }
+          await exigirRegistroMetaEditavel(m,e.contratoId,'EVIDENCIA',ev.id);
           this.validarPlanejamentoAtivo(e,ev);
           validarTipo(ev.tipoEvidencia);
           // Mesmo blob, contribuição opcional e explicitamente declarada neste destino.
@@ -881,6 +904,7 @@ export class EvidenciasRecebidasService {
             if((idsDestino.length&&!permissoes?.vincularEvidenciasOcorrencia)||(vq&&!(vq.ocorrenciaQuantidadeId?permissoes?.registrarExecucaoOcorrencia:permissoes?.editarExecucaoFisica))||(destino.percentualExecucao&&destino.ocorrenciaId&&!permissoes?.registrarExecucaoOcorrencia))throw new ForbiddenException('Sem autorização para os vínculos ou a execução do destino.');
           }
           if(idsDestino.length){const validas=await m.query(`SELECT id FROM ocorrencias WHERE contrato_id=$1 AND entregavel_id=$2 AND id=ANY($3::uuid[]) AND substituida_em IS NULL`,[e.contratoId,e.id,idsDestino]);if(validas.length!==idsDestino.length)throw new ConflictException('Selecione ocorrências vigentes do entregável de destino.');}
+          for(const id of idsDestino) await exigirRegistroMetaEditavel(m,e.contratoId,'OCORRENCIA',id);
           await validarOcorrenciaQuantidade(m,e,vq);
           if(destino.percentualExecucao&&destino.ocorrenciaId&&e.tipo==='UNICO')throw new BadRequestException('A parcela do Único deve ser diretamente no entregável.');
           const copia=await repo.save(repo.create({contratoId:e.contratoId,entregavelId:e.id,evidenciaEsperadaId:ev.id,grupoCompartilhadoId,autorId:ator.id,nomeOriginal:pendente.nomeOriginal,tipoMime:pendente.mimeEfetivo,tamanho:pendente.tamanho,sha256:pendente.sha256,storageKey:pendente.chave,descricao:criado.descricao,status:'PENDENTE_VERIFICACAO',quantidadeDeclarada:null,quantidadeAprovada:null,ocorrenciaQuantidadeId:null,origemQuantidade:null,referenciaExecucao:null,...vq,verificadoPor:null,verificadoEm:null}));
@@ -960,6 +984,7 @@ export class EvidenciasRecebidasService {
       if (!grupoAutorizado) await exigirPermissaoTransacional(m, contratoId, ator, 'verificarComprovantes');
       const contrato = await this.contratoEditavel(m, contratoId);
       const { entregavel, esperada } = await this.contexto(m, contratoId, entregavelId, esperadaId);
+      await exigirRegistroMetaEditavel(m,contratoId,'EVIDENCIA',esperadaId,true);
       this.exigirRegularizacao(contrato,entregavel);
       this.validarPlanejamentoAtivo(entregavel, esperada, true);
       await this.etapaAtiva(m, entregavel);
@@ -1044,6 +1069,7 @@ export class EvidenciasRecebidasService {
       await exigirPermissaoTransacional(m, contratoId, ator, 'verificarComprovantes');
       const contrato = await this.contratoEditavel(m, contratoId);
       const { entregavel, esperada } = await this.contexto(m, contratoId, entregavelId, esperadaId);
+      await exigirRegistroMetaEditavel(m,contratoId,'EVIDENCIA',esperadaId);
       this.exigirRegularizacao(contrato,entregavel);
       this.validarPlanejamentoAtivo(entregavel, esperada, true);
       await this.etapaAtiva(m, entregavel);
@@ -1092,6 +1118,7 @@ export class EvidenciasRecebidasService {
       await exigirPermissaoTransacional(m, contratoId, ator, 'reabrirEvidencias');
       const contrato = await this.contratoEditavel(m, contratoId);
       const { entregavel, esperada } = await this.contexto(m, contratoId, entregavelId, esperadaId);
+      await exigirRegistroMetaEditavel(m,contratoId,'EVIDENCIA',esperadaId);
       this.exigirRegularizacao(contrato,entregavel);
       this.validarPlanejamentoAtivo(entregavel, esperada);
       await this.etapaAtiva(m, entregavel);

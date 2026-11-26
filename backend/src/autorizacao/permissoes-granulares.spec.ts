@@ -263,3 +263,12 @@ test('edição padrão não permite arquivar, aprovar, reabrir ou corrigir execu
    expect(permissoesEfetivas('ADMINISTRADOR',false,null).compartilharEvidencias).toBe(true);
    expect(permissoesEfetivas('ADMINISTRADOR',false,null).compartilharAtividades).toBe(true);
  });
+
+test('Marco: concessões de planejamento não delegam aprovação, reabertura ou arquivo',()=>{
+  const p=permissoesEfetivas('GESTOR',true,null);
+  expect(p.criarMetasMarco).toBe(true);expect(p.editarMetasMarco).toBe(true);expect(p.vincularMetasMarco).toBe(true);expect(p.solicitarMetasMarco).toBe(true);
+  expect(p.aprovarVinculosMetasMarco).toBe(false);expect(p.reabrirMetasMarco).toBe(false);expect(p.arquivarMetasMarco).toBe(false);expect(p.reativarMetasMarco).toBe(false);
+  expect(permissoesEfetivas('GESTOR',true,{editarMetasMarco:true}).solicitarMetasMarco).toBe(false);
+  const delegado=permissoesEfetivas('COLABORADOR',false,{reabrirMetasMarco:true});
+  expect(delegado.reabrirMetasMarco).toBe(true);expect(delegado.aprovarVinculosMetasMarco).toBe(false);expect(delegado.editarMetasMarco).toBe(false);
+});

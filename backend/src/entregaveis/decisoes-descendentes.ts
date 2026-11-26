@@ -30,6 +30,10 @@ export async function possuiDecisoesDescendentesPendentes(m: EntityManager, e: E
       AND NOT EXISTS (SELECT 1 FROM comprovantes_evidencia n WHERE n.evidencia_esperada_id=c.evidencia_esperada_id AND (n.criado_em,n.id)>(c.criado_em,c.id))
   ) AS pendentes`, [e.contratoId,e.id]);
   if (r?.pendentes) return true;
+  if(e.tipo==='MARCO') {
+    const [meta]=await m.query(`SELECT EXISTS(SELECT 1 FROM metas_marco WHERE contrato_id=$1 AND entregavel_id=$2 AND arquivado_em IS NULL AND estado IN ('PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO','PENDENTE_REGULARIZACAO')) AS pendentes`,[e.contratoId,e.id]);
+    if(meta?.pendentes)return true;
+  }
   if (e.execucoesIntegradas && (await resumoParcelas(m,e)).itens.some(i => ['PENDENTE','REJEITADO'].includes(i.situacao) && (Boolean(i.referenciaId) || i.centesimos>0))) return true;
   return Boolean((await quantidadeDiretaEvidencias(m,e))?.pendentes);
 }

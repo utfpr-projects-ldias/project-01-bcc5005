@@ -24,7 +24,7 @@ import { MenuAcoesObjeto } from '@/app/components/menu-acoes-objeto';
 import { estadoDoObjeto, rotuloEstadoEntregavel } from '@/lib/identidade-operacional';
 
 /** Consulta o detalhe real no backend, sem confiar só na listagem em cache. */
-export function ModalDetalheEntregavel({ contratoId, etapaId, vigencia, entregavelId, podeEditar, focoRetorno, onFechar, atualizar, permissoes, dentroModal = false, iniciarEditando = false, secaoInicial = 'informacoes', paiArquivado = false, paiConcluido = false, paiParcial = false, paiEmRevisao = false, verificado = false, resumoInicial: resumoRecebido, podeArquivar = false, onArquivar, onReabrir, onReativar, onExcluir, pesosContrato, modoCalculoContrato, retornoContextual = false, interno = false, origemRegistro }: {
+export function ModalDetalheEntregavel({ contratoId, etapaId, vigencia, entregavelId, itemInicial, podeEditar, focoRetorno, onFechar, atualizar, permissoes, dentroModal = false, iniciarEditando = false, secaoInicial = 'informacoes', paiArquivado = false, paiConcluido = false, paiParcial = false, paiEmRevisao = false, verificado = false, resumoInicial: resumoRecebido, podeArquivar = false, onArquivar, onReabrir, onReativar, onExcluir, pesosContrato, modoCalculoContrato, retornoContextual = false, interno = false, origemRegistro }: {
   vigencia?: import('@/lib/vigencia-planejamento').VigenciaPlanejamento; origemRegistro?: import('./execucoes-entregavel').OrigemExecucao; interno?: boolean; retornoContextual?: boolean; contratoId: string; etapaId: string; entregavelId: string; itemInicial?: Entregavel; podeEditar: boolean;
   modoCalculoContrato?: 'SIMPLES' | 'PONDERADO';
   pesosContrato?: Array<{ id: string; peso: string | null; arquivadoEm?: string | null; etapaArquivada?: boolean }>;
@@ -40,8 +40,7 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, vigencia, entregav
   const resumoInicial = resumoConsulta.dados?.[entregavelId] ?? resumoRecebido;
   const elegibilidadeQuery = useElegibilidadeEntregavel(contratoId, entregavelId);
   const elegibilidade = elegibilidadeQuery.erro ? undefined : elegibilidadeQuery.dados;
-  const [dialogoSolicitacao, setDialogoSolicitacao] = useState<'parcial'|'impedimentos'|null>(null);
-  const [abaMarco, setAbaMarco] = useState<'detalhes'|'metas'>('detalhes');
+  const [dialogoSolicitacao, setDialogoSolicitacao] = useState<'integral-continuo'|'parcial'|'impedimentos'|null>(null);
   const [editando, setEditando] = useState(Boolean(iniciarEditando && !paiArquivado && podeEditar && permissoes?.editarEntregaveis));
   const [secaoEdicao, setSecaoEdicao] = useState<'informacoes' | 'planejamento' | 'completo'>(iniciarEditando ? secaoInicial : 'completo');
   const marcadorEdicaoEntregavel = useRef<string | null>(null);
@@ -69,7 +68,10 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, vigencia, entregav
   }, []);
   const [salvando, setSalvando] = useState(false);
   const [confirmarConclusao, setConfirmarConclusao] = useState(false);
+  const [confirmacaoContinuo,setConfirmacaoContinuo]=useState(false);
+  const [observacoesConclusao,setObservacoesConclusao]=useState('');
   const [confirmarEncerramento, setConfirmarEncerramento] = useState(false);
+  const [cienteEncerramento,setCienteEncerramento]=useState(false);
   const [motivoEncerramento, setMotivoEncerramento] = useState('');
   const [devolucaoPendente, setDevolucaoPendente] = useState(false);
   const [motivoDevolucao, setMotivoDevolucao] = useState('');
@@ -166,16 +168,19 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, vigencia, entregav
     } catch (error) { setErroConclusao(error instanceof Error ? error.message : 'Falha ao concluir entregável.'); }
     finally { setSalvando(false); }
   }
+  function abrirSolicitacao(parcial=false){setErroConclusao('');setConfirmacaoContinuo(false);setObservacoesConclusao('');setDialogoSolicitacao(parcial?'parcial':'integral-continuo');}
   async function transicionar(acao: 'solicitar-conclusao' | 'solicitar-conclusao-parcial' | 'solicitar-encerramento' | 'aprovar-encerramento') {
     if (!item || salvando || (acao === 'solicitar-conclusao' && !elegibilidade?.podeSolicitarConclusao) ||
         (acao === 'solicitar-conclusao-parcial' && !elegibilidade?.podeSolicitarParcial) ||
         (acao === 'solicitar-encerramento' && !elegibilidade?.podeSolicitarEncerramento) ||
         (acao === 'aprovar-encerramento' && (!permissoes?.concluirEntregaveis || !elegibilidade?.podeAprovarEncerramento))) return;
+    const precisaConfirmacao=item.tipo==='CONTINUO'&&!regularizacao&&['solicitar-conclusao','solicitar-conclusao-parcial'].includes(acao);
+    if(precisaConfirmacao&&!confirmacaoContinuo)return;
     setSalvando(true); setErroConclusao('');
     try {
       await transicaoAdministrativaEntregavel(contratoId, entregavelId, acao,
-        acao === 'solicitar-encerramento' ? motivoEncerramento.trim() : undefined);
-      setConfirmarEncerramento(false); setDialogoSolicitacao(null); setMotivoEncerramento('');
+        acao === 'solicitar-encerramento' ? motivoEncerramento.trim() : undefined, precisaConfirmacao?{confirmacaoCumprimento:true,observacoesConclusao:observacoesConclusao.trim()}:undefined);
+      setConfirmarEncerramento(false); setDialogoSolicitacao(null); setMotivoEncerramento('');setConfirmacaoContinuo(false);setObservacoesConclusao('');
       toastSucesso(acao === 'aprovar-encerramento' ? 'Entregável finalizado sem alterar o avanço físico.' : acao === 'solicitar-conclusao' && item?.statusExecucao === 'PENDENTE_ENCERRAMENTO' ? 'O pedido de encerramento foi convertido em solicitação de conclusão.' : acao === 'solicitar-conclusao-parcial' && item?.statusExecucao === 'PENDENTE_ENCERRAMENTO' ? 'O pedido de encerramento foi convertido em solicitação de conclusão parcial.' : 'Solicitação registrada. Aguarda aprovação.', acao === 'aprovar-encerramento' ? 'Encerramento aprovado' : acao === 'solicitar-conclusao-parcial' ? 'Conclusão parcial solicitada' : acao === 'solicitar-encerramento' ? 'Encerramento solicitado' : regularizacao ? 'Regularização solicitada' : 'Conclusão solicitada');
       await atualizarDecisoes();
     } catch (erro) {setErroConclusao(erro instanceof Error ? erro.message : 'Não foi possível alterar a situação do entregável.');}
@@ -208,12 +213,14 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, vigencia, entregav
           podeConfigurarPesos={Boolean(permissoes?.configurarPesos)}
           podeReplanejarOcorrencias={Boolean(permissoes?.configurarAgendaOcorrencias)} /> : null) : null;
   // Consultar antes de montar a janela: evita um diálogo provisório sem título/dados reais.
+  // A listagem fornece apenas a geometria inicial; ações e conteúdo aguardam o GET.
+  const tipoVisual = item?.tipo ?? (consulta.carregando && !erro && itemInicial?.id===entregavelId && itemInicial.contratoId===contratoId && itemInicial.etapaId===etapaId ? itemInicial.tipo : undefined);
   if (!interno && !item && !erro && consulta.carregando) return null;
-  const conteudo = <ModalEtapa interno={interno} larguraDetalhe={retornoContextual&&!editando&&!interno} larguraFormulario={editando ? "entregavel" : undefined} camada={dentroModal ? "aninhada" : "principal"} contexto={editando && !interno ? 'Editar entregável' : item ? `Entregável · ${ROTULOS_TIPO[item.tipo]}` : 'Entregável'} titulo={item?.nome ?? 'Detalhes do entregável'}
+  const conteudo = <ModalEtapa acabamentoDetalhe={(!editando || interno) ? tipoVisual==='MARCO'?'marco':'entregavel' : undefined} interno={interno} larguraDetalhe={retornoContextual&&!editando&&!interno} larguraFormulario={editando ? "entregavel" : undefined} camada={dentroModal ? "aninhada" : "principal"} contexto={editando && !interno ? 'Editar entregável' : tipoVisual ? `Entregável · ${ROTULOS_TIPO[tipoVisual]}` : 'Entregável'} titulo={item?.nome ?? 'Detalhes do entregável'}
     retornoEsquerda={interno || !retornoContextual} formularioLongo={editando && !interno}
     etiquetaNoContexto
-    atrasado={item?.atrasado} finalizadoComAtraso={item?.finalizadoComAtraso}
-    etiqueta={item ? rotuloEstadoEntregavel(item.statusExecucao, Boolean(item.arquivadoEm), Boolean(item.reabertoEm), Boolean(item.regularizacaoDocumentalSolicitada), Boolean(item.motivoFinalizacao)) : undefined}
+    atrasado={item?.atrasado} finalizadoComAtraso={item?.tipo!=='CONTINUO'&&item?.finalizadoComAtraso}
+    etiqueta={item ? rotuloEstadoEntregavel(item.statusExecucao, Boolean(item.arquivadoEm), Boolean(item.reabertoEm), Boolean(item.regularizacaoDocumentalSolicitada), Boolean(item.motivoFinalizacao),item.tipo==='CONTINUO'&&Boolean(item.finalizadoComAtraso)) : undefined}
     identidadeEntregavel
     arquivado={Boolean(item?.arquivadoEm)} revisao={Boolean(item?.reabertoEm && !item?.arquivadoEm && !pendenteDecisao)} concluido={!item?.arquivadoEm && !item?.reabertoEm && !editando && item?.statusExecucao === 'CONCLUIDO'} estadoContextual={estadoDoObjeto({objeto:'entregavel',status:item?.statusExecucao,arquivado:Boolean(item?.arquivadoEm),reaberto:Boolean(item?.reabertoEm),pendenteConclusao:Boolean(item?.regularizacaoDocumentalSolicitada)})}
 
@@ -234,8 +241,8 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, vigencia, entregav
           className="rounded-lg border border-green-600/60 bg-green-600/20 px-3 py-2 text-xs font-semibold text-green-800 hover:bg-green-600/30 dark:text-green-200 disabled:opacity-35">Aprovar</button>
         {permissoes?.concluirEntregaveis && item.statusExecucao !== 'PENDENTE_ENCERRAMENTO' && !podeConcluir && <button type="button" onClick={()=>setDialogoSolicitacao('impedimentos')} className="text-xs underline text-foreground/75">Ver impedimentos</button>}
         {item.statusExecucao === 'PENDENTE_ENCERRAMENTO' && permissoes?.editarEntregaveis && <div className="ml-2 flex flex-wrap items-center gap-2">
-          {podeSolicitarConclusao && <button type="button" disabled={salvando} onClick={() => void transicionar('solicitar-conclusao')} className="rounded-lg border border-violet-500/50 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-500/20 dark:text-violet-200 disabled:opacity-35"><IconeConclusao className="inline-block mr-1 h-4 w-4 align-middle"/>Solicitar conclusão</button>}
-          {podeSolicitarParcial && <button type="button" disabled={salvando} onClick={() => {setErroConclusao('');setDialogoSolicitacao('parcial');}} className="rounded-lg border border-violet-500/50 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-500/20 dark:text-violet-200 disabled:opacity-35"><IconeConclusaoParcial className="inline-block mr-1 h-4 w-4 align-middle"/>Solicitar conclusão parcial</button>}
+          {podeSolicitarConclusao && <button type="button" disabled={salvando} onClick={() => item.tipo==='CONTINUO'?abrirSolicitacao():void transicionar('solicitar-conclusao')} className="rounded-lg border border-violet-500/50 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-500/20 dark:text-violet-200 disabled:opacity-35"><IconeConclusao className="inline-block mr-1 h-4 w-4 align-middle"/>Solicitar conclusão</button>}
+          {podeSolicitarParcial && <button type="button" disabled={salvando} onClick={() => {abrirSolicitacao(true);}} className="rounded-lg border border-violet-500/50 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-500/20 dark:text-violet-200 disabled:opacity-35"><IconeConclusaoParcial className="inline-block mr-1 h-4 w-4 align-middle"/>Solicitar conclusão parcial</button>}
         </div>}
       </div> : !item.arquivadoEm && !item.reabertoEm && ['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(item.statusExecucao ?? '') ? <>
         {!bloqueioEdicao && permissoes?.reabrirEntregaveis && onReabrir && <MenuAcoesObjeto rotulo="Reabrir" disabled={salvando} acaoDireta={onReabrir}/>}
@@ -247,11 +254,11 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, vigencia, entregav
             {abertaParaDecisao && permissoes?.editarEntregaveis && <>
               <BotaoAcaoModal intencao={podeSolicitarConclusao ? 'solicitar-conclusao' : 'neutra'} disabled={salvando}
                 className={!podeSolicitarConclusao ? 'opacity-65' : ''} title={!podeSolicitarConclusao ? 'Consultar impedimentos' : undefined}
-                onClick={() => podeSolicitarConclusao ? void transicionar('solicitar-conclusao') : setDialogoSolicitacao('impedimentos')}>Solicitar conclusão</BotaoAcaoModal>
+                onClick={() => podeSolicitarConclusao ? item.tipo==='CONTINUO'?abrirSolicitacao():void transicionar('solicitar-conclusao') : setDialogoSolicitacao('impedimentos')}>Solicitar conclusão</BotaoAcaoModal>
               {podeSolicitarParcial && <BotaoAcaoModal conclusaoParcial intencao="solicitar-conclusao" disabled={salvando}
-                onClick={() => {setErroConclusao('');setDialogoSolicitacao('parcial');}}>Solicitar conclusão parcial</BotaoAcaoModal>}
+                onClick={() => {abrirSolicitacao(true);}}>Solicitar conclusão parcial</BotaoAcaoModal>}
               {elegibilidade?.podeSolicitarEncerramento && <BotaoAcaoModal intencao="solicitar-encerramento" disabled={salvando}
-                onClick={() => setConfirmarEncerramento(true)}>Solicitar encerramento</BotaoAcaoModal>}
+                onClick={() => {setCienteEncerramento(false);setMotivoEncerramento('');setErroConclusao('');setConfirmarEncerramento(true);}}>Solicitar encerramento</BotaoAcaoModal>}
             </>}
             {!bloqueioEdicao && item.statusExecucao === 'PENDENTE_ENCERRAMENTO' && permissoes?.concluirEntregaveis && <BotaoAcaoModal intencao="encerrar" disabled={salvando} onClick={() => void transicionar('aprovar-encerramento')}>✓ Aprovar encerramento</BotaoAcaoModal>}
             {!bloqueioEdicao && ['PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL'].includes(item.statusExecucao ?? '') && permissoes?.concluirEntregaveis && <BotaoAcaoModal intencao="concluir" disabled={salvando || !podeConcluir} onClick={() => setConfirmarConclusao(true)}>Aprovar conclusão</BotaoAcaoModal>}
@@ -268,9 +275,9 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, vigencia, entregav
       {!consulta.carregando && !erro && !item && <p role="alert">Entregável não encontrado ou sem acesso neste contrato.</p>}
       {erroConclusao && <p role="alert" className="text-error-text">{erroConclusao}</p>}
       {item && <>
-        {item.tipo === 'MARCO' && (!editando || interno) && <div role="tablist" aria-label="Seções do Marco" className="flex gap-1 rounded-lg border border-violet-500/20 p-1">{([['detalhes','Detalhes'],['metas','Metas']] as const).map(([aba,rotulo])=><button key={aba} type="button" role="tab" aria-selected={abaMarco===aba} onClick={()=>setAbaMarco(aba)} className={`rounded-lg px-3 py-2 text-xs font-semibold ${abaMarco===aba?'bg-violet-500/20 text-violet-300':'hover:bg-current/10'}`}>{rotulo}</button>)}</div>}
+
         {!interno && formularioEdicao ? <div onChangeCapture={()=>{edicaoSuja.current=true;}}>{formularioEdicao}</div>
-          : item.tipo === 'MARCO' && abaMarco === 'metas' ? <PainelMetasMarco contratoId={contratoId} entregavelId={item.id} permissoes={permissoes} readOnly={bloqueioEdicao || Boolean(item.arquivadoEm) || bloqueioFinalizacao} onAtualizar={()=>{void atualizarDecisoes();}} />
+          : item.tipo === 'MARCO' ? <PainelMetasMarco origemInicial={origemRegistro} contratoId={contratoId} entregavelId={item.id} nomeMarco={item.nome} prazo={item.terminoPrevisto??item.inicioPrevisto} permissoes={permissoes} readOnly={bloqueioEdicao || Boolean(item.arquivadoEm) || bloqueioFinalizacao} regularizacaoDocumental={regularizacao&&!bloqueioDocumental&&!pendenteDecisao} onAtualizar={()=>{void atualizarDecisoes();}} />
           : <ConteudoEntregavel origemRegistro={origemRegistro} interno={interno||retornoContextual} participacao={execucao.progresso?.entregaveis.find(e=>e.entregavelId===item.id)?.participacaoOperacional} item={item} resumoInicial={resumoInicial} contextoModal permissoesExecucao={permissoes} somenteLeituraExecucao={bloqueioEdicao || bloqueioFinalizacao || pendenteDecisao || verificado} regularizacaoDocumental={regularizacao && !bloqueioDocumental} podeEditarEsperada={!bloqueioDocumental && !verificado && (regularizacao || !bloqueioEdicao && !['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(item.statusExecucao ?? '')) && (permissoes?.editarEvidencias ?? podeEditar)}
               podeCriarEvidencia={!bloqueioDocumental && !verificado && (regularizacao || !bloqueioEdicao && !['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO'].includes(item.statusExecucao ?? '')) && (permissoes?.criarEvidencias ?? podeEditar)}
               podeArquivarEvidencia={(permissoes?.arquivarEvidencias ?? podeEditar) && !bloqueioEdicao}
@@ -290,7 +297,23 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, vigencia, entregav
     </div>
     {confirmarDescarteEdicao && <ConfirmacaoSimples titulo="Descartar alterações?" descricao="As alterações do formulário de edição ainda não foram salvas." confirmar="Descartar alterações" perigoso descarte onCancelar={()=>setConfirmarDescarteEdicao(false)} onConfirmar={()=>{setConfirmarDescarteEdicao(false);voltarDaEdicaoEntregavel();}}/>}
     {dialogoSolicitacao === 'impedimentos' && <DialogoImpedimentos dados={elegibilidade} percentual={percentualFisico} carregando={elegibilidadeQuery.carregando || elegibilidadeQuery.atualizando} onFechar={()=>setDialogoSolicitacao(null)}/>}
-    {dialogoSolicitacao === 'parcial' && <ConfirmacaoSimples titulo="Solicitar conclusão parcial?"
+    {item?.tipo==='CONTINUO'&&(dialogoSolicitacao==='integral-continuo'||dialogoSolicitacao==='parcial')&&<ModalEtapa titulo={dialogoSolicitacao==='parcial'?'Solicitar conclusão parcial do Contínuo':'Solicitar conclusão do Contínuo'} contexto={item.nome} camada="edicao" larguraFormulario="registro" ocupado={salvando} onFechar={()=>setDialogoSolicitacao(null)}>
+      <form className="pi-continuo-confirmacao space-y-4 text-sm" onSubmit={ev=>{ev.preventDefault();void transicionar(dialogoSolicitacao==='parcial'?'solicitar-conclusao-parcial':'solicitar-conclusao');}}>
+        <div><p className="font-semibold text-foreground/70">Critério de conclusão</p><p className="mt-2 whitespace-pre-wrap break-words">{item.criterioConclusao}</p></div>
+        <div className="space-y-2 border-t border-current/15 pt-3">
+          <p className="flex items-center gap-2"><span aria-hidden className={elegibilidade?.aptidaoFisica?"text-green-500":"text-amber-500"}>{elegibilidade?.aptidaoFisica?"✓":"!"}</span> Vigência e cumprimento operacional {elegibilidade?.aptidaoFisica?"aptos à avaliação final":"requerem nova consulta"}</p>
+          <p className="flex items-center gap-2"><span aria-hidden className={elegibilidade?.aptidaoFisica?"text-green-500":"text-amber-500"}>{elegibilidade?.aptidaoFisica?"✓":"!"}</span> {elegibilidade?.aptidaoFisica?"Nenhum registro operacional impeditivo pendente":"Verifique os impedimentos operacionais"}</p>
+          <p className="flex items-center gap-2"><span aria-hidden className={elegibilidade?.documentacaoCompleta?'text-green-500':'text-amber-500'}>{elegibilidade?.documentacaoCompleta?'✓':'!'}</span>{elegibilidade?.documentacaoCompleta?'Nenhuma evidência obrigatória pendente':'Documentação obrigatória pendente (conclusão parcial)'}</p>
+          {!!elegibilidade?.impedimentos.length&&!elegibilidade.aptidaoFisica&&<ul className="list-disc pl-5 text-xs text-foreground/75">{elegibilidade.impedimentos.map((p,i)=><li key={i}>{p}</li>)}</ul>}
+          {!elegibilidade?.documentacaoCompleta&&<ul className="list-disc pl-5 text-xs text-foreground/75">{elegibilidade?.pendencias.map((p,i)=><li key={i}>{p}</li>)}</ul>}
+        </div>
+        <label className="flex items-start gap-3 border-t border-current/15 pt-4"><input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-brand-green" required checked={confirmacaoContinuo} onChange={ev=>setConfirmacaoContinuo(ev.target.checked)} disabled={salvando}/><span>Confirmo que a obrigação contratual foi integralmente cumprida durante a vigência, conforme o critério de conclusão.</span></label>
+        <label className="block space-y-2">Observações de conclusão (opcional)<textarea rows={3} maxLength={500} className="block w-full min-w-0 rounded-lg border border-current/25 bg-background p-3" value={observacoesConclusao} onChange={ev=>setObservacoesConclusao(ev.target.value)} disabled={salvando}/></label>
+        {erroConclusao&&<p role="alert" className="text-error-text">{erroConclusao}</p>}
+        <div className="flex flex-wrap justify-end gap-2 border-t border-current/15 pt-3"><button type="button" disabled={salvando} className="rounded-lg border border-current/25 px-3 py-2" onClick={()=>setDialogoSolicitacao(null)}>Cancelar</button><button type="submit" disabled={salvando||!confirmacaoContinuo||!(dialogoSolicitacao==='parcial'?podeSolicitarParcial:podeSolicitarConclusao)} className="rounded-lg bg-violet-700 px-4 py-2 font-semibold text-white disabled:opacity-40">{salvando?'Solicitando…':dialogoSolicitacao==='parcial'?'Solicitar conclusão parcial':'Solicitar conclusão'}</button></div>
+      </form>
+    </ModalEtapa>}
+    {dialogoSolicitacao === 'parcial' && item?.tipo!=='CONTINUO' && <ConfirmacaoSimples titulo="Solicitar conclusão parcial?"
       descricao={podeSolicitarParcial || salvando ? "A execução física está completa, mas ainda existem comprovantes pendentes. A solicitação será encaminhada para aprovação, preservando as pendências documentais." : "A elegibilidade mudou. Consulte novamente a situação do entregável."}
       pendencias={[...(elegibilidade?.pendencias ?? []),...(elegibilidade?.impedimentos ?? []),...(erroConclusao ? [erroConclusao] : [])]}
       confirmar="Confirmar solicitação de conclusão parcial" compactoConclusao confirmacaoRoxa cancelarVermelho ocupado={salvando}
@@ -299,15 +322,18 @@ export function ModalDetalheEntregavel({ contratoId, etapaId, vigencia, entregav
       confirmar="Devolver para revisão" estadoContextual="revisao" cancelarVermelho ocupado={salvando} justificativa={motivoDevolucao} justificativaMinima={15}
       onJustificativaChange={setMotivoDevolucao} onCancelar={() => setDevolucaoPendente(false)}
       onConfirmar={async () => {setSalvando(true);setErroConclusao('');try {await transicaoAdministrativaEntregavel(contratoId,entregavelId,'devolver-solicitacao',motivoDevolucao.trim());setDevolucaoPendente(false);setMotivoDevolucao('');toastSucesso('Solicitação devolvida para revisão.');await atualizarDecisoes();}catch(erro){setErroConclusao(erro instanceof Error?erro.message:'Não foi possível devolver a solicitação.');}finally{setSalvando(false);}}}/>}
-    {confirmarEncerramento && <ModalEtapa titulo="Solicitar encerramento do entregável" contexto="Entregável" estadoContextual="finalizado" camada="edicao" ocupado={salvando} onFechar={() => setConfirmarEncerramento(false)}>
-      <div className="space-y-4 text-sm"><p>O entregável será encerrado no estado atual após aprovação.</p>
-        <label className="block font-semibold">Justificativa (15 a 200 caracteres)<textarea className="mt-2 w-full rounded-lg border border-purple-500/40 bg-background p-3" rows={3} maxLength={200} value={motivoEncerramento} onChange={e => setMotivoEncerramento(e.target.value)}/></label>
-        {erroConclusao && <p role="alert" className="text-error-text">{erroConclusao}</p>}
-        <div className="flex justify-end gap-2"><button type="button" className="rounded-lg border px-3 py-2" onClick={() => setConfirmarEncerramento(false)}>Cancelar</button><button type="button" disabled={salvando || motivoEncerramento.trim().length < 15} className="rounded-lg bg-purple-700 px-3 py-2 font-semibold text-white disabled:opacity-40" onClick={() => void transicionar('solicitar-encerramento')}>Solicitar encerramento</button></div>
-      </div>
+    {confirmarEncerramento && item && <ModalEtapa titulo={item.tipo==='CONTINUO'?'Solicitar encerramento do Contínuo':'Solicitar encerramento do entregável'} contexto={item.nome} estadoContextual="finalizado" camada="edicao" larguraFormulario="registro" ocupado={salvando} onFechar={() => setConfirmarEncerramento(false)}>
+      <form className="pi-continuo-confirmacao space-y-4 text-sm" onSubmit={ev=>{ev.preventDefault();if(cienteEncerramento&&motivoEncerramento.trim().length>=15)void transicionar('solicitar-encerramento');}}>
+        <div><p className="font-semibold text-foreground/70">Critério de conclusão</p><p className="mt-2 whitespace-pre-wrap break-words">{item.criterioConclusao||'Não informado'}</p></div>
+        <div className="space-y-2 border-t border-current/15 pt-3"><p>O encerramento será encaminhado para aprovação e preservará o avanço físico reconhecido. Não equivale à conclusão integral.</p><p>Execução física: {percentualFisico==null?'Indisponível':`${percentualFisico}%`}</p><p>{elegibilidade?.documentacaoCompleta?'Nenhuma evidência obrigatória pendente':'Comprovação obrigatória pendente ou indisponível'}</p>{!!elegibilidade?.impedimentos.length&&<ul className="list-disc pl-5 text-xs text-foreground/75">{elegibilidade.impedimentos.map((p,i)=><li key={i}>{p}</li>)}</ul>}{!!elegibilidade?.pendencias.length&&<ul className="list-disc pl-5 text-xs text-foreground/75">{elegibilidade.pendencias.map((p,i)=><li key={i}>{p}</li>)}</ul>}</div>
+        <label className="flex items-start gap-3 border-t border-current/15 pt-4"><input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-brand-green" required checked={cienteEncerramento} onChange={ev=>setCienteEncerramento(ev.target.checked)} disabled={salvando}/><span>Confirmo que solicito o encerramento no estado atual, sem declarar o cumprimento integral da obrigação.</span></label>
+        <label className="block space-y-2">Justificativa de encerramento (15 a 200 caracteres) *<textarea required minLength={15} maxLength={200} rows={3} className="block w-full min-w-0 rounded-lg border border-current/25 bg-background p-3" value={motivoEncerramento} onChange={e=>setMotivoEncerramento(e.target.value)} disabled={salvando}/><span className="block text-right text-xs text-foreground/65">{motivoEncerramento.length}/200</span></label>
+        {erroConclusao&&<p role="alert" className="text-error-text">{erroConclusao}</p>}
+        <div className="flex flex-wrap justify-end gap-2 border-t border-current/15 pt-3"><button type="button" disabled={salvando} className="rounded-lg border border-current/25 px-3 py-2" onClick={()=>setConfirmarEncerramento(false)}>Cancelar</button><button type="submit" disabled={salvando||!cienteEncerramento||motivoEncerramento.trim().length<15||!elegibilidade?.podeSolicitarEncerramento} className="rounded-lg bg-violet-700 px-4 py-2 font-semibold text-white disabled:opacity-40">{salvando?'Solicitando…':'Solicitar encerramento'}</button></div>
+      </form>
     </ModalEtapa>}
     {confirmarConclusao && <ConfirmacaoSimples titulo={`${tituloConclusaoEntregavel}?`}
-      descricao="A decisão será auditada, preservando o avanço físico e a situação documental. Etapa e contrato exigem decisões próprias."
+      descricao={item?.tipo==='CONTINUO'&&item.confirmacaoContinuo?`Critério confirmado: ${item.confirmacaoContinuo.criterio}.${item.confirmacaoContinuo.observacoes?` Observações: ${item.confirmacaoContinuo.observacoes}`:''} A aprovação reconhecerá o cumprimento físico, preservando as pendências documentais e as decisões próprias da etapa e do contrato.`:"A decisão será auditada, preservando o avanço físico e a situação documental. Etapa e contrato exigem decisões próprias."}
       confirmar={tituloConclusaoEntregavel} confirmacaoRoxa cancelarVermelho ocupado={salvando}
       onCancelar={() => setConfirmarConclusao(false)} onConfirmar={() => void concluir()} />}
   </ModalEtapa>;

@@ -17,7 +17,7 @@ function ConsultaEntregavel({contratoId,destino,foco,fechar}:Props){
  const q=useDetalheEntregavel(contratoId,destino.id);
  const item=q.dados;
  if(q.erro||item&&(item.contratoId!==contratoId||item.id!==destino.id))return <ConsultaAviso erro foco={foco} fechar={fechar}/>;
- if(!item)return <ConsultaAviso erro={false} foco={foco} fechar={fechar}/>;
+ if(!item)return null;
  return <ConsultaOperacionalAvulsa contratoId={contratoId} destino={{etapaId:item.etapaId,entregavelId:item.id}} foco={foco} fechar={fechar}/>;
 }
 function ConsultaOcorrencia({contratoId,destino,foco,fechar}:Props){

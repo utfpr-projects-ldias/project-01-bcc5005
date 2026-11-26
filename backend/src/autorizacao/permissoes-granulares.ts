@@ -9,7 +9,7 @@ export const CHAVES_PERMISSOES = [
   'criarEvidencias', 'editarEvidencias', 'arquivarEvidencias', 'reativarEvidencias', 'reabrirEvidencias', 'excluirEvidenciasArquivadas',
   'alterarObrigatoriedade', 'enviarComprovantes', 'verificarComprovantes', 'compartilharEvidencias',
   'criarOcorrencias', 'editarOcorrencias', 'editarMetaOcorrencia', 'vincularAtividadesOcorrencia', 'vincularEvidenciasOcorrencia', 'editarExigenciasOcorrencia', 'editarPesoOcorrencia', 'registrarExecucaoOcorrencia', 'aprovarExecucaoManual', 'corrigirExecucaoOcorrencia', 'corrigirExecucaoAprovada', 'bloquearExecucaoOcorrencia', 'excluirExecucaoOcorrencia', 'concluirOcorrencias', 'reabrirOcorrencias', 'configurarAgendaOcorrencias', 'editarExecucaoFisica', 'configurarPesos',
-  'criarMetasMarco', 'editarMetasMarco', 'vincularMetasMarco', 'aprovarVinculosMetasMarco',
+  'criarMetasMarco', 'editarMetasMarco', 'vincularMetasMarco', 'aprovarVinculosMetasMarco', 'solicitarMetasMarco', 'reabrirMetasMarco', 'arquivarMetasMarco', 'reativarMetasMarco',
   'registrarAtividades', 'editarAtividades', 'compartilharAtividades', 'verificarAtividades', 'reabrirAtividades', 'arquivarAtividades', 'reativarAtividades', 'excluirAtividadesArquivadas',
   'editarContrato', 'concluirContrato', 'encerrarContrato', 'reabrirContrato', 'cancelarContrato', 'reverterCancelamentoContrato', 'suspenderContrato', 'retomarContrato', 'verificarDocumentos', 'reabrirDocumentos', 'concluirEtapas', 'concluirEntregaveis', 'anexarDocumentos', 'editarDocumentos', 'arquivarDocumentos', 'reativarDocumentos', 'excluirDocumentosArquivados', 'verificarDocumentoPrincipal', 'reabrirDocumentoPrincipal', 'arquivarDocumentoPrincipal', 'reativarDocumentoPrincipal', 'excluirDocumentoPrincipal', 'administrarDocumentoPrincipal',
 ] as const;
@@ -22,8 +22,10 @@ export const ACAO_PERMISSAO: Readonly<Record<string, ChavePermissao>> = {
   'ocorrencias:iniciar-previstas': 'editarOcorrencias', 'ocorrencias:editar-meta': 'editarMetaOcorrencia',
   'ocorrencias:registrar': 'registrarExecucaoOcorrencia', 'ocorrencias:decidir-lancamento': 'aprovarExecucaoManual', 'execucao:decidir-lancamento': 'aprovarExecucaoManual', 'ocorrencias:vincular-evidencia': 'vincularEvidenciasOcorrencia', 'ocorrencias:concluir': 'concluirOcorrencias',
   'ocorrencias:reabrir': 'reabrirOcorrencias',
+  'metas-marco:registrar-manual': 'registrarExecucaoOcorrencia', 'metas-marco:corrigir-manual': 'corrigirExecucaoOcorrencia', 'metas-marco:decidir-manual': 'aprovarExecucaoManual',
   'metas-marco:criar': 'criarMetasMarco', 'metas-marco:editar': 'editarMetasMarco',
   'metas-marco:vincular': 'vincularMetasMarco', 'metas-marco:decidir': 'aprovarVinculosMetasMarco',
+  'metas-marco:solicitar': 'solicitarMetasMarco', 'metas-marco:reabrir': 'reabrirMetasMarco', 'metas-marco:arquivar': 'arquivarMetasMarco', 'metas-marco:reativar': 'reativarMetasMarco',
   'pesos:atualizar': 'configurarPesos',
   'execucao:atualizar': 'editarExecucaoFisica',
   'etapas:criar': 'criarEtapas', 'etapas:solicitar-conclusao': 'editarEtapas', 'etapas:editar': 'editarEtapas',
@@ -72,7 +74,7 @@ export const ACAO_PERMISSAO: Readonly<Record<string, ChavePermissao>> = {
 
 /** Edição operacional não delega decisões, arquivamento ou reabertura. */
 const EDICAO_OPERACIONAL: readonly ChavePermissao[] = ['registrarAtividades', 'editarAtividades', 'criarEvidencias', 'editarEvidencias', 'enviarComprovantes', 'anexarDocumentos', 'registrarExecucaoOcorrencia', 'editarExecucaoFisica', 'corrigirExecucaoOcorrencia'];
-const EDICAO_GESTOR: readonly ChavePermissao[] = ['criarEtapas', 'editarEtapas', 'reordenarEtapas', 'criarEntregaveis', 'editarEntregaveis', 'criarOcorrencias', 'editarOcorrencias', 'configurarAgendaOcorrencias', 'editarContrato', 'editarDocumentos'];
+const EDICAO_GESTOR: readonly ChavePermissao[] = ['criarEtapas', 'editarEtapas', 'reordenarEtapas', 'criarEntregaveis', 'editarEntregaveis', 'criarOcorrencias', 'editarOcorrencias', 'configurarAgendaOcorrencias', 'editarContrato', 'editarDocumentos', 'criarMetasMarco', 'editarMetasMarco', 'vincularMetasMarco', 'solicitarMetasMarco'];
 
 export function permissoesEfetivas(perfil: PerfilUsuario | string, podeEditar: boolean,
   detalhes: PermissoesGranulares | null | undefined): Record<ChavePermissao, boolean> {
@@ -80,7 +82,8 @@ export function permissoesEfetivas(perfil: PerfilUsuario | string, podeEditar: b
   const gestorEditor = perfil === 'GESTOR' && podeEditar;
   const base = {} as Record<ChavePermissao, boolean>;
   for (const chave of CHAVES_PERMISSOES) {
-    const padrao = gestorEditor && (EDICAO_OPERACIONAL.includes(chave) || EDICAO_GESTOR.includes(chave));
+    const metaNova = ['criarMetasMarco', 'editarMetasMarco', 'vincularMetasMarco', 'solicitarMetasMarco'].includes(chave);
+    const padrao = gestorEditor && (!metaNova || detalhes == null) && (EDICAO_OPERACIONAL.includes(chave) || EDICAO_GESTOR.includes(chave));
     base[chave] = admin || (detalhes?.[chave] ?? padrao);
   }
   return base;

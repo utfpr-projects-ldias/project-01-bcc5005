@@ -1,4 +1,4 @@
-import { CLASSES_ACAO_MENU, estadoDoObjeto } from './identidade-operacional';
+import { CLASSES_ACAO_MENU, estadoDoObjeto, rotuloEstadoEntregavel } from './identidade-operacional';
 
 test.each([
   ['contrato', 'CANCELADO', 'cancelado'],
@@ -47,4 +47,11 @@ test('etapa reaberta usa identidade de revisão independentemente do status arma
 test('solicitação pendente prevalece sobre marcador de reabertura antigo', () => {
   expect(estadoDoObjeto({ objeto: 'entregavel', status: 'PENDENTE_CONCLUSAO', reaberto: true })).toBe('pendente');
   expect(estadoDoObjeto({ objeto: 'entregavel', status: 'PENDENTE_ENCERRAMENTO', reaberto: true })).toBe('pendente');
+});
+
+test('Contínuo exibe um único rótulo de conclusão com atrasos, sem alterar o estado',()=>{
+ expect(rotuloEstadoEntregavel('CONCLUIDO',false,false,false,false,true)).toBe('Concluído com atrasos');
+ expect(rotuloEstadoEntregavel('CONCLUIDO')).toBe('Concluído');
+ expect(rotuloEstadoEntregavel('CONCLUIDO_PARCIALMENTE',false,false,false,false,true)).toBe('Concluído parcialmente com atrasos');
+ expect(rotuloEstadoEntregavel('CONCLUIDO',false,true,false,false,true)).toBe('Em revisão');
 });

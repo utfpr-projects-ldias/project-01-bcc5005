@@ -1,4 +1,5 @@
 'use client';
+import { BotaoDesvincularMeta } from '@/app/components/botao-desvincular-meta';
 import { BotaoExcluirModal, BotaoAcaoModal, BotaoEditarModal } from '@/app/components/botoes-modal';
 import { modalidadeEncerramento } from '@/lib/modalidade-encerramento';
 import { consultarCompartilhada } from '@/lib/atividades-compartilhadas';
@@ -411,9 +412,9 @@ function ContadoresGrupoAtividade({grupoId,itens}:{grupoId:string;itens:{rotulo:
 }
 
 /** O MESMO cartão para diário, contrato, modal e entregável; ações autorizadas pela API. */
-export function CartaoAtividade({ atividade, contratoId, permissoes, compacto = false, diario = false, onAbrirEntregavel,onAbrirOcorrencia,onEditar, onAtualizada, dentroEntregavel = false, abrirDetalhesInicialmente = false, aoFecharDetalhe }: {
+export function CartaoAtividade({ atividade, contratoId, permissoes, compacto = false, diario = false, onAbrirEntregavel,onAbrirOcorrencia,onEditar, onAtualizada, dentroEntregavel = false, abrirDetalhesInicialmente = false, aoFecharDetalhe, acaoDesvincularMeta }: {
   atividade: Atividade; contratoId: string; permissoes?: PermissoesAtividade; compacto?: boolean; diario?:boolean; onAbrirEntregavel?:(id:string,origem?:HTMLElement)=>void; onAbrirOcorrencia?:(id:string)=>void;
-  onEditar?: (atividade: Atividade, gatilho: HTMLButtonElement) => void; onAtualizada?: () => void; dentroEntregavel?: boolean; abrirDetalhesInicialmente?: boolean; aoFecharDetalhe?:()=>void;
+  onEditar?: (atividade: Atividade, gatilho: HTMLButtonElement) => void; onAtualizada?: () => void; dentroEntregavel?: boolean; abrirDetalhesInicialmente?: boolean; aoFecharDetalhe?:()=>void; acaoDesvincularMeta?:()=>void;
   estadosEntregaveis?: Record<string, EstadoVisualEntregavel>; etapasPorId?: Record<string,string>;
 }) {
   const cache = useRepositorioConsultasOpcional();
@@ -535,6 +536,7 @@ export function CartaoAtividade({ atividade, contratoId, permissoes, compacto = 
               onClick={e => solicitar(acao, e.currentTarget)}>{acao !== 'solicitar-conclusao' && acao !== 'reabrir' ? <Icone nome={acao}/> : null}{ROTULO[acao]}</BotaoAcaoModal>)}
         </MenuAcoesObjeto>}
         {estado === 'VERIFICADA' && acaoDisponivel('arquivar') && acaoDisponivel('reabrir') && <button type="button" onClick={() => solicitar('arquivar', null)} title="Arquivar atividade verificada" aria-label="Arquivar atividade verificada" className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-orange-500/45 bg-orange-500/10 text-orange-700 dark:text-orange-300 hover:bg-orange-500/20"><Icone nome="arquivar" /></button>}
+        {acaoDesvincularMeta && estado==='REGISTRADA' && <BotaoDesvincularMeta onClick={acaoDesvincularMeta}/>}
         {estado === 'ARQUIVADA' && acaoDisponivel('excluir') && <BotaoExcluirModal rotulo="Excluir atividade arquivada" onClick={() => solicitar('excluir', null)}/>}
       </>}>
       <div className="space-y-4 text-sm" data-testid="detalhe-atividade-modal">

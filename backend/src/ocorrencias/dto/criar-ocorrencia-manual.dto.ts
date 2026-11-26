@@ -1,5 +1,5 @@
 import {
-  IsNotEmpty,
+  IsNotEmpty, IsUUID,
   IsIn,
   IsOptional,
   IsBoolean,
@@ -10,6 +10,7 @@ import {
 } from 'class-validator';
 
 export class CriarOcorrenciaManualDto {
+  @IsOptional() @IsUUID() metaMarcoId?:string;
   @IsOptional() @IsBoolean() exigeAtividade?: boolean;
   @IsOptional() @IsInt() @Min(0) @Max(99) minimoAtividadesVerificadas?: number;
   @IsOptional() @IsInt() @Min(0) @Max(99) minimoEvidenciasVerificadas?: number;

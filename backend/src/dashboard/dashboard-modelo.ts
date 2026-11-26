@@ -21,11 +21,11 @@ export function projetarContrato(c: Contrato, progresso: Progresso, documental: 
   const abertos = progresso.entregaveis.filter(e => pendente(e.statusEntregavel, Boolean(e.reabertoEm || e.regularizacaoDocumentalSolicitada)));
   const ativosIds = new Set(progresso.entregaveis.map(e => e.entregavelId));
   const prazos: Prazo[] = [];
-  function prazo(tipo: Prazo['tipo'], id: string, entregavelId: string | null, nome: string, data: string | null, aberto: boolean) {
-    if (data) prazos.push({tipo,id,entregavelId,nome,data,aberto,atrasado:aberto && data < hoje});
+  function prazo(tipo: Prazo['tipo'], id: string, entregavelId: string | null, nome: string, data: string | null, aberto: boolean, atrasoCalculado?:boolean) {
+    if (data) prazos.push({tipo,id,entregavelId,nome,data,aberto,atrasado:aberto && (atrasoCalculado??data < hoje)});
   }
   for (const e of etapas) prazo('ETAPA',e.id,null,e.nome,e.terminoPrevisto,pendente(e.status,Boolean(e.reabertoEm)));
-  for (const e of progresso.entregaveis) prazo('ENTREGAVEL',e.entregavelId,e.entregavelId,e.nome,e.terminoPrevisto,abertos.includes(e));
+  for (const e of progresso.entregaveis) prazo('ENTREGAVEL',e.entregavelId,e.entregavelId,e.nome,e.terminoPrevisto,abertos.includes(e),e.tipo==='CONTINUO'?false:undefined);
   for (const o of ocorrencias) if (ativosIds.has(o.entregavelId)) prazo('OCORRENCIA',o.id,o.entregavelId,o.titulo,o.dataPrevista ?? o.periodoFim,pendente(o.status));
   prazos.sort((a,b)=>a.data.localeCompare(b.data)||a.nome.localeCompare(b.nome,'pt-BR')||a.id.localeCompare(b.id));
   const alertas: Alerta[] = [];
@@ -34,7 +34,7 @@ export function projetarContrato(c: Contrato, progresso: Progresso, documental: 
   const monitorar = !c.arquivadoEm && c.status !== 'CANCELADO' && (!FINAL_CONTRATO.includes(c.status)||Boolean(c.reabertoEm));
   if (monitorar) {
     for (const p of prazos) {
-      if (p.aberto && (p.atrasado || diasEntre(hoje,p.data)<=limite)) alertas.push({tipo:p.atrasado?'ATRASO':'PRAZO_PROXIMO',severidade:p.atrasado?'Prioritário':'Atenção',objeto:p.tipo,id:p.id,entregavelId:p.entregavelId,data:p.data,motivo:p.atrasado?`${p.nome} — prazo vencido`:`${p.nome} — prazo próximo`});
+      if (p.aberto && (p.atrasado || (p.data>=hoje && diasEntre(hoje,p.data)<=limite))) alertas.push({tipo:p.atrasado?'ATRASO':'PRAZO_PROXIMO',severidade:p.atrasado?'Prioritário':'Atenção',objeto:p.tipo,id:p.id,entregavelId:p.entregavelId,data:p.data,motivo:p.atrasado?`${p.nome} — prazo vencido`:`${p.nome} — prazo próximo`});
     }
     if (diasRestantes <= limite) alertas.push({tipo:diasRestantes<0?'VIGENCIA_VENCIDA':'ENCERRAMENTO_PROXIMO',severidade:diasRestantes<0?'Prioritário':'Atenção',objeto:'CONTRATO',id:c.id,entregavelId:null,data:c.terminoVigencia,motivo:diasRestantes<0?'Vigência vencida':'Término da vigência próximo'});
   }
