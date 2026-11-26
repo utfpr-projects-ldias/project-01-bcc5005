@@ -2,6 +2,7 @@
 import { BotaoExcluirModal, BotaoAcaoModal, BotaoEditarModal } from '@/app/components/botoes-modal';
 import { modalidadeEncerramento } from '@/lib/modalidade-encerramento';
 import { consultarCompartilhada } from '@/lib/atividades-compartilhadas';
+import { BotaoVinculos } from '@/app/components/botao-vinculos';
 import { ContadoresVinculos } from '@/app/components/contadores-vinculos';
 import { EtiquetaAtraso } from '@/app/components/etiqueta-atraso';
 
@@ -406,7 +407,7 @@ function ContadoresAtividade({grupoId,itens}:{grupoId?:string|null;itens:{rotulo
 }
 function ContadoresGrupoAtividade({grupoId,itens}:{grupoId:string;itens:{rotulo:string;total:number|null}[]}) {
  const consulta=useConsulta(['atividades','compartilhada',grupoId],()=>consultarCompartilhada(grupoId),{validadeMs:30000});
- return <ContadoresVinculos itens={itens.map(i=>i.rotulo==='Contratos'?{...i,total:consulta.dados?.total??null}:i)}/>;
+ return <ContadoresVinculos itens={itens.map((i,indice)=>({...i,total:indice===0?consulta.dados?.total??null:indice===1?consulta.dados?.vinculos?.entregaveis??null:indice===2?consulta.dados?.vinculos?.ocorrencias??null:consulta.dados?.vinculos?.evidencias??null}))}/>;
 }
 
 /** O MESMO cartão para diário, contrato, modal e entregável; ações autorizadas pela API. */
@@ -464,7 +465,7 @@ export function CartaoAtividade({ atividade, contratoId, permissoes, compacto = 
     } catch (e) { setErro(e instanceof Error ? e.message : 'Não foi possível executar a operação.'); }
     finally { setOcupado(false); }
   }
-  const contadores = [{rotulo:'Contratos',total:atividade.atividadeCompartilhadaId?null:1},{rotulo:atividade.atividadeCompartilhadaId?'Entregáveis neste contrato':'Entregáveis',total:new Set(atividade.entregaveis.map(e=>e.id)).size},{rotulo:atividade.atividadeCompartilhadaId?'Ocorrências neste contrato':'Ocorrências',total:new Set([...(atividade.ocorrencias??[]).map(o=>o.id),...(atividade.ocorrenciaIds??[]),...(atividade.ocorrenciaId?[atividade.ocorrenciaId]:[])]).size},{rotulo:'Evidências',total:atividade.comprovantesVinculados??null}];
+  const contadores = [{rotulo:'Contratos',total:atividade.atividadeCompartilhadaId?null:1},{rotulo:'Entregáveis',total:new Set(atividade.entregaveis.map(e=>e.id)).size},{rotulo:'Ocorrências',total:new Set([...(atividade.ocorrencias??[]).map(o=>o.id),...(atividade.ocorrenciaIds??[]),...(atividade.ocorrenciaId?[atividade.ocorrenciaId]:[])]).size},{rotulo:'Evidências',total:atividade.comprovantesVinculados??null}];
   function abrirDetalheCard() {
     // Abre o diálogo real, sem camada intermediária de carregamento.
     setDetalheAberto(true);
@@ -550,7 +551,7 @@ export function CartaoAtividade({ atividade, contratoId, permissoes, compacto = 
           <h3 className="text-sm font-semibold">Execução física</h3>
           {atividade.contribuicoesDiario.length===0?<p className="text-xs text-foreground/65">Sem contribuição física adicional.</p>:<ul className="divide-y divide-slate-500/15">{atividade.contribuicoesDiario.map((c,i)=><li key={`${c.entregavelId}:${c.ocorrenciaId}:${i}`} className="flex flex-wrap items-center justify-between gap-2 py-2"><div className="min-w-0"><p className="break-words font-medium">{c.destino}</p><p className="text-xs text-foreground/65">{c.reconhecida?'Reconhecida':c.situacao==='PENDENTE'?'Aguardando reconhecimento':'Não reconhecida'}{c.ocorrenciaId&&` · ${atividade.ocorrencias?.find(o=>o.id===c.ocorrenciaId)?.titulo??'Ocorrência vinculada'}`}</p></div><strong className="tabular-nums">{c.reconhecida?'+':''}{c.valor.toLocaleString('pt-BR',{maximumFractionDigits:3})}{c.unidade==='%'?'%':` ${c.unidade}`}</strong></li>)}</ul>}
         </section>}
-        <button type="button" className="pi-atividade-vinculos-resumo" onClick={()=>setListaEntregaveisAberta(true)}><span className="font-semibold">Vínculos</span><ContadoresAtividade grupoId={atividade.atividadeCompartilhadaId} itens={contadores}/><span aria-hidden="true">›</span></button>
+        <BotaoVinculos onClick={()=>setListaEntregaveisAberta(true)}><ContadoresAtividade grupoId={atividade.atividadeCompartilhadaId} itens={contadores}/></BotaoVinculos>
 
 
       </div>

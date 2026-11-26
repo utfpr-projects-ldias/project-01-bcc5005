@@ -1,6 +1,7 @@
 'use client';
 import { BotaoExcluirModal, BotaoAcaoModal } from '@/app/components/botoes-modal';
 import {ContadoresVinculos} from '@/app/components/contadores-vinculos';
+import {itensVinculosEvidencia} from '@/lib/vinculos-evidencia';
 
 import { MenuAcoesObjeto } from '@/app/components/menu-acoes-objeto';
 import { AbasRolaveis } from '@/app/components/abas-rolaveis';
@@ -87,7 +88,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
   const planejamentoHabilitado = !bloqueadoPorPai && !paiArquivado && !paiConcluido && !item.arquivadoEm && !concluidoSemReabertura;
   const [historicoExpandido, setHistoricoExpandido] = useState(false);
   const chaveEvidencias = `${item.contratoId}:${item.id}:${item.evidenciasEsperadas.map(e => e.id).join(',')}:${versaoEstado}`;
-  const [consultaStatus, setConsultaStatus] = useState<{ chave: string; status: Record<string, { status: StatusComprovante; arquivo: string | null; reabertoEm?: string | null; vinculos?: DetalheEvidencia['vinculosAtuais'] }> }>({ chave: '', status: {} });
+  const [consultaStatus, setConsultaStatus] = useState<{ chave: string; status: Record<string, { status: StatusComprovante; arquivo: string | null; reabertoEm?: string | null; vinculos: ReturnType<typeof itensVinculosEvidencia> }> }>({ chave: '', status: {} });
   const statusInicialCarregado = item.evidenciasEsperadas.length === 0 ||
     consultaStatus.chave === chaveEvidencias;
   const [detalheConfirmado,setDetalheConfirmado] = useState<{chave:string;detalhe:DetalheEvidencia}|null>(()=>evidenciaAvulsa?{chave:chaveEvidencias,detalhe:evidenciaAvulsa}:null);
@@ -108,7 +109,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
   },[chaveEvidencias]);
   const confirmado = detalheConfirmado?.chave === chaveEvidencias && detalheConfirmado.detalhe.id === evidenciaId ? detalheConfirmado.detalhe : null;
   const temStatusAnterior = consultaStatus.chave.startsWith(`${item.contratoId}:${item.id}:`);
-  const estadoEvidencias = { ...(statusInicialCarregado || temStatusAnterior ? consultaStatus.status : {}), ...(confirmado ? {[confirmado.id]:{status:confirmado.status,arquivo:confirmado.versoes[0]?.nomeOriginal ?? null,reabertoEm:confirmado.reabertoEm,vinculos:confirmado.vinculosAtuais}} : {}) };
+  const estadoEvidencias = { ...(statusInicialCarregado || temStatusAnterior ? consultaStatus.status : {}), ...(confirmado ? {[confirmado.id]:{status:confirmado.status,arquivo:confirmado.versoes[0]?.nomeOriginal ?? null,reabertoEm:confirmado.reabertoEm,vinculos:itensVinculosEvidencia(confirmado)}} : {}) };
 
   const [focoRetornoEvidencia, setFocoRetornoEvidencia] = useState<HTMLElement | null>(focoAvulso??null);
   useEffect(() => {
@@ -120,7 +121,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
     if (!ids.length) return;
     void Promise.allSettled(ids.map(id => consultarEvidencia(item.contratoId, item.id, id)))
       .then(resultados => { if (!ativo) return;
-        const mapa: Record<string, { status: StatusComprovante; arquivo: string | null; reabertoEm?: string | null; vinculos?: DetalheEvidencia['vinculosAtuais'] }> = {};
+        const mapa: Record<string, { status: StatusComprovante; arquivo: string | null; reabertoEm?: string | null; vinculos: ReturnType<typeof itensVinculosEvidencia> }> = {};
         resultados.forEach((resultado, indice) => {
           const detalhe = resultado.status === 'fulfilled' ? resultado.value : null;
           // Respostas HTTP podem estar malformadas apesar da tipagem estática.
@@ -130,7 +131,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
             detalhe.contratoId === item.contratoId && detalhe.entregavelId === item.id &&
             Array.isArray(detalhe.versoes) &&
             ['SEM_ENVIO', 'PENDENTE_VERIFICACAO', 'VERIFICADA', 'REJEITADA'].includes(detalhe.status))
-            mapa[ids[indice]] = { status: detalhe.status, arquivo: detalhe.versoes[0]?.nomeOriginal ?? null, reabertoEm: detalhe.reabertoEm, vinculos:detalhe.vinculosAtuais };
+            mapa[ids[indice]] = { status: detalhe.status, arquivo: detalhe.versoes[0]?.nomeOriginal ?? null, reabertoEm: detalhe.reabertoEm, vinculos:itensVinculosEvidencia(detalhe) };
         });
         setConsultaStatus({ chave: chaveEvidencias, status: mapa });
       });
@@ -602,7 +603,7 @@ export function ConteudoEntregavel({ item, resumoInicial, podeEditarEsperada = f
                       {estadoEvidencias[e.id]?.arquivo ? (categoriaVisivelEvidencia(e.tipoEvidencia, estadoEvidencias[e.id]?.arquivo ?? '') ?? e.tipoEvidencia) : e.descricao}
                     </span>}
                   </div>
-                  <ContadoresVinculos itens={[{rotulo:"Contratos",total:1},{rotulo:"Entregáveis",total:1},{rotulo:"Ocorrências",total:estadoEvidencias[e.id]?.vinculos?.filter(v=>v.tipo==='ocorrencia').length??null},{rotulo:"Atividades",total:estadoEvidencias[e.id]?.vinculos?.filter(v=>v.tipo==='atividade').length??null}]}/>
+                  <ContadoresVinculos itens={estadoEvidencias[e.id]?.vinculos??itensVinculosEvidencia()}/>
                   <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2 pl-11 sm:pl-0">
                     <span className={`rounded-full border px-2 py-1 text-[11px] ${estadoEvidencias[e.id]?.reabertoEm ? 'border-teal-600/55 bg-teal-900/20 text-teal-200' : estadoEvidencias[e.id]?.status === 'VERIFICADA' ? 'border-violet-400/45 bg-violet-500/15 text-violet-100' : estadoEvidencias[e.id] ? CLASSE_STATUS[estadoEvidencias[e.id].status] : 'border-foreground/20 text-foreground/60'}`}
                       aria-label={`Status da evidência ${e.tipoEvidencia}`}>

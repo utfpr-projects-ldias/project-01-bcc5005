@@ -4,7 +4,8 @@ import { chaveUpload } from './idempotencia-upload';
 export type StatusComprovante = 'SEM_ENVIO' | 'PENDENTE_VERIFICACAO' | 'VERIFICADA' | 'REJEITADA';
 export type DestinoCompartilhamento = { entregavelId:string; esperadaId:string|null; quantidadeExecutada?:string; percentualExecucao?:string; ocorrenciaId?:string; ocorrenciaIds?:string[] };
 export type OpcaoCompartilhamento = DestinoCompartilhamento & {contratoId:string;contrato:string;entregavel:string;tipo:string|null;descricao:string|null};
-export type VinculoCompartilhado = {contratoId:string;contrato:string;entregavelId:string;entregavel:string;esperadaId:string;comprovanteId:string;status:StatusComprovante;vigente:boolean;somenteDocumento:boolean;podeVerificar:boolean};
+export type VinculoLocalEvidencia = {id:string;titulo:string;tipo:'ocorrencia'|'atividade'};
+export type VinculoCompartilhado = {contratoId:string;contrato:string;entregavelId:string;entregavel:string;esperadaId:string;comprovanteId:string;status:StatusComprovante;vigente:boolean;somenteDocumento:boolean;podeVerificar:boolean;podeEditarVinculos?:boolean;vinculosAtuais?:VinculoLocalEvidencia[]};
 export type VersaoComprovante = {
   grupoCompartilhadoId?:string|null;
   id: string; autorId: string; nomeOriginal: string; tipoMime: string; tamanho: number;
@@ -28,7 +29,7 @@ export type DetalheEvidencia = {
   declaracaoPreliminar?:DeclaracaoPreliminar|null;
   totalDestinosAguardandoEnvio?:number;
   aguardandoEnvioCompartilhado?:boolean;
-  compartilhamentosPreliminares?:{esperadaId:string;entregavelId:string;entregavel:string;contratoId:string;contrato:string}[];
+  compartilhamentosPreliminares?:{esperadaId:string;entregavelId:string;entregavel:string;contratoId:string;contrato:string;vinculosAtuais?:VinculoLocalEvidencia[]}[];
   id: string; codigoPublico?: number; contratoId: string; entregavelId: string; tipoEvidencia: string;
   descricao: string | null; obrigatoria: boolean;
   status: StatusComprovante; versoes: VersaoComprovante[]; podeVerificar: boolean; contextoPermiteAlterar?: boolean; podeEditarContribuicao?: boolean;
@@ -39,7 +40,8 @@ export type DetalheEvidencia = {
   ocorrenciasQuantitativas?: { id: string; titulo: string; status: string }[];
   historico?: EventoRastreabilidadeEvidencia[];
   compartilhamentos?: VinculoCompartilhado[];
-  vinculosAtuais?: {id:string;titulo:string;tipo:'ocorrencia'|'atividade'}[];
+  vinculosAtuais?: VinculoLocalEvidencia[];
+  contrato?:string; entregavel?:string; podeEditarVinculos?:boolean;
   arquivadoEm?: string | null; reabertoEm?: string | null; entregavelArquivadoEm?: string | null;
 };
 /** Validação em runtime: a resposta HTTP pode estar incompleta mesmo quando foi tipada em TypeScript.

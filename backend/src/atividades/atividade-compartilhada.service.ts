@@ -143,7 +143,17 @@ export class AtividadeCompartilhadaService {
       podeAprovar: registro.status === 'PENDENTE_CONCLUSAO' &&
         await this.pode(ator, 'atividades:verificar', registro.contratoId),
     });
-    return { id, ...contarAprovacoes(visiveis.map(r => r.status)), atividades: linhas };
+    // Agrega exclusivamente os membros que passaram pela autorização de leitura acima.
+    const [vinculos] = await this.database.manager.query(`WITH membros AS (
+      SELECT id,"contratoId","ocorrenciaId" FROM atividades WHERE id=ANY($1::uuid[]) AND "excluidaEm" IS NULL
+    ) SELECT
+      (SELECT count(DISTINCT (m."contratoId",ae."entregavelId"))::int FROM membros m JOIN atividade_entregaveis ae ON ae."atividadeId"=m.id) AS entregaveis,
+      (SELECT count(*)::int FROM (SELECT m."contratoId",ao."ocorrenciaId" FROM membros m JOIN atividade_ocorrencias ao ON ao."atividadeId"=m.id AND ao."contratoId"=m."contratoId" UNION SELECT "contratoId","ocorrenciaId" FROM membros WHERE "ocorrenciaId" IS NOT NULL) o) AS ocorrencias,
+      (SELECT count(DISTINCT (ac.contrato_id,ac.comprovante_id))::int FROM membros m JOIN atividade_comprovantes ac ON ac.atividade_id=m.id AND ac.contrato_id=m."contratoId"
+        JOIN comprovantes_evidencia c ON c.id=ac.comprovante_id AND c.contrato_id=ac.contrato_id JOIN evidencias_esperadas ev ON ev.id=c.evidencia_esperada_id
+        WHERE ev.arquivado_em IS NULL AND EXISTS(SELECT 1 FROM atividade_entregaveis ae WHERE ae."atividadeId"=m.id AND ae."entregavelId"=c.entregavel_id)
+        AND NOT EXISTS(SELECT 1 FROM comprovantes_evidencia n WHERE n.evidencia_esperada_id=c.evidencia_esperada_id AND (n.criado_em,n.id)>(c.criado_em,c.id))) AS evidencias`,[visiveis.map(r=>r.id)]) as {entregaveis:number;ocorrencias:number;evidencias:number}[];
+    return { id, ...contarAprovacoes(visiveis.map(r => r.status)), atividades: linhas, vinculos };
   }
 
   /** Retira apenas a associação ao grupo. O diário local, as medições e os comprovantes permanecem intactos. */

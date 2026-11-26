@@ -4688,3 +4688,39 @@ body button:not(:disabled) svg.pi-icone-reabrir-verde path { fill:currentColor!i
 .dark body button:not(:disabled) svg.pi-icone-reabrir-verde, body.dark button:not(:disabled) svg.pi-icone-reabrir-verde { color:#4ade80!important; }
 /* Somente os seletores do Novo registro usam rótulo curto em uma linha. */
 body [role="listbox"][data-pi-opcoes-compactas] [role="option"] { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; overflow-wrap:normal; }
+
+/* Consultas de vínculos: dimensões estáveis, independentemente da aba ou quantidade de registros. */
+[data-tec08-modal] > [data-tec08-entidade="modal"][data-pi-modal-neutro]:has(> [data-tec08-corpo-modal] > .pi-vinculos-estavel) {
+  height:min(78dvh,640px)!important;
+  max-height:calc(100dvh - 24px)!important;
+}
+[data-pi-formulario-modal] > [data-tec08-corpo-modal]:has(> .pi-vinculos-estavel) { overflow:hidden; display:flex; }
+.pi-vinculos-estavel { flex:1; min-height:0; min-width:0; display:flex; flex-direction:column; gap:12px; }
+.pi-vinculos-estavel > :not(.pi-vinculos-lista-estavel) { flex-shrink:0; }
+.pi-vinculos-estavel > .pi-atividade-vinculos-abas { margin:0; flex-wrap:nowrap; overflow-x:auto; }
+.pi-vinculos-estavel > .pi-atividade-vinculos-abas button { white-space:nowrap; flex-shrink:0; }
+.pi-vinculos-estavel .pi-vinculos-filtros-estaveis { display:grid; grid-template-columns:minmax(0,1fr) repeat(2,minmax(0,180px)); gap:8px; align-items:start; }
+.pi-vinculos-estavel .pi-vinculos-filtros-estaveis > :first-child:only-child { grid-column:1/-1; }
+.pi-vinculos-estavel .pi-vinculos-filtros-estaveis:not(:has(> :nth-child(3))) { grid-template-columns:minmax(0,1fr) minmax(0,220px); }
+.pi-vinculos-estavel .pi-vinculos-filtros-estaveis > label { min-width:0; }
+.pi-vinculos-estavel .pi-vinculos-filtros-estaveis :is(input,select) { height:40px; min-height:40px; }
+.pi-vinculos-lista-estavel { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; scrollbar-gutter:stable; display:flex; flex-direction:column; gap:8px; padding:2px 4px 2px 2px; }
+.pi-vinculos-lista-estavel > * { flex-shrink:0; min-width:0; }
+.pi-card-adicionar-vinculo { display:flex; flex-wrap:wrap; align-items:center; gap:8px; border:1px dashed var(--pi-form-borda); border-radius:10px; padding:10px; }
+.pi-card-adicionar-vinculo > label { flex:1 1 180px; }
+.pi-card-adicionar-vinculo select { width:100%; }
+.pi-card-adicionar-vinculo > button { display:inline-flex; align-items:center; justify-content:center; gap:8px; flex:1 1 auto; min-height:40px; padding:8px 12px; border-radius:7px; border:1px solid #48616d!important; background:#293b44!important; color:#e5eef2!important; font-weight:600; font-size:13px; }
+.pi-card-adicionar-vinculo > button:hover:not(:disabled) { background:#354c57!important; }
+.pi-card-adicionar-vinculo > button:disabled { opacity:.5; cursor:not-allowed; }
+@container (max-width:560px) {
+  .pi-vinculos-estavel .pi-vinculos-filtros-estaveis { grid-template-columns:repeat(2,minmax(0,1fr)); min-height:88px; }
+  .pi-vinculos-estavel .pi-vinculos-filtros-estaveis > :first-child { grid-column:1/-1; }
+  .pi-vinculos-estavel .pi-vinculos-filtros-estaveis:not(:has(> :nth-child(3))) > :nth-child(2) { grid-column:1/-1; }
+}
+
+@media (max-height:520px) {
+  [data-tec08-modal] > [data-tec08-entidade="modal"][data-pi-modal-neutro]:has(> [data-tec08-corpo-modal] > .pi-vinculos-estavel) { height:calc(100dvh - 24px)!important; }
+  [data-pi-formulario-modal] > [data-tec08-corpo-modal]:has(> .pi-vinculos-estavel) { overflow-y:auto; }
+  .pi-vinculos-estavel { min-height:340px; }
+}
+.pi-vinculos-estavel .pi-busca-vinculos > span.relative { width:100%; justify-self:stretch; }

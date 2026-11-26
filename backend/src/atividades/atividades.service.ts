@@ -526,7 +526,16 @@ export class AtividadesService implements OnModuleInit {
     const medicoesDiretas=registro.entregaveis.some(e=>e.quantidadeDiretaIntegrada)?await this.repo.manager.query(`SELECT entregavel_id AS "entregavelId",quantidade::text FROM atividade_entregavel_medicoes WHERE contrato_id=$1 AND atividade_id=$2`,[contratoId,id]):[];
     const parcelasAtividade=registro.entregaveis.some(e=>e.execucoesIntegradas)?await this.repo.manager.findBy(ExecucaoLancamento,{contratoId,origem:'ATIVIDADE',origemId:id}):[];
     const parcelasPercentuais=parcelasAtividade.filter(p=>!p.referenciaId).map(p=>({entregavelId:p.entregavelId,ocorrenciaId:p.ocorrenciaId??undefined,percentual:(p.centesimos/100).toFixed(2)}));
-    return Object.assign({}, registro, { medicoes:[...medidas.map(({ocorrenciaId,quantidade})=>({ocorrenciaId,quantidade})),...legado],medicoesDiretas,parcelasPercentuais,
+    const ocorrencias = [...(registro.ocorrencias??[])];
+    if(registro.ocorrenciaId&&!ocorrencias.some(o=>o.id===registro.ocorrenciaId)) {
+      const o=await this.repo.manager.findOneBy(Ocorrencia,{id:registro.ocorrenciaId,contratoId});
+      if(o) ocorrencias.push(o);
+    }
+    const [contagem] = await this.repo.manager.query(`SELECT count(DISTINCT ac.comprovante_id)::int AS historicos,
+      count(DISTINCT ac.comprovante_id) FILTER(WHERE ev.arquivado_em IS NULL AND EXISTS(SELECT 1 FROM atividade_entregaveis ae WHERE ae."atividadeId"=ac.atividade_id AND ae."entregavelId"=c.entregavel_id) AND NOT EXISTS(SELECT 1 FROM comprovantes_evidencia n WHERE n.evidencia_esperada_id=c.evidencia_esperada_id AND (n.criado_em,n.id)>(c.criado_em,c.id)))::int AS total
+      FROM atividade_comprovantes ac JOIN comprovantes_evidencia c ON c.id=ac.comprovante_id AND c.contrato_id=ac.contrato_id JOIN evidencias_esperadas ev ON ev.id=c.evidencia_esperada_id
+      WHERE ac.contrato_id=$1 AND ac.atividade_id=$2`,[contratoId,id]) as {historicos:number;total:number}[];
+    return Object.assign({}, registro, { ocorrencias, comprovantesVinculados:contagem?.total??0, comprovantesHistoricos:(contagem?.historicos??0)-(contagem?.total??0), medicoes:[...medidas.map(({ocorrenciaId,quantidade})=>({ocorrenciaId,quantidade})),...legado],medicoesDiretas,parcelasPercentuais,
       referenciasQuantitativas:medidas.filter(m=>m.referenciaExecucao).map(m=>({ocorrenciaId:m.ocorrenciaId,referencia:m.referenciaExecucao})),
       referenciasPercentuais:parcelasAtividade.filter(p=>p.referenciaId).map(p=>({id:p.id,entregavelId:p.entregavelId,ocorrenciaId:p.ocorrenciaId,referenciaId:p.referenciaId})) });
   }

@@ -14,6 +14,7 @@ export type NovaCompartilhada = {
 };
 export type ResumoCompartilhada = {
   id: string; total: number; aprovadas: number; pendentes: number;
+  vinculos?: { entregaveis:number; ocorrencias:number; evidencias:number };
   atividades: { contratoId: string; atividadeId: string; status: EstadoAtividade; podeSolicitar: boolean; podeAprovar: boolean }[];
 };
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
