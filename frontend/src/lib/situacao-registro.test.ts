@@ -3,6 +3,7 @@ import { situacaoRegistro, opcoesSituacaoRegistros } from './situacao-registro';
 describe('situações de registros', () => {
   test.each<[string,string,string|undefined,string]>([
     ['MANUAL','REJEITADO',undefined,'Em revisão'],
+    ['MANUAL','PENDENTE',undefined,'Pendente de verificação'],
     ['EVIDENCIA','PENDENTE','EM_REVISAO','Em revisão'],
     ['ATIVIDADE','INATIVO','ARQUIVADO','Arquivado'],
     ['EVIDENCIA','INATIVO','ARQUIVADO','Arquivado'],

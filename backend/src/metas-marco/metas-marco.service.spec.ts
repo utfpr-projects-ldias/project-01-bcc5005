@@ -11,7 +11,7 @@ describe('Metas do Marco — autorização fechada por contrato', () => {
     const ds={transaction:jest.fn()} as never;
     const service=new MetasMarcoService(ds,{permitido} as never,{} as never);
     await expect(service.criar(contratoId,entregavelId,
-      {tipo:'ATIVIDADE',titulo:'Treinamento',quantidadeExigida:2},usuario as never))
+      {tipo:'DESCRITIVA',titulo:'Treinamento',pesoCentesimos:10000,criterioConclusao:'Equipe treinada',provasExigidas:0},usuario as never))
       .rejects.toThrow(/Sem autorização/);
     expect((ds as {transaction:jest.Mock}).transaction).not.toHaveBeenCalled();
   });

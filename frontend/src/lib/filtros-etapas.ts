@@ -7,7 +7,7 @@ const andamento = [['PLANEJADA', 'Em planejamento'], ['EM_ANDAMENTO', 'Em andame
 const finais = [['CONCLUIDA', 'Concluída'], ['CONCLUIDO_PARCIALMENTE', 'Concluída parcialmente'], ['ENCERRADA', 'Encerrada'], ['FINALIZADA', 'Finalizada']] as const;
 const pendencias = [['PENDENTE_CONCLUSAO', 'Pendente de conclusão'], ['PENDENTE_CONCLUSAO_PARCIAL', 'Pendente de conclusão parcial'], ['PENDENTE_ENCERRAMENTO', 'Pendente de encerramento']] as const;
 export const filtrosEtapas: Record<AbaEtapas, readonly (readonly [string, string])[]> = {
-  todas: [...andamento, ['EM_REVISAO', 'Em revisão']],
+  todas: andamento,
   revisao: andamento,
   pendentes: pendencias,
   concluidas: finais,
@@ -24,5 +24,5 @@ export function etapaNaAba(etapa: Etapa, aba: AbaEtapas, filtro = ''): boolean {
   if (aba === 'revisao') return revisao && (!filtro || etapa.status === filtro);
   if (aba === 'pendentes') return pendencia !== null && (!filtro || pendencia === filtro);
   if (aba === 'concluidas') return !etapa.reabertoEm && !pendencia && final && (!filtro || etapa.status === filtro);
-  return (revisao || (!pendencia && !final)) && (!filtro || (revisao ? filtro === 'EM_REVISAO' : etapa.status === filtro));
+  return !revisao && !pendencia && !final && (!filtro || etapa.status === filtro);
 }

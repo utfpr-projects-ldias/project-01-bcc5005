@@ -83,9 +83,9 @@ export default function MinhaContaPage() {
       {falha && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-sm text-error-text">{falha}</p>}
       <form onSubmit={enviarNome} aria-label="Alterar meu nome" className="space-y-3 rounded-xl border border-[color:var(--pi-admin-borda)] p-4 sm:p-5">
         <div><h2 className="font-semibold">Alterar meu nome</h2><p className="mt-1 text-xs text-foreground/60">Identificação exibida em seu perfil e no cabeçalho.</p></div>
-        <label className="block text-sm" htmlFor="conta-nome">Nome completo</label>
-        <input className={campo} id="conta-nome" value={nome} onChange={e => setNome(e.target.value)}
-          placeholder={perfil.nome ?? 'Seu nome'} minLength={3} maxLength={LIMITES_CONTA.nome} required autoComplete="name" />
+        <label className="block text-sm" htmlFor="conta-nome">Nome</label>
+        <input className={campo} id="conta-nome" type="text" name="nome" autoComplete="name" value={nome} onChange={e => setNome(e.target.value)}
+          placeholder={perfil.nome ?? 'Seu nome'} minLength={3} maxLength={LIMITES_CONTA.nome} required />
         <p className="text-right text-xs text-foreground/65">{nome.length}/{LIMITES_CONTA.nome} · mínimo 3</p>
         <button type="submit" className={botao} disabled={enviando}>{enviando ? 'Salvando...' : 'Atualizar nome'}</button>
       </form>

@@ -1,3 +1,4 @@
+import { exigirRegistroMetaEditavel } from '../metas-marco/proteger-registro-meta.js';
 import { exigirPermissaoTransacional } from '../autorizacao/permissao-transacional.js';
 import { validarContribuicaoEvidencia } from './quantidade-evidencias.js';
 import { validarSaldoParcelas } from '../execucao/parcelas-execucao.js';
@@ -85,6 +86,7 @@ export class ArquivamentoPlanejamentoService {
       const repo = m.getRepository(EvidenciaEsperada);
       const evidencia = await repo.findOneBy({ id, entregavelId });
       if (!evidencia) throw new NotFoundException('Evidência não encontrada neste entregável');
+      await exigirRegistroMetaEditavel(m,contratoId,'EVIDENCIA',id);
       if (Boolean(evidencia.arquivadoEm) === arquivar) throw new ConflictException(arquivar ? 'Evidência já arquivada' : 'Evidência já ativa');
       if (regularizacao) {
         if (evidencia.obrigatoria) throw new ConflictException('Preserve a exigência obrigatória. Substitua o comprovante no mesmo item, sem arquivá-lo.');
@@ -102,7 +104,7 @@ export class ArquivamentoPlanejamentoService {
         if (ultima?.status === 'VERIFICADA') throw new ConflictException('Evidência verificada: reabra antes de arquivar');
       }
       if (!arquivar) {
-        const ativos = await repo.count({ where: { entregavelId, arquivadoEm: IsNull() } });
+        const ativos = await repo.count({ where: { entregavelId, arquivadoEm: IsNull(), dataAcompanhamento:evidencia.dataAcompanhamento??IsNull() } });
         if (ativos >= 10) throw new ConflictException('Limite de dez evidências esperadas ativas por entregável');
       }
       const anterior = evidencia.arquivadoEm;

@@ -17,8 +17,8 @@ export function centesimos(valor: unknown): number {
   if (n<1 || n>10000) throw new BadRequestException('Informe um percentual maior que zero e até 100%.');
   return n;
 }
-export const percentualDireto = (tipo:string) => tipo==='UNICO'||tipo==='CONTINUO';
-export const aceitaParcelas = (tipo:string) => percentualDireto(tipo)||tipo==='RECORRENTE';
+export const percentualDireto = (tipo:string) => tipo==='UNICO';
+export const aceitaParcelas = (tipo:string) => percentualDireto(tipo)||tipo==='RECORRENTE'||tipo==='CONTINUO';
 export type ParcelaPublica = ExecucaoLancamento & { situacao:'PENDENTE'|'APROVADO'|'REJEITADO'|'INATIVO'; reconhecido:number; reservado:number; titulo:string; evidenciaId?:string; situacaoRegistro?:string };
 export async function parcelas(m:EntityManager,e:Entregavel,atividadeIds?:string[]):Promise<ParcelaPublica[]> {
   if (!e.execucoesIntegradas || atividadeIds?.length===0) return [];
@@ -48,10 +48,10 @@ export async function parcelas(m:EntityManager,e:Entregavel,atividadeIds?:string
   }));
 }
 export async function resumoParcelas(m:EntityManager,e:Entregavel) {
-  const itens=await parcelas(m,e), base=Math.round(Number(e.percentualExecucao??0)*100);
+  const itens=await parcelas(m,e), base=e.tipo==='CONTINUO'?0:Math.round(Number(e.percentualExecucao??0)*100);
   const ids=[...new Set(itens.flatMap(i=>i.ocorrenciaId?[i.ocorrenciaId]:[]))];
-  const saldosOcorrencias=ids.map(id=>({id,...saldoParcelas(e.tipo==='CONTINUO'?base:0,itens.filter(i=>i.ocorrenciaId===id))}));
-  return {...saldoParcelas(base,e.tipo==='RECORRENTE'?[]:itens),base,itens,saldosOcorrencias};
+  const saldosOcorrencias=ids.map(id=>({id,...saldoParcelas(0,itens.filter(i=>i.ocorrenciaId===id))}));
+  return {...saldoParcelas(base,['RECORRENTE','CONTINUO'].includes(e.tipo)?[]:itens),base,itens,saldosOcorrencias};
 }
 export async function percentualComParcelas(m:EntityManager,e:Entregavel):Promise<number|null> {
   if (!e.execucoesIntegradas||!percentualDireto(e.tipo)) return e.percentualExecucao==null?null:Number(e.percentualExecucao);
@@ -71,13 +71,12 @@ export async function resumoPercentualOcorrencia(m:EntityManager,o:Ocorrencia,ca
   const dados=await promessa;
   if(!dados)return null;
   const {e,r}=dados;
-  const saldo = r.saldosOcorrencias.find(s=>s.id===o.id) ?? saldoParcelas(e.tipo==='CONTINUO'?r.base:0,[]);
+  const saldo = r.saldosOcorrencias.find(s=>s.id===o.id) ?? saldoParcelas(0,[]);
   const itens=r.itens.filter(i=>i.ocorrenciaId===o.id);
   return {...saldo, emRevisao:itens.some(i=>i.situacao==='REJEITADO'),pendente:itens.some(i=>i.situacao==='PENDENTE')};
 }
 export async function exigirOcorrenciaParcela(m:EntityManager,e:Entregavel,id:string|null|undefined){
   if(e.tipo==='UNICO'){if(id)throw new ConflictException('Entregável único não recebe ocorrência.');return null;}
-  if(e.tipo==='CONTINUO'&&!id && !await m.findOneBy(Ocorrencia,{contratoId:e.contratoId,entregavelId:e.id,substituidaEm:IsNull()}))return null;
   if(!id)throw new ConflictException('Selecione a ocorrência descritiva de destino.');
   const o=await m.findOneBy(Ocorrencia,{id,contratoId:e.contratoId,entregavelId:e.id,substituidaEm:IsNull()});
   if(!o||o.modoRegistro!=='DESCRITIVO'||['CONCLUIDO','CONCLUIDO_PARCIALMENTE','ENCERRADA','PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(o.status))throw new ConflictException('A ocorrência não está disponível para novos lançamentos percentuais.');
@@ -94,7 +93,7 @@ export async function criarParcela(m:EntityManager,e:Entregavel,ator:UsuarioAute
   if(Boolean(dados.referenciaId)===Boolean(dados.valor))throw new BadRequestException('Informe nova contribuição ou uma referência, não ambas.');
   const o=await exigirOcorrenciaParcela(m,e,dados.ocorrenciaId);
   const r=await resumoParcelas(m,e);
-  const saldo=o&&e.tipo==='RECORRENTE'?(r.saldosOcorrencias.find(s=>s.id===o.id)?.saldo??10000):r.saldo;
+  const saldo=o&&['RECORRENTE','CONTINUO'].includes(e.tipo)?(r.saldosOcorrencias.find(s=>s.id===o.id)?.saldo??10000):r.saldo;
   if(dados.referenciaId){if(dados.origem==='MANUAL'||!r.itens.some(i=>i.id===dados.referenciaId&&i.reconhecido>0&&i.ocorrenciaId===(o?.id??null)))throw new ConflictException('Selecione uma execução reconhecida deste entregável.');}
   else await exigirPermissaoParcela(m,e.contratoId,ator);
   const n=dados.referenciaId?0:centesimos(dados.valor);

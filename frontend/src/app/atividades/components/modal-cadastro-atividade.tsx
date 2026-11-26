@@ -47,13 +47,13 @@ function VinculoAdicional({vinculo,nome,aba,onChange}:{vinculo:VinculoCompartilh
 const CAMPO = 'mt-1 w-full min-w-0 rounded-xl border border-brand-green/25 bg-background/80 px-3 py-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-brand-neon';
 
 type Props = { contratoId: string; entregavelId?: string; origem?: HTMLElement | null; estadoContextual?: EstadoContextual;
-  execucaoInicial?: { percentual?: string; comprovaExecucaoId?: string; ocorrenciaId?: string; quantidade?: string; referenciaQuantitativa?:string };
-  navegacaoCadastro?: NavegacaoCadastroRegistro; onFechar: () => void; onSalvo?: () => void | Promise<unknown> };
+  execucaoInicial?: { dataInicial?:string; percentual?: string; comprovaExecucaoId?: string; ocorrenciaId?: string; quantidade?: string; referenciaQuantitativa?:string };
+  navegacaoCadastro?: NavegacaoCadastroRegistro; onFechar: () => void; onSalvo?: () => void | Promise<unknown>; onCriada?: (id:string)=>void };
 
 /** Compartilhado com a consulta contratual: nunca redireciona para /atividades.
  * A API revalida contrato, etapas, entregáveis e permissões sob transação. */
-export function ModalCadastroAtividade({ contratoId, entregavelId = '', origem, onFechar, onSalvo, execucaoInicial, estadoContextual = 'normal', navegacaoCadastro }: Props) {
-  const [form, setForm] = useState<FormularioAtividade>(() => ({...vazio(entregavelId), ...(execucaoInicial?.ocorrenciaId ? {ocorrenciaIds:[execucaoInicial.ocorrenciaId], medicoes:execucaoInicial.referenciaQuantitativa ? [{ocorrenciaId:execucaoInicial.ocorrenciaId,quantidade:"0"}] : execucaoInicial.quantidade ? [{ocorrenciaId:execucaoInicial.ocorrenciaId,quantidade:execucaoInicial.quantidade}] : []} : {})}));
+export function ModalCadastroAtividade({ contratoId, entregavelId = '', origem, onFechar, onSalvo, onCriada, execucaoInicial, estadoContextual = 'normal', navegacaoCadastro }: Props) {
+  const [form, setForm] = useState<FormularioAtividade>(() => ({...vazio(entregavelId), ...(execucaoInicial?.dataInicial?{dataHora:`${execucaoInicial.dataInicial}T09:00`}:{}), ...(execucaoInicial?.ocorrenciaId ? {ocorrenciaIds:[execucaoInicial.ocorrenciaId], medicoes:execucaoInicial.referenciaQuantitativa ? [{ocorrenciaId:execucaoInicial.ocorrenciaId,quantidade:"0"}] : execucaoInicial.quantidade ? [{ocorrenciaId:execucaoInicial.ocorrenciaId,quantidade:execucaoInicial.quantidade}] : []} : {})}));
   const perfil=useMeuPerfil();const contrato=useContrato(contratoId);const cache=useRepositorioConsultasOpcional();
   const [adicionais,setAdicionais]=useState<VinculoCompartilhado[]>([]);
   const contratos=useListaContratos();
@@ -86,7 +86,7 @@ export function ModalCadastroAtividade({ contratoId, entregavelId = '', origem, 
     !['CONCLUIDO','CONCLUIDO_PARCIALMENTE','FINALIZADO','PENDENTE_CONCLUSAO','PENDENTE_CONCLUSAO_PARCIAL','PENDENTE_ENCERRAMENTO'].includes(ent.statusExecucao ?? '') && etapasAbertas.has(ent.etapaId));
   const origemNaoElegivel = Boolean(entregavelId && !elegiveis.some(e => e.id === entregavelId));
 
-  const destinosPercentuais = elegiveis.filter(e=>form.entregavelIds.includes(e.id) && (e.tipo==='UNICO'||e.tipo==='CONTINUO'&&!agenda.loading&&!agenda.erro&&!agenda.ocorrencias.some(o=>o.entregavelId===e.id&&!o.substituidaEm)||(['RECORRENTE','CONTINUO'].includes(e.tipo)&&agenda.ocorrencias.some(o=>o.entregavelId===e.id&&o.modoRegistro==='DESCRITIVO'&&!o.substituidaEm&&(form.ocorrenciaIds??[]).includes(o.id)))));
+  const destinosPercentuais = elegiveis.filter(e=>form.entregavelIds.includes(e.id) && (e.tipo==='UNICO'||(['RECORRENTE','CONTINUO'].includes(e.tipo)&&agenda.ocorrencias.some(o=>o.entregavelId===e.id&&o.modoRegistro==='DESCRITIVO'&&!o.substituidaEm&&(form.ocorrenciaIds??[]).includes(o.id)))));
 
   const alvoEditor=elegiveis.find(e=>e.id===alvoContribuicao?.entregavelId);
   const ocorrenciaEditor=agenda.ocorrencias.find(o=>o.id===alvoContribuicao?.ocorrenciaId);
@@ -125,12 +125,15 @@ export function ModalCadastroAtividade({ contratoId, entregavelId = '', origem, 
     };
     setSalvando(true); setErro(''); setErros({});
     try {
+      let idCriada:string|undefined;
       if(adicionais.length){
         const vinculos=[{contratoId,entregavelIds:parsed.data.entregavelIds,ocorrenciaIds:parsed.data.ocorrenciaIds??[],medicoes:parsed.data.medicoes??[],medicoesDiretas,parcelasPercentuais:dados.parcelasPercentuais},...adicionais];
-        await criarCompartilhada({titulo:dados.titulo,dataHora:dados.dataHora,descricao:dados.descricao,tipo:dados.tipo,participantes:dados.participantes,responsavel:dados.responsavel,responsavelId:dados.responsavelId??undefined,local:dados.local,duracao:dados.duracao,observacoes:dados.observacoes,vinculos});
+        const criada=await criarCompartilhada({titulo:dados.titulo,dataHora:dados.dataHora,descricao:dados.descricao,tipo:dados.tipo,participantes:dados.participantes,responsavel:dados.responsavel,responsavelId:dados.responsavelId??undefined,local:dados.local,duracao:dados.duracao,observacoes:dados.observacoes,vinculos});
+        idCriada=criada.atividades.find(a=>a.contratoId===contratoId)?.atividadeId;
         sincronizarEvidenciaCompartilhada(cache,contratoId);
         window.dispatchEvent(new CustomEvent('pi:estrutura-operacional-atualizada',{detail:{contratoId,cacheAtualizado:Boolean(cache)}}));
-      }else await diario.criarAtividade(dados);
+      }else idCriada=(await diario.criarAtividade(dados)).id;
+      if(idCriada)onCriada?.(idCriada);
       onFechar(); await Promise.resolve().then(()=>onSalvo?.()).catch(() => {});
     }
     catch (e) { setErro(e instanceof Error ? e.message : 'Não foi possível registrar a atividade.'); }

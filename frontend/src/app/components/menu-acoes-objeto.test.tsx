@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MenuAcoesObjeto } from './menu-acoes-objeto';
+import { BotaoAcaoModal } from './botoes-modal';
 
 it('não cria menu vazio quando todas as transições forem negadas', () => {
   render(<MenuAcoesObjeto><>{false}{null}</></MenuAcoesObjeto>);
@@ -40,4 +41,40 @@ it('estado pendente de conclusão usa checklist violeta sem aprovar automaticame
   expect(aprovar).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'Aprovar' }));
   expect(aprovar).toHaveBeenCalledTimes(1);
+});
+
+function iconeDoMenu() {
+  return screen.getByRole('button', { name: 'Fechar: escolher ação' }).querySelector('svg');
+}
+
+it('reage à elegibilidade integral e parcial sem depender do estado pendente', () => {
+  const menu = (integral: boolean, parcial: boolean) => <MenuAcoesObjeto><>
+    <BotaoAcaoModal intencao="solicitar-conclusao" disabled={!integral}>Solicitar conclusão</BotaoAcaoModal>
+    <BotaoAcaoModal intencao="solicitar-conclusao" conclusaoParcial disabled={!parcial}>Solicitar conclusão parcial</BotaoAcaoModal>
+  </></MenuAcoesObjeto>;
+  const { rerender } = render(menu(false, false));
+  expect(iconeDoMenu()).not.toHaveAttribute('data-pi-icone-ciclo');
+  rerender(menu(false, true));
+  expect(iconeDoMenu()).toHaveAttribute('data-pi-icone-ciclo', 'conclusao-parcial');
+  rerender(menu(true, true));
+  expect(iconeDoMenu()).toHaveAttribute('data-pi-icone-ciclo', 'conclusao');
+  rerender(menu(false, false));
+  expect(iconeDoMenu()).not.toHaveAttribute('data-pi-icone-ciclo');
+});
+
+it('consulta de impedimentos ou arquivamento não sinaliza conclusão', () => {
+  render(<MenuAcoesObjeto>
+    <BotaoAcaoModal intencao="neutra">Solicitar conclusão</BotaoAcaoModal>
+    <BotaoAcaoModal intencao="arquivar">Arquivar</BotaoAcaoModal>
+  </MenuAcoesObjeto>);
+  expect(iconeDoMenu()).not.toHaveAttribute('data-pi-icone-ciclo');
+});
+
+it('distingue reabertura autorizada de opção indisponível', () => {
+  const { rerender } = render(<MenuAcoesObjeto rotulo="Reabrir" acaoDireta={() => {}}/>);
+  expect(screen.getByRole('button', {name: 'Reabrir'}).querySelector('svg')).toHaveAttribute('data-pi-icone-ciclo','reabertura');
+  rerender(<MenuAcoesObjeto><BotaoAcaoModal intencao="reabrir">Reabrir</BotaoAcaoModal></MenuAcoesObjeto>);
+  expect(iconeDoMenu()).toHaveAttribute('data-pi-icone-ciclo','reabertura');
+  rerender(<MenuAcoesObjeto rotulo="Reabrir"><BotaoAcaoModal intencao="arquivar">Arquivar</BotaoAcaoModal></MenuAcoesObjeto>);
+  expect(screen.getByRole('button', {name: 'Reabrir: escolher ação'}).querySelector('svg')).not.toHaveAttribute('data-pi-icone-ciclo');
 });

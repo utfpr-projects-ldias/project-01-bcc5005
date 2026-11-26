@@ -1,12 +1,12 @@
 "use client";
 import { useCallback, useEffect, useState } from 'react';
 
-export type PedidoExecucaoPendente = { id:string; valor:string; data:string; observacao:string; ocorrenciaId:string|null; endpoint:'OCORRENCIA'|'ENTREGAVEL' };
+export type PedidoExecucaoPendente = { id:string; valor:string; data:string; observacao:string; ocorrenciaId:string|null; endpoint:'OCORRENCIA'|'ENTREGAVEL'|'META_MARCO' };
 function valido(p: unknown): p is PedidoExecucaoPendente {
   if(!p || typeof p!=='object')return false;
   const v=p as Partial<PedidoExecucaoPendente>;
   return typeof v.id==='string' && typeof v.valor==='string' && typeof v.data==='string' && typeof v.observacao==='string' &&
-    (v.ocorrenciaId===null || typeof v.ocorrenciaId==='string') && ['OCORRENCIA','ENTREGAVEL'].includes(v.endpoint??'');
+    (v.ocorrenciaId===null || typeof v.ocorrenciaId==='string') && ['OCORRENCIA','ENTREGAVEL','META_MARCO'].includes(v.endpoint??'');
 }
 /** Persistência de um pedido indeterminado nesta aba, separado por conta/recurso. */
 export function usePedidoExecucaoPendente(chave:string|null) {

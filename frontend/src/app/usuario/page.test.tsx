@@ -93,7 +93,7 @@ test('o próprio usuário ativo pode alterar nome sem modificar e-mail ou senha'
   perfil = { ...perfilAdmin, perfil: 'GESTOR' };
   render(<MinhaContaPage />);
   const formulario = screen.getByRole('form', { name: 'Alterar meu nome' });
-  fireEvent.change(within(formulario).getByLabelText('Nome completo'), { target: { value: '  Maria   Oliveira  ' } });
+  fireEvent.change(within(formulario).getByLabelText('Nome'), { target: { value: '  Maria   Oliveira  ' } });
   fireEvent.submit(formulario);
   await waitFor(() => expect(alterarMeuNome).toHaveBeenCalledWith('Maria Oliveira'));
   expect(invalidar).toHaveBeenCalledWith(['identidade', 'me']);
@@ -104,7 +104,7 @@ test('o próprio usuário ativo pode alterar nome sem modificar e-mail ou senha'
 test('nome inválido não dispara escrita na API', () => {
   render(<MinhaContaPage />);
   const formulario = screen.getByRole('form', { name: 'Alterar meu nome' });
-  fireEvent.change(within(formulario).getByLabelText('Nome completo'), { target: { value: 'Nome123' } });
+  fireEvent.change(within(formulario).getByLabelText('Nome'), { target: { value: 'Nome123' } });
   fireEvent.submit(formulario);
   expect(screen.getByRole('alert')).toHaveTextContent('nome válido');
   expect(alterarMeuNome).not.toHaveBeenCalled();
@@ -115,7 +115,7 @@ test('permite informar somente um nome no perfil antes sem nome', async () => {
   perfil = { ...perfilAdmin, nome: null };
   render(<MinhaContaPage />);
   const formulario = screen.getByRole('form', {name:'Alterar meu nome'});
-  fireEvent.change(within(formulario).getByLabelText('Nome completo'),{target:{value:'Rinaldi'}});
+  fireEvent.change(within(formulario).getByLabelText('Nome'),{target:{value:'Rinaldi'}});
   fireEvent.submit(formulario);
   await waitFor(()=>expect(alterarMeuNome).toHaveBeenCalledWith('Rinaldi'));
 });

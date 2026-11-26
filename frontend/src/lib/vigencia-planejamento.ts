@@ -1,4 +1,4 @@
-export type VigenciaPlanejamento = { inicioVigencia: string; terminoVigencia: string };
+export type VigenciaPlanejamento = { inicioVigencia: string; terminoVigencia: string; inicioEtapa?: string | null; terminoEtapa?: string | null };
 type Datas = { inicioPrevisto?: string | null; terminoPrevisto?: string | null };
 export function intervaloVigencia(vigencia: VigenciaPlanejamento) {
   const br = (d: string) => d.split('-').reverse().join('/');
@@ -14,4 +14,14 @@ export function validarDatasNaVigencia(dados: Datas, vigencia?: VigenciaPlanejam
     }
   }
   return erros;
+}
+
+export function intervaloEtapa(vigencia?: VigenciaPlanejamento) {
+  const br=(d:string)=>d.split('-').reverse().join('/');
+  const a=vigencia?.inicioEtapa,b=vigencia?.terminoEtapa;
+  return a&&b?`${br(a)} a ${br(b)}`:a?`A partir de ${br(a)}`:b?`Até ${br(b)}`:'Não informada';
+}
+export function limitesDatasEntregavel(dados:Datas,vigencia?:VigenciaPlanejamento) {
+  const inicio=vigencia?.inicioVigencia,fim=vigencia?.terminoVigencia;
+  return {minInicio:inicio,maxInicio:dados.terminoPrevisto&&(!fim||dados.terminoPrevisto<fim)?dados.terminoPrevisto:fim,minTermino:dados.inicioPrevisto&&(!inicio||dados.inicioPrevisto>inicio)?dados.inicioPrevisto:inicio,maxTermino:fim};
 }

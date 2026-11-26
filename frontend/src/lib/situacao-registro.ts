@@ -10,7 +10,7 @@ export function situacaoRegistro(origem: string, situacao: string, origemSituaca
   if (['REJEITADO','REJEITADA','EM_REVISAO'].includes(situacao) || origemSituacao === 'EM_REVISAO') return 'Em revisão';
   if (situacao === 'APROVADO') return origem === 'OCORRENCIA' ? 'Concluída' : origem === 'MANUAL' ? 'Aprovado' : 'Verificada';
   if (situacao === 'PENDENTE') {
-    if (origem === 'EVIDENCIA') return 'Pendente de verificação';
+    if (origem === 'EVIDENCIA' || origem === 'MANUAL') return 'Pendente de verificação';
     if (origem === 'ATIVIDADE' && origemSituacao === 'REGISTRADA') return 'Registrada';
     if (origem === 'ATIVIDADE' && origemSituacao === 'PENDENTE_CONCLUSAO') return 'Pendente de conclusão';
     return 'Pendente de aprovação';

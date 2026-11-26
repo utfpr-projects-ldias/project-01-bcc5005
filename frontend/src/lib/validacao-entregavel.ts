@@ -1,4 +1,4 @@
-import type { Entregavel, EvidenciaEsperada, PeriodicidadeEntregavel, TipoEntregavel } from './entregaveis';
+import type { Entregavel, FrequenciaAcompanhamento, EvidenciaEsperada, PeriodicidadeEntregavel, TipoEntregavel } from './entregaveis';
 
 /** O formulário mantém strings decimais, evitando arredondamentos de Number no envio. */
 export type ItemChecklistFormulario = Pick<EvidenciaEsperada, 'tipoEvidencia' | 'descricao' | 'obrigatoria'> & {
@@ -8,6 +8,7 @@ export type RascunhoEntregavel = {
   etapaId: string; nome: string; codigo: string; descricao: string; tipo: TipoEntregavel;
   responsavelId: string; inicioPrevisto: string; terminoPrevisto: string;
   quantidadePrevista: string; unidadeMedida: string; periodicidade: PeriodicidadeEntregavel | '';
+  frequenciaAcompanhamento?: FrequenciaAcompanhamento;
   modoRecorrente?: 'DESCRITIVO' | 'QUANTITATIVO';
   peso: string; criterioConclusao: string; observacoes: string;
   evidenciasEsperadas: ItemChecklistFormulario[];
@@ -17,6 +18,7 @@ export type DadosPlanejamentoEntregavel = {
   responsavelId: string | null; inicioPrevisto: string | null; terminoPrevisto: string | null;
   quantidadePrevista: string | null; unidadeMedida: string | null;
   periodicidade: PeriodicidadeEntregavel | null; configuracaoPeriodicidade: Entregavel['configuracaoPeriodicidade'] | null;
+  frequenciaAcompanhamento?: FrequenciaAcompanhamento | null;
   peso: string | null; criterioConclusao: string | null; observacoes: string | null;
   evidenciasEsperadas: { id?: string; tipoEvidencia: string; descricao: string | null; obrigatoria: boolean }[];
 };
@@ -46,9 +48,10 @@ export function inicialEntregavel(etapaId: string, item?: Entregavel): RascunhoE
     tipo: item?.tipo ?? 'UNICO', responsavelId: item?.responsavelId ?? '',
     inicioPrevisto: item?.inicioPrevisto ?? '', terminoPrevisto: item?.terminoPrevisto ?? '',
     quantidadePrevista: item?.quantidadePrevista ?? '', unidadeMedida: item?.unidadeMedida ?? '',
+    frequenciaAcompanhamento: item?.frequenciaAcompanhamento ?? 'DIARIA',
     periodicidade: item?.periodicidade ?? '', modoRecorrente: item ? item.configuracaoPeriodicidade?.modoRegistro : 'DESCRITIVO', peso: item?.peso == null ? '' : normalizarDecimalPlanejamento(item.peso),
     criterioConclusao: item?.criterioConclusao ?? '', observacoes: item?.observacoes ?? '',
-    evidenciasEsperadas: (item?.evidenciasEsperadas ?? []).map((e, indice) => ({ ...e, chave: `existente-${indice}-${e.id}` })),
+    evidenciasEsperadas: (item?.evidenciasEsperadas ?? []).filter(e=>!e.dataAcompanhamento).map((e, indice) => ({ ...e, chave: `existente-${indice}-${e.id}` })),
   };
 }
 export function mudouEstrutura(r: RascunhoEntregavel, inicial?: Entregavel): boolean {
@@ -77,6 +80,7 @@ export function validarEntregavel(r: RascunhoEntregavel, inicial?: Entregavel): 
       erros.quantidadePrevista = 'Informe quantidade prevista positiva (até três casas).';
     if (!r.unidadeMedida.trim()) erros.unidadeMedida = 'Informe a unidade de medida.';
   }
+  if (r.tipo==='CONTINUO' && !['DIARIA','SEMANAL','MENSAL'].includes(r.frequenciaAcompanhamento??'DIARIA')) erros.frequenciaAcompanhamento='Selecione uma frequência válida.';
   if (r.tipo === 'CONTINUO' && !r.terminoPrevisto) erros.terminoPrevisto = 'Informe o término previsto do serviço contínuo.';
   if (r.tipo === 'RECORRENTE') {
     if (!r.modoRecorrente && !(inicial?.tipo === 'RECORRENTE' && inicial.configuracaoPeriodicidade?.modoRegistro === undefined && !mudouEstrutura(r,inicial))) erros.periodicidade = 'Defina a modalidade de medição recorrente.';
@@ -103,6 +107,7 @@ export function validarEntregavel(r: RascunhoEntregavel, inicial?: Entregavel): 
     terminoPrevisto: opcional(r.terminoPrevisto),
     quantidadePrevista: r.tipo === 'QUANTITATIVO' ? opcional(r.quantidadePrevista.replace(',', '.')) : null,
     unidadeMedida: ['QUANTITATIVO', 'RECORRENTE'].includes(r.tipo) ? opcional(r.unidadeMedida) : null,
+    frequenciaAcompanhamento: r.tipo==='CONTINUO'?(r.frequenciaAcompanhamento??'DIARIA'):null,
     periodicidade: r.tipo === 'RECORRENTE' && r.periodicidade ? r.periodicidade as PeriodicidadeEntregavel : null,
     configuracaoPeriodicidade: r.tipo === 'RECORRENTE' && r.periodicidade ? { versao: 1, ...(r.modoRecorrente ? {modoRegistro:r.modoRecorrente} : {}) } : null,
     peso: opcional(r.peso.replace(',', '.')), criterioConclusao: opcional(r.criterioConclusao), observacoes: opcional(r.observacoes),
@@ -120,10 +125,10 @@ export function normalizarDecimalPlanejamento(valor: string): string {
   const parte = fracao.replace(/0+$/, '');
   return inteiro.replace(/^0+(?=\d)/, '') + (parte ? '.'+parte : '');
 }
-const CAMPOS_PLANEJAMENTO = ['etapaId','nome','tipo','codigo','descricao','responsavelId','inicioPrevisto','terminoPrevisto','quantidadePrevista','unidadeMedida','periodicidade','configuracaoPeriodicidade','peso','criterioConclusao','observacoes'] as const;
+const CAMPOS_PLANEJAMENTO = ['etapaId','nome','tipo','codigo','descricao','responsavelId','inicioPrevisto','terminoPrevisto','quantidadePrevista','unidadeMedida','periodicidade','configuracaoPeriodicidade','frequenciaAcompanhamento','peso','criterioConclusao','observacoes'] as const;
 export function prepararEdicaoEntregavel(base: Entregavel, dados: DadosPlanejamentoEntregavel, secao = 'completo'): Partial<DadosPlanejamentoEntregavel> {
   const alteracoes: Partial<DadosPlanejamentoEntregavel> = {};
-  const permitidos = secao === 'informacoes' ? ['codigo','nome','responsavelId','descricao','observacoes'] : secao === 'planejamento' ? ['tipo','quantidadePrevista','unidadeMedida','inicioPrevisto','terminoPrevisto','peso','criterioConclusao','periodicidade','configuracaoPeriodicidade'] : CAMPOS_PLANEJAMENTO;
+  const permitidos = secao === 'informacoes' ? ['codigo','nome','responsavelId','descricao','observacoes'] : secao === 'planejamento' ? ['tipo','quantidadePrevista','unidadeMedida','inicioPrevisto','terminoPrevisto','peso','criterioConclusao','periodicidade','configuracaoPeriodicidade','frequenciaAcompanhamento'] : CAMPOS_PLANEJAMENTO;
   for (const campo of CAMPOS_PLANEJAMENTO) {
     if (!(permitidos as readonly string[]).includes(campo)) continue;
     const atual = base[campo], novo = dados[campo];

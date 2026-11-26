@@ -115,6 +115,7 @@ describe('TEC08-03 — etapa reaberta após conclusão', () => {
     entregaveisHook.mockReturnValue({ dados: [comprovado], carregando: false, erro: undefined, atualizar: jest.fn() });
     documentalHook.mockReturnValue({ dados: { [comprovado.id]: { obrigatorias: 1, verificadas: 1, total: 1, verificadasTotal: 1 } }, carregando: false, erro: undefined, atualizar: jest.fn() });
     render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Em revisão' }));
     fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes da etapa 1: Planejamento' }));
     const modal = screen.getByRole('dialog', { name: /Planejamento/ });
     const cabecalho = modal.querySelector('header');
@@ -132,6 +133,7 @@ describe('TEC08-03 — etapa reaberta após conclusão', () => {
     entregaveisHook.mockReturnValue({ dados: [comprovado, { ...comprovado, id: 'entregavel-novo', nome: 'Pendência nova', statusExecucao: 'NAO_INICIADO' }], carregando: false, erro: undefined, atualizar: jest.fn() });
     documentalHook.mockReturnValue({ dados: { [comprovado.id]: { obrigatorias: 1, verificadas: 1, total: 1, verificadasTotal: 1 } }, carregando: false, erro: undefined, atualizar: jest.fn() });
     render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Em revisão' }));
     fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes da etapa 1: Planejamento' }));
     const menuBotao = screen.queryByRole('button', { name: 'Fechar: escolher ação' });
     if (menuBotao) {
@@ -148,6 +150,7 @@ describe('TEC08-03 — etapa reaberta após conclusão', () => {
     entregaveisHook.mockReturnValue({ dados: [comOpcionalArquivada], carregando: false, erro: undefined, atualizar: jest.fn() });
     documentalHook.mockReturnValue({ dados: { [comprovado.id]: { obrigatorias: 1, verificadas: 1, total: 1, verificadasTotal: 1 } }, carregando: false, erro: undefined, atualizar: jest.fn() });
     render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Em revisão' }));
     fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes da etapa 1: Planejamento' }));
     const modal = screen.getByRole('dialog', { name: /Planejamento/ });
     fireEvent.click(within(modal.querySelector('header') as HTMLElement).getByRole('button', { name: 'Fechar: escolher ação' }));
@@ -162,6 +165,7 @@ describe('TEC08-03 — etapa reaberta após conclusão', () => {
     entregaveisHook.mockReturnValue({ dados: [comEvidenciaPendente], carregando: false, erro: undefined, atualizar: jest.fn() });
     documentalHook.mockReturnValue({ dados: { [comprovado.id]: { obrigatorias: 2, verificadas: 1, total: 2, verificadasTotal: 1 } }, carregando: false, erro: undefined, atualizar: jest.fn() });
     render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Em revisão' }));
     fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes da etapa 1: Planejamento' }));
     const menuBotao = screen.queryByRole('button', { name: 'Fechar: escolher ação' });
     if (menuBotao) {
@@ -178,6 +182,7 @@ describe('TEC08-03 — etapa reaberta após conclusão', () => {
     entregaveisHook.mockReturnValue({ dados: [comEvidenciaPendente], carregando: false, erro: undefined, atualizar: jest.fn() });
     documentalHook.mockReturnValue({ dados: { [comprovado.id]: { obrigatorias: 1, verificadas: 1, total: 2, verificadasTotal: 1 } }, carregando: false, erro: undefined, atualizar: jest.fn() });
     render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Em revisão' }));
     fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes da etapa 1: Planejamento' }));
     fireEvent.click(within(screen.getByRole('dialog', { name: /Planejamento/ })).getByRole('button', { name: 'Fechar: escolher ação' }));
     expect(within(screen.getByRole('menu', { name: 'Fechar' })).getByRole('button', { name: 'Solicitar conclusão' })).toBeEnabled();
@@ -187,6 +192,7 @@ describe('TEC08-03 — etapa reaberta após conclusão', () => {
     entregaveisHook.mockReturnValue({ dados: [comprovado], carregando: false, erro: undefined, atualizar: jest.fn() });
     documentalHook.mockReturnValue({ dados: { [comprovado.id]: { obrigatorias: 1, verificadas: 1, total: 1, verificadasTotal: 1 } }, carregando: false, erro: undefined, atualizar: jest.fn() });
     render(<PainelEtapas contratoId={contrato} habilitado podeGerenciar={false} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Em revisão' }));
     fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes da etapa 1: Planejamento' }));
     const menuBotao = screen.queryByRole('button', { name: 'Fechar: escolher ação' });
     if (menuBotao) {

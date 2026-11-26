@@ -1,7 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   Allow, ArrayMaxSize, IsArray, IsBoolean, IsEnum, IsNotEmpty,
-  IsOptional, IsString, IsUUID, Matches, MaxLength, ValidateIf, ValidateNested,
+  IsOptional, IsIn, IsString, IsUUID, Matches, MaxLength, ValidateIf, ValidateNested,
 } from 'class-validator';
 import { PeriodicidadeEntregavel } from '../periodicidade-entregavel.enum.js';
 import { TipoEntregavel } from '../tipo-entregavel.enum.js';
@@ -21,6 +21,7 @@ export class CriarEntregavelDto {
   @IsOptional() @IsEnum(PeriodicidadeEntregavel) periodicidade?: PeriodicidadeEntregavel | null;
   /** Validação estrutural estrita no serviço; não transformar objeto arbitrário. */
   @Allow() configuracaoPeriodicidade?: unknown;
+  @IsOptional() @IsIn(['DIARIA','SEMANAL','MENSAL']) frequenciaAcompanhamento?: 'DIARIA'|'SEMANAL'|'MENSAL'|null;
   @IsOptional() @IsString() peso?: string | null;
   @IsOptional() @IsString() @MaxLength(200) criterioConclusao?: string | null;
   @IsOptional() @IsString() @MaxLength(100) observacoes?: string | null;
@@ -43,6 +44,7 @@ export class EditarEntregavelDto {
   @IsOptional() @IsString() @MaxLength(80) unidadeMedida?: string | null;
   @IsOptional() @IsEnum(PeriodicidadeEntregavel) periodicidade?: PeriodicidadeEntregavel | null;
   @Allow() configuracaoPeriodicidade?: unknown;
+  @IsOptional() @IsIn(['DIARIA','SEMANAL','MENSAL']) frequenciaAcompanhamento?: 'DIARIA'|'SEMANAL'|'MENSAL'|null;
   @IsOptional() @IsString() peso?: string | null;
   @IsOptional() @IsString() @MaxLength(5000) criterioConclusao?: string | null;
   @IsOptional() @IsString() @MaxLength(3000) observacoes?: string | null;

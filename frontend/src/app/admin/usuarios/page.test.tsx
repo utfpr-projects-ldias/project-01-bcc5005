@@ -102,7 +102,7 @@ test("cadastrar possui formulário isolado e valida senha antes da API", async (
   renderComConsultas(<CadastrarFuncionarioPage />);
   await screen.findByRole("heading", { name: "Nova conta de funcionário", level: 2 });
   expect(screen.queryByRole("region", { name: "Funcionários" })).not.toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText("Nome completo"), { target: { value: gestor.nome } });
+  fireEvent.change(screen.getByLabelText("Nome"), { target: { value: gestor.nome } });
   fireEvent.change(screen.getByLabelText("E-mail"), { target: { value: gestor.email } });
   fireEvent.change(screen.getByLabelText("Senha inicial"), { target: { value: "fraca" } });
   fireEvent.change(screen.getByLabelText("Confirmar senha"), { target: { value: "fraca" } });
@@ -115,12 +115,16 @@ test("cadastro válido grava via API e retorna à listagem", async () => {
   criar.mockResolvedValue(gestor);
   renderComConsultas(<CadastrarFuncionarioPage />);
   await screen.findByRole("heading", { name: "Nova conta de funcionário", level: 2 });
-  fireEvent.change(screen.getByLabelText("Nome completo"), { target: { value: gestor.nome } });
+  const nome = screen.getByLabelText("Nome");
+  for (const valor of ['Gestor', 'Gestor ', 'Gestor de', 'Gestor de ', gestor.nome]) {
+    fireEvent.change(nome, { target: { value: valor } });
+    expect(nome).toHaveValue(valor);
+  }
   fireEvent.change(screen.getByLabelText("E-mail"), { target: { value: "GESTOR@EXEMPLO.COM" } });
   fireEvent.change(screen.getByLabelText("Senha inicial"), { target: { value: "ForteSenha!123" } });
   fireEvent.change(screen.getByLabelText("Confirmar senha"), { target: { value: "ForteSenha!123" } });
   fireEvent.click(screen.getByRole("button", { name: "Cadastrar funcionário" }));
-  await waitFor(() => expect(criar).toHaveBeenCalledWith(expect.objectContaining({ email: gestor.email })));
+  await waitFor(() => expect(criar).toHaveBeenCalledWith(expect.objectContaining({ email: gestor.email, nome: gestor.nome })));
   expect(substituir).toHaveBeenCalledWith("/admin");
 });
 
@@ -137,7 +141,7 @@ test("edição abre por UUID consultando API individual, mesmo fora das 100 prim
 
 test("edição de conta com nome não referencia aviso ARIA inexistente", async () => {
   renderComConsultas(<PainelAdministracao vista="edicao" idEdicao="b" />);
-  const nome = await screen.findByLabelText("Nome completo");
+  const nome = await screen.findByLabelText("Nome");
   expect(nome).not.toHaveAttribute("aria-describedby");
   expect(document.getElementById("aviso-nome-legado")).toBeNull();
 });
@@ -145,7 +149,7 @@ test("edição de conta com nome não referencia aviso ARIA inexistente", async 
 test("edição de conta legada sem nome vincula o aviso ARIA visível", async () => {
   porId.mockResolvedValue({ ...gestor, nome: null });
   renderComConsultas(<PainelAdministracao vista="edicao" idEdicao="b" />);
-  const nome = await screen.findByLabelText("Nome completo");
+  const nome = await screen.findByLabelText("Nome");
   expect(nome).toHaveAttribute("aria-describedby", "aviso-nome-legado");
   expect(document.getElementById("aviso-nome-legado")).toHaveTextContent(/Nome legado opcional/);
 });
@@ -163,7 +167,7 @@ test("edição salva o PATCH e permanece na página para gerenciar credenciais",
 test("editar Administrador permite somente o próprio nome", async () => {
   porId.mockResolvedValue(admin);
   renderComConsultas(<PainelAdministracao vista="edicao" idEdicao="a" />);
-  await screen.findByLabelText("Nome completo");
+  await screen.findByLabelText("Nome");
   expect(screen.queryByLabelText("Perfil de acesso")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Novo e-mail")).not.toBeInTheDocument();
 });

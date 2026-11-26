@@ -1,3 +1,4 @@
+import type { ConfirmacaoContinuo } from '../execucao/acompanhamento-continuo.js';
 import {
   Check, Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn,
 } from 'typeorm';
@@ -33,6 +34,7 @@ import { TipoEntregavel } from './tipo-entregavel.enum.js';
 
 @Check('ck_entregaveis_nome_nao_vazio', 'length(btrim("nome")) > 0')
 @Check('ck_entregaveis_codigo_nao_vazio', '"codigo" IS NULL OR length(btrim("codigo")) > 0')
+@Check('ck_frequencia_acompanhamento', "frequencia_acompanhamento IS NULL OR (tipo='CONTINUO' AND frequencia_acompanhamento IN ('DIARIA','SEMANAL','MENSAL'))")
 @Check('ck_entregaveis_datas', '"inicio_previsto" IS NULL OR "termino_previsto" IS NULL OR "termino_previsto" >= "inicio_previsto"')
 @Check('ck_entregaveis_quantidades', '("quantidade_prevista" IS NULL OR "quantidade_prevista" >= 0) AND ("quantidade_realizada" IS NULL OR "quantidade_realizada" >= 0)')
 @Check('ck_entregaveis_peso', '"peso" IS NULL OR ("peso" >= 0 AND "peso" <= 100)')
@@ -117,6 +119,10 @@ export class Entregavel {
 
   @Column({ name: 'configuracao_periodicidade', type: 'jsonb', nullable: true })
   configuracaoPeriodicidade!: ConfiguracaoPeriodicidadeV1 | null;
+
+
+  @Column({name:'frequencia_acompanhamento',type:'varchar',length:7,nullable:true}) frequenciaAcompanhamento?: 'DIARIA'|'SEMANAL'|'MENSAL'|null;
+  @Column({name:'confirmacao_continuo',type:'jsonb',nullable:true}) confirmacaoContinuo?: ConfirmacaoContinuo|null;
 
   /** Peso OPERACIONAL individual. Soma de 100% pertence a TEC09. */
   @Column({ type: 'numeric', precision: 7, scale: 4, nullable: true })

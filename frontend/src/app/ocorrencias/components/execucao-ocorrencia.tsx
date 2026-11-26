@@ -1,5 +1,6 @@
 'use client';
-import { BotaoExcluirModal, BotaoEditarModal } from '@/app/components/botoes-modal';
+import { IconeReabertura } from '@/app/components/icones-ciclo-vida';
+import { BotaoExcluirModal } from '@/app/components/botoes-modal';
 import { ConfirmacaoSimples } from '@/app/components/confirmacao-simples';
 
 import { PainelComprovacaoEvidencia } from '@/app/contratos/components/painel-comprovacao-evidencia';
@@ -67,6 +68,7 @@ export function ExecucaoOcorrencia({ contratoId, ocorrencia, unidade, podeRegist
   const dataCivil=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   const [dataRegistro,setDataRegistro]=useState(dataCivil);
   const [corrigindo,setCorrigindo]=useState<string|null>(null);
+  const [detalheManual,setDetalheManual]=useState<{id:string;origem:HTMLElement}|null>(null);
   const [quantidadeCorrecao,setQuantidadeCorrecao]=useState('');
   const [motivoCorrecao,setMotivoCorrecao]=useState('');
   const [dataCorrecao,setDataCorrecao]=useState(''),[obsCorrecao,setObsCorrecao]=useState('');
@@ -85,7 +87,7 @@ export function ExecucaoOcorrencia({ contratoId, ocorrencia, unidade, podeRegist
   }
   async function decidir(id:string,decisao:'APROVADO'|'REJEITADO'){
     if(ocupado)return;setOcupado(true);setErro('');
-    try{await decidirLancamentoOcorrencia(contratoId,ocorrencia.id,id,decisao,decisao==='REJEITADO'?motivoRejeicao:undefined,decisao==='REJEITADO'?versaoRejeicao.current:lancamentos.find(l=>l.id===id)?.versao);setRejeitando(null);await atualizarLancamentos();}catch(e){setErro(e instanceof Error?e.message:'Não foi possível decidir o lançamento.');}finally{setOcupado(false);}
+    try{await decidirLancamentoOcorrencia(contratoId,ocorrencia.id,id,decisao,decisao==='REJEITADO'?motivoRejeicao:undefined,decisao==='REJEITADO'?versaoRejeicao.current:lancamentos.find(l=>l.id===id)?.versao);setRejeitando(null);await atualizarLancamentos();setDetalheManual(null);}catch(e){setErro(e instanceof Error?e.message:'Não foi possível decidir o lançamento.');}finally{setOcupado(false);}
   }
   useEffect(()=>{
     if(ocorrencia.modoRegistro!=='QUANTITATIVO'||ocorrencia.metaQuantidade==null)return;
@@ -181,9 +183,9 @@ export function ExecucaoOcorrencia({ contratoId, ocorrencia, unidade, podeRegist
           lancamentos.length===0?(erro?null:<p className="text-xs text-foreground/60">Nenhum lançamento manual registrado.</p>):
           <ul className="space-y-2">{lancamentos.map(item=><li key={item.id} className="pi-lancamento-card-v18 rounded-lg border border-current/15 p-3 text-sm">
             <div className="flex flex-wrap items-start justify-between gap-2"><div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
-              <strong className="tabular-nums">{quantidadeApiParaBR(item.quantidade)} {unidade}</strong>
+              <button type="button" className="text-left font-semibold tabular-nums break-words hover:underline" onClick={ev=>{setErro('');setMotivoRejeicao('');setDetalheManual({id:item.id,origem:ev.currentTarget});}}>{quantidadeApiParaBR(item.quantidade)} {unidade}</button>
               <p className="text-xs text-foreground/60">{item.dataExecucao?`Realizado em ${item.dataExecucao.slice(0,10).split('-').reverse().join('/')}`:`Registrado em ${new Date(item.criadoEm).toLocaleString('pt-BR')}`}{item.alteradoEm?' · corrigido posteriormente':''}</p>
-              <p className="text-xs text-foreground/65">{item.situacao==='PENDENTE'?'Pendente de aprovação':item.situacao==='REJEITADO'?'Em revisão':'Aprovado'}</p>{item.observacao&&<p className="text-xs break-words">{item.observacao}</p>}{item.justificativa&&<p className="mt-1 break-words text-xs text-foreground/70">{item.justificativa}</p>}
+              <p className="text-xs text-foreground/65"><span className={item.situacao==='PENDENTE'?'pi-manual-pendente':undefined}>{item.situacao==='PENDENTE'?'Pendente de verificação':item.situacao==='REJEITADO'?'Em revisão':'Aprovado'}</span></p>{item.observacao&&<p className="text-xs break-words">{item.observacao}</p>}{item.justificativa&&<p className="mt-1 break-words text-xs text-foreground/70">{item.justificativa}</p>}
             </div>
             <div className="pi-lancamento-acoes-v18">
               {aberta(ocorrencia)&&podeAprovar&&['PENDENTE','REJEITADO'].includes(item.situacao??'APROVADO')&&!item.bloqueadoEm&&<><button type="button" className={`${ACAO} text-green-400 border-green-500/40`} disabled={ocupado} onClick={()=>void decidir(item.id,'APROVADO')}>Aprovar</button>{item.situacao==='PENDENTE'&&<button type="button" className={`${ACAO} text-error-text border-red-500/40`} disabled={ocupado} onClick={()=>{versaoRejeicao.current=item.versao;setRejeitando(item.id);setMotivoRejeicao('');}}>Rejeitar</button>}</>}
@@ -196,9 +198,10 @@ export function ExecucaoOcorrencia({ contratoId, ocorrencia, unidade, podeRegist
                   {item.bloqueadoEm?<path d="M8 10V7a4 4 0 0 1 8 0v3"/>:<path d="M8 10V7a4 4 0 0 1 7.5-2"/>}
                 </svg>
               </button>}
-              {aberta(ocorrencia)&&podeCorrigir&&(['PENDENTE','REJEITADO'].includes(item.situacao??'APROVADO')||podeCorrigirAprovada)&&!item.bloqueadoEm&&<BotaoEditarModal rotulo="Editar lançamento" className="pi-editar-registro pi-lancamento-topo-v18" onClick={()=>{versaoCorrecao.current=item.versao;setCorrigindo(item.id);setQuantidadeCorrecao(quantidadeApiParaBR(item.quantidade));setMotivoCorrecao('');setDataCorrecao(item.dataExecucao??item.criadoEm.slice(0,10));setObsCorrecao(item.observacao??'');}}/>}
+              {aberta(ocorrencia)&&podeCorrigir&&(['PENDENTE','REJEITADO'].includes(item.situacao??'APROVADO')||podeCorrigirAprovada)&&!item.bloqueadoEm&&<button type="button" className={`${ACAO} pi-lancamento-topo-v18 inline-flex items-center gap-1`} disabled={ocupado} onClick={()=>{versaoCorrecao.current=item.versao;setCorrigindo(item.id);setQuantidadeCorrecao(quantidadeApiParaBR(item.quantidade));setMotivoCorrecao('');setDataCorrecao(item.dataExecucao??item.criadoEm.slice(0,10));setObsCorrecao(item.observacao??'');}}>{(item.situacao??'APROVADO')==='APROVADO'&&<IconeReabertura className="h-4 w-4"/>}{(item.situacao??'APROVADO')==='APROVADO'?'Reabrir':'Editar'}</button>}
               {aberta(ocorrencia)&&podeExcluir&&!item.bloqueadoEm&&<BotaoExcluirModal rotulo="Excluir lançamento" disabled={ocupado} className="pi-lancamento-excluir-v18" onClick={()=>{setCorrigindo(null);setExcluindo(item.id);setMotivoExclusao('');}}/>}
             </div></div>
+            {detalheManual?.id===item.id&&createPortal(<ModalEtapa titulo="Execução manual" contexto={ocorrencia.titulo} camada="edicao" larguraFormulario="registro-manual" ocupado={ocupado} focoRetorno={detalheManual.origem} onFechar={()=>setDetalheManual(null)}><div className="space-y-3 min-w-0"><p className="text-xl font-semibold break-words">{quantidadeApiParaBR(item.quantidade)} {unidade}</p><p className="text-sm">Data: {(item.dataExecucao??item.criadoEm).slice(0,10).split('-').reverse().join('/')}</p><p className="text-sm"><span className={item.situacao==='PENDENTE'?'pi-manual-pendente':undefined}>{item.situacao==='PENDENTE'?'Pendente de verificação':item.situacao==='REJEITADO'?'Em revisão':'Aprovado'}</span></p>{item.observacao&&<p className="text-sm whitespace-pre-wrap break-words">{item.observacao}</p>}{aberta(ocorrencia)&&podeAprovar&&['PENDENTE','REJEITADO'].includes(item.situacao??'APROVADO')&&!item.bloqueadoEm&&<><label className="block text-sm">Justificativa para rejeição<textarea rows={2} maxLength={300} className={CAMPO} value={motivoRejeicao} onChange={ev=>setMotivoRejeicao(ev.target.value)}/></label><div className="flex justify-end gap-2">{item.situacao==='PENDENTE'&&<button type="button" className={ACAO} disabled={ocupado||!motivoRejeicao.trim()} onClick={()=>{versaoRejeicao.current=item.versao;void decidir(item.id,'REJEITADO');}}>Rejeitar</button>}<button type="button" data-pi-acao="primaria" className={CONFIRMAR} disabled={ocupado} onClick={()=>void decidir(item.id,'APROVADO')}>Aprovar</button></div></>}{erro&&<p role="alert" className="text-error-text">{erro}</p>}</div></ModalEtapa>,document.body)}
             {rejeitando===item.id&&<form onSubmit={ev=>{ev.preventDefault();void decidir(item.id,'REJEITADO');}} className="mt-2 space-y-2"><label className="block text-xs">Justificativa<input className={CAMPO} value={motivoRejeicao} maxLength={300} required onChange={ev=>setMotivoRejeicao(ev.target.value)}/></label><button type="button" className={ACAO} onClick={()=>setRejeitando(null)}>Cancelar</button> <button type="submit" className={ACAO} disabled={ocupado||!motivoRejeicao.trim()}>Confirmar rejeição</button></form>}
             {excluindo===item.id&&<form onSubmit={excluir} className="mt-3 rounded-lg border border-red-700/60 p-3">
               <p className="text-xs font-semibold">Excluir este lançamento? A quantidade deixará de contar, mas o histórico permanecerá.</p>

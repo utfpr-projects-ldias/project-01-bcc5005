@@ -88,6 +88,7 @@ test('redistribuição parcial mantém os pesos e o modo ponderado com auditoria
 test.each(['UNICO','CONTINUO','QUANTITATIVO','RECORRENTE','MARCO'])('R49: novo %s começa em zero sem execução reconhecida',async tipo=>{
   const x=cenario(); x.e.tipo=tipo;
   if(tipo==='QUANTITATIVO')x.e.quantidadePrevista='100';
+  if(tipo==='CONTINUO')Object.assign(x.e,{inicioPrevisto:'2026-12-01',terminoPrevisto:'2026-12-02'});
   if(tipo==='RECORRENTE')Object.assign(x.e,{inicioPrevisto:'2026-12-01',terminoPrevisto:'2026-12-02',periodicidade:'DIARIA'});
   const r=await x.service.consultar('c');
   expect(r.entregaveis[0].percentualExecucao).toBe(0);

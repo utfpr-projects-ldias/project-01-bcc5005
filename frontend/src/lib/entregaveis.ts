@@ -3,6 +3,7 @@ import type { DadosPlanejamentoEntregavel } from './validacao-entregavel';
 
 /** HU07-03/HU07-04 — leitura e escrita do planejamento real da API HU07-02. */
 export type TipoEntregavel = 'UNICO' | 'QUANTITATIVO' | 'RECORRENTE' | 'CONTINUO' | 'MARCO';
+export type FrequenciaAcompanhamento = 'DIARIA'|'SEMANAL'|'MENSAL';
 export type PeriodicidadeEntregavel = 'DIARIA' | 'SEMANAL' | 'MENSAL' | 'TRIMESTRAL' | 'SEMESTRAL' | 'ANUAL';
 export const ROTULOS_TIPO: Record<TipoEntregavel, string> = {
   UNICO: 'Único', QUANTITATIVO: 'Quantitativo', RECORRENTE: 'Recorrente',
@@ -13,6 +14,7 @@ export const ROTULOS_PERIODICIDADE: Record<PeriodicidadeEntregavel, string> = {
   TRIMESTRAL: 'Trimestral', SEMESTRAL: 'Semestral', ANUAL: 'Anual',
 };
 export type EvidenciaEsperada = {
+  dataAcompanhamento?:string|null;
   id: string; codigoPublico?: number; tipoEvidencia: string; descricao: string | null; obrigatoria: boolean; arquivadoEm?: string | null; reabertoEm?: string | null;
 };
 export type Entregavel = {
@@ -24,6 +26,8 @@ export type Entregavel = {
   inicioPrevisto: string | null; terminoPrevisto: string | null; criadoEm?: string | null; agendaInicioFuturo?: string | null;
   quantidadePrevista: string | null; quantidadeRealizada: string | null; quantidadeDiretaIntegrada?:boolean;
   unidadeMedida: string | null; periodicidade: PeriodicidadeEntregavel | null;
+  frequenciaAcompanhamento?: FrequenciaAcompanhamento | null;
+  confirmacaoContinuo?:{autorId:string;em:string;criterio:string;observacoes:string|null}|null;
   configuracaoPeriodicidade: { versao: 1; modoRegistro?: 'DESCRITIVO' | 'QUANTITATIVO' } | null;
   peso: string | null; criterioConclusao: string | null;
   regularizacaoDocumentalSolicitada?: boolean;
@@ -155,12 +159,12 @@ export const editarEntregavel = (contratoId: string, id: string, dados: Partial<
 /** Conclusão explícita de entregável, validada pelo backend e auditada na transação. */
 /** Solicitação e aprovação de encerramento administrativo não alteram o avanço físico. */
 export async function transicaoAdministrativaEntregavel(c: string, id: string,
-  acao: 'solicitar-conclusao' | 'solicitar-conclusao-parcial' | 'solicitar-encerramento' | 'aprovar-encerramento' | 'devolver-solicitacao', motivo?: string): Promise<Entregavel> {
+  acao: 'solicitar-conclusao' | 'solicitar-conclusao-parcial' | 'solicitar-encerramento' | 'aprovar-encerramento' | 'devolver-solicitacao', motivo?: string, confirmacao?:{confirmacaoCumprimento:boolean;observacoesConclusao?:string}): Promise<Entregavel> {
   let resposta: Response;
   try {
     resposta = await fetch(`${API}${base(c)}/${encodeURIComponent(id)}/${acao}`, {
       method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(motivo ? { motivo } : {}),
+      body: JSON.stringify(confirmacao??(motivo ? { motivo } : {})),
     });
   } catch {
     throw new ErroEntregavel(0, 'Falha de conexão ao alterar a situação do entregável. Tente novamente.');

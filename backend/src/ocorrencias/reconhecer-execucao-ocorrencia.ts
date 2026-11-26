@@ -14,7 +14,7 @@ export async function reconhecerExecucaoOcorrencia(m:EntityManager,auditoria:Aud
   if(!o||o.substituidaEm||![StatusOcorrencia.NAO_INICIADO,StatusOcorrencia.EM_ANDAMENTO,StatusOcorrencia.EM_REVISAO].includes(o.status))return;
   const r=await resumoMedicao(m,o);
   const anterior=o.status;
-  const novo=proximoStatusAutomatico(o,r,conclusaoTemporalPermitida(e.tipo,e.terminoPrevisto)) as StatusOcorrencia;
+  const novo=proximoStatusAutomatico(o,r,conclusaoTemporalPermitida(e.tipo,o.dataPrevista??o.periodoFim??o.periodoInicio)) as StatusOcorrencia;
   if(novo===anterior)return;
   o.status=novo;
   await m.save(Ocorrencia,o);

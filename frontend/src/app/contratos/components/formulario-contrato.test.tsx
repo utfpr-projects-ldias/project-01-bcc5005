@@ -54,7 +54,7 @@ test('limites de caracteres e mensagens explicativas de modo de cálculo', () =>
   render(<FormularioContrato responsaveis={[]} onSalvar={jest.fn()} />);
   expect(screen.getByLabelText('Objeto *')).toHaveAttribute('maxLength', '50');
   expect(screen.queryByLabelText('Modo de cálculo físico *')).not.toBeInTheDocument();
-  expect(screen.getByText(/é configurado em Editar execução/)).toBeInTheDocument();
+  expect(screen.queryByText(/é configurado em Editar execução/)).not.toBeInTheDocument();
   fireEvent.click(screen.getByText(/Informações complementares/));
   expect(screen.getByLabelText('Descrição')).toHaveAttribute('maxLength', '300');
   expect(screen.getByLabelText('Observações')).toHaveAttribute('maxLength', '200');
@@ -186,4 +186,13 @@ test('campo número só admite algarismos em novo cadastro', () => {
   fireEvent.change(numero, { target: { value: '2026/001-A' } });
   expect(numero.value).toBe('2026001');
   expect(numero).toHaveAttribute('inputMode', 'numeric');
+});
+
+ test('duração sem data não mostra aviso de calendário ambíguo', () => {
+  render(<FormularioContrato responsaveis={[]} onSalvar={jest.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Duração em meses' }));
+  expect(screen.getByText('O término será calculado automaticamente.')).toBeInTheDocument();
+  expect(screen.queryByText(/O mês de término não possui/)).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Início da vigência *'), { target: { value: '2026-11-17' } });
+  expect(screen.getByText('16/11/2027')).toBeInTheDocument();
 });

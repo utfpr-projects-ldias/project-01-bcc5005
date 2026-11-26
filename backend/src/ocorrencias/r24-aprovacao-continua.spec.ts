@@ -10,7 +10,7 @@ const contratoId='11111111-1111-4111-8111-111111111111';
 const ator={id:'22222222-2222-4222-8222-222222222222',perfil:'ADMINISTRADOR'};
 function ambiente() {
   const o={id:'oc',contratoId,entregavelId:'ent',status:'PENDENTE_CONCLUSAO',substituidaEm:null,
-    metaQuantidade:'1',exigeAtividade:false,minimoAtividadesVerificadas:0,evidenciaExigida:'NENHUMA',minimoEvidenciasVerificadas:0};
+    dataPrevista:'2026-11-23',metaQuantidade:'1',exigeAtividade:false,minimoAtividadesVerificadas:0,evidenciaExigida:'NENHUMA',minimoEvidenciasVerificadas:0};
   const e={id:'ent',contratoId,etapaId:'et',tipo:'CONTINUO',terminoPrevisto:'2026-11-23',arquivadoEm:null,statusExecucao:'EM_ANDAMENTO'};
   const etapa={id:'et',status:'EM_ANDAMENTO',arquivadoEm:null,conclusaoSolicitadaEm:null,encerramentoSolicitadoEm:null};
   const repo={findOne:jest.fn(async()=>o),save:jest.fn(async(x:unknown)=>x)};

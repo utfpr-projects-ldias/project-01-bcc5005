@@ -13,13 +13,21 @@ export function NavegadorEntregaveis({ selecionado, lista, children }: {
   const sujo = useRef(false);
   const [descarte, setDescarte] = useState<{ continuar?: () => void } | null>(null);
   const anterior = useRef<string | null | undefined>(undefined);
+  const rolagemLista = useRef<number | null>(null);
   useEffect(() => {
     if (anterior.current === selecionado) return;
     anterior.current = selecionado;
     sujo.current = false;
     const quadro = requestAnimationFrame(() => {
-      if (selecionado) detalhes.current?.focus({ preventScroll: true });
-      else painel.current?.querySelector<HTMLElement>('input, select, button')?.focus({ preventScroll: true });
+      const corpo = detalhes.current?.closest<HTMLElement>('[data-tec08-corpo-modal]');
+      if (selecionado) {
+        if (corpo) { if (rolagemLista.current === null) rolagemLista.current = corpo.scrollTop; corpo.scrollTop = 0; }
+        detalhes.current?.focus({ preventScroll: true });
+      } else {
+        if (corpo && rolagemLista.current !== null) corpo.scrollTop = rolagemLista.current;
+        rolagemLista.current = null;
+        painel.current?.querySelector<HTMLElement>('input, select, button')?.focus({ preventScroll: true });
+      }
     });
     return () => cancelAnimationFrame(quadro);
   }, [selecionado]);

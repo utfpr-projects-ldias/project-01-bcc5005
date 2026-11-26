@@ -154,20 +154,17 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
 
     <div className="pi-form-contrato-planejamento">    <div className="pi-grupo-formulario space-y-2">
       <h2 className="pi-titulo-formulario">Situação operacional</h2>
-      <div className="max-w-xs">
-        <Campo titulo="Status operacional" id="status" obrigatorio ajuda={emRevisao ? 'Fase operacional durante a revisão.' : inicial ? 'Situações especiais exigem autorização. Concluído depende de aprovação separada.' : 'O novo contrato começa em Planejamento ou Em execução.'} erro={erroDo('status')}>
-          <select id="status" className={input} value={valorSelectStatus} onChange={e => selecionarStatus(e.target.value as StatusContrato)} {...acessibilidade('status', 'status', true)}>{statusDisponiveis.map(k => <option key={`contrato-status-${k}`} value={k}>{k === 'ENCERRADO' ? 'Encerrar' : STATUS[k]}</option>)}</select></Campo>
+      <div className="min-w-0">
+        <Campo titulo="Status operacional" id="status" obrigatorio ajuda={emRevisao ? 'Fase operacional durante a revisão.' : inicial ? 'Situações especiais exigem autorização. Concluído depende de aprovação separada.' : undefined} erro={erroDo('status')}>
+          <select id="status" className={input} value={valorSelectStatus} onChange={e => selecionarStatus(e.target.value as StatusContrato)} {...acessibilidade('status', 'status', Boolean(inicial))}>{statusDisponiveis.map(k => <option key={`contrato-status-${k}`} value={k}>{k === 'ENCERRADO' ? 'Encerrar' : STATUS[k]}</option>)}</select></Campo>
 
       </div>
-      <p className="text-xs text-foreground/65">
-        A média e os pesos podem ser configurados em Editar execução, no painel do contrato.
-      </p>
     </div>
-<fieldset className="min-w-0 space-y-2">
+<fieldset className="pi-vigencia-contrato min-w-0 space-y-2">
       <legend className="pi-titulo-formulario">Vigência</legend>
 
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Modo da vigência">
-        <button type="button" aria-pressed={modo === 'data'} onClick={() => { setModo('data'); setErros({}); }} className={`rounded-lg border px-3 py-2 text-sm ${modo === 'data' ? 'border-brand-green bg-brand-green/10 font-semibold' : 'border-brand-green/30'}`}>Informar término</button>
+      <div className="pi-vigencia-abas" role="group" aria-label="Modo da vigência">
+        <button type="button" aria-pressed={modo === 'data'} onClick={() => { setModo('data'); setErros({}); }} className={`rounded-lg border px-3 py-2 text-sm ${modo === 'data' ? 'border-brand-green bg-brand-green/10 font-semibold' : 'border-brand-green/30'}`}>Datas de início e término</button>
         <button type="button" aria-pressed={modo === 'meses'} onClick={() => { setModo('meses'); setTerminoManualConfirmado(false); setErros({}); }} className={`rounded-lg border px-3 py-2 text-sm ${modo === 'meses' ? 'border-brand-green bg-brand-green/10 font-semibold' : 'border-brand-green/30'}`}>Duração em meses</button>
       </div>
       <div className="pi-datas-pareadas">
@@ -175,11 +172,12 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
           <CampoDataCivil id="inicio" className={input} value={form.inicioVigencia} onChange={e => atualizar('inicioVigencia', e.target.value)} {...acessibilidade('inicio', 'inicioVigencia')} /></Campo>
         {modo === 'data' ? <Campo titulo="Término da vigência" id="fim" obrigatorio erro={erroDo('terminoVigencia')}>
           <CampoDataCivil id="fim" className={input} min={form.inicioVigencia || undefined} value={form.terminoVigencia} onChange={e => atualizar('terminoVigencia', e.target.value)} {...acessibilidade('fim', 'terminoVigencia')} /></Campo> :
-          <Campo titulo="Duração em meses" id="meses" obrigatorio erro={erros.meses} ajuda="O término é calculado considerando vigência inclusiva.">
-            <input id="meses" type="number" min={1} max={1200} step={1} className={input} value={meses} onChange={e => { setMeses(e.target.value); setTerminoManualConfirmado(false); setErros(v => ({ ...v, meses: undefined })); }} aria-invalid={!!erros.meses} aria-describedby={erros.meses ? 'meses-erro' : 'meses-ajuda'} /></Campo>}
+          <Campo titulo="Duração em meses" id="meses" obrigatorio erro={erros.meses}>
+            <input id="meses" type="number" min={1} max={1200} step={1} className={input} value={meses} onChange={e => { setMeses(e.target.value); setTerminoManualConfirmado(false); setErros(v => ({ ...v, meses: undefined })); }} aria-invalid={!!erros.meses} aria-describedby={erros.meses ? 'meses-erro' : undefined} /></Campo>}
       </div>
-      {modo === 'meses' && (calculado ? <p role="status" className="text-sm text-foreground/75">Término calculado: <strong>{calculado.split('-').reverse().join('/')}</strong> (vigência inclusiva).</p> :
-        <p className="text-sm text-amber-600 dark:text-amber-300">Para mês curto, fim de mês ou data ainda inválida, informe a data final quando disponível. A convenção para casos ambíguos depende de decisão do cliente.</p>)}
+      {modo === 'meses' && (calculado ? <p role="status" className="text-xs text-foreground/75">Término calculado: <strong>{calculado.split('-').reverse().join('/')}</strong></p> : fimAmbiguo ?
+        <p className="text-xs text-amber-600 dark:text-amber-300">O mês de término não possui o dia de início. Informe a data final.</p> :
+        <p className="text-xs text-foreground/65">O término será calculado automaticamente.</p>)}
       {fimAmbiguo && <Campo titulo="Data de término explícita" id="fim-manual" obrigatorio erro={erroDo('terminoVigencia')}>
         <CampoDataCivil id="fim-manual" className={input} min={form.inicioVigencia || undefined} value={form.terminoVigencia}
           onChange={e => { atualizar('terminoVigencia', e.target.value); setTerminoManualConfirmado(Boolean(e.target.value)); }}
@@ -193,7 +191,7 @@ export function FormularioContrato({ inicial, responsaveis, onSalvar, salvando =
 
 </div>
 
-    <p className="text-xs text-foreground/65">O modo de cálculo físico é configurado em Editar execução, após o cadastro.</p>
+
     <details open={Boolean(erroDo('processoAdministrativo')||erroDo('unidadeResponsavel')||erroDo('dataAssinatura')||erroDo('fiscalGestor')||erroDo('responsavelInternoId')||erroDo('descricao')||erroDo('observacoes')) || undefined} className="pi-grupo-formulario pi-contrato-complementares group">
       <summary className="pi-titulo-formulario cursor-pointer focus-visible:outline-2 focus-visible:outline-brand-green">Informações complementares <span className="text-xs font-normal text-foreground/60">(opcionais)</span></summary>
       <div className="mt-3 space-y-3">

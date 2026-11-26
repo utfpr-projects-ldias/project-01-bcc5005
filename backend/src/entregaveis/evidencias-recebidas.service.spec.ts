@@ -644,3 +644,19 @@ test('não verifica evidência com hash divergente', async()=>{
    await expect(a.service.listarDestinos(contratoId,entregavelId,gestor)).resolves.toEqual([]);
    expect(a.m.query).not.toHaveBeenCalled();
  });
+
+test('regularização pendente permite nova evidência opcional independente', async () => {
+  const a = cenario();
+  a.entregavel.statusExecucao = StatusExecucaoEntregavel.CONCLUIDO_PARCIALMENTE;
+  a.entregavel.regularizacaoDocumentalSolicitada = true;
+  await expect(a.service.criarEsperada(contratoId, entregavelId, {tipoEvidencia:'Relatório', obrigatoria:false}, autor)).resolves.toMatchObject({obrigatoria:false});
+});
+
+test('regularização pendente não aceita novas exigências obrigatórias nem contribuição física', async () => {
+  const a = cenario();
+  a.entregavel.statusExecucao = StatusExecucaoEntregavel.CONCLUIDO_PARCIALMENTE;
+  a.entregavel.regularizacaoDocumentalSolicitada = true;
+  await expect(a.service.criarEsperada(contratoId, entregavelId, {tipoEvidencia:'Relatório', obrigatoria:true}, autor)).rejects.toBeInstanceOf(ConflictException);
+  await expect(a.service.criarEsperada(contratoId, entregavelId, {tipoEvidencia:'Relatório', obrigatoria:false, rascunhoEnvio:{percentualExecucao:'10'}}, autor)).rejects.toBeInstanceOf(ConflictException);
+  expect(a.esperadas.save).not.toHaveBeenCalled();
+});

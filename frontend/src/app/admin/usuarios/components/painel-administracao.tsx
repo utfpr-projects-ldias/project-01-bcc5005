@@ -185,7 +185,7 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
     evento.preventDefault(); if (enviando) return;
     setErroFormulario("");
     const valido = cadastroSchema.safeParse({
-      ...form, nome: form.nome.trim().replace(/\s+/g, " "), email: form.email.trim().toLowerCase(),
+      ...form, email: form.email.trim().toLowerCase(),
     });
     if (!valido.success) {
       const novos: Erros = {};
@@ -436,8 +436,8 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
                 <p className="mb-4 text-xs text-foreground/65">Use Salvar dados somente para nome, perfil e situação. As demais operações são independentes.</p>
                 <form className="space-y-4" noValidate onSubmit={(e) => void salvarEdicao(e)}>
                   <div>
-                    <label htmlFor="edicao-nome" className="mb-1 block text-sm">Nome completo</label>
-                    <input id="edicao-nome" className={campo} value={edicao.nome} onChange={(e) => setEdicao((s) => ({ ...s, nome: e.target.value }))} aria-describedby={!editando.nome ? "aviso-nome-legado" : undefined} maxLength={LIMITES_CONTA.nome} minLength={3} />
+                    <label htmlFor="edicao-nome" className="mb-1 block text-sm">Nome</label>
+                    <input id="edicao-nome" type="text" name="nome" autoComplete="name" className={campo} value={edicao.nome} onChange={(e) => { const nome = e.currentTarget.value; setEdicao((s) => ({ ...s, nome })); }} aria-describedby={!editando.nome ? "aviso-nome-legado" : undefined} maxLength={LIMITES_CONTA.nome} minLength={3} />
                   <p className="text-right text-xs text-foreground/60">{edicao.nome.length}/{LIMITES_CONTA.nome} · mínimo 3</p>
                     {!editando.nome && <p id="aviso-nome-legado" className="text-xs text-foreground/60">Nome legado opcional nesta edição. Ao preencher, informe um nome válido.</p>}
                   </div>
@@ -557,8 +557,8 @@ export function PainelAdministracao({ vista, idEdicao }: { vista: 'lista' | 'cad
               </>
             ) : vista === "cadastro" ? (
               <form onSubmit={(e) => void cadastrar(e)} noValidate className="space-y-4">
-                <div><label htmlFor="usuario-nome" className="mb-1 block text-sm">Nome completo</label>
-                  <input id="usuario-nome" className={campo} value={form.nome} onChange={(e) => setForm((s) => ({ ...s, nome: e.target.value }))} aria-invalid={!!erros.nome} maxLength={LIMITES_CONTA.nome} minLength={3} />
+                <div><label htmlFor="usuario-nome" className="mb-1 block text-sm">Nome</label>
+                  <input id="usuario-nome" type="text" name="nome" autoComplete="name" className={campo} value={form.nome} onChange={(e) => { const nome = e.currentTarget.value; setForm((s) => ({ ...s, nome })); }} aria-invalid={!!erros.nome} maxLength={LIMITES_CONTA.nome} minLength={3} />
                   <p className="text-right text-xs text-foreground/60">{form.nome.length}/{LIMITES_CONTA.nome} · mínimo 3</p>
                   {erros.nome && <p role="alert" className="text-xs text-error-text">{erros.nome}</p>}
                 </div>

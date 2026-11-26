@@ -1,3 +1,5 @@
+import { exigirRegistroMetaEditavel } from '../metas-marco/proteger-registro-meta.js';
+import { MetaMarco, VinculoMetaMarco } from '../metas-marco/meta-marco.entity.js';
 import { FASES_OPERACIONAIS_CONTRATO } from '../contratos/fases-operacionais.js';
 import type { CacheParcelasOcorrencia } from '../execucao/parcelas-execucao.js';
 import { exigirPermissaoTransacional } from '../autorizacao/permissao-transacional.js';
@@ -368,33 +370,35 @@ export class OcorrenciasService implements OnModuleInit {
         throw new NotFoundException('Entregável não encontrado neste contrato');
       await this.exigirEntregavelAberto(m, entregavel);
       if(entregavel.quantidadeDiretaIntegrada)throw new ConflictException('Este entregável já possui medição direta por atividades ou evidências. Não misture fontes.');
-      if(entregavel.tipo===TipoEntregavel.CONTINUO && entregavel.execucoesIntegradas){
-        const [diretas]=await m.query(`SELECT EXISTS(SELECT 1 FROM execucoes_entregavel WHERE contrato_id=$1 AND entregavel_id=$2 AND ocorrencia_id IS NULL AND centesimos>0) AS existe`,[contratoId,entregavelId]);
-        if(diretas?.existe)throw new ConflictException('Há medições diretas registradas. Preserve a modalidade atual até conciliar as fontes de execução.');
-      }
       // RB-03: ocorrências descritivas são opcionais em entregáveis ÚNICOS.
       // A regra quantitativa abaixo continua exclusiva de entregáveis QUANTITATIVOS.
       if (entregavel.tipo === TipoEntregavel.RECORRENTE) {
         throw new BadRequestException('Em entregáveis recorrentes, use a geração da agenda; registre a descrição nas atividades vinculadas aos períodos');
       }
 
-      if ([TipoEntregavel.CONTINUO, TipoEntregavel.MARCO].includes(entregavel.tipo) &&
-          await m.count(Ocorrencia, { where: { entregavelId, contratoId, substituidaEm: IsNull() } }))
-        throw new ConflictException('Este entregável admite uma única ocorrência principal');
       const modoRegistro = dto.modoRegistro ?? ((dto.metaQuantidade != null || dto.quantidadeRealizada != null) ? 'QUANTITATIVO' : 'DESCRITIVO');
       if (modoRegistro === 'QUANTITATIVO' && entregavel.quantidadeRealizada != null && milesimos(entregavel.quantidadeRealizada) !== 0n) throw new ConflictException('Já existe quantidade declarada diretamente; concilie antes de detalhar por ocorrências');
-      if (modoRegistro === 'QUANTITATIVO' && entregavel.tipo !== TipoEntregavel.QUANTITATIVO) throw new BadRequestException('Registro por quantidade exige entregável quantitativo');
+      let metaMarco:MetaMarco|null=null;
+      if(dto.metaMarcoId){
+        await exigirPermissaoTransacional(m,contratoId,ator,'vincularMetasMarco');
+        metaMarco=await m.findOne(MetaMarco,{where:{id:dto.metaMarcoId,contratoId,entregavelId,arquivadoEm:IsNull()},lock:{mode:'pessimistic_write'}});
+        if(entregavel.tipo!==TipoEntregavel.MARCO||!metaMarco||metaMarco.estado!=='ABERTA')throw new ConflictException('Meta do Marco indisponível.');
+        if(modoRegistro==='QUANTITATIVO'&&metaMarco.tipo!=='QUANTITATIVA')throw new BadRequestException('Meta descritiva não recebe ocorrência quantitativa.');
+      }
+      const quantitativaMarco=modoRegistro==='QUANTITATIVO'&&metaMarco?.tipo==='QUANTITATIVA';
+      if (modoRegistro === 'QUANTITATIVO' && entregavel.tipo !== TipoEntregavel.QUANTITATIVO && !quantitativaMarco) throw new BadRequestException('Registro por quantidade exige entregável quantitativo');
       if (modoRegistro === 'DESCRITIVO' && entregavel.tipo === TipoEntregavel.QUANTITATIVO) throw new BadRequestException('Entregável quantitativo exige ocorrência com meta e unidade de medida; utilize as atividades para o relato do trabalho');
       if (modoRegistro === 'DESCRITIVO' && (dto.metaQuantidade != null || dto.quantidadeRealizada != null)) throw new BadRequestException('Ocorrência descritiva não recebe metas ou quantidades; descreva o trabalho nas atividades');
-      if (modoRegistro === 'QUANTITATIVO' && (!entregavel.quantidadePrevista || !entregavel.unidadeMedida)) throw new BadRequestException('Informe a meta total e a unidade no Planejamento do entregável antes de cadastrar a medição');
+      if (modoRegistro === 'QUANTITATIVO' && !quantitativaMarco && (!entregavel.quantidadePrevista || !entregavel.unidadeMedida)) throw new BadRequestException('Informe a meta total e a unidade no Planejamento do entregável antes de cadastrar a medição');
       if (modoRegistro === 'QUANTITATIVO' && dto.metaQuantidade == null) throw new BadRequestException('Ocorrência por quantidade exige meta planejada');
       if (dto.quantidadeRealizada != null) throw new BadRequestException('Registre a quantidade realizada após criar a ocorrência, por lançamento autorizado.');
       if (dto.pesoPeriodo != null) throw new BadRequestException('Peso de período é exclusivo da agenda recorrente.');
       if (dto.metaQuantidade != null && !metaPositiva(dto.metaQuantidade)) throw new BadRequestException('Meta quantitativa deve ser maior que zero');
-      if(modoRegistro==='QUANTITATIVO'&&dto.metaQuantidade!=null){
+      if(modoRegistro==='QUANTITATIVO'&&dto.metaQuantidade!=null&&!quantitativaMarco){
         const [saldo]=await m.query(`SELECT (COALESCE(SUM(meta_quantidade),0)+$3::numeric <= $4::numeric) AS disponivel FROM ocorrencias WHERE contrato_id=$1 AND entregavel_id=$2 AND substituida_em IS NULL`,[contratoId,entregavelId,dto.metaQuantidade,entregavel.quantidadePrevista]);
         if(saldo?.disponivel===false)throw new ConflictException('A meta desta ocorrência ultrapassa a quantidade disponível no entregável.');
       }
+      if(entregavel.tipo==='CONTINUO'&&!(dto.dataPrevista??dto.periodoFim??dto.periodoInicio))throw new BadRequestException('Informe a data ou o período da ocorrência contínua.');
       validarDadosOcorrencia(dto);
       validarVigenciaOcorrencia([dto.periodoInicio,dto.periodoFim,dto.dataPrevista],contrato,entregavel);
       const repo = m.getRepository(Ocorrencia);
@@ -410,6 +414,7 @@ export class OcorrenciasService implements OnModuleInit {
         quantidadeRealizada: dto.metaQuantidade != null ? null : dto.quantidadeRealizada ?? null,
         metaQuantidade: dto.metaQuantidade ?? null,
         modoRegistro,
+        ...(quantitativaMarco&&metaMarco?{metaMarcoOrigemId:metaMarco.id,unidadeMedidaMarco:metaMarco.unidadeMedida}:{}),
         quantidadeAprovada: null,
         observacoes: dto.observacoes?.trim() ?? null,
         origem: modoRegistro === 'DESCRITIVO' ? OrigemOcorrencia.MANUAL_DESCRITIVA : OrigemOcorrencia.MANUAL_QUANTITATIVA,
@@ -426,6 +431,10 @@ export class OcorrenciasService implements OnModuleInit {
       });
 
       const salva = await repo.save(nova);
+      if(metaMarco){
+        const vinculo=await m.save(VinculoMetaMarco,m.create(VinculoMetaMarco,{metaId:metaMarco.id,contratoId,ocorrenciaId:salva.id,status:'APROVADO',solicitadoPor:ator.id}));
+        await this.auditoria.registrarNaTransacao(m,ator,{acao:AcaoAuditoria.META_MARCO_VINCULO_SOLICITADO,entidadeTipo:'ENTREGAVEL',entidadeId:entregavelId,dadosPosteriores:{metaId:metaMarco.id,vinculoId:vinculo.id,registroId:salva.id,tipo:'OCORRENCIA'}});
+      }
       await this.auditoria.registrarNaTransacao(m, ator, {
         acao: AcaoAuditoria.OCORRENCIA_CRIADA,
         entidadeTipo: 'OCORRENCIA',
@@ -465,7 +474,7 @@ export class OcorrenciasService implements OnModuleInit {
     const entregavel = await m.findOneBy(Entregavel, { id: o.entregavelId, contratoId: o.contratoId });
     if (!entregavel) throw new NotFoundException('Entregável da ocorrência indisponível');
     const calculado = proximoStatusAutomatico(o,r,
-      conclusaoTemporalPermitida(entregavel.tipo, entregavel.terminoPrevisto)) as StatusOcorrencia;
+      conclusaoTemporalPermitida(entregavel.tipo, o.dataPrevista??o.periodoFim??o.periodoInicio)) as StatusOcorrencia;
     // Edições de planejamento são independentes (meta, exigências, peso). Não
     // congelar a ocorrência entre dois PATCHes do mesmo formulário.
     const proximo = !solicitarAutomaticamente && calculado === StatusOcorrencia.PENDENTE_CONCLUSAO
@@ -493,8 +502,9 @@ export class OcorrenciasService implements OnModuleInit {
       const regularizacao = !parcial && o.status === StatusOcorrencia.CONCLUIDO_PARCIALMENTE;
       if (contrato.status === 'CONCLUIDO_PARCIALMENTE' && !regularizacao) throw new ConflictException('Somente regularização documental é permitida');
       await this.exigirEntregavelAberto(m, entregavel, regularizacao);
+      await exigirRegistroMetaEditavel(m,contratoId,'OCORRENCIA',id,regularizacao);
       if (o.regularizacaoDocumentalSolicitada || (!regularizacao && ![StatusOcorrencia.NAO_INICIADO, StatusOcorrencia.EM_ANDAMENTO, StatusOcorrencia.EM_REVISAO].includes(o.status))) throw new ConflictException('Ocorrência já submetida à conclusão');
-      if (!conclusaoTemporalPermitida(entregavel.tipo, entregavel.terminoPrevisto))
+      if (!conclusaoTemporalPermitida(entregavel.tipo, o.dataPrevista??o.periodoFim??o.periodoInicio))
         throw new ConflictException('A conclusão de serviço contínuo somente pode ser solicitada após o término previsto');
       const r = await resumoMedicao(m,o);
       if (!r.metaAtingida) throw new ConflictException('Meta ou execução ainda não atingida. Confira as quantidades verificadas e os lançamentos.');
@@ -523,7 +533,8 @@ export class OcorrenciasService implements OnModuleInit {
       const entregavel = await m.findOneBy(Entregavel, { id: o.entregavelId, contratoId });
       if (!entregavel) throw new NotFoundException('Entregável da ocorrência indisponível');
       await this.exigirEntregavelAberto(m, entregavel, regularizacao);
-      if (!conclusaoTemporalPermitida(entregavel.tipo, entregavel.terminoPrevisto))
+      await exigirRegistroMetaEditavel(m,contratoId,'OCORRENCIA',id,regularizacao);
+      if (!conclusaoTemporalPermitida(entregavel.tipo, o.dataPrevista??o.periodoFim??o.periodoInicio))
         throw new ConflictException('A ocorrência contínua só pode ser aprovada após o término previsto.');
       const r = await resumoMedicao(m,o);
       const parcial = o.status === StatusOcorrencia.PENDENTE_CONCLUSAO_PARCIAL;
@@ -562,6 +573,7 @@ export class OcorrenciasService implements OnModuleInit {
       const e = await m.findOneBy(Entregavel, { id: o.entregavelId, contratoId });
       if (!e) throw new NotFoundException('Entregável não encontrado');
       await this.exigirEntregavelAberto(m, e);
+      await exigirRegistroMetaEditavel(m,contratoId,'OCORRENCIA',id);
       if (!['NAO_INICIADO','EM_ANDAMENTO','EM_REVISAO'].includes(o.status))
         throw new ConflictException('Esta ocorrência já possui uma solicitação ou decisão final');
       const abertas: Array<{ total: string }> = await m.query(
@@ -572,7 +584,7 @@ export class OcorrenciasService implements OnModuleInit {
       // Não permitir contornar a conclusão integral pela chamada direta à API.
       const resumoAtual = await resumoMedicao(m, o);
       const prazoContinuoCumprido = e.tipo !== TipoEntregavel.CONTINUO ||
-        !e.terminoPrevisto || hojeCivil() >= e.terminoPrevisto;
+        !(o.dataPrevista??o.periodoFim??o.periodoInicio) || hojeCivil() >= (o.dataPrevista??o.periodoFim??o.periodoInicio)!;
       validarEncerramentoOcorrencia(o, resumoAtual, prazoContinuoCumprido);
       const anterior = { status: o.status, motivoEncerramento: o.motivoEncerramento };
       o.status = StatusOcorrencia.PENDENTE_ENCERRAMENTO;
@@ -598,9 +610,10 @@ export class OcorrenciasService implements OnModuleInit {
       const e = await m.findOneBy(Entregavel, { id: o.entregavelId, contratoId });
       if (!e) throw new NotFoundException('Entregável não encontrado');
       await this.exigirEntregavelAberto(m, e);
+      await exigirRegistroMetaEditavel(m,contratoId,'OCORRENCIA',id);
       const medicao = await resumoMedicao(m, o);
       // A aprovação deve revalidar as mesmas condições da solicitação, dentro do lock.
-      validarEncerramentoOcorrencia(o, medicao, conclusaoTemporalPermitida(e.tipo, e.terminoPrevisto));
+      validarEncerramentoOcorrencia(o, medicao, conclusaoTemporalPermitida(e.tipo, o.dataPrevista??o.periodoFim??o.periodoInicio));
       const anterior = snapshotDecisaoOcorrencia(o);
       o.status = StatusOcorrencia.ENCERRADA;
       o.encerradaEm = new Date(); o.encerradaPor = ator.id;
@@ -633,6 +646,7 @@ export class OcorrenciasService implements OnModuleInit {
       const regularizacao = Boolean(o.regularizacaoDocumentalSolicitada && o.status === StatusOcorrencia.CONCLUIDO_PARCIALMENTE);
       if (contrato.status === 'CONCLUIDO_PARCIALMENTE' && !regularizacao) throw new ConflictException('Somente cancelamento da regularização é permitido');
       await this.exigirEntregavelAberto(m, entregavel, regularizacao);
+      await exigirRegistroMetaEditavel(m,contratoId,'OCORRENCIA',id,regularizacao);
       if (![StatusOcorrencia.PENDENTE_CONCLUSAO, StatusOcorrencia.PENDENTE_CONCLUSAO_PARCIAL, StatusOcorrencia.CONCLUIDO, StatusOcorrencia.CONCLUIDO_PARCIALMENTE, StatusOcorrencia.PENDENTE_ENCERRAMENTO, StatusOcorrencia.ENCERRADA].includes(o.status)) throw new ConflictException('Somente ocorrências pendentes ou concluídas podem ser reabertas');
       const antes = snapshotDecisaoOcorrencia(o);
       if (regularizacao) o.regularizacaoDocumentalSolicitada = false;
@@ -760,6 +774,7 @@ export class OcorrenciasService implements OnModuleInit {
       const entregavel = await m.getRepository(Entregavel).findOneBy({ id: o.entregavelId, contratoId });
       if (!entregavel) throw new NotFoundException('Entregável não encontrado');
       await this.exigirEntregavelAberto(m, entregavel);
+      await exigirRegistroMetaEditavel(m,contratoId,'OCORRENCIA',id);
       if (o.status === StatusOcorrencia.EM_ANDAMENTO) { await iniciarHierarquiaOperacional(m,this.auditoria,ator,contratoId,o.entregavelId); return o; } // sincroniza pai sem duplicar auditoria
       if (o.status !== StatusOcorrencia.NAO_INICIADO)
         throw new ConflictException('Somente uma ocorrência não iniciada pode ser colocada em andamento.');
@@ -809,8 +824,10 @@ export class OcorrenciasService implements OnModuleInit {
       const entregavel = await m.getRepository(Entregavel).findOneBy({ id: o.entregavelId, contratoId });
       if (!entregavel) throw new NotFoundException('Entregável não encontrado neste contrato');
       await this.exigirEntregavelAberto(m, entregavel);
+      await exigirRegistroMetaEditavel(m,contratoId,'OCORRENCIA',id);
 
       validarDadosOcorrencia(dto);
+      if(entregavel.tipo==='CONTINUO'&&!(dto.dataPrevista===undefined?o.dataPrevista??o.periodoFim??o.periodoInicio:dto.dataPrevista??o.periodoFim??o.periodoInicio))throw new BadRequestException('A ocorrência contínua precisa manter uma data ou período.');
       if (dto.dataPrevista!==undefined && dto.dataPrevista!==o.dataPrevista) validarVigenciaOcorrencia([dto.dataPrevista],contrato,entregavel);
       // @IsOptional do class-validator aceita null; para mínimos, null não significa
       // "manter" nem "desativar": use zero explicitamente. Isso impede persistir
@@ -872,7 +889,7 @@ export class OcorrenciasService implements OnModuleInit {
         if (milesimos(dto.metaQuantidade) < milesimos(resumo.quantidadeRegistradaExata ?? resumo.quantidadeRegistrada) &&
             (!justificativaMeta || justificativaMeta.trim().length < 15 || justificativaMeta.trim().length > 200))
           throw new ConflictException('A nova meta é inferior à execução registrada. Informe uma justificativa de 15 a 200 caracteres para preservar o excedente.');
-        if(o.origem===OrigemOcorrencia.MANUAL_QUANTITATIVA&&milesimos(dto.metaQuantidade)>milesimos(o.metaQuantidade)){
+        if(o.origem===OrigemOcorrencia.MANUAL_QUANTITATIVA&&!o.metaMarcoOrigemId&&milesimos(dto.metaQuantidade)>milesimos(o.metaQuantidade)){
           const [saldo]=await m.query(`SELECT (COALESCE(SUM(meta_quantidade),0)+$4::numeric <= $5::numeric) AS disponivel FROM ocorrencias WHERE contrato_id=$1 AND entregavel_id=$2 AND id<>$3 AND substituida_em IS NULL`,[contratoId,o.entregavelId,o.id,dto.metaQuantidade,entregavel.quantidadePrevista]);
           if(saldo?.disponivel===false)throw new ConflictException('A meta desta ocorrência ultrapassa a quantidade disponível no entregável.');
         }
@@ -943,16 +960,12 @@ export class OcorrenciasService implements OnModuleInit {
       throw new BadRequestException('Informe uma data de execução válida e não futura.');
   }
   private async exigirContextoLancamento(m:EntityManager,o:Ocorrencia) {
+    await exigirRegistroMetaEditavel(m,o.contratoId,'OCORRENCIA',o.id);
     const c=await m.findOneBy(Contrato,{id:o.contratoId});
     if(!c||c.conclusaoSolicitadaEm)throw new ConflictException('O contrato aguarda decisão de conclusão.');
     const e=await m.findOneBy(Entregavel,{id:o.entregavelId,contratoId:o.contratoId});
     if(!e) throw new NotFoundException('Entregável não encontrado');
     await this.exigirEntregavelAberto(m,e);
-  }
-  private async podeAprovarLancamento(m:EntityManager,c:string,ator:UsuarioAutenticado) {
-    if(ator.perfil===PerfilUsuario.ADMINISTRADOR)return true;
-    const v=await m.findOneBy(PermissaoContrato,{contratoId:c,usuarioId:ator.id});
-    return Boolean(v&&permissoesEfetivas(ator.perfil,Boolean(v.podeEditar),v.permissoesDetalhadas).aprovarExecucaoManual);
   }
   async listarLancamentos(contratoId: string, id: string, offset = 0, limite?: number) {
     validarPaginacaoOcorrencia(offset, limite);
@@ -998,10 +1011,10 @@ export class OcorrenciasService implements OnModuleInit {
         throw new ConflictException('Reabra a ocorrência para lançar quantidade');
       const antes=await resumoMedicao(m,o);
       if (milesimos(antes.quantidadeRegistradaExata ?? antes.quantidadeRegistrada)+milesimos(quantidade)>milesimos(o.metaQuantidade)) throw new ConflictException('A quantidade excede o saldo disponível da ocorrência, incluindo registros pendentes.');
-      const aprovado=await this.podeAprovarLancamento(m,contratoId,ator);
-      const situacao=aprovado?'APROVADO':'PENDENTE';
+      // Permissão de aprovar não equivale a uma decisão de aprovação.
+      const situacao='PENDENTE' as const;
       const inseridos = await m.query(`INSERT INTO ocorrencia_lancamentos(id,ocorrencia_id,contrato_id,quantidade,justificativa,criado_por,data_execucao,observacao,status_execucao,decidido_por,decidido_em,pedido_original)
-        VALUES ($1::uuid,$2::uuid,$3::uuid,$4::numeric,$5::varchar,$6::uuid,$7::date,$8::varchar,$9::varchar,CASE WHEN $9::varchar='APROVADO' THEN $6::uuid ELSE NULL END,CASE WHEN $9::varchar='APROVADO' THEN now() ELSE NULL END,$10::jsonb) ON CONFLICT (id) DO NOTHING RETURNING id`,
+        VALUES ($1::uuid,$2::uuid,$3::uuid,$4::numeric,$5::varchar,$6::uuid,$7::date,$8::varchar,$9::varchar,NULL,NULL,$10::jsonb) ON CONFLICT (id) DO NOTHING RETURNING id`,
         [operacaoId,id,contratoId,quantidade,justificativa?.trim()||null,ator.id,data,observacao?.trim()||null,situacao,JSON.stringify(pedido)]);
       if (!inseridos.length) throw new ConflictException('Identificador de lançamento já utilizado.');
       const depois=await this.recalcularEstado(m,o,ator);
@@ -1011,7 +1024,6 @@ export class OcorrenciasService implements OnModuleInit {
         dadosPosteriores:{lancamentoId:operacaoId,quantidadeAdicionada:quantidade,quantidadeExecutada:depois.quantidadeExecutada,
           justificativa:justificativa?.trim()??null, situacao,data,observacao:observacao?.trim()??null},
       });
-      if(situacao==='APROVADO')await iniciarHierarquiaOperacional(m,this.auditoria,ator,contratoId,o.entregavelId);
       return {id:operacaoId,situacao,quantidadeExecutada:depois.quantidadeExecutada,restante:depois.quantidadeDisponivel};
     });
   }
@@ -1185,6 +1197,7 @@ export class OcorrenciasService implements OnModuleInit {
       const entregavel = await m.findOneBy(Entregavel, { id: o.entregavelId, contratoId });
       if (!entregavel) throw new NotFoundException('Entregável indisponível');
       await this.exigirEntregavelAberto(m, entregavel, regularizacao);
+      await exigirRegistroMetaEditavel(m,contratoId,'OCORRENCIA',id,regularizacao);
       const validos:Array<{id:string}>=await m.query(`SELECT c.id FROM comprovantes_evidencia c
         JOIN evidencias_esperadas ev ON ev.id=c.evidencia_esperada_id AND ev.arquivado_em IS NULL
         WHERE c.id=$1 AND c.contrato_id=$2 AND c.entregavel_id=$3 AND c.status IN ('PENDENTE_VERIFICACAO','VERIFICADA')
@@ -1220,6 +1233,7 @@ export class OcorrenciasService implements OnModuleInit {
       const regularizacao = o.status === StatusOcorrencia.CONCLUIDO_PARCIALMENTE;
       if (o.regularizacaoDocumentalSolicitada || (contrato.status === 'CONCLUIDO_PARCIALMENTE' && !regularizacao)) throw new ConflictException('Resolva a regularização pendente antes de desvincular evidências');
       await this.exigirEntregavelAberto(m, e, regularizacao);
+      await exigirRegistroMetaEditavel(m,contratoId,'OCORRENCIA',id);
       if (![StatusOcorrencia.NAO_INICIADO,StatusOcorrencia.EM_ANDAMENTO,StatusOcorrencia.EM_REVISAO,StatusOcorrencia.CONCLUIDO_PARCIALMENTE].includes(o.status))
         throw new ConflictException('Reabra a ocorrência para alterar evidências vinculadas');
       const fisico=await m.query(`SELECT 1 FROM comprovantes_evidencia c WHERE c.id=$1 AND c.contrato_id=$2 AND (c.ocorrencia_quantidade_id=$3 AND c.origem_quantidade IS NOT NULL OR EXISTS(SELECT 1 FROM execucoes_entregavel p WHERE p.origem='EVIDENCIA' AND p.origem_id=c.id AND p.ocorrencia_id=$3 AND (p.centesimos>0 OR p.referencia_id IS NOT NULL))) LIMIT 1`,[comprovanteId,contratoId,id]);
