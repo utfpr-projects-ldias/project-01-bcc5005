@@ -3075,7 +3075,6 @@ button[data-tec08-confirmar][data-pi-intencao-confirmacao="concluido"]:not(:disa
 .pi-seletor-responsavel [role=combobox] { border:0!important; background:transparent!important; }
 .pi-seletor-responsavel > .relative > div:first-child { border-color:var(--pi-form-borda,#34414a)!important; background:var(--pi-form-campo,var(--bg-primary))!important; }
 .pi-responsavel-opcoes { background:var(--pi-form-superficie,var(--bg-primary))!important; border-color:var(--pi-form-borda,#34414a)!important; }
-.pi-responsavel-opcoes [role=option]:is(:hover,[aria-selected=true]) { background:color-mix(in srgb,#799fac 20%,transparent)!important; }
 /* Remove regras legadas que sobrescrevem a paleta neutra de criação. */
 [data-tec08-modal] > [data-tec08-entidade="modal"][data-pi-modal-neutro][data-tec08-estado] [data-tec08-formulario-contextual][data-tec08-criacao] { --tec08-status-bg:#35616f!important; --tec08-status-fg:#fff!important; --tec08-status-hover:#407888!important; --tec08-status-border:#799fac!important; }
 [data-tec08-modal] > [data-tec08-entidade="modal"][data-pi-modal-neutro][data-tec08-estado] [data-tec08-formulario-contextual] :is(h2,h3,h4,legend) { color:var(--text-primary)!important; }
@@ -3183,7 +3182,8 @@ button[data-tec08-confirmar][data-pi-intencao-confirmacao="concluido"]:not(:disa
 .pi-vinculos-multiplos { display:grid; min-width:0; gap:6px; }
 .pi-vinculos-opcoes { display:grid; gap:3px; max-height:148px; overflow:auto; padding:2px; }
 .pi-vinculo-opcao { display:flex; align-items:center; gap:9px; min-width:0; padding:6px 8px; border:1px solid transparent; border-radius:6px; cursor:pointer; }
-.pi-vinculo-opcao:hover,.pi-vinculo-opcao[data-selecionado=true] { background:color-mix(in srgb,#799fac 10%,transparent); border-color:color-mix(in srgb,#799fac 35%,transparent); }
+.pi-vinculo-opcao:not([data-selecionado=true]):hover { background:color-mix(in srgb,#799fac 7%,transparent); border-color:color-mix(in srgb,#799fac 20%,transparent); }
+.pi-vinculo-opcao[data-selecionado=true] { background:color-mix(in srgb,#799fac 22%,transparent); border-color:color-mix(in srgb,#799fac 55%,transparent); }
 [data-pi-formulario-modal] .pi-vinculo-opcao input[type=checkbox] { appearance:auto!important; -webkit-appearance:checkbox!important; width:15px!important; height:15px!important; min-width:15px!important; min-height:15px!important; flex:0 0 15px; margin:0!important; accent-color:#799fac!important; border-radius:3px!important; }
 .pi-contribuicao-percentual { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,105px) minmax(0,1fr); align-items:start; gap:8px; }
 .pi-contribuicao-percentual > * { min-width:0; max-width:100%; }
@@ -3796,7 +3796,7 @@ li > .pi-card-ocorrencia-v18 { width:100%; max-width:76rem; margin-inline:auto; 
 .pi-form-evidencia .pi-orientacoes-curtas { min-height:0!important; height:64px!important; resize:vertical; }
 .pi-editor-vinculos-evidencia { padding-inline-end:4px; }
 .pi-editor-vinculos-evidencia .pi-vinculo-opcao { display:flex; align-items:center; min-height:45px; padding:7px 10px; }
-.pi-editor-vinculos-evidencia .pi-vinculo-opcao[data-selecionado=true] { border:1px solid rgb(121 159 172 / .35)!important; background:rgb(121 159 172 / .1)!important; }
+.pi-editor-vinculos-evidencia .pi-vinculo-opcao[data-selecionado=true] { border:1px solid rgb(121 159 172 / .55)!important; background:rgb(121 159 172 / .22)!important; }
 .pi-form-atividade .pi-vinculo-opcao :is(input[type=checkbox],input[type=checkbox]:disabled) { accent-color:#799fac!important; }
 
 /* Oculta o menu do contrato apenas durante a navegação interna de etapa/entregável. */
@@ -4383,7 +4383,18 @@ body :is(input[type="checkbox"],input[type="radio"],input[type="range"]) {accent
 body :is([role="menu"],[role="listbox"],.pi-responsavel-opcoes,.pi-combobox-opcoes) {
   background:var(--pi-admin-superficie)!important;border-color:var(--pi-admin-borda)!important;color:var(--text-primary)!important;
 }
-body [role="listbox"] [role="option"]:is(:hover,[aria-selected="true"]),
+/* Seleção persistente e navegação temporária não têm a mesma aparência.
+   Funciona também em portais e listas de ordenação, sem alterar os selos de status. */
+body [role="listbox"] [role="option"]:not([aria-selected="true"]):is(:hover,[data-pi-realce="true"],:focus-visible) {
+  background:var(--pi-interacao-selecao)!important;color:var(--text-primary)!important;
+}
+body [role="listbox"] [role="option"][aria-selected="true"] {
+  background:var(--pi-interacao-fundo)!important;color:#fff!important;font-weight:600;
+  box-shadow:inset 3px 0 0 #9bbcc9!important;
+}
+body [role="listbox"] [role="option"]:focus-visible {
+  outline:2px solid var(--pi-interacao-foco)!important;outline-offset:-2px;
+}
 body [role="menu"] button:not([data-pi-intencao]):not([data-tec08-decisao]):not(:disabled):hover {
   background:var(--pi-interacao-selecao)!important;color:var(--text-primary)!important;
 }
@@ -4577,10 +4588,10 @@ svg.pi-icone-reabrir-verde { color: #16a34a !important; fill: currentColor !impo
 .dark svg.pi-icone-reabrir-verde { color: #4ade80 !important; }
 
 
-.pi-vinculos-filtros-v21 { display:grid; gap:10px; grid-template-columns:minmax(0,1fr); }
-@media (min-width: 900px) { .pi-vinculos-filtros-v21 { grid-template-columns:minmax(0,1fr) auto; align-items:end; } }
-.pi-vinculos-filtro-contrato { min-width:220px; }
-.pi-vinculos-filtro-contrato .pi-filtro-vinculos-v21 { min-width:220px!important; width:100%!important; border:1px solid var(--pi-form-borda,#34414a)!important; border-radius:10px!important; padding:10px 34px 10px 12px!important; background:var(--pi-form-campo,#1b252d)!important; }
+.pi-vinculos-filtros-v21 { display:flex; flex-wrap:wrap; align-items:start; gap:10px; min-width:0; }
+.pi-vinculos-filtros-v21 > .pi-busca-vinculos { flex:1 1 16rem; min-width:min(100%,12rem); }
+.pi-vinculos-filtro-contrato { flex:1 1 11rem; min-width:min(100%,10rem); max-width:100%; }
+.pi-vinculos-filtro-contrato .pi-filtro-vinculos-v21 { min-width:0!important; width:100%!important; border:1px solid var(--pi-form-borda,#34414a)!important; border-radius:10px!important; padding:10px 34px 10px 12px!important; background:var(--pi-form-campo,#1b252d)!important; }
 .pi-vinculos-detalhe-painel > summary { list-style:none; cursor:pointer; }
 .pi-vinculos-detalhe-painel > summary::-webkit-details-marker { display:none; }
 .pi-vinculos-detalhe-painel[open] > summary > span:last-child { transform:rotate(90deg); }

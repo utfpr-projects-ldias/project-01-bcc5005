@@ -19,6 +19,7 @@ export function SeletorResponsavel({ valor, onChange, itens = [], pesquisar, sel
     const campo = raiz.current?.querySelector('input');
     const area = raiz.current?.closest('[data-tec08-corpo-modal]');
     if (campo) { const r = campo.getBoundingClientRect(); const limite = area?.getBoundingClientRect(); setAcima((limite?.bottom ?? window.innerHeight) - r.bottom < 190 && r.top - (limite?.top ?? 0) > 190); }
+    setDestacado(-1);
     setAberta(true);
   }
   const [remotos, setRemotos] = useState<OpcaoResponsavel[]>([]);
@@ -79,7 +80,7 @@ export function SeletorResponsavel({ valor, onChange, itens = [], pesquisar, sel
         {(carregando || aguardando) && <p role="status" className="px-3 py-2 text-xs text-foreground/65">Buscando responsáveis...</p>}
         {concluida===termo && erroBusca && <p role="alert" className="px-3 py-2 text-xs text-error-text">{erroBusca}</p>}
         {!carregando && !aguardando && !(concluida===termo&&erroBusca) && !opcoes.length && <p className="px-3 py-2 text-xs text-foreground/65">{termo.length === 1 ? 'Digite mais um caractere para pesquisar.' : 'Nenhum usuário encontrado.'}</p>}
-        {!aguardando && opcoes.map((usuario,indice) => <button key={usuario.id} type="button" role="option" id={`${identificador}-opcao-${usuario.id}`} aria-selected={indice === destacado} onMouseDown={e => e.preventDefault()} onMouseEnter={() => setDestacado(indice)} onClick={() => escolher(usuario)} title={usuario.nome ? `${usuario.nome} — ${usuario.email}` : usuario.email} className={`block w-full min-w-0 rounded-md px-3 py-2 text-left text-sm focus-visible:outline-2 focus-visible:outline-current ${indice === destacado ? 'bg-foreground/10' : ''}`}>{usuario.nome ? `${usuario.nome} — ${usuario.email}` : usuario.email}</button>)}
+        {!aguardando && opcoes.map((usuario,indice) => <button key={usuario.id} type="button" role="option" id={`${identificador}-opcao-${usuario.id}`} aria-selected={usuario.id === valor} data-pi-realce={indice === destacado} onMouseDown={e => e.preventDefault()} onMouseEnter={() => setDestacado(indice)} onMouseLeave={() => setDestacado(-1)} onClick={() => escolher(usuario)} title={usuario.nome ? `${usuario.nome} — ${usuario.email}` : usuario.email} className="block w-full min-w-0 rounded-md px-3 py-2 text-left text-sm focus-visible:outline-2 focus-visible:outline-current">{usuario.nome ? `${usuario.nome} — ${usuario.email}` : usuario.email}</button>)}
         {pesquisar && !aguardando && total > opcoes.length && <p className="border-t border-current/15 px-3 py-2 text-xs text-foreground/60">Refine a busca pelo nome ou e-mail para encontrar mais usuários.</p>}
       </div>}
     </div>}

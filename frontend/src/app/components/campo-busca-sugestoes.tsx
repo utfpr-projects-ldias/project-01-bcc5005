@@ -62,8 +62,8 @@ export function CampoBuscaSugestoes({ valor, onChange, opcoes, rotulo, placehold
       style={estiloOpcoes}
       className={`z-[260] min-w-0 max-w-[calc(100vw-24px)] overflow-y-auto rounded-xl border bg-background p-1 shadow-2xl ${contextual ? "border-current/30" : "border-brand-green/40"}`}>
       {sugestoes.map((s, i) => <button type="button" role="option" aria-selected={s === valor} id={`${id}-opcao-${i}`} key={`${s}-${i}`}
-        title={s} onMouseDown={e => e.preventDefault()} onClick={() => selecionar(s)} onMouseEnter={() => setIndice(i)}
-        className={`block w-full min-w-0 rounded-lg px-3 py-2 text-left text-sm ${contextual ? indice === i ? 'bg-current/15 text-foreground' : '' : indice === i ? 'bg-brand-green/15 text-foreground' : ''}`}>{s}</button>)}
+        title={s} onMouseDown={e => e.preventDefault()} onClick={() => selecionar(s)} data-pi-realce={indice === i} onMouseEnter={() => setIndice(i)} onMouseLeave={() => setIndice(-1)}
+        className="block w-full min-w-0 rounded-lg px-3 py-2 text-left text-sm">{s}</button>)}
       {sugestoes.length === 0 && <p className="px-3 py-2 text-xs text-foreground/65">Nenhuma opção encontrada.</p>}
     </div>, document.body)}
   </div>;

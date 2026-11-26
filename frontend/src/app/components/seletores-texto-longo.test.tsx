@@ -74,3 +74,69 @@ test.each(['Etapa','Entregável'])('%s do novo registro abrevia apenas a apresen
   expect(campo).toHaveValue(opcao.textContent);
   expect(campo).toHaveAttribute('title', completo);
 });
+
+// O destaque do mouse/teclado não é uma seleção confirmada.
+test.each(['Etapa', 'Entregável', 'Ocorrência'])('%s distingue seleção e realce temporário', rotulo => {
+  const mudar = jest.fn();
+  render(<SeletorEntregavel rotulo={rotulo} itens={[{id:'a',nome:'Primeiro'},{id:'b',nome:'Segundo'}]} valor="a" onChange={mudar}/>);
+  const campo = screen.getByRole('combobox', {name:rotulo});
+  fireEvent.focus(campo);
+  const primeiro = screen.getByRole('option', {name:'Primeiro'});
+  const segundo = screen.getByRole('option', {name:'Segundo'});
+  fireEvent.mouseEnter(segundo);
+  expect(primeiro).toHaveAttribute('aria-selected','true');
+  expect(segundo).toHaveAttribute('aria-selected','false');
+  expect(segundo).toHaveAttribute('data-pi-realce','true');
+  expect(mudar).not.toHaveBeenCalled();
+  fireEvent.mouseLeave(segundo);
+  expect(segundo).toHaveAttribute('data-pi-realce','false');
+  fireEvent.keyDown(campo,{key:'ArrowDown'});
+  fireEvent.keyDown(campo,{key:'ArrowDown'});
+  expect(campo).toHaveAttribute('aria-activedescendant',segundo.id);
+  fireEvent.keyDown(campo,{key:'Enter'});
+  expect(mudar).toHaveBeenCalledWith('b');
+});
+
+test('contrato mantém seleção ao navegar por outra opção', () => {
+  const mudar = jest.fn();
+  render(<SeletorContrato contratos={[{id:'a',codigoPublico:'1',objeto:'Primeiro'},{id:'b',codigoPublico:'2',objeto:'Segundo'}]} valor="a" onChange={mudar}/>);
+  fireEvent.focus(screen.getByRole('combobox'));
+  const primeiro = screen.getByRole('option',{name:/Primeiro/});
+  const segundo = screen.getByRole('option',{name:/Segundo/});
+  fireEvent.mouseEnter(segundo);
+  expect(primeiro).toHaveAttribute('aria-selected','true');
+  expect(segundo).toHaveAttribute('aria-selected','false');
+  expect(segundo).toHaveAttribute('data-pi-realce','true');
+  expect(mudar).not.toHaveBeenCalled();
+  fireEvent.click(segundo);
+  expect(mudar).toHaveBeenCalledWith('b');
+});
+
+test('responsável distingue responsável atual de candidato sob o mouse', () => {
+  const mudar = jest.fn();
+  const itens = [{id:'a',email:'ana@teste.local'},{id:'b',email:'bruno@teste.local'}];
+  render(<SeletorResponsavel itens={itens} valor="a" onChange={mudar} semprePesquisar/>);
+  fireEvent.focus(screen.getByRole('combobox'));
+  const ana = screen.getByRole('option',{name:/ana@/});
+  const bruno = screen.getByRole('option',{name:/bruno@/});
+  fireEvent.mouseEnter(bruno);
+  expect(ana).toHaveAttribute('aria-selected','true');
+  expect(bruno).toHaveAttribute('aria-selected','false');
+  expect(bruno).toHaveAttribute('data-pi-realce','true');
+  expect(mudar).not.toHaveBeenCalled();
+  fireEvent.click(bruno);
+  expect(mudar).toHaveBeenCalledWith('b',itens[1]);
+});
+
+test('sugestões separam texto atual de realce por mouse', () => {
+  const mudar = jest.fn();
+  render(<CampoBuscaSugestoes valor="Relatório" onChange={mudar} opcoes={['Relatório','Relatório mensal']} rotulo="Pesquisar"/>);
+  fireEvent.focus(screen.getByRole('combobox'));
+  const atual = screen.getByRole('option',{name:'Relatório'});
+  const candidato = screen.getByRole('option',{name:'Relatório mensal'});
+  fireEvent.mouseEnter(candidato);
+  expect(atual).toHaveAttribute('aria-selected','true');
+  expect(candidato).toHaveAttribute('aria-selected','false');
+  expect(candidato).toHaveAttribute('data-pi-realce','true');
+  expect(mudar).not.toHaveBeenCalled();
+});

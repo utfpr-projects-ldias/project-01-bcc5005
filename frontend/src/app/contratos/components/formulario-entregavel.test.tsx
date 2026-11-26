@@ -126,7 +126,10 @@ test('dropdown de responsáveis lista e-mails compactos e permite mouse, teclado
   const campo = screen.getByRole('combobox', { name: 'Responsável pelo entregável (opcional)' });
   fireEvent.keyDown(campo, { key: 'ArrowDown' });
   fireEvent.keyDown(campo, { key: 'ArrowDown' });
-  expect(screen.getByRole('option', { name: /bruno@empresa.test/ })).toHaveAttribute('aria-selected', 'true');
+  const bruno = screen.getByRole('option', { name: /bruno@empresa.test/ });
+  expect(bruno).toHaveAttribute('aria-selected', 'false');
+  expect(bruno).toHaveAttribute('data-pi-realce', 'true');
+  expect(campo).toHaveAttribute('aria-activedescendant', bruno.id);
   fireEvent.keyDown(campo, { key: 'Enter' });
   expect(screen.getByText('bruno@empresa.test')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Remover atribuição' }));

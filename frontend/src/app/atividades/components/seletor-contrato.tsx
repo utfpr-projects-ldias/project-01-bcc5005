@@ -51,9 +51,9 @@ export function SeletorContrato({ contratos, valor, onChange, carregando = false
         onClick={() => escolher('')} className="w-full rounded-lg px-3 py-2 text-left text-xs text-foreground/70 ">Limpar seleção</button>
       {filtrados.length === 0 ? <p className="px-3 py-4 text-sm text-foreground/65">Nenhum contrato encontrado.</p>
       : filtrados.map((contrato, indice) => <button key={contrato.id} id={`${idLista}-${contrato.id}`} role="option" type="button"
-        aria-selected={valor === contrato.id} onMouseEnter={() => setRealce(indice)} onMouseDown={e => e.preventDefault()}
+        aria-selected={valor === contrato.id} data-pi-realce={realce === indice} onMouseEnter={() => setRealce(indice)} onMouseLeave={() => setRealce(-1)} onMouseDown={e => e.preventDefault()}
         onClick={() => escolher(contrato.id)} title={legenda(contrato)}
-        className={`block w-full min-w-0 rounded-lg px-3 py-2 text-left text-sm transition-colors ${realce === indice ? 'bg-current/10 text-foreground' : 'text-foreground '}`}>
+        className="block w-full min-w-0 rounded-lg px-3 py-2 text-left text-sm transition-colors text-foreground">
         <span className="block min-w-0">{legenda(contrato)}</span>
       </button>)}
       {contratos.length > 100 && <p className="px-3 py-1 text-xs text-foreground/50">Digite para restringir a pesquisa.</p>}

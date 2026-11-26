@@ -24,6 +24,7 @@ export function ModalVinculosAtividade({atividade,permissoes,fechar,atualizar}:{
  const [aba,setAba]=useState<Aba>('contratos');
  const [busca,setBusca]=useState('');
  const [filtroContrato,setFiltroContrato]=useState('');
+ const [filtroVerificacao,setFiltroVerificacao]=useState('');
  const [membros,setMembros]=useState<Membro[]>([membroAtual]);
  const [detalhes,setDetalhes]=useState<Record<string,Atividade>>({[atividade.id]:atividade});
  const [evidencias,setEvidencias]=useState<Record<string,ComprovanteAtividade[]>>({});
@@ -64,9 +65,9 @@ export function ModalVinculosAtividade({atividade,permissoes,fechar,atualizar}:{
     if(aba==='entregaveis')l=(d?.entregaveis??[]).map(e=>({id:e.id,nome:e.nome,sub:`Contrato ${nome(m.contratoId)}`,estado:m.status,filtroVerificada:verificada,contratoId:m.contratoId}));
     if(aba==='ocorrencias')l=(d?.ocorrencias??[]).map(o=>({id:o.id,nome:o.titulo,sub:`Contrato ${nome(m.contratoId)} · ${estados[o.status]??o.status}`,estado:m.status,filtroVerificada:verificada,contratoId:m.contratoId}));
     if(aba==='evidencias')l=(evidencias[m.atividadeId]??[]).map(e=>({id:e.id,nome:e.nomeOriginal,sub:`${e.tipoEvidencia} · Contrato ${nome(m.contratoId)}`,estado:e.status,filtroVerificada:e.status==='VERIFICADA',contratoId:m.contratoId}));
-    return l.filter(item=>!filtroContrato||item.contratoId===filtroContrato).filter(item=>!termo||normalizar(`${item.nome} ${item.sub??''} ${estados[item.estado]??item.estado}`).includes(termo)).map(linha=>({m,linha}));
+    return l.filter(item=>aba==='contratos'||!filtroContrato||item.contratoId===filtroContrato).filter(item=>aba==='contratos'||!filtroVerificacao||(filtroVerificacao==='verificada'?item.filtroVerificada:!item.filtroVerificada)).filter(item=>!termo||normalizar(`${item.nome} ${item.sub??''} ${estados[item.estado]??item.estado}`).includes(termo)).map(linha=>({m,linha}));
   });
- },[membros,detalhes,evidencias,aba,busca,filtroContrato,contratos.dados]);
+ },[membros,detalhes,evidencias,aba,busca,filtroContrato,filtroVerificacao,contratos.dados]);
 
  function podeRemover(m:Membro){const d=detalhes[m.atividadeId];return Boolean(d)&&m.status==='REGISTRADA'&&m.podeSolicitar&&(aba!=='contratos'||!!grupo&&membros.length>1&&m.contratoId!==atividade.contratoId)&&(aba!=='entregaveis'||(d?.entregaveis.length??0)>1);}
  async function executar(){if(!confirmar||ocupado)return;setOcupado(true);setErro('');try{const {m,linha,aba:alvo}=confirmar,d=detalhes[m.atividadeId];
@@ -77,7 +78,7 @@ export function ModalVinculosAtividade({atividade,permissoes,fechar,atualizar}:{
   setConfirmar(null);setVersao(v=>v+1);atualizar?.();window.dispatchEvent(new CustomEvent('pi:estrutura-operacional-atualizada',{detail:{contratoId:m.contratoId}}));if(window.parent!==window)window.parent.postMessage({tipo:'pi:estrutura-operacional-atualizada',contratoId:m.contratoId},window.location.origin);
  }catch(e){setErro(e instanceof Error?e.message:'Não foi possível realizar a operação.');}finally{setOcupado(false);}}
 
- const elegiveisVinculo=membros.filter(m=>m.status==='REGISTRADA'&&m.podeSolicitar);
+ const elegiveisVinculo=membros.filter(m=>m.status==='REGISTRADA'&&m.podeSolicitar&&(!filtroContrato||m.contratoId===filtroContrato));
  const opcoesContrato=[...new Map(membros.map(m=>[m.contratoId,nome(m.contratoId)])).entries()];
 
  return createPortal(<>
@@ -85,16 +86,17 @@ export function ModalVinculosAtividade({atividade,permissoes,fechar,atualizar}:{
    <div className="space-y-3 pi-vinculos-consulta pi-vinculos-v21">
     <div className="space-y-1"><h3 className="text-sm font-semibold text-foreground">Vínculos</h3><p className="text-xs text-foreground/65">Consulte os contratos e registros relacionados a esta atividade. Use os filtros para localizar vínculos específicos.</p></div>
     <div className="pi-atividade-vinculos-abas" role="group" aria-label="Tipos de vínculo da atividade">
-      <button type="button" aria-pressed={aba==='contratos'} onClick={()=>{setAba('contratos');setBusca('');setFiltroContrato('');}}>Contratos <span>{contadores.contratos}</span></button>
-      <button type="button" aria-pressed={aba==='entregaveis'} onClick={()=>{setAba('entregaveis');setBusca('');setFiltroContrato('');}}>Entregáveis <span>{contadores.entregaveis}</span></button>
-      <button type="button" aria-pressed={aba==='ocorrencias'} onClick={()=>{setAba('ocorrencias');setBusca('');setFiltroContrato('');}}>Ocorrências <span>{contadores.ocorrencias}</span></button>
-      <button type="button" aria-pressed={aba==='evidencias'} onClick={()=>{setAba('evidencias');setBusca('');setFiltroContrato('');}}>Evidências <span>{contadores.evidencias}</span></button>
+      <button type="button" aria-label="Contratos" aria-pressed={aba==='contratos'} onClick={()=>{setAba('contratos');setBusca('');setFiltroContrato('');setFiltroVerificacao('');}}>Contratos <span>{contadores.contratos}</span></button>
+      <button type="button" aria-label="Entregáveis" aria-pressed={aba==='entregaveis'} onClick={()=>{setAba('entregaveis');setBusca('');setFiltroContrato('');setFiltroVerificacao('');}}>Entregáveis <span>{contadores.entregaveis}</span></button>
+      <button type="button" aria-label="Ocorrências" aria-pressed={aba==='ocorrencias'} onClick={()=>{setAba('ocorrencias');setBusca('');setFiltroContrato('');setFiltroVerificacao('');}}>Ocorrências <span>{contadores.ocorrencias}</span></button>
+      <button type="button" aria-label="Evidências" aria-pressed={aba==='evidencias'} onClick={()=>{setAba('evidencias');setBusca('');setFiltroContrato('');setFiltroVerificacao('');}}>Evidências <span>{contadores.evidencias}</span></button>
     </div>
     <div className="pi-vinculos-filtros-v21">
       <label className="pi-busca-vinculos"><span className="sr-only">Pesquisar vínculo</span><span className="relative block min-w-0"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><input type="search" aria-label="Pesquisar vínculo" data-pi-campo-com-icone="inicio" value={busca} onChange={e=>setBusca(e.target.value)} placeholder={aba==='contratos'?'Localizar contrato…':aba==='entregaveis'?'Localizar entregável…':aba==='ocorrencias'?'Localizar ocorrência…':'Localizar evidência…'} className="w-full rounded-lg border border-current/20 py-2 pl-9 pr-3 text-sm"/></span><span className="text-xs text-foreground/65">{linhas.length} item(ns)</span></label>
       {aba!=='contratos'&&<label className="pi-vinculos-filtro-contrato"><span className="sr-only">Filtrar por contrato</span><select aria-label="Filtrar por contrato" className="pi-filtro-vinculos-v21" value={filtroContrato} onChange={e=>setFiltroContrato(e.target.value)}><option value="">Todos os contratos</option>{opcoesContrato.map(([id,rotulo])=><option key={id} value={id}>Contrato {rotulo}</option>)}</select></label>}
+      {aba!=='contratos'&&<label className="pi-vinculos-filtro-contrato"><span className="sr-only">Filtrar vínculos</span><select aria-label="Filtrar vínculos" className="pi-filtro-vinculos-v21" value={filtroVerificacao} onChange={e=>setFiltroVerificacao(e.target.value)}><option value="">Todas as verificações</option><option value="verificada">Verificadas</option><option value="nao">Não verificadas</option></select></label>}
     </div>
-    {aba==='evidencias'&&!!elegiveisVinculo.length&&<div className="flex flex-wrap gap-2">{elegiveisVinculo.map(m=><button key={m.atividadeId} type="button" className="pi-vinculo-acao" onClick={()=>setVincular(m)}>+ Vincular evidência{elegiveisVinculo.length>1?` · Contrato ${nome(m.contratoId)}`:''}</button>)}</div>}
+    {aba==='evidencias'&&!!elegiveisVinculo.length&&<div className="flex flex-wrap gap-2">{elegiveisVinculo.map(m=><button key={m.atividadeId} type="button" className="pi-vinculo-acao" onClick={()=>setVincular(m)}>+ Vincular evidência{membros.length>1?` · Contrato ${nome(m.contratoId)}`:''}</button>)}</div>}
     {erro&&<p role="alert" className="rounded-lg border border-error-text/35 p-3 text-sm text-error-text">{erro}</p>}
     <div className="grid gap-2">{linhas.map(({m,linha:l})=><article key={`${m.atividadeId}:${l.id}`} className="pi-vinculo-card-v21"><div className="flex min-w-0 items-center gap-3"><strong className="min-w-0 flex-1 truncate" title={l.nome}>{l.nome}</strong>{l.estado&&<span className="pi-diario-etiqueta shrink-0" data-situacao={l.estado}>{aba==='contratos'||aba==='evidencias'?estados[l.estado]??l.estado:rotulos[m.status]}</span>}</div>{l.sub&&<p className="truncate text-xs text-foreground/65" title={l.sub}>{l.sub}</p>}<div className="flex flex-wrap items-center justify-end gap-2">{aba!=='evidencias'&&((m.status==='PENDENTE_CONCLUSAO'&&m.podeAprovar)||(m.status==='REGISTRADA'&&m.podeSolicitar))&&<button type="button" className="pi-vinculo-acao" onClick={()=>{setErro('');setConfirmar({m});}}>{m.status==='PENDENTE_CONCLUSAO'?'Aprovar atividade':'Solicitar conclusão da atividade'}</button>}{podeRemover(m)&&<button type="button" className="pi-desvincular-v21" aria-label={`Desvincular ${l.nome}`} title="Desvincular" onClick={()=>{setErro('');setConfirmar({m,linha:l,aba});}}><IconeDesvincular/></button>}</div></article>)}{!linhas.length&&<p className="rounded-lg border border-current/15 px-3 py-4 text-sm text-foreground/65">Nenhum vínculo encontrado para os filtros atuais.</p>}</div>
    </div>

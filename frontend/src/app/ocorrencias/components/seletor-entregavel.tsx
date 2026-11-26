@@ -65,8 +65,8 @@ export function SeletorEntregavel({ itens, valor, onChange, rotulo = 'Entregáve
     </div>
     {aberto && posicao && typeof document !== 'undefined' && createPortal(<div id={`${id}-lista`} role="listbox" data-pi-opcoes-texto data-pi-opcoes-compactas={Boolean(limiteRotulo) || undefined} aria-label={`${rotulo} disponíveis`} style={{position: 'fixed', top: posicao.top, left: posicao.left, width: posicao.width, maxHeight: posicao.maxHeight}} className="pi-combobox-opcoes z-[240] overflow-y-auto rounded-lg border p-1 shadow-xl">
       {opcaoTodos && <button type="button" role="option" aria-selected={!valor} onMouseEnter={()=>setRealce(-1)} onMouseDown={e => e.preventDefault()} onClick={() => escolher('')} className="block w-full rounded-lg px-3 py-2 text-left text-xs hover:bg-current/10">{rotuloTodos}</button>}
-      {filtrados.map((item, index) => <button type="button" role="option" key={item.id} id={`${id}-${item.id}`} aria-selected={item.id === valor} onMouseDown={e => e.preventDefault()} onMouseEnter={() => setRealce(index)} onClick={() => escolher(item.id)} title={item.nome} aria-label={item.nome}
-        className={`block w-full min-w-0 rounded-lg px-3 py-2 text-left text-sm ${index === realce ? 'bg-current/10 font-semibold' : ''}`}>{abreviar(item.nome)}</button>)}
+      {filtrados.map((item, index) => <button type="button" role="option" key={item.id} id={`${id}-${item.id}`} aria-selected={item.id === valor} onMouseDown={e => e.preventDefault()} data-pi-realce={index === realce} onMouseEnter={() => setRealce(index)} onMouseLeave={() => setRealce(-1)} onClick={() => escolher(item.id)} title={item.nome} aria-label={item.nome}
+        className="block w-full min-w-0 rounded-lg px-3 py-2 text-left text-sm">{abreviar(item.nome)}</button>)}
       {filtrados.length === 0 && <p className="px-3 py-3 text-xs text-foreground/70">Nenhuma opção encontrada.</p>}
     </div>, document.body)}
   </div>;
